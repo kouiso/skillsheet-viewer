@@ -1,0 +1,90 @@
+{
+  "name": "horsemanager-admin",
+  "dockerComposeFile": ["../docker-compose.yaml"],
+  "service": "frontend",
+  "workspaceFolder": "/app",
+  "initializeCommand": "/bin/bash .devcontainer/script/initialize.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "mosapride.zenkaku",
+        "EditorConfig.EditorConfig",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "stylelint.vscode-stylelint",
+        "formulahendry.auto-rename-tag",
+        "github.vscode-github-actions",
+        "wayou.vscode-todo-highlight",
+        "formulahendry.auto-rename-tag",
+        "gruntfuggly.todo-tree",
+        "donjayamanne.typescript-notebook",
+        "anthropic.claude-code"
+      ],
+      "settings": {
+        "git.path": "/usr/bin",
+        // For markdown: GitHub同様、mdファイルは改行で見た目通り改行する
+        "markdown.preview.breaks": true,
+        // For js/ts
+        "editor.codeActionsOnSave": {
+          "source.fixAll.eslint": "explicit",
+          "source.organizeImports": "explicit"
+        },
+        "[json]": {
+          "editor.formatOnSave": true
+        },
+        "[javascript]": {
+          "editor.formatOnSave": true
+        },
+        "[typescript]": {
+          "editor.formatOnSave": true
+        },
+        // For scss
+        "scss.validate": false,
+        "stylelint.configFile": "./.stylelintrc.yml",
+        "stylelint.validate": ["scss"],
+        "[scss]": {
+          "editor.formatOnSave": false,
+          "editor.codeActionsOnSave": {
+            "source.fixAll.stylelint": "explicit"
+          }
+        },
+        // package.jsonにコメントをつけるため、jsonc(コメント付きJSON)として扱う
+        "files.associations": {
+          "package.json": "jsonc"
+        },
+        // for todo tree
+        "todo-tree.highlights.defaultHighlight": {
+          "type": "whole-line",
+          "foreground": "white",
+          "background": "green",
+          "opacity": 50
+        },
+        "todo-tree.general.tags": ["TODO", "FIXME", "BUG", "HACK", "NOTE", "WARNING", "ENHANCE"],
+        "todo-tree.regex.regex": "(//)\\s*($TAGS).*(\\n\\s*//\\s{2,}.*)*"
+      }
+    }
+  },
+  "containerEnv": {
+    "ENV_FILE": ".devcontainer/.env"
+  },
+  "postCreateCommand": "/bin/bash .devcontainer/script/post-create.sh",
+  "containerUser": "root",
+  "forwardPorts": [13000, 19229],
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "nodeGypDependencies": true,
+      "installYarnUsingApt": true,
+      "version": "latest",
+      "nvmVersion": "latest"
+    },
+    "ghcr.io/audacioustux/devcontainers/taskfile:1": {
+      "version": "latest"
+    }
+  },
+  "mounts": [
+    "source=${localWorkspaceFolder}/.devcontainer/.claude,target=/home/node/.claude,type=bind,consistency=cached",
+    "source=${localWorkspaceFolder}/.devcontainer/.claude.json,target=/home/node/.claude.json,type=bind,consistency=cached"
+  ],
+  "remoteUser": "node",
+  "updateRemoteUserUID": true
+}
