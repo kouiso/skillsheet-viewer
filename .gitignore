@@ -1,0 +1,67 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# testing
+/coverage
+
+# debug
+logs
+*.log
+
+# build output
+dist
+dist-ssr
+stats.html
+/.next/
+/out/
+stats.html
+/build
+
+# typescript output
+*.module.scss.d.ts
+*.tsbuildinfo
+next-env.d.ts
+
+# Editor directories and files
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.pem
+
+
+# local env files
+
+*.env*
+!.env.example
+secret
+*.local
+*.module.scss.d.ts
+
+# vercel
+.vercel
+
+# temp
+/temp
+.npm
+playground.nnb
+
+# seo
+sitemap*.xml
+robots.txt
+
+# Storybook
+*storybook.log
+storybook-static/
+
+# Playwright
+playwright-report/
+test-results/
