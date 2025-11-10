@@ -110,6 +110,29 @@ exports.Prisma.SkillSheetScalarFieldEnum = {
   updatedAt: 'updatedAt',
 };
 
+exports.Prisma.ViewerTokenScalarFieldEnum = {
+  id: 'id',
+  token: 'token',
+  label: 'label',
+  expiresAt: 'expiresAt',
+  maxViews: 'maxViews',
+  viewCount: 'viewCount',
+  isActive: 'isActive',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+};
+
+exports.Prisma.ViewLogScalarFieldEnum = {
+  id: 'id',
+  tokenId: 'tokenId',
+  viewedAt: 'viewedAt',
+  viewerName: 'viewerName',
+  companyName: 'companyName',
+  ipAddress: 'ipAddress',
+  userAgent: 'userAgent',
+  gitCommitHash: 'gitCommitHash',
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc',
@@ -120,10 +143,17 @@ exports.Prisma.QueryMode = {
   insensitive: 'insensitive',
 };
 
+exports.Prisma.NullsOrder = {
+  first: 'first',
+  last: 'last',
+};
+
 exports.Prisma.ModelName = {
   Admin: 'Admin',
   ViewerAuth: 'ViewerAuth',
   SkillSheet: 'SkillSheet',
+  ViewerToken: 'ViewerToken',
+  ViewLog: 'ViewLog',
 };
 /**
  * Create the Client
@@ -172,14 +202,14 @@ const config = {
     },
   },
   inlineSchema:
-    '// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\ngenerator client {\n  provider        = "prisma-client-js"\n  output          = "./client"\n  previewFeatures = []\n}\n\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n// Admin user information\nmodel Admin {\n  id        String   @id @default(cuid())\n  username  String   @unique\n  password  String // hashed with bcrypt\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@map("admins")\n}\n\n// Viewer authentication code\nmodel ViewerAuth {\n  id        String   @id @default(cuid())\n  code      String   @unique // hashed with bcrypt\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@map("viewer_auths")\n}\n\n// Skill sheet content\nmodel SkillSheet {\n  id        String   @id @default(cuid())\n  title     String\n  content   String   @db.Text // Markdown content\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@map("skill_sheets")\n}\n',
-  inlineSchemaHash: '40ec44d5eb6d014e0b168357ef95ee9565e9b1594693032bedc5c30d1ca38eaa',
+    '// This is your Prisma schema file,\n// learn more about it in the docs: https://pris.ly/d/prisma-schema\n\ngenerator client {\n  provider        = "prisma-client-js"\n  output          = "./client"\n  previewFeatures = []\n}\n\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n// Admin user information\nmodel Admin {\n  id        String   @id @default(cuid())\n  username  String   @unique\n  password  String // hashed with bcrypt\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@map("admins")\n}\n\n// Viewer authentication code\nmodel ViewerAuth {\n  id        String   @id @default(cuid())\n  code      String   @unique // hashed with bcrypt\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@map("viewer_auths")\n}\n\n// Skill sheet content\nmodel SkillSheet {\n  id        String   @id @default(cuid())\n  title     String\n  content   String   @db.Text // Markdown content\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  @@map("skill_sheets")\n}\n\n// Viewer token for individual access control\nmodel ViewerToken {\n  id        String    @id @default(cuid())\n  token     String    @unique // UUID token for URL access\n  label     String // Description like "A社営業用" or "案件先X社用"\n  expiresAt DateTime? // Optional expiration date\n  maxViews  Int? // Optional view count limit\n  viewCount Int       @default(0) // Current view count\n  isActive  Boolean   @default(true) // Can be disabled by admin\n  createdAt DateTime  @default(now())\n  updatedAt DateTime  @updatedAt\n  viewLogs  ViewLog[]\n\n  @@map("viewer_tokens")\n}\n\n// View log for tracking who viewed when\nmodel ViewLog {\n  id            String      @id @default(cuid())\n  tokenId       String\n  token         ViewerToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)\n  viewedAt      DateTime    @default(now())\n  viewerName    String // Name of the viewer\n  companyName   String // Company name of the viewer\n  ipAddress     String? // Optional IP tracking\n  userAgent     String? // Optional browser/device info\n  gitCommitHash String? // Optional: which version was viewed\n\n  @@map("view_logs")\n}\n',
+  inlineSchemaHash: 'c79ad71588f627b2882f71bac9ee5e9ca3f25a2a7df66b6385cb497fa7745ae8',
   copyEngine: true,
 };
 config.dirname = '/';
 
 config.runtimeDataModel = JSON.parse(
-  '{"models":{"Admin":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"username","kind":"scalar","type":"String"},{"name":"password","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":"admins"},"ViewerAuth":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"code","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":"viewer_auths"},"SkillSheet":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"title","kind":"scalar","type":"String"},{"name":"content","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":"skill_sheets"}},"enums":{},"types":{}}',
+  '{"models":{"Admin":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"username","kind":"scalar","type":"String"},{"name":"password","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":"admins"},"ViewerAuth":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"code","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":"viewer_auths"},"SkillSheet":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"title","kind":"scalar","type":"String"},{"name":"content","kind":"scalar","type":"String"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":"skill_sheets"},"ViewerToken":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"token","kind":"scalar","type":"String"},{"name":"label","kind":"scalar","type":"String"},{"name":"expiresAt","kind":"scalar","type":"DateTime"},{"name":"maxViews","kind":"scalar","type":"Int"},{"name":"viewCount","kind":"scalar","type":"Int"},{"name":"isActive","kind":"scalar","type":"Boolean"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"},{"name":"viewLogs","kind":"object","type":"ViewLog","relationName":"ViewLogToViewerToken"}],"dbName":"viewer_tokens"},"ViewLog":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"tokenId","kind":"scalar","type":"String"},{"name":"token","kind":"object","type":"ViewerToken","relationName":"ViewLogToViewerToken"},{"name":"viewedAt","kind":"scalar","type":"DateTime"},{"name":"viewerName","kind":"scalar","type":"String"},{"name":"companyName","kind":"scalar","type":"String"},{"name":"ipAddress","kind":"scalar","type":"String"},{"name":"userAgent","kind":"scalar","type":"String"},{"name":"gitCommitHash","kind":"scalar","type":"String"}],"dbName":"view_logs"}},"enums":{},"types":{}}',
 );
 defineDmmfProperty(exports.Prisma, config.runtimeDataModel);
 config.engineWasm = {

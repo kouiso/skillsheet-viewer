@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prismaClient';
 import bcrypt from 'bcryptjs';
+import { randomUUID } from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -12,6 +13,8 @@ async function main() {
   const viewerCode = process.env._DEVELOPER_VIEWER_CODE || 'view123';
 
   // 既存のデータをクリア
+  await prisma.viewLog.deleteMany();
+  await prisma.viewerToken.deleteMany();
   await prisma.admin.deleteMany();
   await prisma.viewerAuth.deleteMany();
   await prisma.skillSheet.deleteMany();
@@ -82,6 +85,41 @@ async function main() {
     },
   });
   console.log('✅ Created sample skill sheet:', { title: skillSheet.title });
+
+  // サンプルビューアトークンを作成
+  const tokens = [
+    {
+      token: randomUUID(),
+      label: 'A社営業用トークン',
+      expiresAt: null,
+      maxViews: null,
+    },
+    {
+      token: randomUUID(),
+      label: 'B社案件先用トークン',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30日後
+      maxViews: 10,
+    },
+    {
+      token: randomUUID(),
+      label: 'C社短期トークン',
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7日後
+      maxViews: 5,
+    },
+  ];
+
+  const createdTokens = await Promise.all(
+    tokens.map((tokenData) =>
+      prisma.viewerToken.create({
+        data: tokenData,
+      }),
+    ),
+  );
+
+  console.log('✅ Created sample viewer tokens:');
+  createdTokens.forEach((token) => {
+    console.log(`   - ${token.label}: /view/${token.token}`);
+  });
 
   console.log('');
   console.log('🎉 Seeding completed!');

@@ -26,6 +26,16 @@ export type ViewerAuth = $Result.DefaultSelection<Prisma.$ViewerAuthPayload>;
  *
  */
 export type SkillSheet = $Result.DefaultSelection<Prisma.$SkillSheetPayload>;
+/**
+ * Model ViewerToken
+ *
+ */
+export type ViewerToken = $Result.DefaultSelection<Prisma.$ViewerTokenPayload>;
+/**
+ * Model ViewLog
+ *
+ */
+export type ViewLog = $Result.DefaultSelection<Prisma.$ViewLogPayload>;
 
 /**
  * ##  Prisma Client ʲˢ
@@ -193,6 +203,26 @@ export class PrismaClient<
    * ```
    */
   get skillSheet(): Prisma.SkillSheetDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.viewerToken`: Exposes CRUD operations for the **ViewerToken** model.
+   * Example usage:
+   * ```ts
+   * // Fetch zero or more ViewerTokens
+   * const viewerTokens = await prisma.viewerToken.findMany()
+   * ```
+   */
+  get viewerToken(): Prisma.ViewerTokenDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.viewLog`: Exposes CRUD operations for the **ViewLog** model.
+   * Example usage:
+   * ```ts
+   * // Fetch zero or more ViewLogs
+   * const viewLogs = await prisma.viewLog.findMany()
+   * ```
+   */
+  get viewLog(): Prisma.ViewLogDelegate<ExtArgs, ClientOptions>;
 }
 
 export namespace Prisma {
@@ -613,6 +643,8 @@ export namespace Prisma {
     Admin: 'Admin';
     ViewerAuth: 'ViewerAuth';
     SkillSheet: 'SkillSheet';
+    ViewerToken: 'ViewerToken';
+    ViewLog: 'ViewLog';
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName];
@@ -634,7 +666,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions;
     };
     meta: {
-      modelProps: 'admin' | 'viewerAuth' | 'skillSheet';
+      modelProps: 'admin' | 'viewerAuth' | 'skillSheet' | 'viewerToken' | 'viewLog';
       txIsolationLevel: Prisma.TransactionIsolationLevel;
     };
     model: {
@@ -860,6 +892,154 @@ export namespace Prisma {
           };
         };
       };
+      ViewerToken: {
+        payload: Prisma.$ViewerTokenPayload<ExtArgs>;
+        fields: Prisma.ViewerTokenFieldRefs;
+        operations: {
+          findUnique: {
+            args: Prisma.ViewerTokenFindUniqueArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload> | null;
+          };
+          findUniqueOrThrow: {
+            args: Prisma.ViewerTokenFindUniqueOrThrowArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>;
+          };
+          findFirst: {
+            args: Prisma.ViewerTokenFindFirstArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload> | null;
+          };
+          findFirstOrThrow: {
+            args: Prisma.ViewerTokenFindFirstOrThrowArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>;
+          };
+          findMany: {
+            args: Prisma.ViewerTokenFindManyArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>[];
+          };
+          create: {
+            args: Prisma.ViewerTokenCreateArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>;
+          };
+          createMany: {
+            args: Prisma.ViewerTokenCreateManyArgs<ExtArgs>;
+            result: BatchPayload;
+          };
+          createManyAndReturn: {
+            args: Prisma.ViewerTokenCreateManyAndReturnArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>[];
+          };
+          delete: {
+            args: Prisma.ViewerTokenDeleteArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>;
+          };
+          update: {
+            args: Prisma.ViewerTokenUpdateArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>;
+          };
+          deleteMany: {
+            args: Prisma.ViewerTokenDeleteManyArgs<ExtArgs>;
+            result: BatchPayload;
+          };
+          updateMany: {
+            args: Prisma.ViewerTokenUpdateManyArgs<ExtArgs>;
+            result: BatchPayload;
+          };
+          updateManyAndReturn: {
+            args: Prisma.ViewerTokenUpdateManyAndReturnArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>[];
+          };
+          upsert: {
+            args: Prisma.ViewerTokenUpsertArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewerTokenPayload>;
+          };
+          aggregate: {
+            args: Prisma.ViewerTokenAggregateArgs<ExtArgs>;
+            result: $Utils.Optional<AggregateViewerToken>;
+          };
+          groupBy: {
+            args: Prisma.ViewerTokenGroupByArgs<ExtArgs>;
+            result: $Utils.Optional<ViewerTokenGroupByOutputType>[];
+          };
+          count: {
+            args: Prisma.ViewerTokenCountArgs<ExtArgs>;
+            result: $Utils.Optional<ViewerTokenCountAggregateOutputType> | number;
+          };
+        };
+      };
+      ViewLog: {
+        payload: Prisma.$ViewLogPayload<ExtArgs>;
+        fields: Prisma.ViewLogFieldRefs;
+        operations: {
+          findUnique: {
+            args: Prisma.ViewLogFindUniqueArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload> | null;
+          };
+          findUniqueOrThrow: {
+            args: Prisma.ViewLogFindUniqueOrThrowArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>;
+          };
+          findFirst: {
+            args: Prisma.ViewLogFindFirstArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload> | null;
+          };
+          findFirstOrThrow: {
+            args: Prisma.ViewLogFindFirstOrThrowArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>;
+          };
+          findMany: {
+            args: Prisma.ViewLogFindManyArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>[];
+          };
+          create: {
+            args: Prisma.ViewLogCreateArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>;
+          };
+          createMany: {
+            args: Prisma.ViewLogCreateManyArgs<ExtArgs>;
+            result: BatchPayload;
+          };
+          createManyAndReturn: {
+            args: Prisma.ViewLogCreateManyAndReturnArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>[];
+          };
+          delete: {
+            args: Prisma.ViewLogDeleteArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>;
+          };
+          update: {
+            args: Prisma.ViewLogUpdateArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>;
+          };
+          deleteMany: {
+            args: Prisma.ViewLogDeleteManyArgs<ExtArgs>;
+            result: BatchPayload;
+          };
+          updateMany: {
+            args: Prisma.ViewLogUpdateManyArgs<ExtArgs>;
+            result: BatchPayload;
+          };
+          updateManyAndReturn: {
+            args: Prisma.ViewLogUpdateManyAndReturnArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>[];
+          };
+          upsert: {
+            args: Prisma.ViewLogUpsertArgs<ExtArgs>;
+            result: $Utils.PayloadToResult<Prisma.$ViewLogPayload>;
+          };
+          aggregate: {
+            args: Prisma.ViewLogAggregateArgs<ExtArgs>;
+            result: $Utils.Optional<AggregateViewLog>;
+          };
+          groupBy: {
+            args: Prisma.ViewLogGroupByArgs<ExtArgs>;
+            result: $Utils.Optional<ViewLogGroupByOutputType>[];
+          };
+          count: {
+            args: Prisma.ViewLogCountArgs<ExtArgs>;
+            result: $Utils.Optional<ViewLogCountAggregateOutputType> | number;
+          };
+        };
+      };
     };
   } & {
     other: {
@@ -959,6 +1139,8 @@ export namespace Prisma {
     admin?: AdminOmit;
     viewerAuth?: ViewerAuthOmit;
     skillSheet?: SkillSheetOmit;
+    viewerToken?: ViewerTokenOmit;
+    viewLog?: ViewLogOmit;
   };
 
   /* Types for Logging */
@@ -1027,6 +1209,40 @@ export namespace Prisma {
   /**
    * Count Types
    */
+
+  /**
+   * Count Type ViewerTokenCountOutputType
+   */
+
+  export type ViewerTokenCountOutputType = {
+    viewLogs: number;
+  };
+
+  export type ViewerTokenCountOutputTypeSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    viewLogs?: boolean | ViewerTokenCountOutputTypeCountViewLogsArgs;
+  };
+
+  // Custom InputTypes
+  /**
+   * ViewerTokenCountOutputType without action
+   */
+  export type ViewerTokenCountOutputTypeDefaultArgs<
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+  > = {
+    /**
+     * Select specific fields to fetch from the ViewerTokenCountOutputType
+     */
+    select?: ViewerTokenCountOutputTypeSelect<ExtArgs> | null;
+  };
+
+  /**
+   * ViewerTokenCountOutputType without action
+   */
+  export type ViewerTokenCountOutputTypeCountViewLogsArgs<
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+  > = {
+    where?: ViewLogWhereInput;
+  };
 
   /**
    * Models
@@ -4280,6 +4496,2461 @@ export namespace Prisma {
   };
 
   /**
+   * Model ViewerToken
+   */
+
+  export type AggregateViewerToken = {
+    _count: ViewerTokenCountAggregateOutputType | null;
+    _avg: ViewerTokenAvgAggregateOutputType | null;
+    _sum: ViewerTokenSumAggregateOutputType | null;
+    _min: ViewerTokenMinAggregateOutputType | null;
+    _max: ViewerTokenMaxAggregateOutputType | null;
+  };
+
+  export type ViewerTokenAvgAggregateOutputType = {
+    maxViews: number | null;
+    viewCount: number | null;
+  };
+
+  export type ViewerTokenSumAggregateOutputType = {
+    maxViews: number | null;
+    viewCount: number | null;
+  };
+
+  export type ViewerTokenMinAggregateOutputType = {
+    id: string | null;
+    token: string | null;
+    label: string | null;
+    expiresAt: Date | null;
+    maxViews: number | null;
+    viewCount: number | null;
+    isActive: boolean | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+  };
+
+  export type ViewerTokenMaxAggregateOutputType = {
+    id: string | null;
+    token: string | null;
+    label: string | null;
+    expiresAt: Date | null;
+    maxViews: number | null;
+    viewCount: number | null;
+    isActive: boolean | null;
+    createdAt: Date | null;
+    updatedAt: Date | null;
+  };
+
+  export type ViewerTokenCountAggregateOutputType = {
+    id: number;
+    token: number;
+    label: number;
+    expiresAt: number;
+    maxViews: number;
+    viewCount: number;
+    isActive: number;
+    createdAt: number;
+    updatedAt: number;
+    _all: number;
+  };
+
+  export type ViewerTokenAvgAggregateInputType = {
+    maxViews?: true;
+    viewCount?: true;
+  };
+
+  export type ViewerTokenSumAggregateInputType = {
+    maxViews?: true;
+    viewCount?: true;
+  };
+
+  export type ViewerTokenMinAggregateInputType = {
+    id?: true;
+    token?: true;
+    label?: true;
+    expiresAt?: true;
+    maxViews?: true;
+    viewCount?: true;
+    isActive?: true;
+    createdAt?: true;
+    updatedAt?: true;
+  };
+
+  export type ViewerTokenMaxAggregateInputType = {
+    id?: true;
+    token?: true;
+    label?: true;
+    expiresAt?: true;
+    maxViews?: true;
+    viewCount?: true;
+    isActive?: true;
+    createdAt?: true;
+    updatedAt?: true;
+  };
+
+  export type ViewerTokenCountAggregateInputType = {
+    id?: true;
+    token?: true;
+    label?: true;
+    expiresAt?: true;
+    maxViews?: true;
+    viewCount?: true;
+    isActive?: true;
+    createdAt?: true;
+    updatedAt?: true;
+    _all?: true;
+  };
+
+  export type ViewerTokenAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ViewerToken to aggregate.
+     */
+    where?: ViewerTokenWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewerTokens to fetch.
+     */
+    orderBy?: ViewerTokenOrderByWithRelationInput | ViewerTokenOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the start position
+     */
+    cursor?: ViewerTokenWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewerTokens from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewerTokens.
+     */
+    skip?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Count returned ViewerTokens
+     **/
+    _count?: true | ViewerTokenCountAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Select which fields to average
+     **/
+    _avg?: ViewerTokenAvgAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Select which fields to sum
+     **/
+    _sum?: ViewerTokenSumAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Select which fields to find the minimum value
+     **/
+    _min?: ViewerTokenMinAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Select which fields to find the maximum value
+     **/
+    _max?: ViewerTokenMaxAggregateInputType;
+  };
+
+  export type GetViewerTokenAggregateType<T extends ViewerTokenAggregateArgs> = {
+    [P in keyof T & keyof AggregateViewerToken]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateViewerToken[P]>
+      : GetScalarType<T[P], AggregateViewerToken[P]>;
+  };
+
+  export type ViewerTokenGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ViewerTokenWhereInput;
+    orderBy?: ViewerTokenOrderByWithAggregationInput | ViewerTokenOrderByWithAggregationInput[];
+    by: ViewerTokenScalarFieldEnum[] | ViewerTokenScalarFieldEnum;
+    having?: ViewerTokenScalarWhereWithAggregatesInput;
+    take?: number;
+    skip?: number;
+    _count?: ViewerTokenCountAggregateInputType | true;
+    _avg?: ViewerTokenAvgAggregateInputType;
+    _sum?: ViewerTokenSumAggregateInputType;
+    _min?: ViewerTokenMinAggregateInputType;
+    _max?: ViewerTokenMaxAggregateInputType;
+  };
+
+  export type ViewerTokenGroupByOutputType = {
+    id: string;
+    token: string;
+    label: string;
+    expiresAt: Date | null;
+    maxViews: number | null;
+    viewCount: number;
+    isActive: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    _count: ViewerTokenCountAggregateOutputType | null;
+    _avg: ViewerTokenAvgAggregateOutputType | null;
+    _sum: ViewerTokenSumAggregateOutputType | null;
+    _min: ViewerTokenMinAggregateOutputType | null;
+    _max: ViewerTokenMaxAggregateOutputType | null;
+  };
+
+  type GetViewerTokenGroupByPayload<T extends ViewerTokenGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ViewerTokenGroupByOutputType, T['by']> & {
+        [P in keyof T & keyof ViewerTokenGroupByOutputType]: P extends '_count'
+          ? T[P] extends boolean
+            ? number
+            : GetScalarType<T[P], ViewerTokenGroupByOutputType[P]>
+          : GetScalarType<T[P], ViewerTokenGroupByOutputType[P]>;
+      }
+    >
+  >;
+
+  export type ViewerTokenSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    $Extensions.GetSelect<
+      {
+        id?: boolean;
+        token?: boolean;
+        label?: boolean;
+        expiresAt?: boolean;
+        maxViews?: boolean;
+        viewCount?: boolean;
+        isActive?: boolean;
+        createdAt?: boolean;
+        updatedAt?: boolean;
+        viewLogs?: boolean | ViewerToken$viewLogsArgs<ExtArgs>;
+        _count?: boolean | ViewerTokenCountOutputTypeDefaultArgs<ExtArgs>;
+      },
+      ExtArgs['result']['viewerToken']
+    >;
+
+  export type ViewerTokenSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    $Extensions.GetSelect<
+      {
+        id?: boolean;
+        token?: boolean;
+        label?: boolean;
+        expiresAt?: boolean;
+        maxViews?: boolean;
+        viewCount?: boolean;
+        isActive?: boolean;
+        createdAt?: boolean;
+        updatedAt?: boolean;
+      },
+      ExtArgs['result']['viewerToken']
+    >;
+
+  export type ViewerTokenSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    $Extensions.GetSelect<
+      {
+        id?: boolean;
+        token?: boolean;
+        label?: boolean;
+        expiresAt?: boolean;
+        maxViews?: boolean;
+        viewCount?: boolean;
+        isActive?: boolean;
+        createdAt?: boolean;
+        updatedAt?: boolean;
+      },
+      ExtArgs['result']['viewerToken']
+    >;
+
+  export type ViewerTokenSelectScalar = {
+    id?: boolean;
+    token?: boolean;
+    label?: boolean;
+    expiresAt?: boolean;
+    maxViews?: boolean;
+    viewCount?: boolean;
+    isActive?: boolean;
+    createdAt?: boolean;
+    updatedAt?: boolean;
+  };
+
+  export type ViewerTokenOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<
+    'id' | 'token' | 'label' | 'expiresAt' | 'maxViews' | 'viewCount' | 'isActive' | 'createdAt' | 'updatedAt',
+    ExtArgs['result']['viewerToken']
+  >;
+  export type ViewerTokenInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    viewLogs?: boolean | ViewerToken$viewLogsArgs<ExtArgs>;
+    _count?: boolean | ViewerTokenCountOutputTypeDefaultArgs<ExtArgs>;
+  };
+  export type ViewerTokenIncludeCreateManyAndReturn<
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+  > = {};
+  export type ViewerTokenIncludeUpdateManyAndReturn<
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+  > = {};
+
+  export type $ViewerTokenPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: 'ViewerToken';
+    objects: {
+      viewLogs: Prisma.$ViewLogPayload<ExtArgs>[];
+    };
+    scalars: $Extensions.GetPayloadResult<
+      {
+        id: string;
+        token: string;
+        label: string;
+        expiresAt: Date | null;
+        maxViews: number | null;
+        viewCount: number;
+        isActive: boolean;
+        createdAt: Date;
+        updatedAt: Date;
+      },
+      ExtArgs['result']['viewerToken']
+    >;
+    composites: {};
+  };
+
+  type ViewerTokenGetPayload<S extends boolean | null | undefined | ViewerTokenDefaultArgs> = $Result.GetResult<
+    Prisma.$ViewerTokenPayload,
+    S
+  >;
+
+  type ViewerTokenCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = Omit<
+    ViewerTokenFindManyArgs,
+    'select' | 'include' | 'distinct' | 'omit'
+  > & {
+    select?: ViewerTokenCountAggregateInputType | true;
+  };
+
+  export interface ViewerTokenDelegate<
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+    GlobalOmitOptions = {},
+  > {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ViewerToken']; meta: { name: 'ViewerToken' } };
+    /**
+     * Find zero or one ViewerToken that matches the filter.
+     * @param {ViewerTokenFindUniqueArgs} args - Arguments to find a ViewerToken
+     * @example
+     * // Get one ViewerToken
+     * const viewerToken = await prisma.viewerToken.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ViewerTokenFindUniqueArgs>(
+      args: SelectSubset<T, ViewerTokenFindUniqueArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'findUnique', GlobalOmitOptions> | null,
+      null,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find one ViewerToken that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ViewerTokenFindUniqueOrThrowArgs} args - Arguments to find a ViewerToken
+     * @example
+     * // Get one ViewerToken
+     * const viewerToken = await prisma.viewerToken.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ViewerTokenFindUniqueOrThrowArgs>(
+      args: SelectSubset<T, ViewerTokenFindUniqueOrThrowArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'findUniqueOrThrow', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find the first ViewerToken that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewerTokenFindFirstArgs} args - Arguments to find a ViewerToken
+     * @example
+     * // Get one ViewerToken
+     * const viewerToken = await prisma.viewerToken.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ViewerTokenFindFirstArgs>(
+      args?: SelectSubset<T, ViewerTokenFindFirstArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'findFirst', GlobalOmitOptions> | null,
+      null,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find the first ViewerToken that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewerTokenFindFirstOrThrowArgs} args - Arguments to find a ViewerToken
+     * @example
+     * // Get one ViewerToken
+     * const viewerToken = await prisma.viewerToken.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ViewerTokenFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, ViewerTokenFindFirstOrThrowArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'findFirstOrThrow', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find zero or more ViewerTokens that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewerTokenFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ViewerTokens
+     * const viewerTokens = await prisma.viewerToken.findMany()
+     *
+     * // Get first 10 ViewerTokens
+     * const viewerTokens = await prisma.viewerToken.findMany({ take: 10 })
+     *
+     * // Only select the `id`
+     * const viewerTokenWithIdOnly = await prisma.viewerToken.findMany({ select: { id: true } })
+     *
+     */
+    findMany<T extends ViewerTokenFindManyArgs>(
+      args?: SelectSubset<T, ViewerTokenFindManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'findMany', GlobalOmitOptions>>;
+
+    /**
+     * Create a ViewerToken.
+     * @param {ViewerTokenCreateArgs} args - Arguments to create a ViewerToken.
+     * @example
+     * // Create one ViewerToken
+     * const ViewerToken = await prisma.viewerToken.create({
+     *   data: {
+     *     // ... data to create a ViewerToken
+     *   }
+     * })
+     *
+     */
+    create<T extends ViewerTokenCreateArgs>(
+      args: SelectSubset<T, ViewerTokenCreateArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'create', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Create many ViewerTokens.
+     * @param {ViewerTokenCreateManyArgs} args - Arguments to create many ViewerTokens.
+     * @example
+     * // Create many ViewerTokens
+     * const viewerToken = await prisma.viewerToken.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *
+     */
+    createMany<T extends ViewerTokenCreateManyArgs>(
+      args?: SelectSubset<T, ViewerTokenCreateManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<BatchPayload>;
+
+    /**
+     * Create many ViewerTokens and returns the data saved in the database.
+     * @param {ViewerTokenCreateManyAndReturnArgs} args - Arguments to create many ViewerTokens.
+     * @example
+     * // Create many ViewerTokens
+     * const viewerToken = await prisma.viewerToken.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *
+     * // Create many ViewerTokens and only return the `id`
+     * const viewerTokenWithIdOnly = await prisma.viewerToken.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     *
+     */
+    createManyAndReturn<T extends ViewerTokenCreateManyAndReturnArgs>(
+      args?: SelectSubset<T, ViewerTokenCreateManyAndReturnArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'createManyAndReturn', GlobalOmitOptions>
+    >;
+
+    /**
+     * Delete a ViewerToken.
+     * @param {ViewerTokenDeleteArgs} args - Arguments to delete one ViewerToken.
+     * @example
+     * // Delete one ViewerToken
+     * const ViewerToken = await prisma.viewerToken.delete({
+     *   where: {
+     *     // ... filter to delete one ViewerToken
+     *   }
+     * })
+     *
+     */
+    delete<T extends ViewerTokenDeleteArgs>(
+      args: SelectSubset<T, ViewerTokenDeleteArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'delete', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Update one ViewerToken.
+     * @param {ViewerTokenUpdateArgs} args - Arguments to update one ViewerToken.
+     * @example
+     * // Update one ViewerToken
+     * const viewerToken = await prisma.viewerToken.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     *
+     */
+    update<T extends ViewerTokenUpdateArgs>(
+      args: SelectSubset<T, ViewerTokenUpdateArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'update', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Delete zero or more ViewerTokens.
+     * @param {ViewerTokenDeleteManyArgs} args - Arguments to filter ViewerTokens to delete.
+     * @example
+     * // Delete a few ViewerTokens
+     * const { count } = await prisma.viewerToken.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     *
+     */
+    deleteMany<T extends ViewerTokenDeleteManyArgs>(
+      args?: SelectSubset<T, ViewerTokenDeleteManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<BatchPayload>;
+
+    /**
+     * Update zero or more ViewerTokens.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewerTokenUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ViewerTokens
+     * const viewerToken = await prisma.viewerToken.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     *
+     */
+    updateMany<T extends ViewerTokenUpdateManyArgs>(
+      args: SelectSubset<T, ViewerTokenUpdateManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<BatchPayload>;
+
+    /**
+     * Update zero or more ViewerTokens and returns the data updated in the database.
+     * @param {ViewerTokenUpdateManyAndReturnArgs} args - Arguments to update many ViewerTokens.
+     * @example
+     * // Update many ViewerTokens
+     * const viewerToken = await prisma.viewerToken.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *
+     * // Update zero or more ViewerTokens and only return the `id`
+     * const viewerTokenWithIdOnly = await prisma.viewerToken.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     *
+     */
+    updateManyAndReturn<T extends ViewerTokenUpdateManyAndReturnArgs>(
+      args: SelectSubset<T, ViewerTokenUpdateManyAndReturnArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'updateManyAndReturn', GlobalOmitOptions>
+    >;
+
+    /**
+     * Create or update one ViewerToken.
+     * @param {ViewerTokenUpsertArgs} args - Arguments to update or create a ViewerToken.
+     * @example
+     * // Update or create a ViewerToken
+     * const viewerToken = await prisma.viewerToken.upsert({
+     *   create: {
+     *     // ... data to create a ViewerToken
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ViewerToken we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ViewerTokenUpsertArgs>(
+      args: SelectSubset<T, ViewerTokenUpsertArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'upsert', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Count the number of ViewerTokens.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewerTokenCountArgs} args - Arguments to filter ViewerTokens to count.
+     * @example
+     * // Count the number of ViewerTokens
+     * const count = await prisma.viewerToken.count({
+     *   where: {
+     *     // ... the filter for the ViewerTokens we want to count
+     *   }
+     * })
+     **/
+    count<T extends ViewerTokenCountArgs>(
+      args?: Subset<T, ViewerTokenCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ViewerTokenCountAggregateOutputType>
+        : number
+    >;
+
+    /**
+     * Allows you to perform aggregations operations on a ViewerToken.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewerTokenAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+     **/
+    aggregate<T extends ViewerTokenAggregateArgs>(
+      args: Subset<T, ViewerTokenAggregateArgs>,
+    ): Prisma.PrismaPromise<GetViewerTokenAggregateType<T>>;
+
+    /**
+     * Group by ViewerToken.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewerTokenGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     *
+     **/
+    groupBy<
+      T extends ViewerTokenGroupByArgs,
+      HasSelectOrTake extends Or<Extends<'skip', Keys<T>>, Extends<'take', Keys<T>>>,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ViewerTokenGroupByArgs['orderBy'] }
+        : { orderBy?: ViewerTokenGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+        ? `Error: "by" must not be empty.`
+        : HavingValid extends False
+          ? {
+              [P in HavingFields]: P extends ByFields
+                ? never
+                : P extends string
+                  ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+                  : [Error, 'Field ', P, ` in "having" needs to be provided in "by"`];
+            }[HavingFields]
+          : 'take' extends Keys<T>
+            ? 'orderBy' extends Keys<T>
+              ? ByValid extends True
+                ? {}
+                : {
+                    [P in OrderFields]: P extends ByFields
+                      ? never
+                      : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`;
+                  }[OrderFields]
+              : 'Error: If you provide "take", you also need to provide "orderBy"'
+            : 'skip' extends Keys<T>
+              ? 'orderBy' extends Keys<T>
+                ? ByValid extends True
+                  ? {}
+                  : {
+                      [P in OrderFields]: P extends ByFields
+                        ? never
+                        : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`;
+                    }[OrderFields]
+                : 'Error: If you provide "skip", you also need to provide "orderBy"'
+              : ByValid extends True
+                ? {}
+                : {
+                    [P in OrderFields]: P extends ByFields
+                      ? never
+                      : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`;
+                  }[OrderFields],
+    >(
+      args: SubsetIntersection<T, ViewerTokenGroupByArgs, OrderByArg> & InputErrors,
+    ): {} extends InputErrors ? GetViewerTokenGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>;
+    /**
+     * Fields of the ViewerToken model
+     */
+    readonly fields: ViewerTokenFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ViewerToken.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ViewerTokenClient<
+    T,
+    Null = never,
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+    GlobalOmitOptions = {},
+  > extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: 'PrismaPromise';
+    viewLogs<T extends ViewerToken$viewLogsArgs<ExtArgs> = {}>(
+      args?: Subset<T, ViewerToken$viewLogsArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'findMany', GlobalOmitOptions> | Null
+    >;
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(
+      onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+      onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+    ): $Utils.JsPromise<TResult1 | TResult2>;
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(
+      onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null,
+    ): $Utils.JsPromise<T | TResult>;
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>;
+  }
+
+  /**
+   * Fields of the ViewerToken model
+   */
+  interface ViewerTokenFieldRefs {
+    readonly id: FieldRef<'ViewerToken', 'String'>;
+    readonly token: FieldRef<'ViewerToken', 'String'>;
+    readonly label: FieldRef<'ViewerToken', 'String'>;
+    readonly expiresAt: FieldRef<'ViewerToken', 'DateTime'>;
+    readonly maxViews: FieldRef<'ViewerToken', 'Int'>;
+    readonly viewCount: FieldRef<'ViewerToken', 'Int'>;
+    readonly isActive: FieldRef<'ViewerToken', 'Boolean'>;
+    readonly createdAt: FieldRef<'ViewerToken', 'DateTime'>;
+    readonly updatedAt: FieldRef<'ViewerToken', 'DateTime'>;
+  }
+
+  // Custom InputTypes
+  /**
+   * ViewerToken findUnique
+   */
+  export type ViewerTokenFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewerToken to fetch.
+     */
+    where: ViewerTokenWhereUniqueInput;
+  };
+
+  /**
+   * ViewerToken findUniqueOrThrow
+   */
+  export type ViewerTokenFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewerToken to fetch.
+     */
+    where: ViewerTokenWhereUniqueInput;
+  };
+
+  /**
+   * ViewerToken findFirst
+   */
+  export type ViewerTokenFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewerToken to fetch.
+     */
+    where?: ViewerTokenWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewerTokens to fetch.
+     */
+    orderBy?: ViewerTokenOrderByWithRelationInput | ViewerTokenOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the position for searching for ViewerTokens.
+     */
+    cursor?: ViewerTokenWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewerTokens from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewerTokens.
+     */
+    skip?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     *
+     * Filter by unique combinations of ViewerTokens.
+     */
+    distinct?: ViewerTokenScalarFieldEnum | ViewerTokenScalarFieldEnum[];
+  };
+
+  /**
+   * ViewerToken findFirstOrThrow
+   */
+  export type ViewerTokenFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewerToken to fetch.
+     */
+    where?: ViewerTokenWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewerTokens to fetch.
+     */
+    orderBy?: ViewerTokenOrderByWithRelationInput | ViewerTokenOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the position for searching for ViewerTokens.
+     */
+    cursor?: ViewerTokenWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewerTokens from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewerTokens.
+     */
+    skip?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     *
+     * Filter by unique combinations of ViewerTokens.
+     */
+    distinct?: ViewerTokenScalarFieldEnum | ViewerTokenScalarFieldEnum[];
+  };
+
+  /**
+   * ViewerToken findMany
+   */
+  export type ViewerTokenFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewerTokens to fetch.
+     */
+    where?: ViewerTokenWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewerTokens to fetch.
+     */
+    orderBy?: ViewerTokenOrderByWithRelationInput | ViewerTokenOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the position for listing ViewerTokens.
+     */
+    cursor?: ViewerTokenWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewerTokens from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewerTokens.
+     */
+    skip?: number;
+    distinct?: ViewerTokenScalarFieldEnum | ViewerTokenScalarFieldEnum[];
+  };
+
+  /**
+   * ViewerToken create
+   */
+  export type ViewerTokenCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * The data needed to create a ViewerToken.
+     */
+    data: XOR<ViewerTokenCreateInput, ViewerTokenUncheckedCreateInput>;
+  };
+
+  /**
+   * ViewerToken createMany
+   */
+  export type ViewerTokenCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ViewerTokens.
+     */
+    data: ViewerTokenCreateManyInput | ViewerTokenCreateManyInput[];
+    skipDuplicates?: boolean;
+  };
+
+  /**
+   * ViewerToken createManyAndReturn
+   */
+  export type ViewerTokenCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelectCreateManyAndReturn<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * The data used to create many ViewerTokens.
+     */
+    data: ViewerTokenCreateManyInput | ViewerTokenCreateManyInput[];
+    skipDuplicates?: boolean;
+  };
+
+  /**
+   * ViewerToken update
+   */
+  export type ViewerTokenUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * The data needed to update a ViewerToken.
+     */
+    data: XOR<ViewerTokenUpdateInput, ViewerTokenUncheckedUpdateInput>;
+    /**
+     * Choose, which ViewerToken to update.
+     */
+    where: ViewerTokenWhereUniqueInput;
+  };
+
+  /**
+   * ViewerToken updateMany
+   */
+  export type ViewerTokenUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ViewerTokens.
+     */
+    data: XOR<ViewerTokenUpdateManyMutationInput, ViewerTokenUncheckedUpdateManyInput>;
+    /**
+     * Filter which ViewerTokens to update
+     */
+    where?: ViewerTokenWhereInput;
+    /**
+     * Limit how many ViewerTokens to update.
+     */
+    limit?: number;
+  };
+
+  /**
+   * ViewerToken updateManyAndReturn
+   */
+  export type ViewerTokenUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelectUpdateManyAndReturn<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * The data used to update ViewerTokens.
+     */
+    data: XOR<ViewerTokenUpdateManyMutationInput, ViewerTokenUncheckedUpdateManyInput>;
+    /**
+     * Filter which ViewerTokens to update
+     */
+    where?: ViewerTokenWhereInput;
+    /**
+     * Limit how many ViewerTokens to update.
+     */
+    limit?: number;
+  };
+
+  /**
+   * ViewerToken upsert
+   */
+  export type ViewerTokenUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * The filter to search for the ViewerToken to update in case it exists.
+     */
+    where: ViewerTokenWhereUniqueInput;
+    /**
+     * In case the ViewerToken found by the `where` argument doesn't exist, create a new ViewerToken with this data.
+     */
+    create: XOR<ViewerTokenCreateInput, ViewerTokenUncheckedCreateInput>;
+    /**
+     * In case the ViewerToken was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ViewerTokenUpdateInput, ViewerTokenUncheckedUpdateInput>;
+  };
+
+  /**
+   * ViewerToken delete
+   */
+  export type ViewerTokenDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+    /**
+     * Filter which ViewerToken to delete.
+     */
+    where: ViewerTokenWhereUniqueInput;
+  };
+
+  /**
+   * ViewerToken deleteMany
+   */
+  export type ViewerTokenDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ViewerTokens to delete
+     */
+    where?: ViewerTokenWhereInput;
+    /**
+     * Limit how many ViewerTokens to delete.
+     */
+    limit?: number;
+  };
+
+  /**
+   * ViewerToken.viewLogs
+   */
+  export type ViewerToken$viewLogsArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    where?: ViewLogWhereInput;
+    orderBy?: ViewLogOrderByWithRelationInput | ViewLogOrderByWithRelationInput[];
+    cursor?: ViewLogWhereUniqueInput;
+    take?: number;
+    skip?: number;
+    distinct?: ViewLogScalarFieldEnum | ViewLogScalarFieldEnum[];
+  };
+
+  /**
+   * ViewerToken without action
+   */
+  export type ViewerTokenDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewerToken
+     */
+    select?: ViewerTokenSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewerToken
+     */
+    omit?: ViewerTokenOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewerTokenInclude<ExtArgs> | null;
+  };
+
+  /**
+   * Model ViewLog
+   */
+
+  export type AggregateViewLog = {
+    _count: ViewLogCountAggregateOutputType | null;
+    _min: ViewLogMinAggregateOutputType | null;
+    _max: ViewLogMaxAggregateOutputType | null;
+  };
+
+  export type ViewLogMinAggregateOutputType = {
+    id: string | null;
+    tokenId: string | null;
+    viewedAt: Date | null;
+    viewerName: string | null;
+    companyName: string | null;
+    ipAddress: string | null;
+    userAgent: string | null;
+    gitCommitHash: string | null;
+  };
+
+  export type ViewLogMaxAggregateOutputType = {
+    id: string | null;
+    tokenId: string | null;
+    viewedAt: Date | null;
+    viewerName: string | null;
+    companyName: string | null;
+    ipAddress: string | null;
+    userAgent: string | null;
+    gitCommitHash: string | null;
+  };
+
+  export type ViewLogCountAggregateOutputType = {
+    id: number;
+    tokenId: number;
+    viewedAt: number;
+    viewerName: number;
+    companyName: number;
+    ipAddress: number;
+    userAgent: number;
+    gitCommitHash: number;
+    _all: number;
+  };
+
+  export type ViewLogMinAggregateInputType = {
+    id?: true;
+    tokenId?: true;
+    viewedAt?: true;
+    viewerName?: true;
+    companyName?: true;
+    ipAddress?: true;
+    userAgent?: true;
+    gitCommitHash?: true;
+  };
+
+  export type ViewLogMaxAggregateInputType = {
+    id?: true;
+    tokenId?: true;
+    viewedAt?: true;
+    viewerName?: true;
+    companyName?: true;
+    ipAddress?: true;
+    userAgent?: true;
+    gitCommitHash?: true;
+  };
+
+  export type ViewLogCountAggregateInputType = {
+    id?: true;
+    tokenId?: true;
+    viewedAt?: true;
+    viewerName?: true;
+    companyName?: true;
+    ipAddress?: true;
+    userAgent?: true;
+    gitCommitHash?: true;
+    _all?: true;
+  };
+
+  export type ViewLogAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ViewLog to aggregate.
+     */
+    where?: ViewLogWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewLogs to fetch.
+     */
+    orderBy?: ViewLogOrderByWithRelationInput | ViewLogOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the start position
+     */
+    cursor?: ViewLogWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewLogs from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewLogs.
+     */
+    skip?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Count returned ViewLogs
+     **/
+    _count?: true | ViewLogCountAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Select which fields to find the minimum value
+     **/
+    _min?: ViewLogMinAggregateInputType;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     *
+     * Select which fields to find the maximum value
+     **/
+    _max?: ViewLogMaxAggregateInputType;
+  };
+
+  export type GetViewLogAggregateType<T extends ViewLogAggregateArgs> = {
+    [P in keyof T & keyof AggregateViewLog]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateViewLog[P]>
+      : GetScalarType<T[P], AggregateViewLog[P]>;
+  };
+
+  export type ViewLogGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: ViewLogWhereInput;
+    orderBy?: ViewLogOrderByWithAggregationInput | ViewLogOrderByWithAggregationInput[];
+    by: ViewLogScalarFieldEnum[] | ViewLogScalarFieldEnum;
+    having?: ViewLogScalarWhereWithAggregatesInput;
+    take?: number;
+    skip?: number;
+    _count?: ViewLogCountAggregateInputType | true;
+    _min?: ViewLogMinAggregateInputType;
+    _max?: ViewLogMaxAggregateInputType;
+  };
+
+  export type ViewLogGroupByOutputType = {
+    id: string;
+    tokenId: string;
+    viewedAt: Date;
+    viewerName: string;
+    companyName: string;
+    ipAddress: string | null;
+    userAgent: string | null;
+    gitCommitHash: string | null;
+    _count: ViewLogCountAggregateOutputType | null;
+    _min: ViewLogMinAggregateOutputType | null;
+    _max: ViewLogMaxAggregateOutputType | null;
+  };
+
+  type GetViewLogGroupByPayload<T extends ViewLogGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<ViewLogGroupByOutputType, T['by']> & {
+        [P in keyof T & keyof ViewLogGroupByOutputType]: P extends '_count'
+          ? T[P] extends boolean
+            ? number
+            : GetScalarType<T[P], ViewLogGroupByOutputType[P]>
+          : GetScalarType<T[P], ViewLogGroupByOutputType[P]>;
+      }
+    >
+  >;
+
+  export type ViewLogSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<
+    {
+      id?: boolean;
+      tokenId?: boolean;
+      viewedAt?: boolean;
+      viewerName?: boolean;
+      companyName?: boolean;
+      ipAddress?: boolean;
+      userAgent?: boolean;
+      gitCommitHash?: boolean;
+      token?: boolean | ViewerTokenDefaultArgs<ExtArgs>;
+    },
+    ExtArgs['result']['viewLog']
+  >;
+
+  export type ViewLogSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    $Extensions.GetSelect<
+      {
+        id?: boolean;
+        tokenId?: boolean;
+        viewedAt?: boolean;
+        viewerName?: boolean;
+        companyName?: boolean;
+        ipAddress?: boolean;
+        userAgent?: boolean;
+        gitCommitHash?: boolean;
+        token?: boolean | ViewerTokenDefaultArgs<ExtArgs>;
+      },
+      ExtArgs['result']['viewLog']
+    >;
+
+  export type ViewLogSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    $Extensions.GetSelect<
+      {
+        id?: boolean;
+        tokenId?: boolean;
+        viewedAt?: boolean;
+        viewerName?: boolean;
+        companyName?: boolean;
+        ipAddress?: boolean;
+        userAgent?: boolean;
+        gitCommitHash?: boolean;
+        token?: boolean | ViewerTokenDefaultArgs<ExtArgs>;
+      },
+      ExtArgs['result']['viewLog']
+    >;
+
+  export type ViewLogSelectScalar = {
+    id?: boolean;
+    tokenId?: boolean;
+    viewedAt?: boolean;
+    viewerName?: boolean;
+    companyName?: boolean;
+    ipAddress?: boolean;
+    userAgent?: boolean;
+    gitCommitHash?: boolean;
+  };
+
+  export type ViewLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<
+    'id' | 'tokenId' | 'viewedAt' | 'viewerName' | 'companyName' | 'ipAddress' | 'userAgent' | 'gitCommitHash',
+    ExtArgs['result']['viewLog']
+  >;
+  export type ViewLogInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    token?: boolean | ViewerTokenDefaultArgs<ExtArgs>;
+  };
+  export type ViewLogIncludeCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    token?: boolean | ViewerTokenDefaultArgs<ExtArgs>;
+  };
+  export type ViewLogIncludeUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    token?: boolean | ViewerTokenDefaultArgs<ExtArgs>;
+  };
+
+  export type $ViewLogPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: 'ViewLog';
+    objects: {
+      token: Prisma.$ViewerTokenPayload<ExtArgs>;
+    };
+    scalars: $Extensions.GetPayloadResult<
+      {
+        id: string;
+        tokenId: string;
+        viewedAt: Date;
+        viewerName: string;
+        companyName: string;
+        ipAddress: string | null;
+        userAgent: string | null;
+        gitCommitHash: string | null;
+      },
+      ExtArgs['result']['viewLog']
+    >;
+    composites: {};
+  };
+
+  type ViewLogGetPayload<S extends boolean | null | undefined | ViewLogDefaultArgs> = $Result.GetResult<
+    Prisma.$ViewLogPayload,
+    S
+  >;
+
+  type ViewLogCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = Omit<
+    ViewLogFindManyArgs,
+    'select' | 'include' | 'distinct' | 'omit'
+  > & {
+    select?: ViewLogCountAggregateInputType | true;
+  };
+
+  export interface ViewLogDelegate<
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+    GlobalOmitOptions = {},
+  > {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['ViewLog']; meta: { name: 'ViewLog' } };
+    /**
+     * Find zero or one ViewLog that matches the filter.
+     * @param {ViewLogFindUniqueArgs} args - Arguments to find a ViewLog
+     * @example
+     * // Get one ViewLog
+     * const viewLog = await prisma.viewLog.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends ViewLogFindUniqueArgs>(
+      args: SelectSubset<T, ViewLogFindUniqueArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'findUnique', GlobalOmitOptions> | null,
+      null,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find one ViewLog that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {ViewLogFindUniqueOrThrowArgs} args - Arguments to find a ViewLog
+     * @example
+     * // Get one ViewLog
+     * const viewLog = await prisma.viewLog.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends ViewLogFindUniqueOrThrowArgs>(
+      args: SelectSubset<T, ViewLogFindUniqueOrThrowArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'findUniqueOrThrow', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find the first ViewLog that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewLogFindFirstArgs} args - Arguments to find a ViewLog
+     * @example
+     * // Get one ViewLog
+     * const viewLog = await prisma.viewLog.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends ViewLogFindFirstArgs>(
+      args?: SelectSubset<T, ViewLogFindFirstArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'findFirst', GlobalOmitOptions> | null,
+      null,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find the first ViewLog that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewLogFindFirstOrThrowArgs} args - Arguments to find a ViewLog
+     * @example
+     * // Get one ViewLog
+     * const viewLog = await prisma.viewLog.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends ViewLogFindFirstOrThrowArgs>(
+      args?: SelectSubset<T, ViewLogFindFirstOrThrowArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'findFirstOrThrow', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Find zero or more ViewLogs that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewLogFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all ViewLogs
+     * const viewLogs = await prisma.viewLog.findMany()
+     *
+     * // Get first 10 ViewLogs
+     * const viewLogs = await prisma.viewLog.findMany({ take: 10 })
+     *
+     * // Only select the `id`
+     * const viewLogWithIdOnly = await prisma.viewLog.findMany({ select: { id: true } })
+     *
+     */
+    findMany<T extends ViewLogFindManyArgs>(
+      args?: SelectSubset<T, ViewLogFindManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<$Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'findMany', GlobalOmitOptions>>;
+
+    /**
+     * Create a ViewLog.
+     * @param {ViewLogCreateArgs} args - Arguments to create a ViewLog.
+     * @example
+     * // Create one ViewLog
+     * const ViewLog = await prisma.viewLog.create({
+     *   data: {
+     *     // ... data to create a ViewLog
+     *   }
+     * })
+     *
+     */
+    create<T extends ViewLogCreateArgs>(
+      args: SelectSubset<T, ViewLogCreateArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'create', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Create many ViewLogs.
+     * @param {ViewLogCreateManyArgs} args - Arguments to create many ViewLogs.
+     * @example
+     * // Create many ViewLogs
+     * const viewLog = await prisma.viewLog.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *
+     */
+    createMany<T extends ViewLogCreateManyArgs>(
+      args?: SelectSubset<T, ViewLogCreateManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<BatchPayload>;
+
+    /**
+     * Create many ViewLogs and returns the data saved in the database.
+     * @param {ViewLogCreateManyAndReturnArgs} args - Arguments to create many ViewLogs.
+     * @example
+     * // Create many ViewLogs
+     * const viewLog = await prisma.viewLog.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *
+     * // Create many ViewLogs and only return the `id`
+     * const viewLogWithIdOnly = await prisma.viewLog.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     *
+     */
+    createManyAndReturn<T extends ViewLogCreateManyAndReturnArgs>(
+      args?: SelectSubset<T, ViewLogCreateManyAndReturnArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'createManyAndReturn', GlobalOmitOptions>
+    >;
+
+    /**
+     * Delete a ViewLog.
+     * @param {ViewLogDeleteArgs} args - Arguments to delete one ViewLog.
+     * @example
+     * // Delete one ViewLog
+     * const ViewLog = await prisma.viewLog.delete({
+     *   where: {
+     *     // ... filter to delete one ViewLog
+     *   }
+     * })
+     *
+     */
+    delete<T extends ViewLogDeleteArgs>(
+      args: SelectSubset<T, ViewLogDeleteArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'delete', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Update one ViewLog.
+     * @param {ViewLogUpdateArgs} args - Arguments to update one ViewLog.
+     * @example
+     * // Update one ViewLog
+     * const viewLog = await prisma.viewLog.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     *
+     */
+    update<T extends ViewLogUpdateArgs>(
+      args: SelectSubset<T, ViewLogUpdateArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'update', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Delete zero or more ViewLogs.
+     * @param {ViewLogDeleteManyArgs} args - Arguments to filter ViewLogs to delete.
+     * @example
+     * // Delete a few ViewLogs
+     * const { count } = await prisma.viewLog.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     *
+     */
+    deleteMany<T extends ViewLogDeleteManyArgs>(
+      args?: SelectSubset<T, ViewLogDeleteManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<BatchPayload>;
+
+    /**
+     * Update zero or more ViewLogs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewLogUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many ViewLogs
+     * const viewLog = await prisma.viewLog.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     *
+     */
+    updateMany<T extends ViewLogUpdateManyArgs>(
+      args: SelectSubset<T, ViewLogUpdateManyArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<BatchPayload>;
+
+    /**
+     * Update zero or more ViewLogs and returns the data updated in the database.
+     * @param {ViewLogUpdateManyAndReturnArgs} args - Arguments to update many ViewLogs.
+     * @example
+     * // Update many ViewLogs
+     * const viewLog = await prisma.viewLog.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *
+     * // Update zero or more ViewLogs and only return the `id`
+     * const viewLogWithIdOnly = await prisma.viewLog.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     *
+     */
+    updateManyAndReturn<T extends ViewLogUpdateManyAndReturnArgs>(
+      args: SelectSubset<T, ViewLogUpdateManyAndReturnArgs<ExtArgs>>,
+    ): Prisma.PrismaPromise<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'updateManyAndReturn', GlobalOmitOptions>
+    >;
+
+    /**
+     * Create or update one ViewLog.
+     * @param {ViewLogUpsertArgs} args - Arguments to update or create a ViewLog.
+     * @example
+     * // Update or create a ViewLog
+     * const viewLog = await prisma.viewLog.upsert({
+     *   create: {
+     *     // ... data to create a ViewLog
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the ViewLog we want to update
+     *   }
+     * })
+     */
+    upsert<T extends ViewLogUpsertArgs>(
+      args: SelectSubset<T, ViewLogUpsertArgs<ExtArgs>>,
+    ): Prisma__ViewLogClient<
+      $Result.GetResult<Prisma.$ViewLogPayload<ExtArgs>, T, 'upsert', GlobalOmitOptions>,
+      never,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+
+    /**
+     * Count the number of ViewLogs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewLogCountArgs} args - Arguments to filter ViewLogs to count.
+     * @example
+     * // Count the number of ViewLogs
+     * const count = await prisma.viewLog.count({
+     *   where: {
+     *     // ... the filter for the ViewLogs we want to count
+     *   }
+     * })
+     **/
+    count<T extends ViewLogCountArgs>(
+      args?: Subset<T, ViewLogCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], ViewLogCountAggregateOutputType>
+        : number
+    >;
+
+    /**
+     * Allows you to perform aggregations operations on a ViewLog.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewLogAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+     **/
+    aggregate<T extends ViewLogAggregateArgs>(
+      args: Subset<T, ViewLogAggregateArgs>,
+    ): Prisma.PrismaPromise<GetViewLogAggregateType<T>>;
+
+    /**
+     * Group by ViewLog.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {ViewLogGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     *
+     **/
+    groupBy<
+      T extends ViewLogGroupByArgs,
+      HasSelectOrTake extends Or<Extends<'skip', Keys<T>>, Extends<'take', Keys<T>>>,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: ViewLogGroupByArgs['orderBy'] }
+        : { orderBy?: ViewLogGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+        ? `Error: "by" must not be empty.`
+        : HavingValid extends False
+          ? {
+              [P in HavingFields]: P extends ByFields
+                ? never
+                : P extends string
+                  ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+                  : [Error, 'Field ', P, ` in "having" needs to be provided in "by"`];
+            }[HavingFields]
+          : 'take' extends Keys<T>
+            ? 'orderBy' extends Keys<T>
+              ? ByValid extends True
+                ? {}
+                : {
+                    [P in OrderFields]: P extends ByFields
+                      ? never
+                      : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`;
+                  }[OrderFields]
+              : 'Error: If you provide "take", you also need to provide "orderBy"'
+            : 'skip' extends Keys<T>
+              ? 'orderBy' extends Keys<T>
+                ? ByValid extends True
+                  ? {}
+                  : {
+                      [P in OrderFields]: P extends ByFields
+                        ? never
+                        : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`;
+                    }[OrderFields]
+                : 'Error: If you provide "skip", you also need to provide "orderBy"'
+              : ByValid extends True
+                ? {}
+                : {
+                    [P in OrderFields]: P extends ByFields
+                      ? never
+                      : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`;
+                  }[OrderFields],
+    >(
+      args: SubsetIntersection<T, ViewLogGroupByArgs, OrderByArg> & InputErrors,
+    ): {} extends InputErrors ? GetViewLogGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>;
+    /**
+     * Fields of the ViewLog model
+     */
+    readonly fields: ViewLogFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for ViewLog.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__ViewLogClient<
+    T,
+    Null = never,
+    ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs,
+    GlobalOmitOptions = {},
+  > extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: 'PrismaPromise';
+    token<T extends ViewerTokenDefaultArgs<ExtArgs> = {}>(
+      args?: Subset<T, ViewerTokenDefaultArgs<ExtArgs>>,
+    ): Prisma__ViewerTokenClient<
+      $Result.GetResult<Prisma.$ViewerTokenPayload<ExtArgs>, T, 'findUniqueOrThrow', GlobalOmitOptions> | Null,
+      Null,
+      ExtArgs,
+      GlobalOmitOptions
+    >;
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(
+      onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
+      onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+    ): $Utils.JsPromise<TResult1 | TResult2>;
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(
+      onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null,
+    ): $Utils.JsPromise<T | TResult>;
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>;
+  }
+
+  /**
+   * Fields of the ViewLog model
+   */
+  interface ViewLogFieldRefs {
+    readonly id: FieldRef<'ViewLog', 'String'>;
+    readonly tokenId: FieldRef<'ViewLog', 'String'>;
+    readonly viewedAt: FieldRef<'ViewLog', 'DateTime'>;
+    readonly viewerName: FieldRef<'ViewLog', 'String'>;
+    readonly companyName: FieldRef<'ViewLog', 'String'>;
+    readonly ipAddress: FieldRef<'ViewLog', 'String'>;
+    readonly userAgent: FieldRef<'ViewLog', 'String'>;
+    readonly gitCommitHash: FieldRef<'ViewLog', 'String'>;
+  }
+
+  // Custom InputTypes
+  /**
+   * ViewLog findUnique
+   */
+  export type ViewLogFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewLog to fetch.
+     */
+    where: ViewLogWhereUniqueInput;
+  };
+
+  /**
+   * ViewLog findUniqueOrThrow
+   */
+  export type ViewLogFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewLog to fetch.
+     */
+    where: ViewLogWhereUniqueInput;
+  };
+
+  /**
+   * ViewLog findFirst
+   */
+  export type ViewLogFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewLog to fetch.
+     */
+    where?: ViewLogWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewLogs to fetch.
+     */
+    orderBy?: ViewLogOrderByWithRelationInput | ViewLogOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the position for searching for ViewLogs.
+     */
+    cursor?: ViewLogWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewLogs from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewLogs.
+     */
+    skip?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     *
+     * Filter by unique combinations of ViewLogs.
+     */
+    distinct?: ViewLogScalarFieldEnum | ViewLogScalarFieldEnum[];
+  };
+
+  /**
+   * ViewLog findFirstOrThrow
+   */
+  export type ViewLogFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewLog to fetch.
+     */
+    where?: ViewLogWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewLogs to fetch.
+     */
+    orderBy?: ViewLogOrderByWithRelationInput | ViewLogOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the position for searching for ViewLogs.
+     */
+    cursor?: ViewLogWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewLogs from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewLogs.
+     */
+    skip?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     *
+     * Filter by unique combinations of ViewLogs.
+     */
+    distinct?: ViewLogScalarFieldEnum | ViewLogScalarFieldEnum[];
+  };
+
+  /**
+   * ViewLog findMany
+   */
+  export type ViewLogFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * Filter, which ViewLogs to fetch.
+     */
+    where?: ViewLogWhereInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     *
+     * Determine the order of ViewLogs to fetch.
+     */
+    orderBy?: ViewLogOrderByWithRelationInput | ViewLogOrderByWithRelationInput[];
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     *
+     * Sets the position for listing ViewLogs.
+     */
+    cursor?: ViewLogWhereUniqueInput;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Take `±n` ViewLogs from the position of the cursor.
+     */
+    take?: number;
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     *
+     * Skip the first `n` ViewLogs.
+     */
+    skip?: number;
+    distinct?: ViewLogScalarFieldEnum | ViewLogScalarFieldEnum[];
+  };
+
+  /**
+   * ViewLog create
+   */
+  export type ViewLogCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * The data needed to create a ViewLog.
+     */
+    data: XOR<ViewLogCreateInput, ViewLogUncheckedCreateInput>;
+  };
+
+  /**
+   * ViewLog createMany
+   */
+  export type ViewLogCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many ViewLogs.
+     */
+    data: ViewLogCreateManyInput | ViewLogCreateManyInput[];
+    skipDuplicates?: boolean;
+  };
+
+  /**
+   * ViewLog createManyAndReturn
+   */
+  export type ViewLogCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelectCreateManyAndReturn<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * The data used to create many ViewLogs.
+     */
+    data: ViewLogCreateManyInput | ViewLogCreateManyInput[];
+    skipDuplicates?: boolean;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogIncludeCreateManyAndReturn<ExtArgs> | null;
+  };
+
+  /**
+   * ViewLog update
+   */
+  export type ViewLogUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * The data needed to update a ViewLog.
+     */
+    data: XOR<ViewLogUpdateInput, ViewLogUncheckedUpdateInput>;
+    /**
+     * Choose, which ViewLog to update.
+     */
+    where: ViewLogWhereUniqueInput;
+  };
+
+  /**
+   * ViewLog updateMany
+   */
+  export type ViewLogUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update ViewLogs.
+     */
+    data: XOR<ViewLogUpdateManyMutationInput, ViewLogUncheckedUpdateManyInput>;
+    /**
+     * Filter which ViewLogs to update
+     */
+    where?: ViewLogWhereInput;
+    /**
+     * Limit how many ViewLogs to update.
+     */
+    limit?: number;
+  };
+
+  /**
+   * ViewLog updateManyAndReturn
+   */
+  export type ViewLogUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelectUpdateManyAndReturn<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * The data used to update ViewLogs.
+     */
+    data: XOR<ViewLogUpdateManyMutationInput, ViewLogUncheckedUpdateManyInput>;
+    /**
+     * Filter which ViewLogs to update
+     */
+    where?: ViewLogWhereInput;
+    /**
+     * Limit how many ViewLogs to update.
+     */
+    limit?: number;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogIncludeUpdateManyAndReturn<ExtArgs> | null;
+  };
+
+  /**
+   * ViewLog upsert
+   */
+  export type ViewLogUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * The filter to search for the ViewLog to update in case it exists.
+     */
+    where: ViewLogWhereUniqueInput;
+    /**
+     * In case the ViewLog found by the `where` argument doesn't exist, create a new ViewLog with this data.
+     */
+    create: XOR<ViewLogCreateInput, ViewLogUncheckedCreateInput>;
+    /**
+     * In case the ViewLog was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<ViewLogUpdateInput, ViewLogUncheckedUpdateInput>;
+  };
+
+  /**
+   * ViewLog delete
+   */
+  export type ViewLogDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+    /**
+     * Filter which ViewLog to delete.
+     */
+    where: ViewLogWhereUniqueInput;
+  };
+
+  /**
+   * ViewLog deleteMany
+   */
+  export type ViewLogDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which ViewLogs to delete
+     */
+    where?: ViewLogWhereInput;
+    /**
+     * Limit how many ViewLogs to delete.
+     */
+    limit?: number;
+  };
+
+  /**
+   * ViewLog without action
+   */
+  export type ViewLogDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the ViewLog
+     */
+    select?: ViewLogSelect<ExtArgs> | null;
+    /**
+     * Omit specific fields from the ViewLog
+     */
+    omit?: ViewLogOmit<ExtArgs> | null;
+    /**
+     * Choose, which related nodes to fetch as well
+     */
+    include?: ViewLogInclude<ExtArgs> | null;
+  };
+
+  /**
    * Enums
    */
 
@@ -4321,6 +6992,33 @@ export namespace Prisma {
 
   export type SkillSheetScalarFieldEnum = (typeof SkillSheetScalarFieldEnum)[keyof typeof SkillSheetScalarFieldEnum];
 
+  export const ViewerTokenScalarFieldEnum: {
+    id: 'id';
+    token: 'token';
+    label: 'label';
+    expiresAt: 'expiresAt';
+    maxViews: 'maxViews';
+    viewCount: 'viewCount';
+    isActive: 'isActive';
+    createdAt: 'createdAt';
+    updatedAt: 'updatedAt';
+  };
+
+  export type ViewerTokenScalarFieldEnum = (typeof ViewerTokenScalarFieldEnum)[keyof typeof ViewerTokenScalarFieldEnum];
+
+  export const ViewLogScalarFieldEnum: {
+    id: 'id';
+    tokenId: 'tokenId';
+    viewedAt: 'viewedAt';
+    viewerName: 'viewerName';
+    companyName: 'companyName';
+    ipAddress: 'ipAddress';
+    userAgent: 'userAgent';
+    gitCommitHash: 'gitCommitHash';
+  };
+
+  export type ViewLogScalarFieldEnum = (typeof ViewLogScalarFieldEnum)[keyof typeof ViewLogScalarFieldEnum];
+
   export const SortOrder: {
     asc: 'asc';
     desc: 'desc';
@@ -4334,6 +7032,13 @@ export namespace Prisma {
   };
 
   export type QueryMode = (typeof QueryMode)[keyof typeof QueryMode];
+
+  export const NullsOrder: {
+    first: 'first';
+    last: 'last';
+  };
+
+  export type NullsOrder = (typeof NullsOrder)[keyof typeof NullsOrder];
 
   /**
    * Field references
@@ -4368,6 +7073,21 @@ export namespace Prisma {
    * Reference to a field of type 'Int[]'
    */
   export type ListIntFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Int[]'>;
+
+  /**
+   * Reference to a field of type 'Boolean'
+   */
+  export type BooleanFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Boolean'>;
+
+  /**
+   * Reference to a field of type 'Float'
+   */
+  export type FloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float'>;
+
+  /**
+   * Reference to a field of type 'Float[]'
+   */
+  export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>;
 
   /**
    * Deep Input Types
@@ -4533,6 +7253,159 @@ export namespace Prisma {
     updatedAt?: DateTimeWithAggregatesFilter<'SkillSheet'> | Date | string;
   };
 
+  export type ViewerTokenWhereInput = {
+    AND?: ViewerTokenWhereInput | ViewerTokenWhereInput[];
+    OR?: ViewerTokenWhereInput[];
+    NOT?: ViewerTokenWhereInput | ViewerTokenWhereInput[];
+    id?: StringFilter<'ViewerToken'> | string;
+    token?: StringFilter<'ViewerToken'> | string;
+    label?: StringFilter<'ViewerToken'> | string;
+    expiresAt?: DateTimeNullableFilter<'ViewerToken'> | Date | string | null;
+    maxViews?: IntNullableFilter<'ViewerToken'> | number | null;
+    viewCount?: IntFilter<'ViewerToken'> | number;
+    isActive?: BoolFilter<'ViewerToken'> | boolean;
+    createdAt?: DateTimeFilter<'ViewerToken'> | Date | string;
+    updatedAt?: DateTimeFilter<'ViewerToken'> | Date | string;
+    viewLogs?: ViewLogListRelationFilter;
+  };
+
+  export type ViewerTokenOrderByWithRelationInput = {
+    id?: SortOrder;
+    token?: SortOrder;
+    label?: SortOrder;
+    expiresAt?: SortOrderInput | SortOrder;
+    maxViews?: SortOrderInput | SortOrder;
+    viewCount?: SortOrder;
+    isActive?: SortOrder;
+    createdAt?: SortOrder;
+    updatedAt?: SortOrder;
+    viewLogs?: ViewLogOrderByRelationAggregateInput;
+  };
+
+  export type ViewerTokenWhereUniqueInput = Prisma.AtLeast<
+    {
+      id?: string;
+      token?: string;
+      AND?: ViewerTokenWhereInput | ViewerTokenWhereInput[];
+      OR?: ViewerTokenWhereInput[];
+      NOT?: ViewerTokenWhereInput | ViewerTokenWhereInput[];
+      label?: StringFilter<'ViewerToken'> | string;
+      expiresAt?: DateTimeNullableFilter<'ViewerToken'> | Date | string | null;
+      maxViews?: IntNullableFilter<'ViewerToken'> | number | null;
+      viewCount?: IntFilter<'ViewerToken'> | number;
+      isActive?: BoolFilter<'ViewerToken'> | boolean;
+      createdAt?: DateTimeFilter<'ViewerToken'> | Date | string;
+      updatedAt?: DateTimeFilter<'ViewerToken'> | Date | string;
+      viewLogs?: ViewLogListRelationFilter;
+    },
+    'id' | 'token'
+  >;
+
+  export type ViewerTokenOrderByWithAggregationInput = {
+    id?: SortOrder;
+    token?: SortOrder;
+    label?: SortOrder;
+    expiresAt?: SortOrderInput | SortOrder;
+    maxViews?: SortOrderInput | SortOrder;
+    viewCount?: SortOrder;
+    isActive?: SortOrder;
+    createdAt?: SortOrder;
+    updatedAt?: SortOrder;
+    _count?: ViewerTokenCountOrderByAggregateInput;
+    _avg?: ViewerTokenAvgOrderByAggregateInput;
+    _max?: ViewerTokenMaxOrderByAggregateInput;
+    _min?: ViewerTokenMinOrderByAggregateInput;
+    _sum?: ViewerTokenSumOrderByAggregateInput;
+  };
+
+  export type ViewerTokenScalarWhereWithAggregatesInput = {
+    AND?: ViewerTokenScalarWhereWithAggregatesInput | ViewerTokenScalarWhereWithAggregatesInput[];
+    OR?: ViewerTokenScalarWhereWithAggregatesInput[];
+    NOT?: ViewerTokenScalarWhereWithAggregatesInput | ViewerTokenScalarWhereWithAggregatesInput[];
+    id?: StringWithAggregatesFilter<'ViewerToken'> | string;
+    token?: StringWithAggregatesFilter<'ViewerToken'> | string;
+    label?: StringWithAggregatesFilter<'ViewerToken'> | string;
+    expiresAt?: DateTimeNullableWithAggregatesFilter<'ViewerToken'> | Date | string | null;
+    maxViews?: IntNullableWithAggregatesFilter<'ViewerToken'> | number | null;
+    viewCount?: IntWithAggregatesFilter<'ViewerToken'> | number;
+    isActive?: BoolWithAggregatesFilter<'ViewerToken'> | boolean;
+    createdAt?: DateTimeWithAggregatesFilter<'ViewerToken'> | Date | string;
+    updatedAt?: DateTimeWithAggregatesFilter<'ViewerToken'> | Date | string;
+  };
+
+  export type ViewLogWhereInput = {
+    AND?: ViewLogWhereInput | ViewLogWhereInput[];
+    OR?: ViewLogWhereInput[];
+    NOT?: ViewLogWhereInput | ViewLogWhereInput[];
+    id?: StringFilter<'ViewLog'> | string;
+    tokenId?: StringFilter<'ViewLog'> | string;
+    viewedAt?: DateTimeFilter<'ViewLog'> | Date | string;
+    viewerName?: StringFilter<'ViewLog'> | string;
+    companyName?: StringFilter<'ViewLog'> | string;
+    ipAddress?: StringNullableFilter<'ViewLog'> | string | null;
+    userAgent?: StringNullableFilter<'ViewLog'> | string | null;
+    gitCommitHash?: StringNullableFilter<'ViewLog'> | string | null;
+    token?: XOR<ViewerTokenScalarRelationFilter, ViewerTokenWhereInput>;
+  };
+
+  export type ViewLogOrderByWithRelationInput = {
+    id?: SortOrder;
+    tokenId?: SortOrder;
+    viewedAt?: SortOrder;
+    viewerName?: SortOrder;
+    companyName?: SortOrder;
+    ipAddress?: SortOrderInput | SortOrder;
+    userAgent?: SortOrderInput | SortOrder;
+    gitCommitHash?: SortOrderInput | SortOrder;
+    token?: ViewerTokenOrderByWithRelationInput;
+  };
+
+  export type ViewLogWhereUniqueInput = Prisma.AtLeast<
+    {
+      id?: string;
+      AND?: ViewLogWhereInput | ViewLogWhereInput[];
+      OR?: ViewLogWhereInput[];
+      NOT?: ViewLogWhereInput | ViewLogWhereInput[];
+      tokenId?: StringFilter<'ViewLog'> | string;
+      viewedAt?: DateTimeFilter<'ViewLog'> | Date | string;
+      viewerName?: StringFilter<'ViewLog'> | string;
+      companyName?: StringFilter<'ViewLog'> | string;
+      ipAddress?: StringNullableFilter<'ViewLog'> | string | null;
+      userAgent?: StringNullableFilter<'ViewLog'> | string | null;
+      gitCommitHash?: StringNullableFilter<'ViewLog'> | string | null;
+      token?: XOR<ViewerTokenScalarRelationFilter, ViewerTokenWhereInput>;
+    },
+    'id'
+  >;
+
+  export type ViewLogOrderByWithAggregationInput = {
+    id?: SortOrder;
+    tokenId?: SortOrder;
+    viewedAt?: SortOrder;
+    viewerName?: SortOrder;
+    companyName?: SortOrder;
+    ipAddress?: SortOrderInput | SortOrder;
+    userAgent?: SortOrderInput | SortOrder;
+    gitCommitHash?: SortOrderInput | SortOrder;
+    _count?: ViewLogCountOrderByAggregateInput;
+    _max?: ViewLogMaxOrderByAggregateInput;
+    _min?: ViewLogMinOrderByAggregateInput;
+  };
+
+  export type ViewLogScalarWhereWithAggregatesInput = {
+    AND?: ViewLogScalarWhereWithAggregatesInput | ViewLogScalarWhereWithAggregatesInput[];
+    OR?: ViewLogScalarWhereWithAggregatesInput[];
+    NOT?: ViewLogScalarWhereWithAggregatesInput | ViewLogScalarWhereWithAggregatesInput[];
+    id?: StringWithAggregatesFilter<'ViewLog'> | string;
+    tokenId?: StringWithAggregatesFilter<'ViewLog'> | string;
+    viewedAt?: DateTimeWithAggregatesFilter<'ViewLog'> | Date | string;
+    viewerName?: StringWithAggregatesFilter<'ViewLog'> | string;
+    companyName?: StringWithAggregatesFilter<'ViewLog'> | string;
+    ipAddress?: StringNullableWithAggregatesFilter<'ViewLog'> | string | null;
+    userAgent?: StringNullableWithAggregatesFilter<'ViewLog'> | string | null;
+    gitCommitHash?: StringNullableWithAggregatesFilter<'ViewLog'> | string | null;
+  };
+
   export type AdminCreateInput = {
     id?: string;
     username: string;
@@ -4694,6 +7567,170 @@ export namespace Prisma {
     updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
   };
 
+  export type ViewerTokenCreateInput = {
+    id?: string;
+    token: string;
+    label: string;
+    expiresAt?: Date | string | null;
+    maxViews?: number | null;
+    viewCount?: number;
+    isActive?: boolean;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+    viewLogs?: ViewLogCreateNestedManyWithoutTokenInput;
+  };
+
+  export type ViewerTokenUncheckedCreateInput = {
+    id?: string;
+    token: string;
+    label: string;
+    expiresAt?: Date | string | null;
+    maxViews?: number | null;
+    viewCount?: number;
+    isActive?: boolean;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+    viewLogs?: ViewLogUncheckedCreateNestedManyWithoutTokenInput;
+  };
+
+  export type ViewerTokenUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    token?: StringFieldUpdateOperationsInput | string;
+    label?: StringFieldUpdateOperationsInput | string;
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    maxViews?: NullableIntFieldUpdateOperationsInput | number | null;
+    viewCount?: IntFieldUpdateOperationsInput | number;
+    isActive?: BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewLogs?: ViewLogUpdateManyWithoutTokenNestedInput;
+  };
+
+  export type ViewerTokenUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    token?: StringFieldUpdateOperationsInput | string;
+    label?: StringFieldUpdateOperationsInput | string;
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    maxViews?: NullableIntFieldUpdateOperationsInput | number | null;
+    viewCount?: IntFieldUpdateOperationsInput | number;
+    isActive?: BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewLogs?: ViewLogUncheckedUpdateManyWithoutTokenNestedInput;
+  };
+
+  export type ViewerTokenCreateManyInput = {
+    id?: string;
+    token: string;
+    label: string;
+    expiresAt?: Date | string | null;
+    maxViews?: number | null;
+    viewCount?: number;
+    isActive?: boolean;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+  };
+
+  export type ViewerTokenUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    token?: StringFieldUpdateOperationsInput | string;
+    label?: StringFieldUpdateOperationsInput | string;
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    maxViews?: NullableIntFieldUpdateOperationsInput | number | null;
+    viewCount?: IntFieldUpdateOperationsInput | number;
+    isActive?: BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+  };
+
+  export type ViewerTokenUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    token?: StringFieldUpdateOperationsInput | string;
+    label?: StringFieldUpdateOperationsInput | string;
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    maxViews?: NullableIntFieldUpdateOperationsInput | number | null;
+    viewCount?: IntFieldUpdateOperationsInput | number;
+    isActive?: BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+  };
+
+  export type ViewLogCreateInput = {
+    id?: string;
+    viewedAt?: Date | string;
+    viewerName: string;
+    companyName: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    gitCommitHash?: string | null;
+    token: ViewerTokenCreateNestedOneWithoutViewLogsInput;
+  };
+
+  export type ViewLogUncheckedCreateInput = {
+    id?: string;
+    tokenId: string;
+    viewedAt?: Date | string;
+    viewerName: string;
+    companyName: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    gitCommitHash?: string | null;
+  };
+
+  export type ViewLogUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    viewedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewerName?: StringFieldUpdateOperationsInput | string;
+    companyName?: StringFieldUpdateOperationsInput | string;
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null;
+    userAgent?: NullableStringFieldUpdateOperationsInput | string | null;
+    gitCommitHash?: NullableStringFieldUpdateOperationsInput | string | null;
+    token?: ViewerTokenUpdateOneRequiredWithoutViewLogsNestedInput;
+  };
+
+  export type ViewLogUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    tokenId?: StringFieldUpdateOperationsInput | string;
+    viewedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewerName?: StringFieldUpdateOperationsInput | string;
+    companyName?: StringFieldUpdateOperationsInput | string;
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null;
+    userAgent?: NullableStringFieldUpdateOperationsInput | string | null;
+    gitCommitHash?: NullableStringFieldUpdateOperationsInput | string | null;
+  };
+
+  export type ViewLogCreateManyInput = {
+    id?: string;
+    tokenId: string;
+    viewedAt?: Date | string;
+    viewerName: string;
+    companyName: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    gitCommitHash?: string | null;
+  };
+
+  export type ViewLogUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    viewedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewerName?: StringFieldUpdateOperationsInput | string;
+    companyName?: StringFieldUpdateOperationsInput | string;
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null;
+    userAgent?: NullableStringFieldUpdateOperationsInput | string | null;
+    gitCommitHash?: NullableStringFieldUpdateOperationsInput | string | null;
+  };
+
+  export type ViewLogUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    tokenId?: StringFieldUpdateOperationsInput | string;
+    viewedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewerName?: StringFieldUpdateOperationsInput | string;
+    companyName?: StringFieldUpdateOperationsInput | string;
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null;
+    userAgent?: NullableStringFieldUpdateOperationsInput | string | null;
+    gitCommitHash?: NullableStringFieldUpdateOperationsInput | string | null;
+  };
+
   export type StringFilter<$PrismaModel = never> = {
     equals?: string | StringFieldRefInput<$PrismaModel>;
     in?: string[] | ListStringFieldRefInput<$PrismaModel>;
@@ -4821,12 +7858,335 @@ export namespace Prisma {
     updatedAt?: SortOrder;
   };
 
+  export type DateTimeNullableFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null;
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null;
+  };
+
+  export type IntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null;
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    lt?: number | IntFieldRefInput<$PrismaModel>;
+    lte?: number | IntFieldRefInput<$PrismaModel>;
+    gt?: number | IntFieldRefInput<$PrismaModel>;
+    gte?: number | IntFieldRefInput<$PrismaModel>;
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null;
+  };
+
+  export type IntFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>;
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>;
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>;
+    lt?: number | IntFieldRefInput<$PrismaModel>;
+    lte?: number | IntFieldRefInput<$PrismaModel>;
+    gt?: number | IntFieldRefInput<$PrismaModel>;
+    gte?: number | IntFieldRefInput<$PrismaModel>;
+    not?: NestedIntFilter<$PrismaModel> | number;
+  };
+
+  export type BoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>;
+    not?: NestedBoolFilter<$PrismaModel> | boolean;
+  };
+
+  export type ViewLogListRelationFilter = {
+    every?: ViewLogWhereInput;
+    some?: ViewLogWhereInput;
+    none?: ViewLogWhereInput;
+  };
+
+  export type SortOrderInput = {
+    sort: SortOrder;
+    nulls?: NullsOrder;
+  };
+
+  export type ViewLogOrderByRelationAggregateInput = {
+    _count?: SortOrder;
+  };
+
+  export type ViewerTokenCountOrderByAggregateInput = {
+    id?: SortOrder;
+    token?: SortOrder;
+    label?: SortOrder;
+    expiresAt?: SortOrder;
+    maxViews?: SortOrder;
+    viewCount?: SortOrder;
+    isActive?: SortOrder;
+    createdAt?: SortOrder;
+    updatedAt?: SortOrder;
+  };
+
+  export type ViewerTokenAvgOrderByAggregateInput = {
+    maxViews?: SortOrder;
+    viewCount?: SortOrder;
+  };
+
+  export type ViewerTokenMaxOrderByAggregateInput = {
+    id?: SortOrder;
+    token?: SortOrder;
+    label?: SortOrder;
+    expiresAt?: SortOrder;
+    maxViews?: SortOrder;
+    viewCount?: SortOrder;
+    isActive?: SortOrder;
+    createdAt?: SortOrder;
+    updatedAt?: SortOrder;
+  };
+
+  export type ViewerTokenMinOrderByAggregateInput = {
+    id?: SortOrder;
+    token?: SortOrder;
+    label?: SortOrder;
+    expiresAt?: SortOrder;
+    maxViews?: SortOrder;
+    viewCount?: SortOrder;
+    isActive?: SortOrder;
+    createdAt?: SortOrder;
+    updatedAt?: SortOrder;
+  };
+
+  export type ViewerTokenSumOrderByAggregateInput = {
+    maxViews?: SortOrder;
+    viewCount?: SortOrder;
+  };
+
+  export type DateTimeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null;
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    not?: NestedDateTimeNullableWithAggregatesFilter<$PrismaModel> | Date | string | null;
+    _count?: NestedIntNullableFilter<$PrismaModel>;
+    _min?: NestedDateTimeNullableFilter<$PrismaModel>;
+    _max?: NestedDateTimeNullableFilter<$PrismaModel>;
+  };
+
+  export type IntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null;
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    lt?: number | IntFieldRefInput<$PrismaModel>;
+    lte?: number | IntFieldRefInput<$PrismaModel>;
+    gt?: number | IntFieldRefInput<$PrismaModel>;
+    gte?: number | IntFieldRefInput<$PrismaModel>;
+    not?: NestedIntNullableWithAggregatesFilter<$PrismaModel> | number | null;
+    _count?: NestedIntNullableFilter<$PrismaModel>;
+    _avg?: NestedFloatNullableFilter<$PrismaModel>;
+    _sum?: NestedIntNullableFilter<$PrismaModel>;
+    _min?: NestedIntNullableFilter<$PrismaModel>;
+    _max?: NestedIntNullableFilter<$PrismaModel>;
+  };
+
+  export type IntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>;
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>;
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>;
+    lt?: number | IntFieldRefInput<$PrismaModel>;
+    lte?: number | IntFieldRefInput<$PrismaModel>;
+    gt?: number | IntFieldRefInput<$PrismaModel>;
+    gte?: number | IntFieldRefInput<$PrismaModel>;
+    not?: NestedIntWithAggregatesFilter<$PrismaModel> | number;
+    _count?: NestedIntFilter<$PrismaModel>;
+    _avg?: NestedFloatFilter<$PrismaModel>;
+    _sum?: NestedIntFilter<$PrismaModel>;
+    _min?: NestedIntFilter<$PrismaModel>;
+    _max?: NestedIntFilter<$PrismaModel>;
+  };
+
+  export type BoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>;
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean;
+    _count?: NestedIntFilter<$PrismaModel>;
+    _min?: NestedBoolFilter<$PrismaModel>;
+    _max?: NestedBoolFilter<$PrismaModel>;
+  };
+
+  export type StringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null;
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    lt?: string | StringFieldRefInput<$PrismaModel>;
+    lte?: string | StringFieldRefInput<$PrismaModel>;
+    gt?: string | StringFieldRefInput<$PrismaModel>;
+    gte?: string | StringFieldRefInput<$PrismaModel>;
+    contains?: string | StringFieldRefInput<$PrismaModel>;
+    startsWith?: string | StringFieldRefInput<$PrismaModel>;
+    endsWith?: string | StringFieldRefInput<$PrismaModel>;
+    mode?: QueryMode;
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null;
+  };
+
+  export type ViewerTokenScalarRelationFilter = {
+    is?: ViewerTokenWhereInput;
+    isNot?: ViewerTokenWhereInput;
+  };
+
+  export type ViewLogCountOrderByAggregateInput = {
+    id?: SortOrder;
+    tokenId?: SortOrder;
+    viewedAt?: SortOrder;
+    viewerName?: SortOrder;
+    companyName?: SortOrder;
+    ipAddress?: SortOrder;
+    userAgent?: SortOrder;
+    gitCommitHash?: SortOrder;
+  };
+
+  export type ViewLogMaxOrderByAggregateInput = {
+    id?: SortOrder;
+    tokenId?: SortOrder;
+    viewedAt?: SortOrder;
+    viewerName?: SortOrder;
+    companyName?: SortOrder;
+    ipAddress?: SortOrder;
+    userAgent?: SortOrder;
+    gitCommitHash?: SortOrder;
+  };
+
+  export type ViewLogMinOrderByAggregateInput = {
+    id?: SortOrder;
+    tokenId?: SortOrder;
+    viewedAt?: SortOrder;
+    viewerName?: SortOrder;
+    companyName?: SortOrder;
+    ipAddress?: SortOrder;
+    userAgent?: SortOrder;
+    gitCommitHash?: SortOrder;
+  };
+
+  export type StringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null;
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    lt?: string | StringFieldRefInput<$PrismaModel>;
+    lte?: string | StringFieldRefInput<$PrismaModel>;
+    gt?: string | StringFieldRefInput<$PrismaModel>;
+    gte?: string | StringFieldRefInput<$PrismaModel>;
+    contains?: string | StringFieldRefInput<$PrismaModel>;
+    startsWith?: string | StringFieldRefInput<$PrismaModel>;
+    endsWith?: string | StringFieldRefInput<$PrismaModel>;
+    mode?: QueryMode;
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null;
+    _count?: NestedIntNullableFilter<$PrismaModel>;
+    _min?: NestedStringNullableFilter<$PrismaModel>;
+    _max?: NestedStringNullableFilter<$PrismaModel>;
+  };
+
   export type StringFieldUpdateOperationsInput = {
     set?: string;
   };
 
   export type DateTimeFieldUpdateOperationsInput = {
     set?: Date | string;
+  };
+
+  export type ViewLogCreateNestedManyWithoutTokenInput = {
+    create?:
+      | XOR<ViewLogCreateWithoutTokenInput, ViewLogUncheckedCreateWithoutTokenInput>
+      | ViewLogCreateWithoutTokenInput[]
+      | ViewLogUncheckedCreateWithoutTokenInput[];
+    connectOrCreate?: ViewLogCreateOrConnectWithoutTokenInput | ViewLogCreateOrConnectWithoutTokenInput[];
+    createMany?: ViewLogCreateManyTokenInputEnvelope;
+    connect?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+  };
+
+  export type ViewLogUncheckedCreateNestedManyWithoutTokenInput = {
+    create?:
+      | XOR<ViewLogCreateWithoutTokenInput, ViewLogUncheckedCreateWithoutTokenInput>
+      | ViewLogCreateWithoutTokenInput[]
+      | ViewLogUncheckedCreateWithoutTokenInput[];
+    connectOrCreate?: ViewLogCreateOrConnectWithoutTokenInput | ViewLogCreateOrConnectWithoutTokenInput[];
+    createMany?: ViewLogCreateManyTokenInputEnvelope;
+    connect?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+  };
+
+  export type NullableDateTimeFieldUpdateOperationsInput = {
+    set?: Date | string | null;
+  };
+
+  export type NullableIntFieldUpdateOperationsInput = {
+    set?: number | null;
+    increment?: number;
+    decrement?: number;
+    multiply?: number;
+    divide?: number;
+  };
+
+  export type IntFieldUpdateOperationsInput = {
+    set?: number;
+    increment?: number;
+    decrement?: number;
+    multiply?: number;
+    divide?: number;
+  };
+
+  export type BoolFieldUpdateOperationsInput = {
+    set?: boolean;
+  };
+
+  export type ViewLogUpdateManyWithoutTokenNestedInput = {
+    create?:
+      | XOR<ViewLogCreateWithoutTokenInput, ViewLogUncheckedCreateWithoutTokenInput>
+      | ViewLogCreateWithoutTokenInput[]
+      | ViewLogUncheckedCreateWithoutTokenInput[];
+    connectOrCreate?: ViewLogCreateOrConnectWithoutTokenInput | ViewLogCreateOrConnectWithoutTokenInput[];
+    upsert?: ViewLogUpsertWithWhereUniqueWithoutTokenInput | ViewLogUpsertWithWhereUniqueWithoutTokenInput[];
+    createMany?: ViewLogCreateManyTokenInputEnvelope;
+    set?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    disconnect?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    delete?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    connect?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    update?: ViewLogUpdateWithWhereUniqueWithoutTokenInput | ViewLogUpdateWithWhereUniqueWithoutTokenInput[];
+    updateMany?: ViewLogUpdateManyWithWhereWithoutTokenInput | ViewLogUpdateManyWithWhereWithoutTokenInput[];
+    deleteMany?: ViewLogScalarWhereInput | ViewLogScalarWhereInput[];
+  };
+
+  export type ViewLogUncheckedUpdateManyWithoutTokenNestedInput = {
+    create?:
+      | XOR<ViewLogCreateWithoutTokenInput, ViewLogUncheckedCreateWithoutTokenInput>
+      | ViewLogCreateWithoutTokenInput[]
+      | ViewLogUncheckedCreateWithoutTokenInput[];
+    connectOrCreate?: ViewLogCreateOrConnectWithoutTokenInput | ViewLogCreateOrConnectWithoutTokenInput[];
+    upsert?: ViewLogUpsertWithWhereUniqueWithoutTokenInput | ViewLogUpsertWithWhereUniqueWithoutTokenInput[];
+    createMany?: ViewLogCreateManyTokenInputEnvelope;
+    set?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    disconnect?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    delete?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    connect?: ViewLogWhereUniqueInput | ViewLogWhereUniqueInput[];
+    update?: ViewLogUpdateWithWhereUniqueWithoutTokenInput | ViewLogUpdateWithWhereUniqueWithoutTokenInput[];
+    updateMany?: ViewLogUpdateManyWithWhereWithoutTokenInput | ViewLogUpdateManyWithWhereWithoutTokenInput[];
+    deleteMany?: ViewLogScalarWhereInput | ViewLogScalarWhereInput[];
+  };
+
+  export type ViewerTokenCreateNestedOneWithoutViewLogsInput = {
+    create?: XOR<ViewerTokenCreateWithoutViewLogsInput, ViewerTokenUncheckedCreateWithoutViewLogsInput>;
+    connectOrCreate?: ViewerTokenCreateOrConnectWithoutViewLogsInput;
+    connect?: ViewerTokenWhereUniqueInput;
+  };
+
+  export type NullableStringFieldUpdateOperationsInput = {
+    set?: string | null;
+  };
+
+  export type ViewerTokenUpdateOneRequiredWithoutViewLogsNestedInput = {
+    create?: XOR<ViewerTokenCreateWithoutViewLogsInput, ViewerTokenUncheckedCreateWithoutViewLogsInput>;
+    connectOrCreate?: ViewerTokenCreateOrConnectWithoutViewLogsInput;
+    upsert?: ViewerTokenUpsertWithoutViewLogsInput;
+    connect?: ViewerTokenWhereUniqueInput;
+    update?: XOR<
+      XOR<ViewerTokenUpdateToOneWithWhereWithoutViewLogsInput, ViewerTokenUpdateWithoutViewLogsInput>,
+      ViewerTokenUncheckedUpdateWithoutViewLogsInput
+    >;
   };
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -4894,6 +8254,304 @@ export namespace Prisma {
     _count?: NestedIntFilter<$PrismaModel>;
     _min?: NestedDateTimeFilter<$PrismaModel>;
     _max?: NestedDateTimeFilter<$PrismaModel>;
+  };
+
+  export type NestedDateTimeNullableFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null;
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    not?: NestedDateTimeNullableFilter<$PrismaModel> | Date | string | null;
+  };
+
+  export type NestedIntNullableFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null;
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    lt?: number | IntFieldRefInput<$PrismaModel>;
+    lte?: number | IntFieldRefInput<$PrismaModel>;
+    gt?: number | IntFieldRefInput<$PrismaModel>;
+    gte?: number | IntFieldRefInput<$PrismaModel>;
+    not?: NestedIntNullableFilter<$PrismaModel> | number | null;
+  };
+
+  export type NestedBoolFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>;
+    not?: NestedBoolFilter<$PrismaModel> | boolean;
+  };
+
+  export type NestedDateTimeNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: Date | string | DateTimeFieldRefInput<$PrismaModel> | null;
+    in?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    notIn?: Date[] | string[] | ListDateTimeFieldRefInput<$PrismaModel> | null;
+    lt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    lte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gt?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    gte?: Date | string | DateTimeFieldRefInput<$PrismaModel>;
+    not?: NestedDateTimeNullableWithAggregatesFilter<$PrismaModel> | Date | string | null;
+    _count?: NestedIntNullableFilter<$PrismaModel>;
+    _min?: NestedDateTimeNullableFilter<$PrismaModel>;
+    _max?: NestedDateTimeNullableFilter<$PrismaModel>;
+  };
+
+  export type NestedIntNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel> | null;
+    in?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel> | null;
+    lt?: number | IntFieldRefInput<$PrismaModel>;
+    lte?: number | IntFieldRefInput<$PrismaModel>;
+    gt?: number | IntFieldRefInput<$PrismaModel>;
+    gte?: number | IntFieldRefInput<$PrismaModel>;
+    not?: NestedIntNullableWithAggregatesFilter<$PrismaModel> | number | null;
+    _count?: NestedIntNullableFilter<$PrismaModel>;
+    _avg?: NestedFloatNullableFilter<$PrismaModel>;
+    _sum?: NestedIntNullableFilter<$PrismaModel>;
+    _min?: NestedIntNullableFilter<$PrismaModel>;
+    _max?: NestedIntNullableFilter<$PrismaModel>;
+  };
+
+  export type NestedFloatNullableFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel> | null;
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel> | null;
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel> | null;
+    lt?: number | FloatFieldRefInput<$PrismaModel>;
+    lte?: number | FloatFieldRefInput<$PrismaModel>;
+    gt?: number | FloatFieldRefInput<$PrismaModel>;
+    gte?: number | FloatFieldRefInput<$PrismaModel>;
+    not?: NestedFloatNullableFilter<$PrismaModel> | number | null;
+  };
+
+  export type NestedIntWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: number | IntFieldRefInput<$PrismaModel>;
+    in?: number[] | ListIntFieldRefInput<$PrismaModel>;
+    notIn?: number[] | ListIntFieldRefInput<$PrismaModel>;
+    lt?: number | IntFieldRefInput<$PrismaModel>;
+    lte?: number | IntFieldRefInput<$PrismaModel>;
+    gt?: number | IntFieldRefInput<$PrismaModel>;
+    gte?: number | IntFieldRefInput<$PrismaModel>;
+    not?: NestedIntWithAggregatesFilter<$PrismaModel> | number;
+    _count?: NestedIntFilter<$PrismaModel>;
+    _avg?: NestedFloatFilter<$PrismaModel>;
+    _sum?: NestedIntFilter<$PrismaModel>;
+    _min?: NestedIntFilter<$PrismaModel>;
+    _max?: NestedIntFilter<$PrismaModel>;
+  };
+
+  export type NestedFloatFilter<$PrismaModel = never> = {
+    equals?: number | FloatFieldRefInput<$PrismaModel>;
+    in?: number[] | ListFloatFieldRefInput<$PrismaModel>;
+    notIn?: number[] | ListFloatFieldRefInput<$PrismaModel>;
+    lt?: number | FloatFieldRefInput<$PrismaModel>;
+    lte?: number | FloatFieldRefInput<$PrismaModel>;
+    gt?: number | FloatFieldRefInput<$PrismaModel>;
+    gte?: number | FloatFieldRefInput<$PrismaModel>;
+    not?: NestedFloatFilter<$PrismaModel> | number;
+  };
+
+  export type NestedBoolWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel>;
+    not?: NestedBoolWithAggregatesFilter<$PrismaModel> | boolean;
+    _count?: NestedIntFilter<$PrismaModel>;
+    _min?: NestedBoolFilter<$PrismaModel>;
+    _max?: NestedBoolFilter<$PrismaModel>;
+  };
+
+  export type NestedStringNullableFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null;
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    lt?: string | StringFieldRefInput<$PrismaModel>;
+    lte?: string | StringFieldRefInput<$PrismaModel>;
+    gt?: string | StringFieldRefInput<$PrismaModel>;
+    gte?: string | StringFieldRefInput<$PrismaModel>;
+    contains?: string | StringFieldRefInput<$PrismaModel>;
+    startsWith?: string | StringFieldRefInput<$PrismaModel>;
+    endsWith?: string | StringFieldRefInput<$PrismaModel>;
+    not?: NestedStringNullableFilter<$PrismaModel> | string | null;
+  };
+
+  export type NestedStringNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: string | StringFieldRefInput<$PrismaModel> | null;
+    in?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    notIn?: string[] | ListStringFieldRefInput<$PrismaModel> | null;
+    lt?: string | StringFieldRefInput<$PrismaModel>;
+    lte?: string | StringFieldRefInput<$PrismaModel>;
+    gt?: string | StringFieldRefInput<$PrismaModel>;
+    gte?: string | StringFieldRefInput<$PrismaModel>;
+    contains?: string | StringFieldRefInput<$PrismaModel>;
+    startsWith?: string | StringFieldRefInput<$PrismaModel>;
+    endsWith?: string | StringFieldRefInput<$PrismaModel>;
+    not?: NestedStringNullableWithAggregatesFilter<$PrismaModel> | string | null;
+    _count?: NestedIntNullableFilter<$PrismaModel>;
+    _min?: NestedStringNullableFilter<$PrismaModel>;
+    _max?: NestedStringNullableFilter<$PrismaModel>;
+  };
+
+  export type ViewLogCreateWithoutTokenInput = {
+    id?: string;
+    viewedAt?: Date | string;
+    viewerName: string;
+    companyName: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    gitCommitHash?: string | null;
+  };
+
+  export type ViewLogUncheckedCreateWithoutTokenInput = {
+    id?: string;
+    viewedAt?: Date | string;
+    viewerName: string;
+    companyName: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    gitCommitHash?: string | null;
+  };
+
+  export type ViewLogCreateOrConnectWithoutTokenInput = {
+    where: ViewLogWhereUniqueInput;
+    create: XOR<ViewLogCreateWithoutTokenInput, ViewLogUncheckedCreateWithoutTokenInput>;
+  };
+
+  export type ViewLogCreateManyTokenInputEnvelope = {
+    data: ViewLogCreateManyTokenInput | ViewLogCreateManyTokenInput[];
+    skipDuplicates?: boolean;
+  };
+
+  export type ViewLogUpsertWithWhereUniqueWithoutTokenInput = {
+    where: ViewLogWhereUniqueInput;
+    update: XOR<ViewLogUpdateWithoutTokenInput, ViewLogUncheckedUpdateWithoutTokenInput>;
+    create: XOR<ViewLogCreateWithoutTokenInput, ViewLogUncheckedCreateWithoutTokenInput>;
+  };
+
+  export type ViewLogUpdateWithWhereUniqueWithoutTokenInput = {
+    where: ViewLogWhereUniqueInput;
+    data: XOR<ViewLogUpdateWithoutTokenInput, ViewLogUncheckedUpdateWithoutTokenInput>;
+  };
+
+  export type ViewLogUpdateManyWithWhereWithoutTokenInput = {
+    where: ViewLogScalarWhereInput;
+    data: XOR<ViewLogUpdateManyMutationInput, ViewLogUncheckedUpdateManyWithoutTokenInput>;
+  };
+
+  export type ViewLogScalarWhereInput = {
+    AND?: ViewLogScalarWhereInput | ViewLogScalarWhereInput[];
+    OR?: ViewLogScalarWhereInput[];
+    NOT?: ViewLogScalarWhereInput | ViewLogScalarWhereInput[];
+    id?: StringFilter<'ViewLog'> | string;
+    tokenId?: StringFilter<'ViewLog'> | string;
+    viewedAt?: DateTimeFilter<'ViewLog'> | Date | string;
+    viewerName?: StringFilter<'ViewLog'> | string;
+    companyName?: StringFilter<'ViewLog'> | string;
+    ipAddress?: StringNullableFilter<'ViewLog'> | string | null;
+    userAgent?: StringNullableFilter<'ViewLog'> | string | null;
+    gitCommitHash?: StringNullableFilter<'ViewLog'> | string | null;
+  };
+
+  export type ViewerTokenCreateWithoutViewLogsInput = {
+    id?: string;
+    token: string;
+    label: string;
+    expiresAt?: Date | string | null;
+    maxViews?: number | null;
+    viewCount?: number;
+    isActive?: boolean;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+  };
+
+  export type ViewerTokenUncheckedCreateWithoutViewLogsInput = {
+    id?: string;
+    token: string;
+    label: string;
+    expiresAt?: Date | string | null;
+    maxViews?: number | null;
+    viewCount?: number;
+    isActive?: boolean;
+    createdAt?: Date | string;
+    updatedAt?: Date | string;
+  };
+
+  export type ViewerTokenCreateOrConnectWithoutViewLogsInput = {
+    where: ViewerTokenWhereUniqueInput;
+    create: XOR<ViewerTokenCreateWithoutViewLogsInput, ViewerTokenUncheckedCreateWithoutViewLogsInput>;
+  };
+
+  export type ViewerTokenUpsertWithoutViewLogsInput = {
+    update: XOR<ViewerTokenUpdateWithoutViewLogsInput, ViewerTokenUncheckedUpdateWithoutViewLogsInput>;
+    create: XOR<ViewerTokenCreateWithoutViewLogsInput, ViewerTokenUncheckedCreateWithoutViewLogsInput>;
+    where?: ViewerTokenWhereInput;
+  };
+
+  export type ViewerTokenUpdateToOneWithWhereWithoutViewLogsInput = {
+    where?: ViewerTokenWhereInput;
+    data: XOR<ViewerTokenUpdateWithoutViewLogsInput, ViewerTokenUncheckedUpdateWithoutViewLogsInput>;
+  };
+
+  export type ViewerTokenUpdateWithoutViewLogsInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    token?: StringFieldUpdateOperationsInput | string;
+    label?: StringFieldUpdateOperationsInput | string;
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    maxViews?: NullableIntFieldUpdateOperationsInput | number | null;
+    viewCount?: IntFieldUpdateOperationsInput | number;
+    isActive?: BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+  };
+
+  export type ViewerTokenUncheckedUpdateWithoutViewLogsInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    token?: StringFieldUpdateOperationsInput | string;
+    label?: StringFieldUpdateOperationsInput | string;
+    expiresAt?: NullableDateTimeFieldUpdateOperationsInput | Date | string | null;
+    maxViews?: NullableIntFieldUpdateOperationsInput | number | null;
+    viewCount?: IntFieldUpdateOperationsInput | number;
+    isActive?: BoolFieldUpdateOperationsInput | boolean;
+    createdAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    updatedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+  };
+
+  export type ViewLogCreateManyTokenInput = {
+    id?: string;
+    viewedAt?: Date | string;
+    viewerName: string;
+    companyName: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    gitCommitHash?: string | null;
+  };
+
+  export type ViewLogUpdateWithoutTokenInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    viewedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewerName?: StringFieldUpdateOperationsInput | string;
+    companyName?: StringFieldUpdateOperationsInput | string;
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null;
+    userAgent?: NullableStringFieldUpdateOperationsInput | string | null;
+    gitCommitHash?: NullableStringFieldUpdateOperationsInput | string | null;
+  };
+
+  export type ViewLogUncheckedUpdateWithoutTokenInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    viewedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewerName?: StringFieldUpdateOperationsInput | string;
+    companyName?: StringFieldUpdateOperationsInput | string;
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null;
+    userAgent?: NullableStringFieldUpdateOperationsInput | string | null;
+    gitCommitHash?: NullableStringFieldUpdateOperationsInput | string | null;
+  };
+
+  export type ViewLogUncheckedUpdateManyWithoutTokenInput = {
+    id?: StringFieldUpdateOperationsInput | string;
+    viewedAt?: DateTimeFieldUpdateOperationsInput | Date | string;
+    viewerName?: StringFieldUpdateOperationsInput | string;
+    companyName?: StringFieldUpdateOperationsInput | string;
+    ipAddress?: NullableStringFieldUpdateOperationsInput | string | null;
+    userAgent?: NullableStringFieldUpdateOperationsInput | string | null;
+    gitCommitHash?: NullableStringFieldUpdateOperationsInput | string | null;
   };
 
   /**

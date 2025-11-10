@@ -133,6 +133,29 @@ exports.Prisma.SkillSheetScalarFieldEnum = {
   updatedAt: 'updatedAt',
 };
 
+exports.Prisma.ViewerTokenScalarFieldEnum = {
+  id: 'id',
+  token: 'token',
+  label: 'label',
+  expiresAt: 'expiresAt',
+  maxViews: 'maxViews',
+  viewCount: 'viewCount',
+  isActive: 'isActive',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt',
+};
+
+exports.Prisma.ViewLogScalarFieldEnum = {
+  id: 'id',
+  tokenId: 'tokenId',
+  viewedAt: 'viewedAt',
+  viewerName: 'viewerName',
+  companyName: 'companyName',
+  ipAddress: 'ipAddress',
+  userAgent: 'userAgent',
+  gitCommitHash: 'gitCommitHash',
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc',
@@ -143,10 +166,17 @@ exports.Prisma.QueryMode = {
   insensitive: 'insensitive',
 };
 
+exports.Prisma.NullsOrder = {
+  first: 'first',
+  last: 'last',
+};
+
 exports.Prisma.ModelName = {
   Admin: 'Admin',
   ViewerAuth: 'ViewerAuth',
   SkillSheet: 'SkillSheet',
+  ViewerToken: 'ViewerToken',
+  ViewLog: 'ViewLog',
 };
 
 /**
