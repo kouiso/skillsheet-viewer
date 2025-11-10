@@ -5,18 +5,24 @@ import { prisma } from './prisma';
 
 const VIEWER_SESSION_COOKIE = 'viewer-session';
 
+async function checkAuthCode(auth: { code: string }, code: string): Promise<boolean> {
+  return bcrypt.compare(code, auth.code);
+}
+
+async function verifyCodeAgainstAuths(viewerAuths: { code: string }[], code: string): Promise<boolean> {
+  for (const auth of viewerAuths) {
+    const isValid = await checkAuthCode(auth, code);
+    if (isValid) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export async function verifyViewerCode(code: string): Promise<boolean> {
   try {
     const viewerAuths = await prisma.viewerAuth.findMany();
-
-    for (const auth of viewerAuths) {
-      const isValid = await bcrypt.compare(code, auth.code);
-      if (isValid) {
-        return true;
-      }
-    }
-
-    return false;
+    return verifyCodeAgainstAuths(viewerAuths, code);
   } catch (error) {
     console.error('Error verifying viewer code:', error);
     return false;
