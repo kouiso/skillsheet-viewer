@@ -15,7 +15,7 @@ const theme = createTheme({
   },
 });
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+const Providers = ({ children }: { children: React.ReactNode }) => {
   const [queryClient] = useState(() => new QueryClient());
   const [trpcClient] = useState(() => getTRPCClient());
 
@@ -31,4 +31,6 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       </QueryClientProvider>
     </trpc.Provider>
   );
-}
+};
+
+export default Providers;

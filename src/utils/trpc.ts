@@ -4,6 +4,8 @@ import superjson from 'superjson';
 
 import { type AppRouter } from '@/server/routers/_app';
 
+const DEFAULT_PORT = 3000;
+
 export const trpc = createTRPCReact<AppRouter>();
 
 function getBaseUrl() {
@@ -16,7 +18,7 @@ function getBaseUrl() {
     return `https://${process.env.VERCEL_URL}`;
   }
   // Assume localhost
-  return `http://localhost:${process.env.PORT ?? 3000}`;
+  return `http://localhost:${process.env.PORT ?? DEFAULT_PORT}`;
 }
 
 export function getTRPCClient() {

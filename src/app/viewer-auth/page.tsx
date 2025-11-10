@@ -55,7 +55,11 @@ export default function ViewerAuthPage() {
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <form
+            onSubmit={(e) => {
+              void handleSubmit(e);
+            }}
+          >
             <TextField
               fullWidth
               label="認証コード"

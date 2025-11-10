@@ -1,8 +1,7 @@
 const path = require('path');
 const micromatch = require('micromatch');
 
-const buildEslintCommand = (filenames) =>
-  `next lint --fix --file ${filenames.map((f) => path.relative(process.cwd(), f)).join(' --file ')}`;
+const buildEslintCommand = (filenames) => `eslint ${filenames.map((f) => path.relative(process.cwd(), f)).join(' ')}`;
 
 module.exports = {
   '*': (allFiles) => {

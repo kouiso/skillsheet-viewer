@@ -5,16 +5,19 @@ Markdownで管理できるスキルシート・ポートフォリオサイト。
 ## 主な機能
 
 ### 管理者機能
+
 - ID/パスワードによるログイン（NextAuth.js）
 - Markdownエディタでスキルシートを編集・保存
 - 閲覧者用の認証コードを設定・変更
 
 ### 閲覧者機能
+
 - 認証コード入力でスキルシートを閲覧
 - Markdown表示（テーブル、コードブロック対応）
 - 自動生成される目次（TOC）機能
 
 ### セキュリティ
+
 - パスワード・認証コードはbcryptでハッシュ化
 - SSRによる認証チェック（middlewareは不使用）
 - 検索エンジンからの除外（noindex）
@@ -37,6 +40,7 @@ Markdownで管理できるスキルシート・ポートフォリオサイト。
 ### 前提条件
 
 以下がインストールされていること：
+
 - [Task](https://taskfile.dev/#/installation)
 - Docker & Docker Compose
 - Node.js 23.10.0以上
@@ -50,6 +54,7 @@ task init
 ```
 
 このコマンドは以下を実行します：
+
 - `.env`ファイルの生成
 - 既存環境のクリーンアップ
 - Dockerイメージのビルド
@@ -69,10 +74,12 @@ http://localhost:3000 にアクセスしてください。
 シードデータにより、以下の認証情報が使用できます（`.env`ファイルから注入）：
 
 **管理者ログイン** (`/login`)
+
 - ユーザー名: `_DEVELOPER_USERNAME` (デフォルト: `admin`)
 - パスワード: `_DEVELOPER_PASSWORD` (デフォルト: `admin123`)
 
 **閲覧者認証** (`/viewer-auth`)
+
 - 認証コード: `_DEVELOPER_VIEWER_CODE` (デフォルト: `view123`)
 
 認証情報は `.env` ファイルで設定できます。詳細は `.env.example` を参照してください。
@@ -214,6 +221,7 @@ Error: P1001: Can't reach database server
 ```
 
 **解決方法：**
+
 ```bash
 # DBコンテナの状態確認
 task ps

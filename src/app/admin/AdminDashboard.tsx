@@ -30,7 +30,7 @@ interface AdminDashboardProps {
   } | null;
 }
 
-export default function AdminDashboard({ initialSkillSheet }: AdminDashboardProps) {
+const AdminDashboard = ({ initialSkillSheet }: AdminDashboardProps) => {
   const router = useRouter();
   const [tabValue, setTabValue] = useState(0);
 
@@ -82,7 +82,12 @@ export default function AdminDashboard({ initialSkillSheet }: AdminDashboardProp
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">管理画面</Typography>
-        <Button variant="outlined" onClick={handleSignOut}>
+        <Button
+          variant="outlined"
+          onClick={() => {
+            void handleSignOut();
+          }}
+        >
           ログアウト
         </Button>
       </Box>
@@ -165,4 +170,6 @@ export default function AdminDashboard({ initialSkillSheet }: AdminDashboardProp
       </Paper>
     </Container>
   );
-}
+};
+
+export default AdminDashboard;

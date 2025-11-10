@@ -353,5 +353,14 @@ export default [
     },
   },
 
+  {
+    name: 'api-routes/override',
+    files: ['src/app/api/**/*.ts', 'src/lib/**/*.ts'],
+    rules: {
+      'import/prefer-default-export': 'off',
+      'no-magic-numbers': 'off',
+    },
+  },
+
   eslintConfigPrettier,
 ];
