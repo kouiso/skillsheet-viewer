@@ -1,12 +1,10 @@
-'use client';
-
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 import { Box, Button, Card, CardContent, TextField, Typography, Alert } from '@mui/material';
-import { useRouter } from 'next/navigation';
 
-export default function ViewerAuthPage() {
-  const router = useRouter();
+const ViewerAuthPage = () => {
+  const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
@@ -17,24 +15,23 @@ export default function ViewerAuthPage() {
     setIsVerifying(true);
 
     try {
-      const response = await fetch('/api/viewer-auth/verify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ code }),
-      });
+      // Client-side authentication using environment variable
+      const validCode = import.meta.env.VITE_VIEWER_CODE;
 
-      if (!response.ok) {
-        const data = await response.json();
-        setError(data.error || '認証コードが正しくありません');
+      if (!validCode) {
+        setError('認証システムの設定が不正です');
         setIsVerifying(false);
         return;
       }
 
-      // Success - redirect to view page
-      router.push('/view');
-      router.refresh();
+      if (code === validCode) {
+        // Store authentication status in sessionStorage
+        sessionStorage.setItem('viewer-authenticated', 'true');
+        void navigate('/view');
+      } else {
+        setError('認証コードが正しくありません');
+        setIsVerifying(false);
+      }
     } catch {
       setError('認証に失敗しました。もう一度お試しください。');
       setIsVerifying(false);
@@ -95,4 +92,6 @@ export default function ViewerAuthPage() {
       </Card>
     </Box>
   );
-}
+};
+
+export default ViewerAuthPage;
