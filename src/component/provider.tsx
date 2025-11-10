@@ -9,11 +9,11 @@ const theme = createTheme({
   },
 });
 
-const Providers = ({ children }: { children: React.ReactNode }) => (
+const Provider = ({ children }: { children: React.ReactNode }) => (
   <ThemeProvider theme={theme}>
     <CssBaseline />
     {children}
   </ThemeProvider>
 );
 
-export default Providers;
+export default Provider;

@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 
 import { fetchSkillSheet } from '@/lib/github';
 
-import SkillSheetViewer from './SkillSheetViewer';
+import SkillSheetViewer from './skill-sheet-viewer';
 
 export default async function ViewPage() {
   // Check if user has valid session
