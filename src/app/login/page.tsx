@@ -31,7 +31,7 @@ export default function LoginPage() {
         router.push('/admin');
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       setError('ログインに失敗しました');
     } finally {
       setLoading(false);
@@ -63,7 +63,11 @@ export default function LoginPage() {
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <form
+            onSubmit={(e) => {
+              void handleSubmit(e);
+            }}
+          >
             <TextField
               fullWidth
               label="ユーザー名"
