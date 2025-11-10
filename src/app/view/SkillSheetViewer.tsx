@@ -20,13 +20,18 @@ interface SkillSheetViewerProps {
   };
 }
 
-export default function SkillSheetViewer({ skillSheet }: SkillSheetViewerProps) {
+const MAX_HEADING_LEVEL_INDENT = 2;
+const SIDEBAR_WIDTH = 280;
+const LARGE_FONT_SIZE = 0.95;
+const SMALL_FONT_SIZE = 0.875;
+const FONT_WEIGHT_BOLD = 600;
+const FONT_WEIGHT_NORMAL = 400;
+
+const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-
     // Markdownから見出しを抽出
     const extractHeadings = () => {
       const headingRegex = /^(#{1,6})\s+(.+)$/gm;
@@ -44,13 +49,14 @@ export default function SkillSheetViewer({ skillSheet }: SkillSheetViewerProps) 
       });
 
       setHeadings(extractedHeadings);
+      setMounted(true);
     };
 
     extractHeadings();
   }, [skillSheet.content]);
 
   const scrollToHeading = (id: string) => {
-    const element = document.getElementById(id);
+    const element = document.querySelector(`#${id}`);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -62,11 +68,11 @@ export default function SkillSheetViewer({ skillSheet }: SkillSheetViewerProps) 
       {mounted && (
         <Paper
           sx={{
-            width: 280,
+            width: SIDEBAR_WIDTH,
             position: 'fixed',
             height: '100vh',
             overflowY: 'auto',
-            p: 2,
+            p: MAX_HEADING_LEVEL_INDENT,
             borderRadius: 0,
           }}
         >
@@ -75,13 +81,13 @@ export default function SkillSheetViewer({ skillSheet }: SkillSheetViewerProps) 
           </Typography>
           <List dense>
             {headings.map((heading, index) => (
-              <ListItem key={index} disablePadding sx={{ pl: (heading.level - 1) * 2 }}>
+              <ListItem key={index} disablePadding sx={{ pl: (heading.level - 1) * MAX_HEADING_LEVEL_INDENT }}>
                 <ListItemButton onClick={() => scrollToHeading(heading.id)}>
                   <Typography
                     variant="body2"
                     sx={{
-                      fontSize: heading.level === 1 ? '0.95rem' : '0.875rem',
-                      fontWeight: heading.level === 1 ? 600 : 400,
+                      fontSize: heading.level === 1 ? `${LARGE_FONT_SIZE}rem` : `${SMALL_FONT_SIZE}rem`,
+                      fontWeight: heading.level === 1 ? FONT_WEIGHT_BOLD : FONT_WEIGHT_NORMAL,
                     }}
                   >
                     {heading.text}
@@ -97,7 +103,7 @@ export default function SkillSheetViewer({ skillSheet }: SkillSheetViewerProps) 
       <Container
         maxWidth="md"
         sx={{
-          ml: mounted ? '280px' : 0,
+          ml: mounted ? `${SIDEBAR_WIDTH}px` : 0,
           py: 4,
           flex: 1,
         }}
@@ -182,4 +188,6 @@ export default function SkillSheetViewer({ skillSheet }: SkillSheetViewerProps) 
       </Container>
     </Box>
   );
-}
+};
+
+export default SkillSheetViewer;
