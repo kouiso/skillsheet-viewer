@@ -5,29 +5,40 @@ import { useState } from 'react';
 import { Box, Button, Card, CardContent, TextField, Typography, Alert } from '@mui/material';
 import { useRouter } from 'next/navigation';
 
-import { trpc } from '@/utils/trpc';
-
 export default function ViewerAuthPage() {
   const router = useRouter();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
-
-  const verifyMutation = trpc.viewerAuth.verify.useMutation({
-    onSuccess: async () => {
-      // Set session cookie via API route
-      await fetch('/api/viewer-auth/session', { method: 'POST' });
-      router.push('/view');
-      router.refresh();
-    },
-    onError: (error) => {
-      setError(error.message || '認証コードが正しくありません');
-    },
-  });
+  const [isVerifying, setIsVerifying] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    verifyMutation.mutate({ code });
+    setIsVerifying(true);
+
+    try {
+      const response = await fetch('/api/viewer-auth/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        setError(data.error || '認証コードが正しくありません');
+        setIsVerifying(false);
+        return;
+      }
+
+      // Success - redirect to view page
+      router.push('/view');
+      router.refresh();
+    } catch {
+      setError('認証に失敗しました。もう一度お試しください。');
+      setIsVerifying(false);
+    }
   };
 
   return (
@@ -74,10 +85,10 @@ export default function ViewerAuthPage() {
               type="submit"
               variant="contained"
               size="large"
-              disabled={verifyMutation.isPending}
+              disabled={isVerifying}
               sx={{ mt: 3, py: 1.5 }}
             >
-              {verifyMutation.isPending ? '認証中...' : '認証'}
+              {isVerifying ? '認証中...' : '認証'}
             </Button>
           </form>
         </CardContent>

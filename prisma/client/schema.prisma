@@ -43,3 +43,34 @@ model SkillSheet {
 
   @@map("skill_sheets")
 }
+
+// Viewer token for individual access control
+model ViewerToken {
+  id        String    @id @default(cuid())
+  token     String    @unique // UUID token for URL access
+  label     String // Description like "A社営業用" or "案件先X社用"
+  expiresAt DateTime? // Optional expiration date
+  maxViews  Int? // Optional view count limit
+  viewCount Int       @default(0) // Current view count
+  isActive  Boolean   @default(true) // Can be disabled by admin
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  viewLogs  ViewLog[]
+
+  @@map("viewer_tokens")
+}
+
+// View log for tracking who viewed when
+model ViewLog {
+  id            String      @id @default(cuid())
+  tokenId       String
+  token         ViewerToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  viewedAt      DateTime    @default(now())
+  viewerName    String // Name of the viewer
+  companyName   String // Company name of the viewer
+  ipAddress     String? // Optional IP tracking
+  userAgent     String? // Optional browser/device info
+  gitCommitHash String? // Optional: which version was viewed
+
+  @@map("view_logs")
+}
