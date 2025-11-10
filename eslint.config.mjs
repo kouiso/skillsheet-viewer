@@ -29,6 +29,7 @@ export default [
       'test-results/',
       'prisma/**',
       '.storybook/**',
+      'src/test/**',
     ],
   },
 
