@@ -54,7 +54,7 @@ export default function ViewerAuthPage() {
       <Card sx={{ minWidth: 400, maxWidth: 500 }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h4" component="h1" gutterBottom align="center">
-            認証コード入力
+            エンジニアスキルシート閲覧
           </Typography>
           <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 4 }}>
             共有された認証コードを入力してください

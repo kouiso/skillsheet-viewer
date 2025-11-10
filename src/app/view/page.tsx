@@ -24,13 +24,13 @@ export default async function ViewPage() {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>エラー</h1>
-        <p>スキルシートの読み込みに失敗しました。</p>
+        <p>エンジニアスキルシートの読み込みに失敗しました。</p>
       </div>
     );
   }
 
   const skillSheet = {
-    title: 'スキルシート',
+    title: 'エンジニアスキルシート',
     content: skillSheetData.content,
   };
 
