@@ -1,8 +1,8 @@
 {
-  "name": "horsemanager-console",
+  "name": "engineer-skill-sheet-viewer",
   "version": "1.0.0",
   "private": true,
-  "description": "HM Developer Console (CS Tool)",
+  "description": "Engineer Skill Sheet Viewer - Display engineer skill sheets from GitHub",
   "author": "KosukeIsogai",
   "license": "UNLICENSED",
   "engines": {

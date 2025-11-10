@@ -1,6 +1,6 @@
-# Skill Sheet Viewer - セットアップガイド
+# Engineer Skill Sheet Viewer - セットアップガイド
 
-スキルシートをMarkdown形式で管理し、Web上で見やすく表示するためのアプリケーションです。
+エンジニアのスキルシートをMarkdown形式で管理し、Web上で見やすく表示するためのアプリケーションです。
 
 ## 特徴
 
@@ -52,9 +52,11 @@ Next.js Application (Vercel)
 NODE_ENV=development
 
 # Viewer authentication (任意の共有コード)
+
 VIEWER_CODE=your-secret-viewer-code
 
 # GitHub API
+
 GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
 GITHUB_OWNER=your-github-username
 GITHUB_REPO=your-private-repo-name
