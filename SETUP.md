@@ -137,9 +137,33 @@ vercel --prod
 2. GitHub Tokenの権限が`repo`スコープを含むか確認
 3. `skillsheet.md`がリポジトリの指定パスに存在するか確認
 
-### 認証コードが通らない
+### 認証コードが通らない（ローカル）
 
 - `.env`の`VIEWER_CODE`と入力したコードが一致するか確認
+
+### Vercelで認証処理に失敗する
+
+1. **環境変数が設定されているか確認**
+   - Vercel Dashboard → Settings → Environment Variables
+   - 以下がすべて設定されているか確認：
+     - `VIEWER_CODE`
+     - `GITHUB_TOKEN`
+     - `GITHUB_OWNER`
+     - `GITHUB_REPO`
+     - `GITHUB_FILE_PATH`
+     - `GITHUB_BRANCH`
+
+2. **環境変数のスコープを確認**
+   - Production, Preview, Development すべてにチェックが入っているか確認
+
+3. **再デプロイ**
+   - 環境変数を追加/変更後は必ず再デプロイが必要
+   - Deployments → 最新デプロイの右側のメニュー → Redeploy
+
+4. **ログを確認**
+   - Vercel Dashboard → Deployments → Functions
+   - `/api/viewer-auth/verify` のログを確認
+   - `[Auth]` で始まるログメッセージを探す
 
 ### GitHub API Rate Limit
 
