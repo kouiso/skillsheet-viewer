@@ -68,8 +68,15 @@ export async function fetchSkillSheet(): Promise<SkillSheetContent> {
 
   const data = await response.json();
 
-  // Base64 decode the content
-  const decodedContent = atob(data.content.replace(/\n/g, ''));
+  // Base64 decode the content with proper UTF-8 handling
+  const base64Content = data.content.replace(/\n/g, '');
+  const binaryString = atob(base64Content);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  const decoder = new TextDecoder('utf-8');
+  const decodedContent = decoder.decode(bytes);
 
   return {
     content: decodedContent,
