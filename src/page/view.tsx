@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { pdf } from '@react-pdf/renderer';
 
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
 
+import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
+import { SkillSheetPDF } from '@/component/pdf-export';
 import { fetchSkillSheet } from '@/lib/github-client';
 
 interface SkillSheet {
@@ -16,6 +19,10 @@ const ViewPage = () => {
   const [skillSheet, setSkillSheet] = useState<SkillSheet | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
     // Check authentication
@@ -46,6 +53,46 @@ const ViewPage = () => {
 
     void loadSkillSheet();
   }, [navigate]);
+
+  const handleDownloadPdf = async () => {
+    if (!skillSheet) return;
+
+    try {
+      setPdfLoading(true);
+      setSnackbarMessage('PDFを生成中...');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+
+      // PDFドキュメントを生成
+      const pdfDocument = <SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />;
+      const blob = await pdf(pdfDocument).toBlob();
+
+      // ダウンロード
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `スキルシート_${skillSheet.title}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setSnackbarMessage('PDFのダウンロードが完了しました');
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+      setSnackbarMessage('PDFの生成に失敗しました');
+      setSnackbarSeverity('error');
+      setSnackbarOpen(true);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
 
   if (loading) {
     return (
@@ -84,7 +131,24 @@ const ViewPage = () => {
     return null;
   }
 
-  return <SkillSheetViewer skillSheet={skillSheet} />;
+  return (
+    <Box>
+      <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
+      <SkillSheetViewer skillSheet={skillSheet} />
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={4000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
 };
 
 export default ViewPage;
