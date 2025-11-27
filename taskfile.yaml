@@ -1,0 +1,29 @@
+# https://taskfile.dev
+
+version: '3'
+
+dotenv:
+  - .env
+
+tasks:
+  default:
+    cmds:
+      - task -l
+
+  init:
+    desc: "初期セットアップ"
+    cmds:
+      - npm install
+      - cp -n .env.example .env || true
+      - echo "✅ Setup complete"
+
+  up:
+    desc: "開発サーバー起動"
+    cmds:
+      - npm run dev
+
+  healthcheck:
+    desc: "動作確認"
+    cmds:
+      - npm run build
+      - echo "✅ Health check passed"
