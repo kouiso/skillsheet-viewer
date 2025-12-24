@@ -1,17 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
-import { Box, Container, Typography, Paper, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Container, Paper, Typography, useMediaQuery, useTheme } from '@mui/material';
+import { motion } from 'framer-motion';
 import rehypeSlug from 'rehype-slug';
-import remarkGfm from 'remark-gfm';
 import remarkBreaks from 'remark-breaks';
+import remarkGfm from 'remark-gfm';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
-import { motion } from 'framer-motion';
 
-import TableOfContents from './table-of-contents';
-import CodeBlock from './code-block';
 import { useActiveHeading } from '@/hooks/use-active-heading';
+
+import CodeBlock from './code-block';
+import TableOfContents from './table-of-contents';
 
 interface Heading {
   id: string;
@@ -91,9 +92,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       {/* 目次（左サイドバー） */}
-      {mounted && (
-        <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />
-      )}
+      {mounted && <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />}
 
       {/* メインコンテンツ */}
       <Container
