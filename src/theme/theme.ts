@@ -56,12 +56,15 @@ const getThemeOptions = (mode: 'light' | 'dark'): ThemeOptions => ({
   },
   typography: {
     fontFamily: [
+      '"Helvetica Neue"',
+      'Arial',
+      '"Hiragino Kaku Gothic ProN"',
+      '"Hiragino Sans"',
+      'Meiryo',
       '-apple-system',
       'BlinkMacSystemFont',
       '"Segoe UI"',
       'Roboto',
-      '"Helvetica Neue"',
-      'Arial',
       'sans-serif',
       '"Apple Color Emoji"',
       '"Segoe UI Emoji"',
