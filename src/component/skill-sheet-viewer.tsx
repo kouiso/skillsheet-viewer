@@ -3,7 +3,6 @@ import ReactMarkdown from 'react-markdown';
 
 import { Box, Container, Typography, Paper, useTheme, useMediaQuery } from '@mui/material';
 import rehypeSlug from 'rehype-slug';
-import rehypePrettyCode from 'rehype-pretty-code';
 import remarkGfm from 'remark-gfm';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
@@ -233,16 +232,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[
-                rehypeSlug,
-                [
-                  rehypePrettyCode,
-                  {
-                    theme: theme.palette.mode === 'dark' ? 'github-dark' : 'github-light',
-                    keepBackground: false,
-                  },
-                ],
-              ]}
+              rehypePlugins={[rehypeSlug]}
               components={{
                 code(props) {
                   const { className, children, ...rest } = props;
