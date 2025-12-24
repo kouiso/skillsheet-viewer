@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { Box, Container, Typography, Paper, useTheme, useMediaQuery } from '@mui/material';
 import rehypeSlug from 'rehype-slug';
 import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 import { motion } from 'framer-motion';
@@ -183,31 +184,36 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
               },
               '& ul, & ol': {
                 mb: 2,
-                pl: 3,
+                pl: 4,
               },
               '& li': {
                 mb: 0.5,
                 lineHeight: 1.8,
                 color: theme.palette.text.primary,
+                '&::marker': {
+                  color: theme.palette.primary.main,
+                },
               },
               '& blockquote': {
                 borderLeft: `4px solid ${theme.palette.primary.main}`,
                 pl: 2,
                 ml: 0,
-                my: 2,
+                my: 3,
                 fontStyle: 'italic',
                 color: theme.palette.text.secondary,
-                backgroundColor: theme.palette.mode === 'dark' ? '#1e293b' : '#f8fafc',
-                py: 1,
-                borderRadius: '0 4px 4px 0',
+                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(30, 41, 59, 0.5)' : 'rgba(248, 250, 252, 0.8)',
+                py: 2,
+                pr: 2,
+                borderRadius: '0 8px 8px 0',
               },
               '& a': {
                 color: theme.palette.primary.main,
                 textDecoration: 'none',
                 fontWeight: 500,
+                borderBottom: `1px solid transparent`,
                 transition: 'all 0.2s ease',
                 '&:hover': {
-                  textDecoration: 'underline',
+                  borderBottom: `1px solid ${theme.palette.primary.main}`,
                   color: theme.palette.primary.dark,
                 },
               },
@@ -231,7 +237,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
             }}
           >
             <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
+              remarkPlugins={[remarkGfm, remarkBreaks]}
               rehypePlugins={[rehypeSlug]}
               components={{
                 code(props) {
