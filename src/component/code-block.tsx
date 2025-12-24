@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 import { Box, IconButton, Tooltip, useTheme } from '@mui/material';
 import { ContentCopy, Check } from '@mui/icons-material';
@@ -28,11 +30,10 @@ const CodeBlock = ({ children, className }: CodeBlockProps) => {
     <Box
       sx={{
         position: 'relative',
-        backgroundColor: theme.palette.mode === 'dark' ? '#1e293b' : '#f8fafc',
         borderRadius: 2,
-        border: `1px solid ${theme.palette.divider}`,
         overflow: 'hidden',
         mb: 3,
+        border: `1px solid ${theme.palette.divider}`,
       }}
     >
       {/* ヘッダー */}
@@ -43,7 +44,7 @@ const CodeBlock = ({ children, className }: CodeBlockProps) => {
           alignItems: 'center',
           px: 2,
           py: 1,
-          backgroundColor: theme.palette.mode === 'dark' ? '#0f172a' : '#e2e8f0',
+          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
           borderBottom: `1px solid ${theme.palette.divider}`,
         }}
       >
@@ -79,23 +80,21 @@ const CodeBlock = ({ children, className }: CodeBlockProps) => {
       </Box>
 
       {/* コードブロック */}
-      <Box
-        component="pre"
-        sx={{
-          m: 0,
-          p: 2,
-          overflow: 'auto',
+      <SyntaxHighlighter
+        language={language}
+        style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
+        customStyle={{
+          margin: 0,
+          padding: '16px',
           fontSize: '0.875rem',
           lineHeight: 1.7,
           fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
-          '& code': {
-            backgroundColor: 'transparent',
-            padding: 0,
-          },
+          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
         }}
+        PreTag="div"
       >
-        <code className={className}>{children}</code>
-      </Box>
+        {String(children).replace(/\n$/, '')}
+      </SyntaxHighlighter>
     </Box>
   );
 };
