@@ -67,7 +67,7 @@
 
 💡 **豆知識**
 
-ちなみに、PythonのsortはTimSortというアルゴリズムを使っていますよ。これは実際のデータに最適化された、挿入ソートとマージソートのハイブリッドアルゴリズムなんです。
+ちなみに、TypeScriptの型システムは「構造的部分型（Structural Subtyping）」を採用しています。これは、型の名前ではなく、その構造（プロパティやメソッド）で互換性を判断する方式なんです。JavaやC#のような名前ベースの型システムとは大きく異なる特徴ですよ。
 ```
 
 #### 豆知識のアイデア集
@@ -142,9 +142,13 @@ function getUserData(userId: string) {
 }
 
 // ✅ 良い例
-// ユーザーデータをAPIから取得する関数
+/**
+ * ユーザーデータをAPIから取得する関数
+ * @param userId - 取得したいユーザーのID
+ * @returns ユーザーデータを含むPromise
+ */
 function getUserData(userId: string) {
-  // データを取得して返す
+  // APIエンドポイントからデータを取得して返す
   return fetch(`/api/users/${userId}`);
 }
 ```
