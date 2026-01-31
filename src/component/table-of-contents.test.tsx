@@ -2,15 +2,17 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TableOfContents from './table-of-contents';
-import { ThemeProvider, createTheme } from '@mui/material';
 
 // framer-motionをモック
 vi.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, initial, animate, exit, transition, whileHover, ...props }: { children: React.ReactNode; initial?: unknown; animate?: unknown; exit?: unknown; transition?: unknown; whileHover?: unknown }) => (
+    div: ({ children, ...props }: { children: React.ReactNode }) => (
       <div {...props}>{children}</div>
     ),
-    button: ({ children, whileHover, whileTap, ...props }: { children: React.ReactNode; whileHover?: unknown; whileTap?: unknown }) => (
+    li: ({ children, ...props }: { children: React.ReactNode }) => (
+      <li {...props}>{children}</li>
+    ),
+    button: ({ children, ...props }: { children: React.ReactNode }) => (
       <button {...props}>{children}</button>
     ),
   },
@@ -31,8 +33,6 @@ const mockHeadings: Heading[] = [
   { id: 'heading-5', text: 'セクション2-1', level: 2 },
 ];
 
-const theme = createTheme();
-
 const renderTableOfContents = (props = {}) => {
   const defaultProps = {
     headings: mockHeadings,
@@ -41,16 +41,15 @@ const renderTableOfContents = (props = {}) => {
     ...props,
   };
 
-  return render(
-    <ThemeProvider theme={theme}>
-      <TableOfContents {...defaultProps} />
-    </ThemeProvider>,
-  );
+  return render(<TableOfContents {...defaultProps} />);
 };
 
 describe('TableOfContents', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset window size to desktop
+    Object.defineProperty(window, 'innerWidth', { value: 1024, writable: true });
+    window.dispatchEvent(new Event('resize'));
   });
 
   describe('レンダリング', () => {
@@ -76,30 +75,25 @@ describe('TableOfContents', () => {
         expect(screen.getByText(heading.text)).toBeInTheDocument();
       });
     });
-
-    it('MenuBookアイコンが表示されること', () => {
-      renderTableOfContents();
-      expect(screen.getByTestId('MenuBookIcon')).toBeInTheDocument();
-    });
   });
 
   describe('アクティブな見出しのハイライト', () => {
-    it('アクティブな見出しが選択状態になること', () => {
+    it('アクティブな見出しにprimaryスタイルが適用されること', () => {
       renderTableOfContents({ activeId: 'heading-2' });
 
       const activeHeading = screen.getByText('セクション1-1');
-      const button = activeHeading.closest('div[role="button"]');
+      const button = activeHeading.closest('button');
 
-      expect(button).toHaveClass('Mui-selected');
+      expect(button).toHaveClass('bg-primary');
     });
 
-    it('アクティブでない見出しは選択状態でないこと', () => {
+    it('アクティブでない見出しにprimaryスタイルが適用されないこと', () => {
       renderTableOfContents({ activeId: 'heading-1' });
 
       const inactiveHeading = screen.getByText('セクション1-1');
-      const button = inactiveHeading.closest('div[role="button"]');
+      const button = inactiveHeading.closest('button');
 
-      expect(button).not.toHaveClass('Mui-selected');
+      expect(button).not.toHaveClass('bg-primary');
     });
   });
 
@@ -149,7 +143,7 @@ describe('TableOfContents', () => {
       expect(collapseButton).toBeInTheDocument();
     });
 
-    it('折りたたみボタンをクリックすると見出しリストが非表示になること', async () => {
+    it('折りたたみボタンをクリックすると展開ボタンになること', async () => {
       const user = userEvent.setup();
       renderTableOfContents();
 
@@ -157,12 +151,11 @@ describe('TableOfContents', () => {
       await user.click(collapseButton);
 
       await waitFor(() => {
-        // 折りたたまれた後は展開ボタンになる
         expect(screen.getByLabelText('展開')).toBeInTheDocument();
       });
     });
 
-    it('展開ボタンをクリックすると見出しリストが表示されること', async () => {
+    it('展開ボタンをクリックすると折りたたみボタンになること', async () => {
       const user = userEvent.setup();
       renderTableOfContents();
 
@@ -203,13 +196,7 @@ describe('TableOfContents', () => {
       renderTableOfContents();
 
       const headingButtons = screen.getAllByRole('button');
-      // 少なくとも1つのボタンが存在することを確認
       expect(headingButtons.length).toBeGreaterThan(0);
-
-      // 各ボタンがroleを持っていることを確認(キーボード操作可能)
-      headingButtons.forEach((button) => {
-        expect(button).toHaveAttribute('role', 'button');
-      });
     });
   });
 
@@ -220,7 +207,6 @@ describe('TableOfContents', () => {
       const level1Heading = screen.getByText('セクション1');
       const listItem = level1Heading.closest('li');
 
-      // level 1の場合、pl: (1 - 1) * 2 = 0
       expect(listItem).toBeInTheDocument();
     });
 
@@ -230,7 +216,6 @@ describe('TableOfContents', () => {
       const level2Heading = screen.getByText('セクション1-1');
       const listItem = level2Heading.closest('li');
 
-      // level 2の場合、pl: (2 - 1) * 2 = 2
       expect(listItem).toBeInTheDocument();
     });
   });
