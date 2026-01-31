@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { pdf } from '@react-pdf/renderer';
-
-import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
+import { Loader2 } from 'lucide-react';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { SkillSheetPDF } from '@/component/pdf-export';
+import { Toast } from '@/components/ui/toast';
 import { fetchSkillSheet } from '@/lib/github-client';
 
 interface SkillSheet {
@@ -20,9 +20,9 @@ const ViewPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastVariant, setToastVariant] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
     // Check authentication
@@ -59,9 +59,9 @@ const ViewPage = () => {
 
     try {
       setPdfLoading(true);
-      setSnackbarMessage('PDFを生成中...');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
+      setToastMessage('PDFを生成中...');
+      setToastVariant('success');
+      setToastOpen(true);
 
       // PDFドキュメントを生成
       const pdfDocument = <SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />;
@@ -77,53 +77,33 @@ const ViewPage = () => {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setSnackbarMessage('PDFのダウンロードが完了しました');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
+      setToastMessage('PDFのダウンロードが完了しました');
+      setToastVariant('success');
+      setToastOpen(true);
     } catch (err) {
       console.error('Error generating PDF:', err);
-      setSnackbarMessage('PDFの生成に失敗しました');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      setToastMessage('PDFの生成に失敗しました');
+      setToastVariant('error');
+      setToastOpen(true);
     } finally {
       setPdfLoading(false);
     }
   };
 
-  const handleSnackbarClose = () => {
-    setSnackbarOpen(false);
-  };
-
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
+      <div className="flex justify-center items-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          flexDirection: 'column',
-          gap: 2,
-        }}
-      >
-        <Typography variant="h4">エラー</Typography>
-        <Typography variant="body1">{error}</Typography>
-      </Box>
+      <div className="flex justify-center items-center min-h-screen flex-col gap-4">
+        <h1 className="text-2xl font-bold">エラー</h1>
+        <p className="text-muted-foreground">{error}</p>
+      </div>
     );
   }
 
@@ -132,22 +112,18 @@ const ViewPage = () => {
   }
 
   return (
-    <Box>
+    <div>
       <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
       <SkillSheetViewer skillSheet={skillSheet} />
 
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={4000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Box>
+      {/* Toast for notifications */}
+      <Toast
+        open={toastOpen}
+        message={toastMessage}
+        variant={toastVariant}
+        onClose={() => setToastOpen(false)}
+      />
+    </div>
   );
 };
 

@@ -8,10 +8,13 @@ import { ThemeModeProvider } from '@/context/theme-context';
 // framer-motionをモック
 vi.mock('framer-motion', () => ({
   motion: {
-    div: ({ children, initial, animate, transition, ...props }: { children: React.ReactNode; initial?: unknown; animate?: unknown; transition?: unknown }) => (
+    header: ({ children, ...props }: { children: React.ReactNode }) => (
+      <header {...props}>{children}</header>
+    ),
+    div: ({ children, ...props }: { children: React.ReactNode }) => (
       <div {...props}>{children}</div>
     ),
-    button: ({ children, whileHover, whileTap, ...props }: { children: React.ReactNode; whileHover?: unknown; whileTap?: unknown }) => (
+    button: ({ children, ...props }: { children: React.ReactNode }) => (
       <button {...props}>{children}</button>
     ),
   },
@@ -68,13 +71,6 @@ describe('Header', () => {
       expect(logoutButton).toBeInTheDocument();
     });
 
-    it('Descriptionアイコンが表示されること', () => {
-      renderHeader();
-      // MUIのDescriptionIconが存在することを確認
-      const icon = screen.getByTestId('DescriptionIcon');
-      expect(icon).toBeInTheDocument();
-    });
-
     it('PDFダウンロードボタンがonDownloadPdf propがある場合表示されること', () => {
       const mockOnDownloadPdf = vi.fn();
       renderHeader({ onDownloadPdf: mockOnDownloadPdf });
@@ -90,43 +86,24 @@ describe('Header', () => {
   });
 
   describe('テーマ切り替え機能', () => {
-    it('ライトモード時にBrightness4アイコンが表示されること', () => {
-      renderHeader();
-      // ライトモード時のアイコン
-      expect(screen.getByTestId('Brightness4Icon')).toBeInTheDocument();
-    });
-
-    it('ダークモード時にBrightness7アイコンが表示されること', async () => {
-      localStorage.setItem('theme-mode', 'dark');
-      renderHeader();
-
-      // ダークモード時のアイコン
-      await waitFor(() => {
-        expect(screen.getByTestId('Brightness7Icon')).toBeInTheDocument();
-      });
-    });
-
     it('テーマ切り替えボタンをクリックするとテーマが切り替わること', async () => {
       const user = userEvent.setup();
       renderHeader();
 
       const themeButton = screen.getByLabelText('テーマ切り替え');
 
-      // 初期状態はライトモード
-      expect(screen.getByTestId('Brightness4Icon')).toBeInTheDocument();
-
-      // クリックしてダークモードに切り替え
+      // クリックしてテーマを切り替え
       await user.click(themeButton);
 
       await waitFor(() => {
-        expect(screen.getByTestId('Brightness7Icon')).toBeInTheDocument();
+        expect(localStorage.getItem('theme-mode')).toBe('dark');
       });
 
       // もう一度クリックしてライトモードに戻す
       await user.click(themeButton);
 
       await waitFor(() => {
-        expect(screen.getByTestId('Brightness4Icon')).toBeInTheDocument();
+        expect(localStorage.getItem('theme-mode')).toBe('light');
       });
     });
   });
@@ -176,7 +153,7 @@ describe('Header', () => {
       renderHeader({ onDownloadPdf: mockOnDownloadPdf, pdfLoading: true });
 
       const pdfButton = screen.getByLabelText('PDFダウンロード');
-      expect(pdfButton).toHaveAttribute('aria-disabled', 'true');
+      expect(pdfButton).toBeDisabled();
     });
 
     it('PDFローディング中でない場合はボタンが有効化されること', () => {
@@ -210,10 +187,9 @@ describe('Header', () => {
   });
 
   describe('スタイリング', () => {
-    it('AppBarコンポーネントが正しくレンダリングされること', () => {
+    it('ヘッダーコンポーネントが正しくレンダリングされること', () => {
       const { container } = renderHeader();
-      // AppBarがレンダリングされることを確認
-      expect(container.querySelector('.MuiAppBar-root')).toBeInTheDocument();
+      expect(container.querySelector('header')).toBeInTheDocument();
     });
   });
 });

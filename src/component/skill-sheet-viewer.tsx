@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-
-import { Box, Container, Paper, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
 import rehypeSlug from 'rehype-slug';
 import remarkBreaks from 'remark-breaks';
@@ -9,7 +7,9 @@ import remarkGfm from 'remark-gfm';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 
+import { Card } from '@/components/ui/card';
 import { useActiveHeading } from '@/hooks/use-active-heading';
+import { cn } from '@/lib/utils';
 
 import CodeBlock from './code-block';
 import TableOfContents from './table-of-contents';
@@ -35,9 +35,16 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [isMobile, setIsMobile] = useState(false);
 
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   // 見出しIDのリストを作成
   const headingIds = headings.map((h) => h.id);
@@ -90,150 +97,63 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <div className="flex min-h-screen">
       {/* 目次（左サイドバー） */}
       {mounted && <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />}
 
       {/* メインコンテンツ */}
-      <Container
-        maxWidth="md"
-        component={motion.div}
+      <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        sx={{
-          ml: mounted && !isMobile ? `${SIDEBAR_WIDTH}px` : 0,
-          py: 4,
-          flex: 1,
-          transition: 'margin-left 0.3s ease',
-        }}
+        className={cn(
+          'flex-1 py-8 px-4 max-w-3xl mx-auto transition-all duration-300',
+          mounted && !isMobile && `ml-[${SIDEBAR_WIDTH}px]`,
+        )}
+        style={{ marginLeft: mounted && !isMobile ? SIDEBAR_WIDTH : 0 }}
       >
-        <Paper
-          elevation={2}
-          sx={{
-            p: { xs: 2, sm: 3, md: 4 },
-            backgroundColor: theme.palette.background.paper,
-            borderRadius: 3,
-          }}
-        >
-          <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
-            {skillSheet.title}
-          </Typography>
+        <Card className="p-4 sm:p-6 md:p-8 rounded-xl shadow-md">
+          <h1 className="text-3xl font-bold mb-6">{skillSheet.title}</h1>
 
-          <Box
-            className="markdown-content"
-            sx={{
-              '& h1, & h2, & h3, & h4, & h5, & h6': {
-                mt: 3,
-                mb: 2,
-                fontWeight: 600,
-                scrollMarginTop: '100px',
-              },
-              '& h1': {
-                fontSize: '2rem',
-                borderBottom: `2px solid ${theme.palette.primary.main}`,
-                pb: 1,
-                color: theme.palette.primary.main,
-              },
-              '& h2': {
-                fontSize: '1.5rem',
-                borderBottom: `1px solid ${theme.palette.divider}`,
-                pb: 1,
-              },
-              '& h3': { fontSize: '1.25rem' },
-              '& p': {
-                mb: 2,
-                lineHeight: 1.8,
-                color: theme.palette.text.primary,
-              },
-              '& code': {
-                backgroundColor: theme.palette.mode === 'dark' ? '#334155' : '#f1f5f9',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                fontSize: '0.9em',
-                fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
-                color: theme.palette.mode === 'dark' ? '#e2e8f0' : '#334155',
-              },
-              '& pre': {
-                mb: 3,
-              },
-              '& pre code': {
-                backgroundColor: 'transparent',
-                padding: 0,
-              },
-              '& table': {
-                width: '100%',
-                borderCollapse: 'collapse',
-                mb: 2,
-                overflow: 'auto',
-                display: 'block',
-              },
-              '& th, & td': {
-                border: `1px solid ${theme.palette.divider}`,
-                padding: '12px 16px',
-                textAlign: 'left',
-              },
-              '& th': {
-                backgroundColor: theme.palette.mode === 'dark' ? '#1e293b' : '#f8fafc',
-                fontWeight: 600,
-                color: theme.palette.text.primary,
-              },
-              '& td': {
-                color: theme.palette.text.primary,
-              },
-              '& ul, & ol': {
-                mb: 2,
-                pl: 4,
-              },
-              '& li': {
-                mb: 0.5,
-                lineHeight: 1.8,
-                color: theme.palette.text.primary,
-                '&::marker': {
-                  color: theme.palette.primary.main,
-                },
-              },
-              '& blockquote': {
-                borderLeft: `4px solid ${theme.palette.primary.main}`,
-                pl: 2,
-                ml: 0,
-                my: 3,
-                fontStyle: 'italic',
-                color: theme.palette.text.secondary,
-                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(30, 41, 59, 0.5)' : 'rgba(248, 250, 252, 0.8)',
-                py: 2,
-                pr: 2,
-                borderRadius: '0 8px 8px 0',
-              },
-              '& a': {
-                color: theme.palette.primary.main,
-                textDecoration: 'none',
-                fontWeight: 500,
-                borderBottom: `1px solid transparent`,
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  borderBottom: `1px solid ${theme.palette.primary.main}`,
-                  color: theme.palette.primary.dark,
-                },
-              },
-              '& img': {
-                maxWidth: '100%',
-                height: 'auto',
-                borderRadius: 2,
-                my: 2,
-                cursor: 'pointer',
-                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                '&:hover': {
-                  transform: 'scale(1.02)',
-                  boxShadow: theme.shadows[4],
-                },
-              },
-              '& hr': {
-                border: 'none',
-                borderTop: `1px solid ${theme.palette.divider}`,
-                my: 3,
-              },
-            }}
+          <div
+            className={cn(
+              'markdown-content prose prose-slate dark:prose-invert max-w-none',
+              // Headings
+              '[&_h1,&_h2,&_h3,&_h4,&_h5,&_h6]:mt-6 [&_h1,&_h2,&_h3,&_h4,&_h5,&_h6]:mb-4 [&_h1,&_h2,&_h3,&_h4,&_h5,&_h6]:font-semibold [&_h1,&_h2,&_h3,&_h4,&_h5,&_h6]:scroll-mt-24',
+              '[&_h1]:text-3xl [&_h1]:border-b-2 [&_h1]:border-primary [&_h1]:pb-2 [&_h1]:text-primary',
+              '[&_h2]:text-2xl [&_h2]:border-b [&_h2]:border-border [&_h2]:pb-2',
+              '[&_h3]:text-xl',
+              // Paragraphs
+              '[&_p]:mb-4 [&_p]:leading-relaxed [&_p]:text-foreground',
+              // Code
+              '[&_code]:bg-slate-100 [&_code]:dark:bg-slate-700 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-[0.9em] [&_code]:font-mono',
+              '[&_code]:text-slate-700 [&_code]:dark:text-slate-200',
+              '[&_pre]:mb-6',
+              '[&_pre_code]:bg-transparent [&_pre_code]:p-0',
+              // Tables
+              '[&_table]:w-full [&_table]:border-collapse [&_table]:mb-4 [&_table]:block [&_table]:overflow-auto',
+              '[&_th,&_td]:border [&_th,&_td]:border-border [&_th,&_td]:px-4 [&_th,&_td]:py-3 [&_th,&_td]:text-left',
+              '[&_th]:bg-muted [&_th]:font-semibold [&_th]:text-foreground',
+              '[&_td]:text-foreground',
+              // Lists
+              '[&_ul,&_ol]:mb-4 [&_ul,&_ol]:pl-8',
+              '[&_li]:mb-1 [&_li]:leading-relaxed [&_li]:text-foreground',
+              '[&_li]:marker:text-primary',
+              // Blockquote
+              '[&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:ml-0 [&_blockquote]:my-6',
+              '[&_blockquote]:italic [&_blockquote]:text-muted-foreground',
+              '[&_blockquote]:bg-muted/50 [&_blockquote]:py-4 [&_blockquote]:pr-4 [&_blockquote]:rounded-r-lg',
+              // Links
+              '[&_a]:text-primary [&_a]:no-underline [&_a]:font-medium',
+              '[&_a]:border-b [&_a]:border-transparent [&_a]:transition-all [&_a]:duration-200',
+              '[&_a:hover]:border-primary [&_a:hover]:text-primary-dark',
+              // Images
+              '[&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:my-4 [&_img]:cursor-pointer',
+              '[&_img]:transition-all [&_img]:duration-200',
+              '[&_img:hover]:scale-[1.02] [&_img:hover]:shadow-lg',
+              // HR
+              '[&_hr]:border-none [&_hr]:border-t [&_hr]:border-border [&_hr]:my-6',
+            )}
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -273,9 +193,9 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
             >
               {skillSheet.content}
             </ReactMarkdown>
-          </Box>
-        </Paper>
-      </Container>
+          </div>
+        </Card>
+      </motion.div>
 
       {/* Lightbox */}
       <Lightbox
@@ -284,7 +204,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
         slides={lightboxImages}
         index={currentImageIndex}
       />
-    </Box>
+    </div>
   );
 };
 

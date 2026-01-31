@@ -34,6 +34,11 @@ export const ThemeModeProvider = ({ children }: ThemeModeProviderProps) => {
   useEffect(() => {
     // テーマが変更されたらlocalStorageに保存
     localStorage.setItem('theme-mode', mode);
+
+    // HTMLのクラスを更新（Tailwindのダークモード用）
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(mode);
   }, [mode]);
 
   const toggleTheme = () => {
