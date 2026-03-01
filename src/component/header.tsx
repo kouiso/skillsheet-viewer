@@ -8,7 +8,7 @@ import { useThemeMode } from '@/context/theme-context';
 
 interface HeaderProps {
   title?: string;
-  onDownloadPdf?: () => void;
+  onDownloadPdf?: () => void | Promise<void>;
   pdfLoading?: boolean;
 }
 
@@ -33,6 +33,9 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
         backdropFilter: 'blur(10px)',
         backgroundColor: mode === 'dark' ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.9)',
         color: (theme) => theme.palette.text.primary,
+        '@media print': {
+          display: 'none !important',
+        },
       }}
     >
       <Toolbar>
@@ -56,7 +59,9 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
         <Box sx={{ display: 'flex', gap: 1 }}>
           {onDownloadPdf && (
             <IconButton
-              onClick={onDownloadPdf}
+              onClick={() => {
+                void onDownloadPdf();
+              }}
               color="inherit"
               component={motion.button}
               whileHover={{ scale: 1.1 }}
