@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { pdf } from '@react-pdf/renderer';
 
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { SkillSheetPDF } from '@/component/pdf-export';
 import { fetchSkillSheet } from '@/lib/github-client';
 
 interface SkillSheet {
@@ -54,35 +52,24 @@ const ViewPage = () => {
     void loadSkillSheet();
   }, [navigate]);
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadPdf = () => {
     if (!skillSheet) return;
 
     try {
       setPdfLoading(true);
-      setSnackbarMessage('PDFを生成中...');
+      setSnackbarMessage('印刷ダイアログを開いています...');
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
 
-      // PDFドキュメントを生成
-      const pdfDocument = <SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />;
-      const blob = await pdf(pdfDocument).toBlob();
+      // ブラウザの印刷機能を使用してPDF出力
+      window.print();
 
-      // ダウンロード
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `スキルシート_${skillSheet.title}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      setSnackbarMessage('PDFのダウンロードが完了しました');
+      setSnackbarMessage('印刷ダイアログが開きました。PDFとして保存してください。');
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
     } catch (err) {
-      console.error('Error generating PDF:', err);
-      setSnackbarMessage('PDFの生成に失敗しました');
+      console.error('Error opening print dialog:', err);
+      setSnackbarMessage('印刷ダイアログを開けませんでした');
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     } finally {
