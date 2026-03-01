@@ -217,6 +217,9 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
             '& .MuiDrawer-paper': {
               width: SIDEBAR_WIDTH,
             },
+            '@media print': {
+              display: 'none',
+            },
           }}
         >
           {tocContent}
@@ -228,6 +231,7 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
   // デスクトップ表示
   return (
     <Box
+      className="no-print"
       sx={{
         width: isCollapsed ? 'auto' : SIDEBAR_WIDTH,
         position: 'fixed',
@@ -236,6 +240,9 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
         left: 0,
         transition: 'width 0.3s ease',
         zIndex: 1000,
+        '@media print': {
+          display: 'none !important',
+        },
       }}
     >
       {tocContent}

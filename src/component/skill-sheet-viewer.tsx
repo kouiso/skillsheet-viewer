@@ -44,31 +44,36 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   const activeId = useActiveHeading(headingIds);
 
   useEffect(() => {
-    // Markdownから見出しを抽出
-    const extractHeadings = () => {
-      const headingRegex = /^(#{1,6})\s+(.+)$/gm;
-      const matches = [...skillSheet.content.matchAll(headingRegex)];
+    // レンダリング後にDOMから見出しを抽出
+    const extractHeadingsFromDOM = () => {
+      // DOMが完全にレンダリングされるまで少し待つ
+      setTimeout(() => {
+        const markdownContent = document.querySelector('.markdown-content');
+        if (!markdownContent) return;
 
-      const extractedHeadings: Heading[] = matches.map((match) => {
-        const level = match[1].length;
-        const text = match[2];
-        const id = text
-          .toLowerCase()
-          .replace(/[^\s\w-]/g, '')
-          .replace(/\s+/g, '-');
+        const headingElements = markdownContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        const extractedHeadings: Heading[] = Array.from(headingElements)
+          .filter((el) => el.id) // IDがある要素のみ
+          .map((el) => {
+            const level = parseInt(el.tagName.substring(1), 10);
+            const text = el.textContent || '';
+            const id = el.id;
 
-        return { id, text, level };
-      });
+            return { id, text, level };
+          });
 
-      setHeadings(extractedHeadings);
-      setMounted(true);
+        setHeadings(extractedHeadings);
+        setMounted(true);
+      }, 100); // ReactMarkdownのレンダリング完了を待つ
     };
 
-    extractHeadings();
+    // 初回とcontent変更時にDOMから見出しを抽出
+    extractHeadingsFromDOM();
   }, [skillSheet.content]);
 
   const scrollToHeading = (id: string) => {
-    const element = document.querySelector(`#${id}`);
+    // IDにCSS特殊文字が含まれる可能性があるため、getElementByIdを使用
+    const element = document.getElementById(id);
     if (element) {
       const yOffset = -80; // ヘッダー分のオフセット
       const y = element.getBoundingClientRect().top + window.scrollY + yOffset;
@@ -106,6 +111,11 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
           py: 4,
           flex: 1,
           transition: 'margin-left 0.3s ease',
+          '@media print': {
+            ml: '0 !important',
+            py: 0,
+            maxWidth: '100% !important',
+          },
         }}
       >
         <Paper
@@ -114,9 +124,25 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
             p: { xs: 2, sm: 3, md: 4 },
             backgroundColor: theme.palette.background.paper,
             borderRadius: 3,
+            '@media print': {
+              boxShadow: 'none !important',
+              p: 0,
+              backgroundColor: 'white !important',
+            },
           }}
         >
-          <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h3"
+            component="h1"
+            gutterBottom
+            sx={{
+              fontWeight: 700,
+              '@media print': {
+                color: 'black !important',
+                fontSize: '24pt !important',
+              },
+            }}
+          >
             {skillSheet.title}
           </Typography>
 
