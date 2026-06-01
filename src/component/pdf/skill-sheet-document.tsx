@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { Document, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { Document, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
@@ -132,6 +132,8 @@ const styles = StyleSheet.create({
   },
 });
 
+type PdfStyle = (typeof styles)[keyof typeof styles];
+
 interface MdNode {
   type: string;
   value?: string;
@@ -154,11 +156,18 @@ function stripHtml(html: string): string {
 
 // --- インライン描画 -------------------------------------------------------
 
-const INLINE_STYLE = new Map<string, object>([
+// link は Link コンポーネントで個別に描画するためマップには含めない
+const INLINE_STYLE = new Map<string, PdfStyle>([
   ['strong', styles.bold],
   ['emphasis', styles.italic],
   ['delete', styles.strike],
-  ['link', styles.link],
+]);
+
+// 子を持たない単純なインラインノード（テキスト/改行/インラインHTML）
+const INLINE_LEAF = new Map<string, (node: MdNode) => ReactNode>([
+  ['text', (node) => node.value ?? null],
+  ['break', () => '\n'],
+  ['html', () => null],
 ]);
 
 function renderInline(nodes: MdNode[] | undefined): ReactNode {
@@ -167,14 +176,20 @@ function renderInline(nodes: MdNode[] | undefined): ReactNode {
 }
 
 function renderInlineNode(node: MdNode, key: number): ReactNode {
-  if (node.type === 'text') return node.value ?? null;
-  if (node.type === 'break') return '\n';
-  if (node.type === 'html') return null;
+  const leaf = INLINE_LEAF.get(node.type);
+  if (leaf) return leaf(node);
   if (node.type === 'inlineCode') {
     return (
       <Text key={key} style={styles.inlineCode}>
         {node.value}
       </Text>
+    );
+  }
+  if (node.type === 'link') {
+    return (
+      <Link key={key} src={node.url ?? ''} style={styles.link}>
+        {renderInline(node.children)}
+      </Link>
     );
   }
   const style = INLINE_STYLE.get(node.type);
@@ -190,7 +205,7 @@ function renderInlineNode(node: MdNode, key: number): ReactNode {
 
 // --- ブロック描画 ---------------------------------------------------------
 
-function headingStyle(depth: number): object {
+function headingStyle(depth: number): PdfStyle {
   if (depth <= NUM.HEADING_H1) return styles.h1;
   if (depth === NUM.HEADING_H2) return styles.h2;
   if (depth === NUM.HEADING_H3) return styles.h3;
@@ -305,11 +320,15 @@ function renderCodeBlock(node: MdNode, key: number): ReactNode {
 }
 
 function renderHtmlBlock(node: MdNode, key: number): ReactNode {
-  const text = stripHtml(node.value ?? '');
+  const raw = node.value ?? '';
+  const text = stripHtml(raw);
   if (!text) return null;
+  // 見出しタグを含む HTML（例: <summary><h2>…</h2></summary>）のみ見出しとして描画し、
+  // それ以外（注記や改行等）は通常の段落として描画してレイアウト崩れを防ぐ。
+  const isHeading = /<h[1-6][\s>]/i.test(raw);
   return (
-    <View key={key} style={styles.headingWrap}>
-      <Text style={styles.h2}>{text}</Text>
+    <View key={key} style={isHeading ? styles.headingWrap : styles.paragraphWrap}>
+      <Text style={isHeading ? styles.h2 : styles.paragraph}>{text}</Text>
     </View>
   );
 }
