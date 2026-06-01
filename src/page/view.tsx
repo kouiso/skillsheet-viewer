@@ -12,6 +12,9 @@ interface SkillSheet {
   content: string;
 }
 
+// オブジェクト URL の解放を遅延させる時間（ms）
+const REVOKE_OBJECT_URL_DELAY_MS = 100;
+
 const ViewPage = () => {
   const navigate = useNavigate();
   const [skillSheet, setSkillSheet] = useState<SkillSheet | null>(null);
@@ -74,7 +77,10 @@ const ViewPage = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      // 一部ブラウザでは click 直後の同期 revoke でダウンロードが失敗するため少し遅延させる
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, REVOKE_OBJECT_URL_DELAY_MS);
 
       setSnackbarMessage('PDFをダウンロードしました');
       setSnackbarSeverity('success');
