@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   paragraphWrap: { marginBottom: 5 },
   paragraph: { textAlign: 'left' },
   bold: { fontWeight: 700 },
-  italic: {},
+  italic: { fontStyle: 'italic' },
   strike: { textDecoration: 'line-through' },
   inlineCode: { fontFamily: 'Courier', fontSize: 8.5, backgroundColor: COLOR.codeBg },
   link: { color: COLOR.primary, textDecoration: 'underline' },
