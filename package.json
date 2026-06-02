@@ -40,7 +40,9 @@
     "rehype-slug": "^6.0.0",
     "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
     "shiki": "^1.29.1",
+    "unified": "^11.0.5",
     "yet-another-react-lightbox": "^3.25.0"
   },
   "devDependencies": {
