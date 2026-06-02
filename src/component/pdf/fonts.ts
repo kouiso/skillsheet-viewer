@@ -47,6 +47,10 @@ export default function registerPdfFonts(): void {
     fonts: [
       { src: NotoSansJPRegular, fontWeight: 400 },
       { src: NotoSansJPBold, fontWeight: 700 },
+      // 日本語フォントに true italic は存在しないため、italic スタイルにも同じ字形を登録する。
+      // これにより fontStyle: 'italic' が日本語を含めて確実に解決し、文字化け（tofu）を防ぐ。
+      { src: NotoSansJPRegular, fontWeight: 400, fontStyle: 'italic' },
+      { src: NotoSansJPBold, fontWeight: 700, fontStyle: 'italic' },
     ],
   });
 
