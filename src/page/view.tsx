@@ -12,6 +12,9 @@ interface SkillSheet {
   content: string;
 }
 
+// オブジェクト URL の解放を遅延させる時間（ms）
+const REVOKE_OBJECT_URL_DELAY_MS = 100;
+
 const ViewPage = () => {
   const navigate = useNavigate();
   const [skillSheet, setSkillSheet] = useState<SkillSheet | null>(null);
@@ -52,24 +55,39 @@ const ViewPage = () => {
     void loadSkillSheet();
   }, [navigate]);
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!skillSheet) return;
 
     try {
       setPdfLoading(true);
-      setSnackbarMessage('印刷ダイアログを開いています...');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
 
-      // ブラウザの印刷機能を使用してPDF出力
-      window.print();
+      // @react-pdf/renderer はサイズが大きいため、ボタン押下時に動的 import して初期バンドルから分離する
+      const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/component/pdf-export'),
+      ]);
 
-      setSnackbarMessage('印刷ダイアログが開きました。PDFとして保存してください。');
+      const blob = await pdf(<SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />).toBlob();
+
+      // 生成した PDF をワンクリックでダウンロード（印刷ダイアログは使わない）
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'エンジニアスキルシート.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      // 一部ブラウザでは click 直後の同期 revoke でダウンロードが失敗するため少し遅延させる
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, REVOKE_OBJECT_URL_DELAY_MS);
+
+      setSnackbarMessage('PDFをダウンロードしました');
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
     } catch (err) {
-      console.error('Error opening print dialog:', err);
-      setSnackbarMessage('印刷ダイアログを開けませんでした');
+      console.error('Error generating PDF:', err);
+      setSnackbarMessage('PDFの生成に失敗しました');
       setSnackbarSeverity('error');
       setSnackbarOpen(true);
     } finally {
