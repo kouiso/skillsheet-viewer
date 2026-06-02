@@ -6,6 +6,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import PDF_FONT_FAMILY from './constants';
+import { shouldTableWrap } from './table-layout';
 
 // ビューア（src/theme/theme.ts のライトテーマ）に合わせたデザイントークン
 const COLOR = {
@@ -29,7 +30,6 @@ const NUM = {
   COL_LABEL_FLEX: 3,
   COL_VALUE_FLEX: 7,
   MIN_PRESENCE_PROJECT: 48,
-  SMALL_TABLE_MAX_ROWS: 4,
 } as const;
 
 const styles = StyleSheet.create({
@@ -285,11 +285,8 @@ function renderTable(node: MdNode, key: number): ReactNode {
   const columnCount = rows[0]?.children?.length ?? 0;
   if (columnCount === 0) return null;
   const align = node.align ?? [];
-  // 小さい表（概要・担当工程）は分割すると見栄えが悪いので 1 ブロックに保つ。
-  // 背の高い表（技術スタック等）は折り返しを許可し、ページ下部の余白を防ぐ。
-  const keepTogether = rows.length <= NUM.SMALL_TABLE_MAX_ROWS;
   return (
-    <View key={key} style={styles.table} wrap={keepTogether ? false : undefined}>
+    <View key={key} style={styles.table} wrap={shouldTableWrap(rows.length)}>
       {rows.map((row, ri) => (
         <View key={ri} style={styles.tableRow}>
           {(row.children ?? []).map((cell, ci) => renderTableCell(cell, ci, columnCount, align, ri === 0))}
