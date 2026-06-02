@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 
 import { Box, Container, Paper, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
+import rehypeRaw from 'rehype-raw';
 import rehypeSlug from 'rehype-slug';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -263,7 +264,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
-              rehypePlugins={[rehypeSlug]}
+              rehypePlugins={[rehypeRaw, rehypeSlug]}
               components={{
                 code(props) {
                   const { className, children, ...rest } = props;
