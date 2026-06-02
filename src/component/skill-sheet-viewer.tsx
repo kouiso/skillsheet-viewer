@@ -3,6 +3,8 @@ import ReactMarkdown from 'react-markdown';
 
 import { Box, Container, Paper, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
+import rehypeRaw from 'rehype-raw';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
@@ -28,6 +30,17 @@ interface SkillSheetViewerProps {
 }
 
 const SIDEBAR_WIDTH = 280;
+
+// rehype-raw が有効化する生HTML描画を details/summary タグに限定する。
+// style属性はデフォルトスキーマで除外済み（XSS防止）。
+const SANITIZE_SCHEMA = {
+  ...defaultSchema,
+  tagNames: [...(defaultSchema.tagNames ?? []), 'details', 'summary'],
+  attributes: {
+    ...defaultSchema.attributes,
+    details: ['open'],
+  },
+};
 
 const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
@@ -263,7 +276,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
           >
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
-              rehypePlugins={[rehypeSlug]}
+              rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA], rehypeSlug]}
               components={{
                 code(props) {
                   const { className, children, ...rest } = props;
