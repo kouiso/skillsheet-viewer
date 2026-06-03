@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
-import { Box, Container, Paper, Typography, useMediaQuery, useTheme } from '@mui/material';
 import { motion } from 'framer-motion';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -29,7 +28,7 @@ interface SkillSheetViewerProps {
   };
 }
 
-const SIDEBAR_WIDTH = 280;
+const HEADING_EXTRACT_DELAY_MS = 100;
 
 // rehype-raw が有効化する生HTML描画を details/summary タグに限定する。
 // style属性はデフォルトスキーマで除外済み（XSS防止）。
@@ -48,9 +47,6 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   // 見出しIDのリストを作成
   const headingIds = headings.map((h) => h.id);
@@ -77,7 +73,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
 
         setHeadings(extractedHeadings);
         setMounted(true);
-      }, 100); // ReactMarkdownのレンダリング完了を待つ
+      }, HEADING_EXTRACT_DELAY_MS); // ReactMarkdownのレンダリング完了を待つ
     };
 
     // 初回とcontent変更時にDOMから見出しを抽出
@@ -85,7 +81,8 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   }, [skillSheet.content]);
 
   const scrollToHeading = (id: string) => {
-    // IDにCSS特殊文字が含まれる可能性があるため、getElementByIdを使用
+    // IDにCSS特殊文字が含まれる可能性があるため、querySelector ではなく getElementById を使用
+    // eslint-disable-next-line unicorn/prefer-query-selector
     const element = document.getElementById(id);
     if (element) {
       const yOffset = -80; // ヘッダー分のオフセット
@@ -108,172 +105,22 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   };
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* 目次（左サイドバー） */}
+    <div className="flex min-h-screen">
+      {/* 目次（左サイドバー / モバイルはSheet）。デスクトップでは flex で隣接し、
+          折りたたみ・印刷時にメインが自動で幅を詰める（固定marginを使わない） */}
       {mounted && <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />}
 
       {/* メインコンテンツ */}
-      <Container
-        maxWidth="md"
-        component={motion.div}
+      <motion.main
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        sx={{
-          ml: mounted && !isMobile ? `${SIDEBAR_WIDTH}px` : 0,
-          py: 4,
-          flex: 1,
-          transition: 'margin-left 0.3s ease',
-          '@media print': {
-            ml: '0 !important',
-            py: 0,
-            maxWidth: '100% !important',
-          },
-        }}
+        className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6"
       >
-        <Paper
-          elevation={2}
-          sx={{
-            p: { xs: 2, sm: 3, md: 4 },
-            backgroundColor: theme.palette.background.paper,
-            borderRadius: 3,
-            '@media print': {
-              boxShadow: 'none !important',
-              p: 0,
-              backgroundColor: 'white !important',
-            },
-          }}
-        >
-          <Typography
-            variant="h3"
-            component="h1"
-            gutterBottom
-            sx={{
-              fontWeight: 700,
-              '@media print': {
-                color: 'black !important',
-                fontSize: '24pt !important',
-              },
-            }}
-          >
-            {skillSheet.title}
-          </Typography>
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-elevation-2 sm:p-6 md:p-8">
+          <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
 
-          <Box
-            className="markdown-content"
-            sx={{
-              '& h1, & h2, & h3, & h4, & h5, & h6': {
-                mt: 3,
-                mb: 2,
-                fontWeight: 600,
-                scrollMarginTop: '100px',
-              },
-              '& h1': {
-                fontSize: '2rem',
-                borderBottom: `2px solid ${theme.palette.primary.main}`,
-                pb: 1,
-                color: theme.palette.primary.main,
-              },
-              '& h2': {
-                fontSize: '1.5rem',
-                borderBottom: `1px solid ${theme.palette.divider}`,
-                pb: 1,
-              },
-              '& h3': { fontSize: '1.25rem' },
-              '& p': {
-                mb: 2,
-                lineHeight: 1.8,
-                color: theme.palette.text.primary,
-              },
-              '& code': {
-                backgroundColor: theme.palette.mode === 'dark' ? '#334155' : '#f1f5f9',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                fontSize: '0.9em',
-                fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
-                color: theme.palette.mode === 'dark' ? '#e2e8f0' : '#334155',
-              },
-              '& pre': {
-                mb: 3,
-              },
-              '& pre code': {
-                backgroundColor: 'transparent',
-                padding: 0,
-              },
-              '& table': {
-                width: '100%',
-                borderCollapse: 'collapse',
-                mb: 2,
-                overflow: 'auto',
-                display: 'block',
-              },
-              '& th, & td': {
-                border: `1px solid ${theme.palette.divider}`,
-                padding: '12px 16px',
-                textAlign: 'left',
-              },
-              '& th': {
-                backgroundColor: theme.palette.mode === 'dark' ? '#1e293b' : '#f8fafc',
-                fontWeight: 600,
-                color: theme.palette.text.primary,
-              },
-              '& td': {
-                color: theme.palette.text.primary,
-              },
-              '& ul, & ol': {
-                mb: 2,
-                pl: 4,
-              },
-              '& li': {
-                mb: 0.5,
-                lineHeight: 1.8,
-                color: theme.palette.text.primary,
-                '&::marker': {
-                  color: theme.palette.primary.main,
-                },
-              },
-              '& blockquote': {
-                borderLeft: `4px solid ${theme.palette.primary.main}`,
-                pl: 2,
-                ml: 0,
-                my: 3,
-                fontStyle: 'italic',
-                color: theme.palette.text.secondary,
-                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(30, 41, 59, 0.5)' : 'rgba(248, 250, 252, 0.8)',
-                py: 2,
-                pr: 2,
-                borderRadius: '0 8px 8px 0',
-              },
-              '& a': {
-                color: theme.palette.primary.main,
-                textDecoration: 'none',
-                fontWeight: 500,
-                borderBottom: `1px solid transparent`,
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  borderBottom: `1px solid ${theme.palette.primary.main}`,
-                  color: theme.palette.primary.dark,
-                },
-              },
-              '& img': {
-                maxWidth: '100%',
-                height: 'auto',
-                borderRadius: 2,
-                my: 2,
-                cursor: 'pointer',
-                transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                '&:hover': {
-                  transform: 'scale(1.02)',
-                  boxShadow: theme.shadows[4],
-                },
-              },
-              '& hr': {
-                border: 'none',
-                borderTop: `1px solid ${theme.palette.divider}`,
-                my: 3,
-              },
-            }}
-          >
+          <div className="markdown-content">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
               rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA], rehypeSlug]}
@@ -312,9 +159,9 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
             >
               {skillSheet.content}
             </ReactMarkdown>
-          </Box>
-        </Paper>
-      </Container>
+          </div>
+        </div>
+      </motion.main>
 
       {/* Lightbox */}
       <Lightbox
@@ -323,7 +170,7 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
         slides={lightboxImages}
         index={currentImageIndex}
       />
-    </Box>
+    </div>
   );
 };
 
