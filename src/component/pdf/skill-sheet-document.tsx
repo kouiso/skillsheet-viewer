@@ -8,7 +8,7 @@ import { unified } from 'unified';
 import PDF_FONT_FAMILY from './constants';
 import { shouldTableWrap } from './table-layout';
 
-// ビューア（src/theme/theme.ts のライトテーマ）に合わせたデザイントークン
+// ビューア（src/index.css のライトテーマトークン）に合わせたデザイントークン
 const COLOR = {
   primary: '#6366f1',
   primaryDark: '#4f46e5',

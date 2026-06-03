@@ -1,19 +1,12 @@
 import { useState } from 'react';
 
-import {
-  Box,
-  Typography,
-  List,
-  ListItem,
-  ListItemButton,
-  IconButton,
-  Collapse,
-  useTheme,
-  useMediaQuery,
-  Drawer,
-} from '@mui/material';
-import { MenuBook, ExpandLess, ExpandMore, Menu as MenuIcon, Close } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
+import { BookOpen, ChevronDown, ChevronUp, Menu as MenuIcon } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import useMediaQuery from '@/hooks/use-media-query';
+import { cn } from '@/lib/utils';
 
 interface Heading {
   id: string;
@@ -27,226 +20,117 @@ interface TableOfContentsProps {
   onHeadingClick: (id: string) => void;
 }
 
-const MAX_HEADING_LEVEL_INDENT = 2;
-const SIDEBAR_WIDTH = 280;
-const LARGE_FONT_SIZE = 0.95;
-const SMALL_FONT_SIZE = 0.875;
-const FONT_WEIGHT_BOLD = 600;
-const FONT_WEIGHT_NORMAL = 400;
+export const SIDEBAR_WIDTH = 280;
+
+// 見出し出現アニメーションのスタッガー間隔（秒）と階層インデント（rem/レベル）
+const STAGGER_DELAY_SEC = 0.02;
+const INDENT_REM_PER_LEVEL = 0.75;
+
+interface TocListProps {
+  headings: Heading[];
+  activeId: string;
+  onHeadingClick: (id: string) => void;
+}
+
+const TocList = ({ headings, activeId, onHeadingClick }: TocListProps) => (
+  <nav className="flex-1 overflow-y-auto p-2">
+    <ul className="space-y-0.5">
+      <AnimatePresence>
+        {headings.map((heading, index) => {
+          const isActive = heading.id === activeId;
+          return (
+            <motion.li
+              key={heading.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2, delay: index * STAGGER_DELAY_SEC }}
+              style={{ paddingLeft: `${(heading.level - 1) * INDENT_REM_PER_LEVEL}rem` }}
+            >
+              <button
+                type="button"
+                onClick={() => onHeadingClick(heading.id)}
+                className={cn(
+                  'w-full rounded-md px-3 py-1.5 text-left transition-colors',
+                  heading.level === 1 ? 'text-[0.95rem]' : 'text-sm',
+                  isActive
+                    ? 'bg-primary font-semibold text-primary-foreground hover:bg-primary-dark'
+                    : cn('text-foreground hover:bg-accent', heading.level === 1 && 'font-semibold'),
+                )}
+              >
+                {heading.text}
+              </button>
+            </motion.li>
+          );
+        })}
+      </AnimatePresence>
+    </ul>
+  </nav>
+);
+
+const TocHeader = ({ children }: { children?: React.ReactNode }) => (
+  <div className="flex items-center justify-between border-b border-border p-4">
+    <div className="flex items-center gap-2">
+      <BookOpen className="size-5 text-primary" />
+      <span className="text-base font-bold">目次</span>
+    </div>
+    {children}
+  </div>
+);
 
 const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContentsProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  const toggleCollapse = () => {
-    setIsCollapsed(!isCollapsed);
-  };
-
-  const handleMobileToggle = () => {
-    setMobileOpen(!mobileOpen);
-  };
+  const isMobile = useMediaQuery('(max-width: 899px)');
 
   const handleHeadingClick = (id: string) => {
     onHeadingClick(id);
-    if (isMobile) {
-      setMobileOpen(false);
-    }
+    if (isMobile) setMobileOpen(false);
   };
 
-  const tocContent = (
-    <Box
-      component={motion.div}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      sx={{
-        width: SIDEBAR_WIDTH,
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        backgroundColor: theme.palette.background.paper,
-        borderRight: !isMobile ? `1px solid ${theme.palette.divider}` : 'none',
-      }}
-    >
-      {/* ヘッダー */}
-      <Box
-        sx={{
-          p: 2,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          borderBottom: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <MenuBook color="primary" />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            目次
-          </Typography>
-        </Box>
-        <Box>
-          {!isMobile && (
-            <IconButton
-              size="small"
-              onClick={toggleCollapse}
-              component={motion.button}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              aria-label={isCollapsed ? '展開' : '折りたたむ'}
-            >
-              {isCollapsed ? <ExpandMore /> : <ExpandLess />}
-            </IconButton>
-          )}
-          {isMobile && (
-            <IconButton
-              size="small"
-              onClick={handleMobileToggle}
-              component={motion.button}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              aria-label="閉じる"
-            >
-              <Close />
-            </IconButton>
-          )}
-        </Box>
-      </Box>
-
-      {/* 目次リスト */}
-      <Collapse in={!isCollapsed} timeout="auto" unmountOnExit>
-        <Box sx={{ overflowY: 'auto', flex: 1, p: 1 }}>
-          <List dense>
-            <AnimatePresence>
-              {headings.map((heading, index) => {
-                const isActive = heading.id === activeId;
-
-                return (
-                  <motion.div
-                    key={heading.id}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.2, delay: index * 0.02 }}
-                  >
-                    <ListItem disablePadding sx={{ pl: (heading.level - 1) * MAX_HEADING_LEVEL_INDENT }}>
-                      <ListItemButton
-                        onClick={() => handleHeadingClick(heading.id)}
-                        selected={isActive}
-                        component={motion.div}
-                        whileHover={{ x: 4 }}
-                        sx={{
-                          borderRadius: 1,
-                          mb: 0.5,
-                          transition: 'all 0.2s ease',
-                          backgroundColor: isActive ? theme.palette.primary.main : 'transparent',
-                          color: isActive ? theme.palette.primary.contrastText : theme.palette.text.primary,
-                          '&:hover': {
-                            backgroundColor: isActive
-                              ? theme.palette.primary.dark
-                              : theme.palette.action.hover,
-                          },
-                          '&.Mui-selected': {
-                            backgroundColor: theme.palette.primary.main,
-                            '&:hover': {
-                              backgroundColor: theme.palette.primary.dark,
-                            },
-                          },
-                        }}
-                      >
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            fontSize: heading.level === 1 ? `${LARGE_FONT_SIZE}rem` : `${SMALL_FONT_SIZE}rem`,
-                            fontWeight:
-                              heading.level === 1 || isActive ? FONT_WEIGHT_BOLD : FONT_WEIGHT_NORMAL,
-                            transition: 'all 0.2s ease',
-                          }}
-                        >
-                          {heading.text}
-                        </Typography>
-                      </ListItemButton>
-                    </ListItem>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </List>
-        </Box>
-      </Collapse>
-    </Box>
-  );
-
-  // モバイル表示
+  // モバイル: 右下FAB + Sheet（左から）
   if (isMobile) {
     return (
-      <>
-        {/* モバイルメニューボタン */}
-        <IconButton
-          onClick={handleMobileToggle}
-          component={motion.button}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
-          sx={{
-            position: 'fixed',
-            bottom: 16,
-            right: 16,
-            backgroundColor: theme.palette.primary.main,
-            color: theme.palette.primary.contrastText,
-            zIndex: 1200,
-            boxShadow: theme.shadows[4],
-            '&:hover': {
-              backgroundColor: theme.palette.primary.dark,
-            },
-          }}
-          aria-label="目次を開く"
-        >
-          <MenuIcon />
-        </IconButton>
-
-        {/* モバイルドロワー */}
-        <Drawer
-          anchor="left"
-          open={mobileOpen}
-          onClose={handleMobileToggle}
-          ModalProps={{
-            keepMounted: true, // Better open performance on mobile.
-          }}
-          sx={{
-            '& .MuiDrawer-paper': {
-              width: SIDEBAR_WIDTH,
-            },
-            '@media print': {
-              display: 'none',
-            },
-          }}
-        >
-          {tocContent}
-        </Drawer>
-      </>
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetTrigger asChild>
+          <Button
+            size="icon"
+            className="no-print fixed bottom-4 right-4 z-50 size-12 rounded-full shadow-elevation-4"
+            aria-label="目次を開く"
+          >
+            <MenuIcon />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="flex w-72 flex-col p-0">
+          <TocHeader />
+          <TocList headings={headings} activeId={activeId} onHeadingClick={handleHeadingClick} />
+        </SheetContent>
+      </Sheet>
     );
   }
 
-  // デスクトップ表示
+  // デスクトップ: 固定サイドバー
   return (
-    <Box
-      className="no-print"
-      sx={{
+    <aside
+      className="no-print fixed left-0 top-16 z-30 flex flex-col border-r border-border bg-card"
+      style={{
         width: isCollapsed ? 'auto' : SIDEBAR_WIDTH,
-        position: 'fixed',
-        height: 'calc(100vh - 64px)', // AppBarの高さを引く
-        top: 64,
-        left: 0,
-        transition: 'width 0.3s ease',
-        zIndex: 1000,
-        '@media print': {
-          display: 'none !important',
-        },
+        height: 'calc(100vh - 4rem)',
       }}
     >
-      {tocContent}
-    </Box>
+      <TocHeader>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={() => setIsCollapsed((v) => !v)}
+          aria-label={isCollapsed ? '展開' : '折りたたむ'}
+        >
+          {isCollapsed ? <ChevronDown /> : <ChevronUp />}
+        </Button>
+      </TocHeader>
+      {!isCollapsed && <TocList headings={headings} activeId={activeId} onHeadingClick={handleHeadingClick} />}
+    </aside>
   );
 };
 
