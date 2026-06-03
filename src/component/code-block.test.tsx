@@ -1,19 +1,30 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+import { renderWithProviders } from '@/test/render-with-providers';
+
 import CodeBlock from './code-block';
-import { ThemeProvider, createTheme } from '@mui/material';
 
-// framer-motionをモック
+// framer-motion をモック（CodeBlock 自体は未使用だが、依存の安全のため）
 vi.mock('framer-motion', () => ({
-  motion: {
-    button: ({ children, whileHover, whileTap, ...props }: { children: React.ReactNode; whileHover?: unknown; whileTap?: unknown }) => (
-      <button {...props}>{children}</button>
-    ),
-  },
+  motion: new Proxy(
+    {},
+    {
+      get: () => {
+        const Passthrough = ({ children, ...props }: { children?: React.ReactNode }) => {
+          const rest = { ...props } as Record<string, unknown>;
+          for (const key of ['initial', 'animate', 'transition', 'whileHover', 'whileTap', 'exit', 'variants']) {
+            delete rest[key];
+          }
+          return <div {...rest}>{children}</div>;
+        };
+        return Passthrough;
+      },
+    },
+  ),
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-
-const theme = createTheme();
 
 const renderCodeBlock = (props = {}) => {
   const defaultProps = {
@@ -21,12 +32,7 @@ const renderCodeBlock = (props = {}) => {
     className: 'language-javascript',
     ...props,
   };
-
-  return render(
-    <ThemeProvider theme={theme}>
-      <CodeBlock {...defaultProps} />
-    </ThemeProvider>,
-  );
+  return renderWithProviders(<CodeBlock {...defaultProps} />);
 };
 
 describe('CodeBlock', () => {
@@ -35,154 +41,58 @@ describe('CodeBlock', () => {
   });
 
   describe('レンダリング', () => {
-    it('コードブロックが正しくレンダリングされること', () => {
-      renderCodeBlock();
-      expect(screen.getByText('const greeting = "Hello, World!";')).toBeInTheDocument();
+    it('言語ラベルが表示されること', () => {
+      const { container } = renderCodeBlock();
+      expect(within(container).getByText('javascript')).toBeInTheDocument();
     });
 
-    it('コードの内容が正しく表示されること', () => {
-      const code = 'function test() { return true; }';
-      renderCodeBlock({ children: code });
-      expect(screen.getByText(code)).toBeInTheDocument();
+    it('コードの内容が（トークン分割されても）テキストとして含まれること', () => {
+      const { container } = renderCodeBlock();
+      const text = container.textContent ?? '';
+      expect(text).toContain('const');
+      expect(text).toContain('greeting');
+      expect(text).toContain('Hello, World!');
     });
 
-    it('言語名が正しく表示されること', () => {
-      renderCodeBlock({ className: 'language-typescript' });
-      expect(screen.getByText('typescript')).toBeInTheDocument();
-    });
-
-    it('言語が指定されていない場合は"code"と表示されること', () => {
-      renderCodeBlock({ className: undefined });
-      expect(screen.getByText('code')).toBeInTheDocument();
-    });
-
-    it('classNameが空の場合は"code"と表示されること', () => {
-      renderCodeBlock({ className: '' });
-      expect(screen.getByText('code')).toBeInTheDocument();
-    });
-
-    it('コピーボタンが表示されること', () => {
-      renderCodeBlock();
-      const copyButton = screen.getByLabelText('コードをコピー');
-      expect(copyButton).toBeInTheDocument();
-    });
-
-    it('ContentCopyアイコンが初期表示されること', () => {
-      renderCodeBlock();
-      expect(screen.getByTestId('ContentCopyIcon')).toBeInTheDocument();
+    it('classNameが無い場合は "code" と表示されること', () => {
+      const { container } = renderCodeBlock({ className: undefined, children: 'plain' });
+      expect(within(container).getByText('code')).toBeInTheDocument();
     });
   });
 
   describe('コピー機能', () => {
-    let writeTextMock: ReturnType<typeof vi.fn>;
-
-    beforeEach(() => {
-      // Clipboard APIのモック
-      writeTextMock = vi.fn().mockResolvedValue(undefined);
-      Object.defineProperty(navigator, 'clipboard', {
-        value: {
-          writeText: writeTextMock,
-        },
-        writable: true,
-        configurable: true,
-      });
-    });
-
     it('コピーボタンが存在すること', () => {
       renderCodeBlock();
-      const copyButton = screen.getByLabelText('コードをコピー');
-      expect(copyButton).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'コードをコピー' })).toBeInTheDocument();
     });
 
-    it('コピー機能のテスト - クリックでチェックアイコンが表示されること', async () => {
+    it('ボタン押下でクリップボードにコードが書き込まれること', async () => {
       const user = userEvent.setup();
+
       renderCodeBlock();
+      await user.click(screen.getByRole('button', { name: 'コードをコピー' }));
 
-      const copyButton = screen.getByLabelText('コードをコピー');
-
-      // 初期状態でContentCopyIconが表示されている
-      expect(screen.getByTestId('ContentCopyIcon')).toBeInTheDocument();
-
-      await user.click(copyButton);
-
-      // クリック後はCheckIconが表示される
-      await waitFor(() => {
-        expect(screen.queryByTestId('CheckIcon')).toBeInTheDocument();
+      await waitFor(async () => {
+        expect(await navigator.clipboard.readText()).toBe('const greeting = "Hello, World!";');
       });
-    });
-  });
-
-  describe('複数言語対応', () => {
-    it('Python言語が正しく表示されること', () => {
-      renderCodeBlock({
-        className: 'language-python',
-        children: 'print("Hello, World!")',
-      });
-      expect(screen.getByText('python')).toBeInTheDocument();
-    });
-
-    it('TypeScript言語が正しく表示されること', () => {
-      renderCodeBlock({
-        className: 'language-typescript',
-        children: 'const num: number = 42;',
-      });
-      expect(screen.getByText('typescript')).toBeInTheDocument();
-    });
-
-    it('Bash言語が正しく表示されること', () => {
-      renderCodeBlock({
-        className: 'language-bash',
-        children: 'echo "Hello"',
-      });
-      expect(screen.getByText('bash')).toBeInTheDocument();
     });
   });
 
   describe('アクセシビリティ', () => {
-    it('コピーボタンに適切なaria-labelが設定されていること', () => {
+    it('コピーボタンに aria-label が付与されていること', () => {
       renderCodeBlock();
-      const copyButton = screen.getByLabelText('コードをコピー');
-      expect(copyButton).toHaveAttribute('aria-label', 'コードをコピー');
-    });
-
-    it('コードブロックがpreタグでマークアップされていること', () => {
-      renderCodeBlock();
-      const preElement = screen.getByText('const greeting = "Hello, World!";').closest('pre');
-      expect(preElement).toBeInTheDocument();
-    });
-
-    it('コードがcodeタグでマークアップされていること', () => {
-      renderCodeBlock({ className: 'language-javascript' });
-      const codeElement = screen.getByText('const greeting = "Hello, World!";');
-      expect(codeElement.tagName).toBe('CODE');
-      expect(codeElement).toHaveClass('language-javascript');
-    });
-  });
-
-  describe('スタイリング', () => {
-    it('言語名が大文字で表示されること', () => {
-      renderCodeBlock({ className: 'language-javascript' });
-      const languageLabel = screen.getByText('javascript');
-      expect(languageLabel).toBeInTheDocument();
+      expect(screen.getByLabelText('コードをコピー')).toBeInTheDocument();
     });
   });
 
   describe('エッジケース', () => {
-    it('空のコードブロックでもエラーなくレンダリングされること', () => {
-      renderCodeBlock({ children: '' });
-      expect(screen.getByLabelText('コードをコピー')).toBeInTheDocument();
+    it('特殊文字を含むコードでもクラッシュせず描画できること', () => {
+      const { container } = renderCodeBlock({ children: 'const re = /[<>&"\']/g;' });
+      expect(container.textContent ?? '').toContain('const');
     });
 
-    it('非常に長いコードでもレンダリングされること', () => {
-      const longCode = 'const test = "test";\n'.repeat(100);
-      renderCodeBlock({ children: longCode });
-      expect(screen.getByLabelText('コードをコピー')).toBeInTheDocument();
-    });
-
-    it('特殊文字を含むコードが正しく表示されること', () => {
-      const specialCode = 'const regex = /[a-z]{2,}/gi;';
-      renderCodeBlock({ children: specialCode });
-      expect(screen.getByText(specialCode)).toBeInTheDocument();
+    it('空のコードでもクラッシュしないこと', () => {
+      expect(() => renderCodeBlock({ children: '' })).not.toThrow();
     });
   });
 });

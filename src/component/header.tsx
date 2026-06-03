@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 
-import { AppBar, Toolbar, Typography, IconButton, Box } from '@mui/material';
-import { Brightness4, Brightness7, Logout, Description, PictureAsPdf } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { FileText, FileDown, LogOut, Moon, Sun } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
 
 interface HeaderProps {
@@ -22,99 +23,58 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
   };
 
   return (
-    <AppBar
-      position="sticky"
-      elevation={1}
-      component={motion.div}
+    <motion.header
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      sx={{
-        backdropFilter: 'blur(10px)',
-        backgroundColor: mode === 'dark' ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-        color: (theme) => theme.palette.text.primary,
-        '@media print': {
-          display: 'none !important',
-        },
-      }}
+      className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md"
     >
-      <Toolbar>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1 }}>
-          <Description sx={{ fontSize: 28 }} color="primary" />
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{
-              fontWeight: 700,
-              background: (theme) =>
-                `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-            }}
-          >
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <div className="flex items-center gap-2">
+          <FileText className="size-7 text-primary" />
+          <span className="bg-linear-to-br from-primary to-secondary bg-clip-text text-lg font-bold text-transparent">
             {title}
-          </Typography>
-        </Box>
+          </span>
+        </div>
 
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <div className="flex items-center gap-1">
           {onDownloadPdf && (
-            <IconButton
-              onClick={() => {
-                void onDownloadPdf();
-              }}
-              color="inherit"
-              component={motion.button}
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
-              aria-label="PDFダウンロード"
-              disabled={pdfLoading}
-              sx={{
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  backgroundColor: (theme) => theme.palette.action.hover,
-                },
-              }}
-            >
-              <PictureAsPdf />
-            </IconButton>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void onDownloadPdf()}
+                  disabled={pdfLoading}
+                  aria-label="PDFダウンロード"
+                >
+                  <FileDown />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>PDFをダウンロード</TooltipContent>
+            </Tooltip>
           )}
 
-          <IconButton
-            onClick={toggleTheme}
-            color="inherit"
-            component={motion.button}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="テーマ切り替え"
-            sx={{
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: (theme) => theme.palette.action.hover,
-              },
-            }}
-          >
-            {mode === 'dark' ? <Brightness7 /> : <Brightness4 />}
-          </IconButton>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="テーマ切り替え">
+                {mode === 'dark' ? <Sun /> : <Moon />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
+          </Tooltip>
 
-          <IconButton
-            onClick={handleLogout}
-            color="inherit"
-            component={motion.button}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="ログアウト"
-            sx={{
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                backgroundColor: (theme) => theme.palette.action.hover,
-              },
-            }}
-          >
-            <Logout />
-          </IconButton>
-        </Box>
-      </Toolbar>
-    </AppBar>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="ログアウト">
+                <LogOut />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>ログアウト</TooltipContent>
+          </Tooltip>
+        </div>
+      </div>
+    </motion.header>
   );
 };
 

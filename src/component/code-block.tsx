@@ -1,19 +1,24 @@
 import { useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+
+import { Check, Copy } from 'lucide-react';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-import { Box, IconButton, Tooltip, useTheme } from '@mui/material';
-import { ContentCopy, Check } from '@mui/icons-material';
-import { motion } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { useThemeMode } from '@/context/theme-context';
 
 interface CodeBlockProps {
   children: React.ReactNode;
   className?: string;
 }
 
+const COPIED_RESET_MS = 2000;
+
 const CodeBlock = ({ children, className }: CodeBlockProps) => {
   const [copied, setCopied] = useState(false);
-  const theme = useTheme();
+  const { mode } = useThemeMode();
+  const isDark = mode === 'dark';
 
   // 言語を抽出
   const match = /language-(\w+)/.exec(className || '');
@@ -23,79 +28,49 @@ const CodeBlock = ({ children, className }: CodeBlockProps) => {
     const code = String(children).replace(/\n$/, '');
     await navigator.clipboard.writeText(code);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setTimeout(() => setCopied(false), COPIED_RESET_MS);
   };
 
   return (
-    <Box
-      sx={{
-        position: 'relative',
-        borderRadius: 2,
-        overflow: 'hidden',
-        mb: 3,
-        border: `1px solid ${theme.palette.divider}`,
-      }}
-    >
+    <div className="mb-6 overflow-hidden rounded-lg border border-border">
       {/* ヘッダー */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          px: 2,
-          py: 1,
-          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
-          borderBottom: `1px solid ${theme.palette.divider}`,
-        }}
-      >
-        <Box
-          sx={{
-            fontSize: '0.75rem',
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            color: theme.palette.text.secondary,
-            letterSpacing: 0.5,
-          }}
-        >
+      <div className="flex items-center justify-between border-b border-border bg-muted px-4 py-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {language || 'code'}
-        </Box>
-        <Tooltip title={copied ? 'コピーしました！' : 'コードをコピー'}>
-          <IconButton
-            size="small"
-            onClick={() => void handleCopy()}
-            component={motion.button}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-            aria-label="コードをコピー"
-            sx={{
-              color: theme.palette.text.secondary,
-              '&:hover': {
-                color: theme.palette.primary.main,
-              },
-            }}
-          >
-            {copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
-          </IconButton>
+        </span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7 text-muted-foreground hover:text-primary"
+              onClick={() => void handleCopy()}
+              aria-label="コードをコピー"
+            >
+              {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{copied ? 'コピーしました！' : 'コードをコピー'}</TooltipContent>
         </Tooltip>
-      </Box>
+      </div>
 
       {/* コードブロック */}
       <SyntaxHighlighter
         language={language}
-        style={theme.palette.mode === 'dark' ? vscDarkPlus : vs}
+        style={isDark ? vscDarkPlus : vs}
         customStyle={{
           margin: 0,
           padding: '16px',
           fontSize: '0.875rem',
           lineHeight: 1.7,
           fontFamily: '"Fira Code", "Consolas", "Monaco", monospace',
-          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#ffffff',
+          backgroundColor: isDark ? '#1e1e1e' : '#ffffff',
         }}
         PreTag="div"
       >
         {String(children).replace(/\n$/, '')}
       </SyntaxHighlighter>
-    </Box>
+    </div>
   );
 };
 
