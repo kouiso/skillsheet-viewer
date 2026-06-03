@@ -11,10 +11,9 @@ import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 
 import { useActiveHeading } from '@/hooks/use-active-heading';
-import useMediaQuery from '@/hooks/use-media-query';
 
 import CodeBlock from './code-block';
-import TableOfContents, { SIDEBAR_WIDTH } from './table-of-contents';
+import TableOfContents from './table-of-contents';
 
 interface Heading {
   id: string;
@@ -48,8 +47,6 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
-  const isMobile = useMediaQuery('(max-width: 899px)');
 
   // 見出しIDのリストを作成
   const headingIds = headings.map((h) => h.id);
@@ -107,11 +104,10 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
     setLightboxOpen(true);
   };
 
-  const showSidebar = mounted && !isMobile;
-
   return (
     <div className="flex min-h-screen">
-      {/* 目次（左サイドバー / モバイルはSheet） */}
+      {/* 目次（左サイドバー / モバイルはSheet）。デスクトップでは flex で隣接し、
+          折りたたみ・印刷時にメインが自動で幅を詰める（固定marginを使わない） */}
       {mounted && <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />}
 
       {/* メインコンテンツ */}
@@ -120,7 +116,6 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6"
-        style={{ marginLeft: showSidebar ? SIDEBAR_WIDTH : undefined }}
       >
         <div className="rounded-2xl border border-border bg-card p-4 shadow-elevation-2 sm:p-6 md:p-8">
           <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
