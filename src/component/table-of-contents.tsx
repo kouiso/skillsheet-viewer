@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, ChevronDown, ChevronUp, Menu as MenuIcon } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import useMediaQuery from '@/hooks/use-media-query';
 import { cn } from '@/lib/utils';
 
@@ -102,6 +102,11 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="flex w-72 flex-col p-0">
+          {/* スクリーンリーダー向けに Dialog の Title/Description を提供（Radix のa11y要件・警告回避） */}
+          <div className="sr-only">
+            <SheetTitle>目次</SheetTitle>
+            <SheetDescription>ドキュメントの見出し一覧</SheetDescription>
+          </div>
           <TocHeader />
           <TocList headings={headings} activeId={activeId} onHeadingClick={handleHeadingClick} />
         </SheetContent>
@@ -109,14 +114,13 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
     );
   }
 
-  // デスクトップ: 固定サイドバー
+  // デスクトップ: スティッキーなフレックスサイドバー。
+  // position:fixed + 固定marginを使わず flex で隣接させることで、折りたたみ時・印刷時に
+  // メインコンテンツが自動的に幅を詰める（余白バグの根本対処）。
   return (
     <aside
-      className="no-print fixed left-0 top-16 z-30 flex flex-col border-r border-border bg-card"
-      style={{
-        width: isCollapsed ? 'auto' : SIDEBAR_WIDTH,
-        height: 'calc(100vh - 4rem)',
-      }}
+      className="no-print sticky top-16 z-30 flex h-[calc(100vh-4rem)] shrink-0 flex-col self-start border-r border-border bg-card transition-[width] duration-300"
+      style={{ width: isCollapsed ? 'auto' : SIDEBAR_WIDTH }}
     >
       <TocHeader>
         <Button
