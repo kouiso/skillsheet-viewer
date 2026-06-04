@@ -1,5 +1,5 @@
 {
-  "id": "76fa2563-3254-425e-87b1-9653ed109335",
+  "id": "f06bfbd7-d5ca-4d15-b9c0-e280ca76559c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -57,7 +57,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "blocks_sheet_id_order_unique": {
+          "name": "blocks_sheet_id_order_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "sheet_id",
+            "order"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -103,7 +112,15 @@
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "skill_sheets_owner_id_unique": {
+          "name": "skill_sheets_owner_id_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "owner_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
