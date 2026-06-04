@@ -13,7 +13,11 @@ interface SkillSheetContent {
 }
 
 async function fetchFromApi(): Promise<string> {
-  const res = await fetch('/api/skillsheet', { headers: { Accept: 'application/json' } });
+  // /view と同じ共有コードでサーバ側認可を通す（無認可の直接GETを防止）
+  const headers: Record<string, string> = { Accept: 'application/json' };
+  const viewerCode = import.meta.env.VITE_VIEWER_CODE;
+  if (viewerCode) headers['x-viewer-code'] = viewerCode;
+  const res = await fetch('/api/skillsheet', { headers });
   if (!res.ok) throw new Error(`/api/skillsheet returned ${res.status}`);
   const data = (await res.json()) as { content?: string };
   if (typeof data.content !== 'string' || data.content.length === 0) {
