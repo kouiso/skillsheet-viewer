@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { fetchSkillSheet } from '@/lib/github-client';
+import { fetchSkillSheet } from '@/lib/skillsheet-client';
 
 interface SkillSheet {
   title: string;
