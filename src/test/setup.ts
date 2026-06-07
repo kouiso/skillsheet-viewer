@@ -117,3 +117,29 @@ global.matchMedia = vi.fn().mockImplementation(
 );
 
 global.ResizeObserver = ResizeObserverMock;
+
+// jsdom には IntersectionObserver が無いためモックする（use-active-heading が使用）
+class IntersectionObserverMock {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  takeRecords = vi.fn(() => []);
+  root = null;
+  rootMargin = '';
+  thresholds = [];
+}
+global.IntersectionObserver = IntersectionObserverMock as unknown as typeof IntersectionObserver;
+
+// Radix UI（Tooltip/Dialog 等）は pointer capture / scrollIntoView を使うが jsdom には無いためモックする
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = vi.fn(() => false);
+}
+if (!Element.prototype.setPointerCapture) {
+  Element.prototype.setPointerCapture = vi.fn();
+}
+if (!Element.prototype.releasePointerCapture) {
+  Element.prototype.releasePointerCapture = vi.fn();
+}
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}

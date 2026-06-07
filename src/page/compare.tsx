@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { Box, CircularProgress, Typography, Grid } from '@mui/material';
+import { Loader2 } from 'lucide-react';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
@@ -58,38 +58,35 @@ const ComparePage = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-10 animate-spin text-primary" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', flexDirection: 'column', gap: 2 }}>
-        <Typography variant="h5">エラー</Typography>
-        <Typography>{error}</Typography>
-      </Box>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
+        <h2 className="text-2xl font-bold">エラー</h2>
+        <p className="text-muted-foreground">{error}</p>
+      </div>
     );
   }
 
   if (!sheetA || !sheetB) return null;
 
   return (
-    <Box>
+    <div>
       <Header title="スキルシート比較" />
-      <Grid container spacing={0} sx={{ minHeight: 'calc(100vh - 64px)' }}>
-        <Grid
-          size={{ xs: 12, md: 6 }}
-          sx={{ borderRight: { md: '1px solid' }, borderColor: 'divider' }}
-        >
+      <div className="flex min-h-[calc(100vh-64px)] flex-col md:flex-row">
+        <div className="flex-1 border-b border-border md:border-b-0 md:border-r">
           <SkillSheetViewer skillSheet={sheetA} compareMode />
-        </Grid>
-        <Grid size={{ xs: 12, md: 6 }}>
+        </div>
+        <div className="flex-1">
           <SkillSheetViewer skillSheet={sheetB} compareMode />
-        </Grid>
-      </Grid>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 };
 
