@@ -1,57 +1,56 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { fetchSkillSheet } from '@/lib/github-client';
+import { fetchSheet, AuthError } from '@/lib/github-client';
 
 interface SkillSheet {
   title: string;
   content: string;
 }
 
-// オブジェクト URL の解放を遅延させる時間（ms）
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
 const ViewPage = () => {
   const navigate = useNavigate();
+  const { path } = useParams<{ path: string }>();
   const [skillSheet, setSkillSheet] = useState<SkillSheet | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   useEffect(() => {
-    // Check authentication
-    const isAuthenticated = sessionStorage.getItem('viewer-authenticated') === 'true';
-
-    if (!isAuthenticated) {
-      void navigate('/viewer-auth');
+    if (!path) {
+      void navigate('/view');
       return;
     }
 
-    // Fetch skill sheet
     const loadSkillSheet = async () => {
       try {
         setLoading(true);
-        const data = await fetchSkillSheet();
-        setSkillSheet({
-          title: 'エンジニアスキルシート',
-          content: data.content,
-        });
+        const data = await fetchSheet(path);
+        const firstHeading = data.content.match(/^#\s+(.+)$/m);
+        const title = firstHeading ? firstHeading[1].trim() : path.replace(/\.md$/, '');
+        setSkillSheet({ title, content: data.content });
         setError(null);
       } catch (err) {
+        if (err instanceof AuthError) {
+          void navigate('/viewer-auth');
+          return;
+        }
         console.error('Error fetching skill sheet:', err);
-        setError('エンジニアスキルシートの読み込みに失敗しました。');
+        setError('スキルシートの読み込みに失敗しました。');
       } finally {
         setLoading(false);
       }
     };
 
     void loadSkillSheet();
-  }, [navigate]);
+  }, [navigate, path]);
 
   const handleDownloadPdf = async () => {
     if (!skillSheet) return;
@@ -59,7 +58,6 @@ const ViewPage = () => {
     try {
       setPdfLoading(true);
 
-      // @react-pdf/renderer はサイズが大きいため、ボタン押下時に動的 import して初期バンドルから分離する
       const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
         import('@react-pdf/renderer'),
         import('@/component/pdf-export'),
@@ -67,7 +65,6 @@ const ViewPage = () => {
 
       const blob = await pdf(<SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />).toBlob();
 
-      // 生成した PDF をワンクリックでダウンロード（印刷ダイアログは使わない）
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -75,7 +72,6 @@ const ViewPage = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      // 一部ブラウザでは click 直後の同期 revoke でダウンロードが失敗するため少し遅延させる
       setTimeout(() => {
         URL.revokeObjectURL(url);
       }, REVOKE_OBJECT_URL_DELAY_MS);

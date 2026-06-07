@@ -24,6 +24,14 @@ vi.mock('./page/viewer-auth', () => ({
   default: () => <div data-testid="viewer-auth-page">Viewer Auth Page</div>,
 }));
 
+vi.mock('./page/sheets-list', () => ({
+  default: () => <div data-testid="sheets-list-page">Sheets List Page</div>,
+}));
+
+vi.mock('./page/compare', () => ({
+  default: () => <div data-testid="compare-page">Compare Page</div>,
+}));
+
 describe('App', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -56,12 +64,12 @@ describe('App', () => {
       });
     });
 
-    it('/viewパスでViewページが表示されること', async () => {
+    it('/viewパスでシート一覧ページが表示されること', async () => {
       window.history.pushState({}, '', '/view');
       render(<App />);
 
       await waitFor(() => {
-        expect(screen.getByTestId('view-page')).toBeInTheDocument();
+        expect(screen.getByTestId('sheets-list-page')).toBeInTheDocument();
       });
     });
   });
@@ -142,7 +150,7 @@ describe('App', () => {
 
       render(<App />);
 
-      expect(screen.getByTestId('view-page')).toBeInTheDocument();
+      expect(screen.getByTestId('sheets-list-page')).toBeInTheDocument();
     });
   });
 

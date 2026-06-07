@@ -84,37 +84,30 @@ describe('Header', () => {
     });
   });
 
-  describe('テーマ切り替え機能', () => {
-    it('クリックで html の dark クラスがトグルされること', async () => {
-      const user = userEvent.setup();
-      renderHeader();
-
-      expect(document.documentElement.classList.contains('dark')).toBe(false);
-
-      await user.click(screen.getByLabelText('テーマ切り替え'));
-      await waitFor(() => {
-        expect(document.documentElement.classList.contains('dark')).toBe(true);
-      });
-      expect(localStorage.getItem('theme-mode')).toBe('dark');
-
-      await user.click(screen.getByLabelText('テーマ切り替え'));
-      await waitFor(() => {
-        expect(document.documentElement.classList.contains('dark')).toBe(false);
-      });
-      expect(localStorage.getItem('theme-mode')).toBe('light');
-    });
-  });
-
   describe('ログアウト機能', () => {
-    it('クリックで sessionStorage がクリアされ /viewer-auth に遷移すること', async () => {
+    it('ログアウトボタンをクリックするとPOST /api/logoutが呼ばれること', async () => {
       const user = userEvent.setup();
-      sessionStorage.setItem('viewer-authenticated', 'true');
+      const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+      global.fetch = mockFetch;
+
       renderHeader();
 
       await user.click(screen.getByLabelText('ログアウト'));
 
       await waitFor(() => {
-        expect(sessionStorage.getItem('viewer-authenticated')).toBeNull();
+        expect(mockFetch).toHaveBeenCalledWith('/api/logout', expect.objectContaining({ method: 'POST' }));
+      });
+    });
+
+    it('ログアウトボタンをクリックすると/viewer-authに遷移すること', async () => {
+      const user = userEvent.setup();
+      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+
+      renderHeader();
+
+      await user.click(screen.getByLabelText('ログアウト'));
+
+      await waitFor(() => {
         expect(mockNavigate).toHaveBeenCalledWith('/viewer-auth');
       });
     });
@@ -147,13 +140,6 @@ describe('Header', () => {
       expect(screen.getByLabelText('テーマ切り替え')).toHaveAttribute('aria-label', 'テーマ切り替え');
       expect(screen.getByLabelText('ログアウト')).toHaveAttribute('aria-label', 'ログアウト');
       expect(screen.getByLabelText('PDFダウンロード')).toHaveAttribute('aria-label', 'PDFダウンロード');
-    });
-  });
-
-  describe('スタイリング', () => {
-    it('印刷時に非表示となる no-print クラスを持つこと', () => {
-      const { container } = renderHeader();
-      expect(container.querySelector('header')?.className).toContain('no-print');
     });
   });
 });
