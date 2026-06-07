@@ -1,86 +1,36 @@
-/**
- * GitHub API client for fetching skill sheet content from private repository
- * Client-side version
- */
-
-interface GitHubConfig {
-  token: string;
-  owner: string;
-  repo: string;
-  filePath: string;
-  branch: string;
+export class AuthError extends Error {
+  constructor() {
+    super('Not authenticated');
+    this.name = 'AuthError';
+  }
 }
 
-interface SkillSheetContent {
+export interface SheetMeta {
+  path: string;
+  title: string;
+  sha: string;
+}
+
+export interface SheetContent {
   content: string;
   sha: string;
   lastModified: string;
 }
 
-function getGitHubConfig(): GitHubConfig {
-  return {
-    token: import.meta.env.VITE_GITHUB_TOKEN || '',
-    owner: import.meta.env.VITE_GITHUB_OWNER || '',
-    repo: import.meta.env.VITE_GITHUB_REPO || '',
-    filePath: import.meta.env.VITE_GITHUB_FILE_PATH || 'skillsheet.md',
-    branch: import.meta.env.VITE_GITHUB_BRANCH || 'main',
-  };
+async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
+  const res = await fetch(url, { ...options, credentials: 'include' });
+  if (res.status === 401) throw new AuthError();
+  return res;
 }
 
-function validateConfig(config: GitHubConfig): void {
-  if (!config.token || !config.owner || !config.repo) {
-    throw new Error(
-      'GitHub configuration is incomplete. Please set VITE_GITHUB_TOKEN, VITE_GITHUB_OWNER, and VITE_GITHUB_REPO environment variables.',
-    );
-  }
+export async function listSheets(): Promise<SheetMeta[]> {
+  const res = await apiFetch('/api/sheets');
+  if (!res.ok) throw new Error(`Failed to list sheets: ${res.status}`);
+  return res.json() as Promise<SheetMeta[]>;
 }
 
-function handleResponseError(response: Response, config: GitHubConfig): void {
-  if (response.status === 404) {
-    throw new Error(`File not found: ${config.filePath} in ${config.owner}/${config.repo}`);
-  }
-  if (response.status === 401) {
-    throw new Error('GitHub authentication failed. Please check your VITE_GITHUB_TOKEN.');
-  }
-  throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
-}
-
-/**
- * Fetch skill sheet content from GitHub private repository
- */
-export async function fetchSkillSheet(): Promise<SkillSheetContent> {
-  const config = getGitHubConfig();
-  validateConfig(config);
-
-  const url = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${config.filePath}?ref=${config.branch}`;
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${config.token}`,
-      Accept: 'application/vnd.github.v3+json',
-      'User-Agent': 'Skill-Sheet-Viewer',
-    },
-  });
-
-  if (!response.ok) {
-    handleResponseError(response, config);
-  }
-
-  const data = await response.json();
-
-  // Base64 decode the content with proper UTF-8 handling
-  const base64Content = data.content.replace(/\n/g, '');
-  const binaryString = atob(base64Content);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  const decoder = new TextDecoder('utf-8');
-  const decodedContent = decoder.decode(bytes);
-
-  return {
-    content: decodedContent,
-    sha: data.sha,
-    lastModified: data.commit?.author?.date || new Date().toISOString(),
-  };
+export async function fetchSheet(path: string): Promise<SheetContent> {
+  const res = await apiFetch(`/api/sheets/content?path=${encodeURIComponent(path)}`);
+  if (!res.ok) throw new Error(`Failed to fetch sheet: ${res.status}`);
+  return res.json() as Promise<SheetContent>;
 }
