@@ -15,9 +15,16 @@ export default function handler(req: VercelRequest, res: VercelResponse): void {
 
   const origin = req.headers['origin'];
   const host = req.headers['host'];
-  if (origin && host && !origin.includes(host)) {
-    res.status(403).json({ error: 'Forbidden' });
-    return;
+  if (origin && host) {
+    try {
+      if (new URL(origin).host !== host) {
+        res.status(403).json({ error: 'Forbidden' });
+        return;
+      }
+    } catch {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
   }
 
   const viewerCode = process.env['VIEWER_CODE'];
