@@ -1,5 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
-import { Buffer } from 'node:buffer';
+import { timingSafeEqual, createHash } from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 import { createSessionCookie } from './_lib/session';
@@ -46,15 +45,10 @@ export default function handler(req: VercelRequest, res: VercelResponse): void {
     return;
   }
 
-  if (code.length !== viewerCode.length) {
-    res.status(401).json({ error: 'Invalid code' });
-    return;
-  }
+  const codeHash = createHash('sha256').update(code, 'utf-8').digest();
+  const validHash = createHash('sha256').update(viewerCode, 'utf-8').digest();
 
-  const codeBuffer = Buffer.from(code, 'utf-8');
-  const validBuffer = Buffer.from(viewerCode, 'utf-8');
-
-  if (!timingSafeEqual(codeBuffer, validBuffer)) {
+  if (!timingSafeEqual(codeHash, validHash)) {
     res.status(401).json({ error: 'Invalid code' });
     return;
   }

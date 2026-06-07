@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-import { fetchFile, listSheets } from '../_lib/github';
+import { fetchFile } from '../_lib/github';
 import { verifySession } from '../_lib/session';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
@@ -23,14 +23,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
-  try {
-    const sheets = await listSheets();
-    const allowed = sheets.some((s) => s.path === path);
-    if (!allowed) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
+  // Allow only root-level .md files (no directories, no traversal)
+  if (!/^[\w.-]+\.md$/u.test(path)) {
+    res.status(400).json({ error: 'Invalid path' });
+    return;
+  }
 
+  try {
     const content = await fetchFile(path);
     res.status(200).json(content);
   } catch (err) {
