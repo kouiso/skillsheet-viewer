@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, CssBaseline } from '@mui/material';
 
 import { ThemeModeProvider, useThemeMode } from './context/theme-context';
+import Compare from './page/compare';
+import SheetsList from './page/sheets-list';
 import View from './page/view';
 import ViewerAuth from './page/viewer-auth';
 import { createAppTheme } from './theme/theme';
@@ -18,7 +20,9 @@ const AppContent = () => {
         <Routes>
           <Route path="/" element={<Navigate to="/viewer-auth" replace />} />
           <Route path="/viewer-auth" element={<ViewerAuth />} />
-          <Route path="/view" element={<View />} />
+          <Route path="/view" element={<SheetsList />} />
+          <Route path="/view/:path" element={<View />} />
+          <Route path="/compare" element={<Compare />} />
         </Routes>
       </BrowserRouter>
     </ThemeProvider>

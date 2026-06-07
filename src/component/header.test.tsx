@@ -132,9 +132,10 @@ describe('Header', () => {
   });
 
   describe('ログアウト機能', () => {
-    it('ログアウトボタンをクリックするとsessionStorageがクリアされること', async () => {
+    it('ログアウトボタンをクリックするとPOST /api/logoutが呼ばれること', async () => {
       const user = userEvent.setup();
-      sessionStorage.setItem('viewer-authenticated', 'true');
+      const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+      global.fetch = mockFetch;
 
       renderHeader();
 
@@ -142,12 +143,14 @@ describe('Header', () => {
       await user.click(logoutButton);
 
       await waitFor(() => {
-        expect(sessionStorage.getItem('viewer-authenticated')).toBeNull();
+        expect(mockFetch).toHaveBeenCalledWith('/api/logout', expect.objectContaining({ method: 'POST' }));
       });
     });
 
     it('ログアウトボタンをクリックすると/viewer-authに遷移すること', async () => {
       const user = userEvent.setup();
+      global.fetch = vi.fn().mockResolvedValue({ ok: true });
+
       renderHeader();
 
       const logoutButton = screen.getByLabelText('ログアウト');

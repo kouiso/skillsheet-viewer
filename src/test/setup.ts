@@ -72,6 +72,37 @@ vi.mock('next/link', () => ({
   },
 }));
 
+// jsdom localStorage polyfill (jsdom 27+ doesn't expose clear/key on some environments)
+if (typeof localStorage === 'undefined' || typeof localStorage.clear !== 'function') {
+  const storage: Record<string, string> = {};
+  Object.defineProperty(global, 'localStorage', {
+    value: {
+      getItem: (key: string) => storage[key] ?? null,
+      setItem: (key: string, value: string) => { storage[key] = value; },
+      removeItem: (key: string) => { delete storage[key]; },
+      clear: () => { Object.keys(storage).forEach(k => { delete storage[k]; }); },
+      get length() { return Object.keys(storage).length; },
+      key: (index: number) => Object.keys(storage)[index] ?? null,
+    },
+    writable: true,
+  });
+}
+
+if (typeof sessionStorage === 'undefined' || typeof sessionStorage.clear !== 'function') {
+  const storage: Record<string, string> = {};
+  Object.defineProperty(global, 'sessionStorage', {
+    value: {
+      getItem: (key: string) => storage[key] ?? null,
+      setItem: (key: string, value: string) => { storage[key] = value; },
+      removeItem: (key: string) => { delete storage[key]; },
+      clear: () => { Object.keys(storage).forEach(k => { delete storage[k]; }); },
+      get length() { return Object.keys(storage).length; },
+      key: (index: number) => Object.keys(storage)[index] ?? null,
+    },
+    writable: true,
+  });
+}
+
 global.matchMedia = vi.fn().mockImplementation(
   (query): MediaQueryList => ({
     matches: false,

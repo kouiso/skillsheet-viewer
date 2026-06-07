@@ -17,8 +17,9 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    sessionStorage.removeItem('viewer-authenticated');
-    void navigate('/viewer-auth');
+    void fetch('/api/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+      void navigate('/viewer-auth');
+    });
   };
 
   return (
