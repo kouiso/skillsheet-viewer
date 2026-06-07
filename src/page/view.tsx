@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
-import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
@@ -12,6 +13,8 @@ interface SkillSheet {
   content: string;
 }
 
+const REVOKE_OBJECT_URL_DELAY_MS = 100;
+
 const ViewPage = () => {
   const navigate = useNavigate();
   const { path } = useParams<{ path: string }>();
@@ -19,9 +22,6 @@ const ViewPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
     if (!path) {
@@ -52,64 +52,53 @@ const ViewPage = () => {
     void loadSkillSheet();
   }, [navigate, path]);
 
-  const handleDownloadPdf = () => {
+  const handleDownloadPdf = async () => {
     if (!skillSheet) return;
 
     try {
       setPdfLoading(true);
-      setSnackbarMessage('印刷ダイアログを開いています...');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
 
-      window.print();
+      const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('@/component/pdf-export'),
+      ]);
 
-      setSnackbarMessage('印刷ダイアログが開きました。PDFとして保存してください。');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
+      const blob = await pdf(<SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />).toBlob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'エンジニアスキルシート.pdf';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, REVOKE_OBJECT_URL_DELAY_MS);
+
+      toast.success('PDFをダウンロードしました');
     } catch (err) {
-      console.error('Error opening print dialog:', err);
-      setSnackbarMessage('印刷ダイアログを開けませんでした');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      console.error('Error generating PDF:', err);
+      toast.error('PDFの生成に失敗しました');
     } finally {
       setPdfLoading(false);
     }
   };
 
-  const handleSnackbarClose = () => {
-    setSnackbarOpen(false);
-  };
-
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-10 animate-spin text-primary" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          flexDirection: 'column',
-          gap: 2,
-        }}
-      >
-        <Typography variant="h4">エラー</Typography>
-        <Typography variant="body1">{error}</Typography>
-      </Box>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
+        <h2 className="text-2xl font-bold">エラー</h2>
+        <p className="text-muted-foreground">{error}</p>
+      </div>
     );
   }
 
@@ -118,21 +107,10 @@ const ViewPage = () => {
   }
 
   return (
-    <Box>
-      <Header title={skillSheet.title} onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
+    <div>
+      <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
       <SkillSheetViewer skillSheet={skillSheet} />
-
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={4000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Box>
+    </div>
   );
 };
 

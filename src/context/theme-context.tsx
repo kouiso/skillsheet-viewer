@@ -32,8 +32,14 @@ export const ThemeModeProvider = ({ children }: ThemeModeProviderProps) => {
   });
 
   useEffect(() => {
-    // テーマが変更されたらlocalStorageに保存
+    // テーマが変更されたらlocalStorageに保存し、html要素の dark クラスを切り替える
     localStorage.setItem('theme-mode', mode);
+    const root = document.documentElement;
+    if (mode === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
   }, [mode]);
 
   const toggleTheme = () => {
