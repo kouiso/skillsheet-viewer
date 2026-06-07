@@ -10,6 +10,7 @@ export interface SheetContent {
   content: string;
   sha: string;
   lastModified: string;
+  title: string;
 }
 
 interface GitHubFileItem {
@@ -95,7 +96,6 @@ export async function fetchFile(path: string): Promise<SheetContent> {
     content,
     sha: data.sha,
     lastModified: new Date().toISOString(),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ...(title ? { title } : {}),
+    title,
   };
 }
