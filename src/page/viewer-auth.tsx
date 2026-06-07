@@ -1,16 +1,19 @@
+/* eslint-disable no-magic-numbers -- framer-motion のアニメーションチューニング値（duration/delay/scale 等）のため */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Box, Button, Card, CardContent, TextField, Typography, Alert, useTheme } from '@mui/material';
-import { LockOpen } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { LockKeyhole } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 
 const ViewerAuthPage = () => {
   const navigate = useNavigate();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
-  const theme = useTheme();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,184 +41,100 @@ const ViewerAuthPage = () => {
   };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        background:
-          theme.palette.mode === 'dark'
-            ? 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'
-            : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-br from-primary to-secondary px-4">
       {/* 背景装飾 */}
-      <Box
-        component={motion.div}
-        animate={{
-          scale: [1, 1.2, 1],
-          rotate: [0, 180, 360],
-        }}
-        transition={{
-          duration: 20,
-          repeat: Number.POSITIVE_INFINITY,
-          ease: 'linear',
-        }}
-        sx={{
-          position: 'absolute',
-          width: 400,
-          height: 400,
-          borderRadius: '50%',
-          background:
-            theme.palette.mode === 'dark'
-              ? 'radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%)'
-              : 'radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, transparent 70%)',
-          top: '-10%',
-          right: '-10%',
-        }}
+      <motion.div
+        aria-hidden
+        animate={{ scale: [1, 1.2, 1], rotate: [0, 180, 360] }}
+        transition={{ duration: 20, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
+        className="pointer-events-none absolute -right-[10%] -top-[10%] size-[400px] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.2)_0%,transparent_70%)]"
+      />
+      <motion.div
+        aria-hidden
+        animate={{ scale: [1, 1.3, 1], rotate: [360, 180, 0] }}
+        transition={{ duration: 25, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
+        className="pointer-events-none absolute -bottom-[15%] -left-[10%] size-[360px] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.15)_0%,transparent_70%)]"
       />
 
-      <Card
-        component={motion.div}
+      <motion.div
         initial={{ opacity: 0, y: 50, scale: 0.9 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{
-          duration: 0.6,
-          ease: [0.43, 0.13, 0.23, 0.96],
-        }}
-        sx={{
-          minWidth: { xs: '90%', sm: 400 },
-          maxWidth: 500,
-          backdropFilter: 'blur(10px)',
-          backgroundColor:
-            theme.palette.mode === 'dark' ? 'rgba(30, 41, 59, 0.8)' : 'rgba(255, 255, 255, 0.95)',
-          boxShadow: theme.shadows[10],
-          position: 'relative',
-          zIndex: 1,
-        }}
+        transition={{ duration: 0.6, ease: [0.43, 0.13, 0.23, 0.96] }}
+        className="relative z-10 w-full max-w-md"
       >
-        <CardContent sx={{ p: 4 }}>
-          {/* アイコン */}
-          <Box
-            component={motion.div}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
-            sx={{
-              display: 'flex',
-              justifyContent: 'center',
-              mb: 2,
-            }}
-          >
-            <Box
-              sx={{
-                width: 80,
-                height: 80,
-                borderRadius: '50%',
-                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: theme.shadows[4],
-              }}
-            >
-              <LockOpen sx={{ fontSize: 40, color: 'white' }} />
-            </Box>
-          </Box>
-
-          <Typography
-            component={motion.h1}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4 }}
-            variant="h4"
-            gutterBottom
-            align="center"
-            sx={{ fontWeight: 700 }}
-          >
-            エンジニアスキルシート閲覧
-          </Typography>
-
-          <Typography
-            component={motion.p}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            variant="body2"
-            color="text.secondary"
-            align="center"
-            sx={{ mb: 4 }}
-          >
-            共有された認証コードを入力してください
-          </Typography>
-
-          {error && (
+        <Card className="border-white/20 bg-card/95 shadow-elevation-8 backdrop-blur-md">
+          <CardContent className="p-8">
+            {/* アイコン */}
             <motion.div
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
+              className="mb-4 flex justify-center"
             >
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
+              <div className="flex size-20 items-center justify-center rounded-full bg-linear-to-br from-primary to-secondary shadow-elevation-4">
+                <LockKeyhole className="size-10 text-white" />
+              </div>
             </motion.div>
-          )}
 
-          <motion.form
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            onSubmit={(e) => {
-              void handleSubmit(e);
-            }}
-          >
-            <TextField
-              fullWidth
-              label="認証コード"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              margin="normal"
-              required
-              autoComplete="off"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  '&:hover fieldset': {
-                    borderColor: theme.palette.primary.main,
-                  },
-                },
-              }}
-            />
-            <Button
-              fullWidth
-              type="submit"
-              variant="contained"
-              size="large"
-              disabled={isVerifying}
-              component={motion.button}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              sx={{
-                mt: 3,
-                py: 1.5,
-                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                fontWeight: 600,
-                fontSize: '1rem',
-                textTransform: 'none',
-                boxShadow: theme.shadows[4],
-                '&:hover': {
-                  boxShadow: theme.shadows[8],
-                },
-              }}
+            <motion.h1
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.4 }}
+              className="text-center text-2xl font-bold"
             >
-              {isVerifying ? '認証中...' : '認証'}
-            </Button>
-          </motion.form>
-        </CardContent>
-      </Card>
-    </Box>
+              エンジニアスキルシート閲覧
+            </motion.h1>
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.5 }}
+              className="mb-6 mt-2 text-center text-sm text-muted-foreground"
+            >
+              共有された認証コードを入力してください
+            </motion.p>
+
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.3 }}
+                role="alert"
+                className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+              >
+                {error}
+              </motion.div>
+            )}
+
+            <motion.form
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.6 }}
+              onSubmit={(e) => {
+                void handleSubmit(e);
+              }}
+              className="space-y-4"
+            >
+              <div className="space-y-1.5">
+                <label htmlFor="auth-code" className="text-sm font-medium">
+                  認証コード
+                </label>
+                <Input
+                  id="auth-code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  required
+                  autoComplete="off"
+                />
+              </div>
+              <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={isVerifying}>
+                {isVerifying ? '認証中...' : '認証'}
+              </Button>
+            </motion.form>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </div>
   );
 };
 
