@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 
 import { motion } from 'framer-motion';
@@ -48,6 +48,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // 見出しIDのリストを作成
   const headingIds = headings.map((h) => h.id);
@@ -58,7 +59,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
     const extractHeadingsFromDOM = () => {
       // DOMが完全にレンダリングされるまで少し待つ
       setTimeout(() => {
-        const markdownContent = document.querySelector('.markdown-content');
+        const markdownContent = contentRef.current;
         if (!markdownContent) return;
 
         const headingElements = markdownContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
@@ -93,8 +94,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
   };
 
   const handleImageClick = (src: string) => {
-    // ドキュメント内のすべての画像を収集
-    const images = Array.from(document.querySelectorAll('.markdown-content img')).map((img) => ({
+    const images = Array.from((contentRef.current ?? document).querySelectorAll('img')).map((img) => ({
       src: (img as HTMLImageElement).src,
     }));
     setLightboxImages(images);
@@ -122,7 +122,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
         <div className="rounded-2xl border border-border bg-card p-4 shadow-elevation-2 sm:p-6 md:p-8">
           <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
 
-          <div className="markdown-content">
+          <div className="markdown-content" ref={contentRef}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
               rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA], rehypeSlug]}
