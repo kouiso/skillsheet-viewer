@@ -1,21 +1,17 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
-import { ThemeProvider, CssBaseline } from '@mui/material';
+import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
-import { ThemeModeProvider, useThemeMode } from './context/theme-context';
+import { ThemeModeProvider } from './context/theme-context';
 import Compare from './page/compare';
 import SheetsList from './page/sheets-list';
 import View from './page/view';
 import ViewerAuth from './page/viewer-auth';
-import { createAppTheme } from './theme/theme';
 
-const AppContent = () => {
-  const { mode } = useThemeMode();
-  const theme = createAppTheme(mode);
-
-  return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+const App = () => (
+  <ThemeModeProvider>
+    <TooltipProvider delayDuration={200}>
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Navigate to="/viewer-auth" replace />} />
@@ -25,13 +21,8 @@ const AppContent = () => {
           <Route path="/compare" element={<Compare />} />
         </Routes>
       </BrowserRouter>
-    </ThemeProvider>
-  );
-};
-
-const App = () => (
-  <ThemeModeProvider>
-    <AppContent />
+      <Toaster />
+    </TooltipProvider>
   </ThemeModeProvider>
 );
 

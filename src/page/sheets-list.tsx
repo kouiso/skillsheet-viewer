@@ -1,22 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import {
-  Box,
-  CircularProgress,
-  Typography,
-  TextField,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemButton,
-  Checkbox,
-  Button,
-  Paper,
-  InputAdornment,
-} from '@mui/material';
-import { Search, CompareArrows } from '@mui/icons-material';
+import { Loader2, Search, ArrowLeftRight } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import Header from '@/component/header';
 import { listSheets, AuthError } from '@/lib/github-client';
 import type { SheetMeta } from '@/lib/github-client';
@@ -49,8 +37,7 @@ const SheetsListPage = () => {
   }, [navigate]);
 
   const filtered = useMemo(
-    () =>
-      sheets.filter((s) => s.title.toLowerCase().includes(query.toLowerCase())),
+    () => sheets.filter((s) => s.title.toLowerCase().includes(query.toLowerCase())),
     [sheets, query],
   );
 
@@ -70,93 +57,77 @@ const SheetsListPage = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-10 animate-spin text-primary" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', flexDirection: 'column', gap: 2 }}>
-        <Typography variant="h5">エラー</Typography>
-        <Typography>{error}</Typography>
-      </Box>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
+        <h2 className="text-2xl font-bold">エラー</h2>
+        <p className="text-muted-foreground">{error}</p>
+      </div>
     );
   }
 
   return (
-    <Box>
+    <div>
       <Header title="スキルシート一覧" />
-      <Box sx={{ maxWidth: 800, mx: 'auto', p: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
-          <TextField
-            fullWidth
-            placeholder="シート名で検索..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search />
-                </InputAdornment>
-              ),
-            }}
-          />
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="シート名で検索..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
           {selected.length === 2 && (
-            <Button
-              variant="contained"
-              startIcon={<CompareArrows />}
-              onClick={handleCompare}
-              sx={{ whiteSpace: 'nowrap' }}
-            >
+            <Button onClick={handleCompare} className="shrink-0">
+              <ArrowLeftRight className="mr-2 size-4" />
               比較
             </Button>
           )}
-        </Box>
+        </div>
 
-        {selected.length > 0 && selected.length < 2 && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            比較するシートをもう1件選択してください
-          </Typography>
+        {selected.length === 1 && (
+          <p className="mb-3 text-sm text-muted-foreground">比較するシートをもう1件選択してください</p>
         )}
 
-        <Paper elevation={2}>
-          <List disablePadding>
-            {filtered.map((sheet, index) => (
-              <ListItem
-                key={sheet.path}
-                disablePadding
-                divider={index < filtered.length - 1}
-                secondaryAction={
-                  <Checkbox
-                    edge="end"
+        <div className="rounded-xl border border-border bg-card shadow-sm">
+          {filtered.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">シートが見つかりません</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {filtered.map((sheet) => (
+                <li key={sheet.path} className="flex items-center gap-2 px-4 py-3">
+                  <button
+                    type="button"
+                    className="flex-1 text-left"
+                    onClick={() => void navigate(`/view/${encodeURIComponent(sheet.path)}`)}
+                  >
+                    <p className="font-medium">{sheet.title}</p>
+                    <p className="text-xs text-muted-foreground">{sheet.path}</p>
+                  </button>
+                  <input
+                    type="checkbox"
+                    aria-label={`${sheet.title}を比較選択`}
                     checked={selected.includes(sheet.path)}
                     onChange={() => toggleSelect(sheet.path)}
                     disabled={!selected.includes(sheet.path) && selected.length >= 2}
-                    aria-label={`${sheet.title}を比較選択`}
+                    className="size-4 accent-primary"
                   />
-                }
-              >
-                <ListItemButton onClick={() => void navigate(`/view/${encodeURIComponent(sheet.path)}`)}>
-                  <ListItemText
-                    primary={sheet.title}
-                    secondary={sheet.path}
-                    primaryTypographyProps={{ fontWeight: 500 }}
-                    secondaryTypographyProps={{ fontSize: '0.75rem' }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            ))}
-            {filtered.length === 0 && (
-              <ListItem>
-                <ListItemText primary="シートが見つかりません" />
-              </ListItem>
-            )}
-          </List>
-        </Paper>
-      </Box>
-    </Box>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
