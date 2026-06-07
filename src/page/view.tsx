@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { fetchSkillSheet } from '@/lib/github-client';
+import { fetchSheet, AuthError } from '@/lib/github-client';
 
 interface SkillSheet {
   title: string;
@@ -14,6 +14,7 @@ interface SkillSheet {
 
 const ViewPage = () => {
   const navigate = useNavigate();
+  const { path } = useParams<{ path: string }>();
   const [skillSheet, setSkillSheet] = useState<SkillSheet | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,34 +24,33 @@ const ViewPage = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
-    // Check authentication
-    const isAuthenticated = sessionStorage.getItem('viewer-authenticated') === 'true';
-
-    if (!isAuthenticated) {
-      void navigate('/viewer-auth');
+    if (!path) {
+      void navigate('/view');
       return;
     }
 
-    // Fetch skill sheet
     const loadSkillSheet = async () => {
       try {
         setLoading(true);
-        const data = await fetchSkillSheet();
-        setSkillSheet({
-          title: 'エンジニアスキルシート',
-          content: data.content,
-        });
+        const data = await fetchSheet(path);
+        const firstHeading = data.content.match(/^#\s+(.+)$/m);
+        const title = firstHeading ? firstHeading[1].trim() : path.replace(/\.md$/, '');
+        setSkillSheet({ title, content: data.content });
         setError(null);
       } catch (err) {
+        if (err instanceof AuthError) {
+          void navigate('/viewer-auth');
+          return;
+        }
         console.error('Error fetching skill sheet:', err);
-        setError('エンジニアスキルシートの読み込みに失敗しました。');
+        setError('スキルシートの読み込みに失敗しました。');
       } finally {
         setLoading(false);
       }
     };
 
     void loadSkillSheet();
-  }, [navigate]);
+  }, [navigate, path]);
 
   const handleDownloadPdf = () => {
     if (!skillSheet) return;
@@ -61,7 +61,6 @@ const ViewPage = () => {
       setSnackbarSeverity('success');
       setSnackbarOpen(true);
 
-      // ブラウザの印刷機能を使用してPDF出力
       window.print();
 
       setSnackbarMessage('印刷ダイアログが開きました。PDFとして保存してください。');
@@ -120,10 +119,9 @@ const ViewPage = () => {
 
   return (
     <Box>
-      <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
+      <Header title={skillSheet.title} onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
       <SkillSheetViewer skillSheet={skillSheet} />
 
-      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbarOpen}
         autoHideDuration={4000}

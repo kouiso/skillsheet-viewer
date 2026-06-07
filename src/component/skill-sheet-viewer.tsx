@@ -25,11 +25,12 @@ interface SkillSheetViewerProps {
     title: string;
     content: string;
   };
+  compareMode?: boolean;
 }
 
 const SIDEBAR_WIDTH = 280;
 
-const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
+const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerProps) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -96,18 +97,20 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* 目次（左サイドバー） */}
-      {mounted && <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />}
+      {/* 目次（左サイドバー）— 比較モードでは非表示 */}
+      {mounted && !compareMode && (
+        <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />
+      )}
 
       {/* メインコンテンツ */}
       <Container
-        maxWidth="md"
+        maxWidth={compareMode ? false : 'md'}
         component={motion.div}
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         sx={{
-          ml: mounted && !isMobile ? `${SIDEBAR_WIDTH}px` : 0,
+          ml: mounted && !isMobile && !compareMode ? `${SIDEBAR_WIDTH}px` : 0,
           py: 4,
           flex: 1,
           transition: 'margin-left 0.3s ease',
@@ -258,6 +261,12 @@ const SkillSheetViewer = ({ skillSheet }: SkillSheetViewerProps) => {
                 border: 'none',
                 borderTop: `1px solid ${theme.palette.divider}`,
                 my: 3,
+              },
+              '@media print': {
+                '& h1, & h2': { pageBreakAfter: 'avoid' },
+                '& pre': { pageBreakInside: 'avoid' },
+                '& table': { pageBreakInside: 'avoid' },
+                '& img': { maxWidth: '100% !important' },
               },
             }}
           >
