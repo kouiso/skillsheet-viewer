@@ -21,18 +21,14 @@ const ViewerAuthPage = () => {
     setIsVerifying(true);
 
     try {
-      // Client-side authentication using environment variable
-      const validCode = import.meta.env.VITE_VIEWER_CODE;
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ code }),
+      });
 
-      if (!validCode) {
-        setError('認証システムの設定が不正です');
-        setIsVerifying(false);
-        return;
-      }
-
-      if (code === validCode) {
-        // Store authentication status in sessionStorage
-        sessionStorage.setItem('viewer-authenticated', 'true');
+      if (res.ok) {
         void navigate('/view');
       } else {
         setError('認証コードが正しくありません');
