@@ -13,17 +13,19 @@ tasks:
   init:
     desc: "初期セットアップ"
     cmds:
-      - npm install
+      - pnpm install
       - cp -n .env.example .env || true
       - echo "✅ Setup complete"
 
   up:
     desc: "開発サーバー起動"
     cmds:
-      - npm run dev
+      - pnpm dev
 
   healthcheck:
-    desc: "動作確認"
+    desc: "動作確認（型チェック・テスト・ビルド）"
     cmds:
-      - npm run build
+      - pnpm -r type-check
+      - pnpm -r --if-present test
+      - pnpm build
       - echo "✅ Health check passed"
