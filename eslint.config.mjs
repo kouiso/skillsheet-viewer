@@ -363,5 +363,15 @@ export default [
     },
   },
 
+  {
+    // shadcn/ui プリミティブは named export と variants の同居が慣例のため、該当ルールを無効化
+    name: 'shadcn-ui/override',
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'import/prefer-default-export': 'off',
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+
   eslintConfigPrettier,
 ];
