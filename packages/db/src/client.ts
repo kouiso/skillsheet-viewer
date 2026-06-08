@@ -20,11 +20,21 @@ export function createDb(databaseUrl: string) {
   return drizzle(neon(databaseUrl), { schema: { skillSheets, blocks } });
 }
 
-/** Returns a Drizzle client from `DATABASE_URL`, or throws if it is not configured. */
+let cachedDb: Database | null = null;
+
+/**
+ * Returns a Drizzle client from `DATABASE_URL`, or throws if it is not configured.
+ * The instance is cached at module scope to reuse it across warm serverless
+ * invocations (`DATABASE_URL` is fixed for the process lifetime).
+ */
 export function getDb(): Database {
+  if (cachedDb) {
+    return cachedDb;
+  }
   const url = process.env.DATABASE_URL;
   if (!url) {
     throw new Error('DATABASE_URL is not set');
   }
-  return createDb(url);
+  cachedDb = createDb(url);
+  return cachedDb;
 }
