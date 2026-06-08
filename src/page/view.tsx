@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { Box, CircularProgress, Typography, Snackbar, Alert } from '@mui/material';
+import { Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { fetchSkillSheet } from '@/lib/github-client';
+import { fetchSkillSheet } from '@/lib/skillsheet-client';
 
 interface SkillSheet {
   title: string;
@@ -21,9 +22,6 @@ const ViewPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
 
   useEffect(() => {
     // Check authentication
@@ -82,53 +80,29 @@ const ViewPage = () => {
         URL.revokeObjectURL(url);
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
-      setSnackbarMessage('PDFをダウンロードしました');
-      setSnackbarSeverity('success');
-      setSnackbarOpen(true);
+      toast.success('PDFをダウンロードしました');
     } catch (err) {
       console.error('Error generating PDF:', err);
-      setSnackbarMessage('PDFの生成に失敗しました');
-      setSnackbarSeverity('error');
-      setSnackbarOpen(true);
+      toast.error('PDFの生成に失敗しました');
     } finally {
       setPdfLoading(false);
     }
   };
 
-  const handleSnackbarClose = () => {
-    setSnackbarOpen(false);
-  };
-
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-        }}
-      >
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="size-10 animate-spin text-primary" />
+      </div>
     );
   }
 
   if (error) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100vh',
-          flexDirection: 'column',
-          gap: 2,
-        }}
-      >
-        <Typography variant="h4">エラー</Typography>
-        <Typography variant="body1">{error}</Typography>
-      </Box>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
+        <h2 className="text-2xl font-bold">エラー</h2>
+        <p className="text-muted-foreground">{error}</p>
+      </div>
     );
   }
 
@@ -137,22 +111,10 @@ const ViewPage = () => {
   }
 
   return (
-    <Box>
+    <div>
       <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
       <SkillSheetViewer skillSheet={skillSheet} />
-
-      {/* Snackbar for notifications */}
-      <Snackbar
-        open={snackbarOpen}
-        autoHideDuration={4000}
-        onClose={handleSnackbarClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
-          {snackbarMessage}
-        </Alert>
-      </Snackbar>
-    </Box>
+    </div>
   );
 };
 
