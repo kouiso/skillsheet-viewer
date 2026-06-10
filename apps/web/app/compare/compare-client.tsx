@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { AuthError, fetchSheet } from '@/lib/skillsheet-client';
+import { fetchSheet } from '@/lib/skillsheet-client';
 
 interface Sheet {
   title: string;
@@ -36,11 +36,7 @@ const CompareClient = () => {
         const [dataA, dataB] = await Promise.all([fetchSheet(pathA), fetchSheet(pathB)]);
         setSheetA({ title: dataA.title, content: dataA.content });
         setSheetB({ title: dataB.title, content: dataB.content });
-      } catch (err) {
-        if (err instanceof AuthError) {
-          router.push('/viewer-auth');
-          return;
-        }
+      } catch {
         setError('シートの読み込みに失敗しました。');
       } finally {
         setLoading(false);
