@@ -1,92 +1,58 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { ArrowLeftRight, Loader2, Search } from 'lucide-react';
 
 import Header from '@/component/header';
-import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { fetchSkillSheet } from '@/lib/skillsheet-client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { AuthError, listSheets, type SheetMeta } from '@/lib/skillsheet-client';
 
-interface SkillSheet {
-  title: string;
-  content: string;
-}
-
-// オブジェクト URL の解放を遅延させる時間（ms）
-const REVOKE_OBJECT_URL_DELAY_MS = 100;
-
-const ViewPage = () => {
+const SheetsListPage = () => {
   const router = useRouter();
-  const [skillSheet, setSkillSheet] = useState<SkillSheet | null>(null);
+  const [sheets, setSheets] = useState<SheetMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
 
   useEffect(() => {
-    // 認証チェック
-    const isAuthenticated = sessionStorage.getItem('viewer-authenticated') === 'true';
-
-    if (!isAuthenticated) {
-      router.push('/viewer-auth');
-      return;
-    }
-
-    // スキルシート取得
-    const loadSkillSheet = async () => {
+    const load = async () => {
       try {
-        setLoading(true);
-        const viewerCode = sessionStorage.getItem('viewer-code') ?? undefined;
-        const data = await fetchSkillSheet(viewerCode);
-        setSkillSheet({ title: data.title, content: data.content });
-        setError(null);
+        const data = await listSheets();
+        setSheets(data);
       } catch (err) {
-        console.error('Error fetching skill sheet:', err);
-        setError('エンジニアスキルシートの読み込みに失敗しました。');
+        if (err instanceof AuthError) {
+          router.push('/viewer-auth');
+          return;
+        }
+        setError('シート一覧の取得に失敗しました。');
       } finally {
         setLoading(false);
       }
     };
 
-    void loadSkillSheet();
+    void load();
   }, [router]);
 
-  const handleDownloadPdf = async () => {
-    if (!skillSheet) return;
+  const filtered = useMemo(
+    () => sheets.filter((sheet) => sheet.title.toLowerCase().includes(query.toLowerCase())),
+    [sheets, query],
+  );
 
-    try {
-      setPdfLoading(true);
+  const toggleSelect = (path: string) => {
+    setSelected((prev) => {
+      if (prev.includes(path)) return prev.filter((p) => p !== path);
+      if (prev.length >= 2) return prev;
+      return [...prev, path];
+    });
+  };
 
-      // @react-pdf/renderer はサイズが大きいため、ボタン押下時に動的 import して初期バンドルから分離する
-      const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('@/component/pdf-export'),
-      ]);
-
-      const blob = await pdf(<SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />).toBlob();
-
-      // 生成した PDF をワンクリックでダウンロード（印刷ダイアログは使わない）
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'エンジニアスキルシート.pdf';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      // 一部ブラウザでは click 直後の同期 revoke でダウンロードが失敗するため少し遅延させる
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, REVOKE_OBJECT_URL_DELAY_MS);
-
-      toast.success('PDFをダウンロードしました');
-    } catch (err) {
-      console.error('Error generating PDF:', err);
-      toast.error('PDFの生成に失敗しました');
-    } finally {
-      setPdfLoading(false);
-    }
+  const handleCompare = () => {
+    if (selected.length !== 2) return;
+    router.push(`/compare?a=${encodeURIComponent(selected[0])}&b=${encodeURIComponent(selected[1])}`);
   };
 
   if (loading) {
@@ -106,16 +72,63 @@ const ViewPage = () => {
     );
   }
 
-  if (!skillSheet) {
-    return null;
-  }
-
   return (
     <div>
-      <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
-      <SkillSheetViewer skillSheet={skillSheet} />
+      <Header title="スキルシート一覧" />
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+        <div className="mb-4 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="シート名で検索..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          {selected.length === 2 && (
+            <Button onClick={handleCompare} className="shrink-0">
+              <ArrowLeftRight className="mr-2 size-4" />
+              比較
+            </Button>
+          )}
+        </div>
+
+        {selected.length === 1 && (
+          <p className="mb-3 text-sm text-muted-foreground">比較するシートをもう1件選択してください</p>
+        )}
+
+        <div className="rounded-lg border border-border bg-card shadow-sm">
+          {filtered.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">シートが見つかりません</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {filtered.map((sheet) => (
+                <li key={sheet.path} className="flex items-center gap-2 px-4 py-3">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => router.push(`/view/${encodeURIComponent(sheet.path)}`)}
+                  >
+                    <p className="truncate font-medium">{sheet.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">{sheet.path}</p>
+                  </button>
+                  <input
+                    type="checkbox"
+                    aria-label={`${sheet.title}を比較選択`}
+                    checked={selected.includes(sheet.path)}
+                    onChange={() => toggleSelect(sheet.path)}
+                    disabled={!selected.includes(sheet.path) && selected.length >= 2}
+                    className="size-4 shrink-0 accent-primary"
+                  />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
 
-export default ViewPage;
+export default SheetsListPage;
