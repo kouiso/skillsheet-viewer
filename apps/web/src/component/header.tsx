@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 
 import { motion } from 'framer-motion';
-import { FileText, FileDown, LogOut, Moon, Sun } from 'lucide-react';
+import { FileDown, FileText, LogOut, Moon, Sun } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -20,9 +20,9 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
   const router = useRouter();
 
   const handleLogout = () => {
-    sessionStorage.removeItem('viewer-authenticated');
-    sessionStorage.removeItem('viewer-code');
-    router.push('/viewer-auth');
+    void fetch('/api/logout', { method: 'POST', credentials: 'include' }).finally(() => {
+      router.push('/viewer-auth');
+    });
   };
 
   return (
