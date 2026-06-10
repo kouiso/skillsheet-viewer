@@ -1,27 +1,49 @@
 /**
  * スキルシート取得クライアント（ブラウザ側）。
  *
- * 正本は NeonDB。Route Handler `/api/skillsheet` がサーバ側で DB 読み取り＋
- * （DB 未設定/失敗時は）GitHub ソースへのフォールバックまで担う。GitHub トークンは
- * サーバ側のみで扱い、ブラウザには一切露出しない。
- *
- * 閲覧コードは sessionStorage 経由で受け取り、`x-viewer-code` ヘッダでサーバ認可を通す。
+ * 認証は HttpOnly session cookie を使うため、閲覧コードは保存しない。
+ * GitHub トークンや DB 接続情報は Route Handler のサーバ側だけで扱う。
  */
+export class AuthError extends Error {
+  constructor() {
+    super('Unauthorized');
+    this.name = 'AuthError';
+  }
+}
+
+export interface SheetMeta {
+  path: string;
+  title: string;
+  sha: string;
+}
+
 export interface SkillSheetContent {
   title: string;
   content: string;
+  sha?: string;
+  lastModified?: string;
 }
 
-export async function fetchSkillSheet(viewerCode?: string): Promise<SkillSheetContent> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
-  if (viewerCode) headers['x-viewer-code'] = viewerCode;
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
 
-  const res = await fetch('/api/skillsheet', { headers });
-  if (!res.ok) throw new Error(`/api/skillsheet returned ${res.status}`);
+  if (res.status === 401) throw new AuthError();
+  if (!res.ok) throw new Error(`${url} returned ${res.status}`);
+  return (await res.json()) as T;
+}
 
-  const data = (await res.json()) as { title?: string; content?: string };
+export async function listSheets(): Promise<SheetMeta[]> {
+  return fetchJson<SheetMeta[]>('/api/sheets');
+}
+
+export async function fetchSheet(path: string): Promise<SkillSheetContent> {
+  const params = new URLSearchParams({ path });
+  const data = await fetchJson<SkillSheetContent>(`/api/sheets/content?${params.toString()}`);
   if (typeof data.content !== 'string' || data.content.length === 0) {
-    throw new Error('/api/skillsheet returned empty content');
+    throw new Error('/api/sheets/content returned empty content');
   }
-  return { title: data.title ?? 'エンジニアスキルシート', content: data.content };
+  return data;
 }

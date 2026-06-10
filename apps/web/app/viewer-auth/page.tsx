@@ -1,4 +1,3 @@
-/* eslint-disable no-magic-numbers -- framer-motion のアニメーションチューニング値（duration/delay/scale 等）のため */
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -23,15 +22,14 @@ const ViewerAuthPage = () => {
     setIsVerifying(true);
 
     try {
-      // サーバ側で閲覧コードを検証する（コードをブラウザに露出しない）。
-      // 認可が通れば 200、不正なら 401。VIEWER_CODE 未設定の環境では常に 200（ゲート無効）。
-      const res = await fetch('/api/skillsheet', {
-        headers: { Accept: 'application/json', 'x-viewer-code': code },
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ code }),
       });
 
       if (res.ok) {
-        sessionStorage.setItem('viewer-authenticated', 'true');
-        sessionStorage.setItem('viewer-code', code);
         router.push('/view');
         return;
       }
@@ -41,9 +39,9 @@ const ViewerAuthPage = () => {
       } else {
         setError('認証に失敗しました。もう一度お試しください。');
       }
-      setIsVerifying(false);
     } catch {
       setError('認証に失敗しました。もう一度お試しください。');
+    } finally {
       setIsVerifying(false);
     }
   };
