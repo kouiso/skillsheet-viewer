@@ -18,7 +18,8 @@ export default async function SheetsListPage() {
   let sheets: Awaited<ReturnType<typeof listSheets>>;
   try {
     sheets = await getCachedSheets();
-  } catch {
+  } catch (err) {
+    console.error('Failed to fetch sheets:', err);
     sheets = [];
   }
   return <SheetsListClient initialSheets={sheets} />;
