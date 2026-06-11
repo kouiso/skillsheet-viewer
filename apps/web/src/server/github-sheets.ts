@@ -25,6 +25,14 @@ interface GitHubFileContent {
   sha: string;
 }
 
+/** GitHub 上に対象ファイルが存在しない（404）ことを表す。システムエラーと区別するために使う。 */
+export class SheetNotFoundError extends Error {
+  constructor(path: string) {
+    super(`Sheet not found: ${path}`);
+    this.name = 'SheetNotFoundError';
+  }
+}
+
 function getConfig() {
   const token = process.env.GITHUB_TOKEN ?? process.env.VITE_GITHUB_TOKEN;
   const owner = process.env.GITHUB_OWNER ?? process.env.VITE_GITHUB_OWNER;
@@ -52,7 +60,9 @@ function decodeBase64Content(base64: string): string {
 
 export function isValidSheetPath(path: string): boolean {
   if (path.includes('..') || path.startsWith('/') || path.includes('\0')) return false;
-  return /^[\w.-]+\.md$/u.test(path);
+  // \w は /u でも ASCII 限定のため、Unicode 文字プロパティで日本語ファイル名（例: 技術スキルシート.md）も許容する。
+  // ディレクトリ区切り（/）は許可しないので、フラットな .md ファイル名のみが通る。
+  return /^[\p{L}\p{N}_.-]+\.md$/u.test(path);
 }
 
 export async function listSheets(): Promise<SheetMeta[]> {
@@ -81,6 +91,7 @@ export async function fetchSheetFile(path: string): Promise<SheetContent> {
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodedPath}?ref=${branch}`;
 
   const res = await fetch(url, { headers: githubHeaders(token) });
+  if (res.status === 404) throw new SheetNotFoundError(path);
   if (!res.ok) throw new Error(`GitHub API error fetching file: ${res.status}`);
 
   const data = (await res.json()) as GitHubFileContent;
