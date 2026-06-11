@@ -1,7 +1,7 @@
 import { type Metadata } from 'next';
-import { unstable_cache } from 'next/cache';
 
-import { listSheets } from '@/server/github-sheets';
+import { type SheetMeta } from '@/server/github-sheets';
+import { getCachedSheets } from '@/server/sheets-cache';
 
 import SheetsListClient from './sheets-list-client';
 
@@ -9,13 +9,8 @@ export const metadata: Metadata = {
   title: 'スキルシート一覧 | エンジニアスキルシート',
 };
 
-const getCachedSheets = unstable_cache(async () => listSheets(), ['sheets-list'], {
-  tags: ['sheets'],
-  revalidate: 3600,
-});
-
 export default async function SheetsListPage() {
-  let sheets: Awaited<ReturnType<typeof listSheets>>;
+  let sheets: SheetMeta[];
   try {
     sheets = await getCachedSheets();
   } catch (err) {
