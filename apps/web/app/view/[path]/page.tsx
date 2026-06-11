@@ -1,117 +1,45 @@
-'use client';
+import { type Metadata } from 'next';
+import { notFound } from 'next/navigation';
 
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';
+import { getCachedSheet } from '@/server/sheets-cache';
 
-import { Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
+import SheetViewClient from './sheet-view-client';
 
-import Header from '@/component/header';
-import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { AuthError, fetchSheet } from '@/lib/skillsheet-client';
-
-interface SkillSheet {
-  title: string;
-  content: string;
+interface PageProps {
+  params: Promise<{ path: string }>;
 }
 
-const REVOKE_OBJECT_URL_DELAY_MS = 100;
-
-const SheetViewPage = () => {
-  const router = useRouter();
-  const params = useParams<{ path?: string | string[] }>();
-  const rawPath = params.path;
-  const path = Array.isArray(rawPath) ? rawPath[0] : rawPath;
-  const [skillSheet, setSkillSheet] = useState<SkillSheet | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
-
-  useEffect(() => {
-    if (!path) {
-      router.push('/view');
-      return;
-    }
-
-    const loadSkillSheet = async () => {
-      try {
-        setLoading(true);
-        const data = await fetchSheet(path);
-        setSkillSheet({ title: data.title, content: data.content });
-        setError(null);
-      } catch (err) {
-        if (err instanceof AuthError) {
-          router.push('/viewer-auth');
-          return;
-        }
-        console.error('Error fetching skill sheet:', err);
-        setError('スキルシートの読み込みに失敗しました。');
-      } finally {
-        setLoading(false);
-      }
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  // App Router の params は既にデコード済み（再 decodeURIComponent は % を含む名前で URIError を招く）。
+  const { path } = await params;
+  if (!isValidSheetPath(path)) return {};
+  try {
+    const sheet = await getCachedSheet(path);
+    return {
+      title: `${sheet.title} | エンジニアスキルシート`,
+      openGraph: { title: sheet.title, type: 'profile' },
     };
+  } catch {
+    // メタデータ生成失敗はページ描画を妨げない。詳細ログは下のページ本体で出す。
+    return {};
+  }
+}
 
-    void loadSkillSheet();
-  }, [router, path]);
+export default async function SheetViewPage({ params }: PageProps) {
+  const { path } = await params;
+  if (!isValidSheetPath(path)) notFound();
 
-  const handleDownloadPdf = async () => {
-    if (!skillSheet) return;
-
-    try {
-      setPdfLoading(true);
-
-      const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('@/component/pdf-export'),
-      ]);
-
-      const blob = await pdf(<SkillSheetPDF title={skillSheet.title} content={skillSheet.content} />).toBlob();
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${skillSheet.title}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, REVOKE_OBJECT_URL_DELAY_MS);
-
-      toast.success('PDFをダウンロードしました');
-    } catch (err) {
-      console.error('Error generating PDF:', err);
-      toast.error('PDFの生成に失敗しました');
-    } finally {
-      setPdfLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="size-10 animate-spin text-primary" />
-      </div>
-    );
+  let sheet: Awaited<ReturnType<typeof getCachedSheet>>;
+  try {
+    sheet = await getCachedSheet(path);
+  } catch (err) {
+    // ファイル不在のみ 404。レートリミットやネットワーク等のシステムエラーは
+    // error.tsx / 監視ツールに委ねるため再スローする。
+    if (err instanceof SheetNotFoundError) notFound();
+    console.error('Failed to load sheet:', path, err);
+    throw err;
   }
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-2 px-4 text-center">
-        <h2 className="text-2xl font-bold">エラー</h2>
-        <p className="text-muted-foreground">{error}</p>
-      </div>
-    );
-  }
-
-  if (!skillSheet) return null;
-
-  return (
-    <div>
-      <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
-      <SkillSheetViewer skillSheet={skillSheet} />
-    </div>
-  );
-};
-
-export default SheetViewPage;
+  return <SheetViewClient title={sheet.title} content={sheet.content} />;
+}
