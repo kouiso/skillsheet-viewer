@@ -12,9 +12,10 @@ import { type SheetMeta } from '@/server/github-sheets';
 
 interface SheetsListClientProps {
   initialSheets: SheetMeta[];
+  hasError?: boolean;
 }
 
-const SheetsListClient = ({ initialSheets }: SheetsListClientProps) => {
+const SheetsListClient = ({ initialSheets, hasError = false }: SheetsListClientProps) => {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
@@ -64,7 +65,11 @@ const SheetsListClient = ({ initialSheets }: SheetsListClientProps) => {
         )}
 
         <div className="rounded-lg border border-border bg-card shadow-sm">
-          {filtered.length === 0 ? (
+          {hasError ? (
+            <p className="px-4 py-6 text-center text-sm text-destructive">
+              一覧の取得に失敗しました。時間をおいて再度お試しください。
+            </p>
+          ) : filtered.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">シートが見つかりません</p>
           ) : (
             <ul className="divide-y divide-border">
