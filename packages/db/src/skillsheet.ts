@@ -7,7 +7,7 @@
  *
  * Server-only. Never import this from a Client Component.
  */
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 
 import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks';
 import { type Database, getDb } from './client';
@@ -112,4 +112,27 @@ export async function getSkillSheet(): Promise<SkillSheet> {
   return { title: TITLE, content: blocksToMarkdown(blockList), blocks: blockList };
 }
 
-export { OWNER_ID, TITLE };
+/**
+ * Replace the owner's sheet blocks with the given ordered markdown segments
+ * (D&D builder save path). Empty/whitespace-only segments are dropped.
+ *
+ * neon-http has no interactive transactions, so this does delete-all then
+ * insert; for a single-owner builder the brief window is acceptable and the
+ * (sheet_id, order) unique constraint is never violated because we clear first.
+ */
+export async function saveSkillSheetBlocks(markdowns: string[]): Promise<void> {
+  const db = getDb()
+  const sheetId = await getOrCreateSheetId(db)
+
+  const cleaned = markdowns.map((m) => m.trimEnd()).filter((m) => m.trim().length > 0)
+
+  await db.delete(blocks).where(eq(blocks.sheetId, sheetId))
+  if (cleaned.length > 0) {
+    await db
+      .insert(blocks)
+      .values(cleaned.map((markdown, order) => ({ sheetId, type: 'markdown' as const, order, data: { markdown } })))
+  }
+  await db.update(skillSheets).set({ updatedAt: sql`now()` }).where(eq(skillSheets.id, sheetId))
+}
+
+export { OWNER_ID, TITLE }

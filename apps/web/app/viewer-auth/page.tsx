@@ -30,7 +30,10 @@ const ViewerAuthPage = () => {
       });
 
       if (res.ok) {
-        router.push('/view');
+        // 認証後の遷移先。?next= が内部パスのときのみ許可（オープンリダイレクト防止）。
+        const next = new URLSearchParams(window.location.search).get('next');
+        const dest = next && next.startsWith('/') && !next.startsWith('//') ? next : '/view';
+        router.push(dest);
         return;
       }
 
