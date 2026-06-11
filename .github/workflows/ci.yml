@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Node (${{ matrix.check-type }})
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    strategy:
+      fail-fast: false
+      matrix:
+        check-type: [lint, typecheck, test, build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        if: matrix.check-type == 'lint'
+        run: pnpm run lint
+
+      - name: Typecheck
+        if: matrix.check-type == 'typecheck'
+        run: pnpm run type-check
+
+      - name: Test
+        if: matrix.check-type == 'test'
+        run: pnpm run test
+
+      - name: Build
+        if: matrix.check-type == 'build'
+        run: pnpm run build
