@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 
 import {
   DndContext,
@@ -94,8 +94,10 @@ const SortableBlock = ({
 };
 
 const BuilderClient = ({ initialMarkdowns }: BuilderClientProps) => {
+  // 初期ブロックの ID は SSR/CSR で一致させるためインデックス基準の安定値にする
+  // （newId() は乱数/時刻依存でハイドレーション不整合を起こす）。追加ブロックのみ newId()。
   const [items, setItems] = useState<BlockItem[]>(() =>
-    initialMarkdowns.map((markdown) => ({ id: newId(), markdown })),
+    initialMarkdowns.map((markdown, index) => ({ id: `block-${index}`, markdown })),
   );
   const [showPreview, setShowPreview] = useState(true);
   const [isSaving, startSaving] = useTransition();
@@ -106,7 +108,16 @@ const BuilderClient = ({ initialMarkdowns }: BuilderClientProps) => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const previewContent = useMemo(() => items.map((i) => i.markdown).join('\n'), [items]);
+  // プレビューは重い（Markdown パース＋ハイライト）ため、入力のたびではなく
+  // 300ms デバウンスして更新し、タイピングのラグを防ぐ。初期値は即時反映。
+  const [previewContent, setPreviewContent] = useState(() => items.map((i) => i.markdown).join('\n'));
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setPreviewContent(items.map((i) => i.markdown).join('\n'));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [items]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
