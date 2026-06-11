@@ -1,9 +1,7 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-
 import { motion } from 'framer-motion';
-import { FileDown, FileText, LogOut, Moon, Sun } from 'lucide-react';
+import { FileDown, FileText, Moon, Sun } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,13 +15,6 @@ interface HeaderProps {
 
 const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pdfLoading = false }: HeaderProps) => {
   const { mode, toggleTheme } = useThemeMode();
-  const router = useRouter();
-
-  const handleLogout = () => {
-    void fetch('/api/logout', { method: 'POST', credentials: 'include' }).finally(() => {
-      router.push('/viewer-auth');
-    });
-  };
 
   return (
     <motion.header
@@ -65,15 +56,6 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
               </Button>
             </TooltipTrigger>
             <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
-          </Tooltip>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="ログアウト">
-                <LogOut />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>ログアウト</TooltipContent>
           </Tooltip>
         </div>
       </div>
