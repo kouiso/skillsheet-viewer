@@ -12,8 +12,15 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from './session';
  */
 export async function isEditor(): Promise<boolean> {
   // 1. Better Auth セッション確認
-  const session = await getAuth().api.getSession({ headers: await headers() });
-  if (session?.user) return true;
+  //    BETTER_AUTH_SECRET 未設定など Better Auth が未構成/エラーの場合でも、
+  //    HMAC フォールバックで認可できるよう例外を握りつぶして降格する
+  //    （Better Auth 単体の不調で /builder 全体が 500 になるのを防ぐ）。
+  try {
+    const session = await getAuth().api.getSession({ headers: await headers() });
+    if (session?.user) return true;
+  } catch (err) {
+    console.error('Better Auth session check failed; falling back to HMAC session:', err);
+  }
 
   // 2. フォールバック: 従来の HMAC セッション cookie
   const store = await cookies();
