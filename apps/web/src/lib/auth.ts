@@ -13,31 +13,36 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 import { createDb } from '@skillsheet/db';
 
-let _instance: ReturnType<typeof betterAuth> | undefined;
-
 // Lazy singleton — DATABASE_URL is only available at request time (Vercel runtime),
 // not during `next build` static analysis.
-export function getAuth(): ReturnType<typeof betterAuth> {
-  if (!_instance) {
-    const url = process.env.DATABASE_URL;
-    if (!url) throw new Error('DATABASE_URL is not set');
-    _instance = betterAuth({
-      secret: process.env.BETTER_AUTH_SECRET,
-      baseURL: process.env.BETTER_AUTH_URL,
-      database: drizzleAdapter(createDb(url), {
-        provider: 'pg',
-      }),
-      emailAndPassword: {
+// Use a helper function so TypeScript infers the concrete return type correctly.
+function createAuth() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error('DATABASE_URL is not set');
+  return betterAuth({
+    secret: process.env.BETTER_AUTH_SECRET,
+    baseURL: process.env.BETTER_AUTH_URL,
+    database: drizzleAdapter(createDb(url), {
+      provider: 'pg',
+    }),
+    emailAndPassword: {
+      enabled: true,
+      requireEmailVerification: false,
+    },
+    session: {
+      cookieCache: {
         enabled: true,
-        requireEmailVerification: false,
+        maxAge: 60 * 60 * 24 * 7,
       },
-      session: {
-        cookieCache: {
-          enabled: true,
-          maxAge: 60 * 60 * 24 * 7,
-        },
-      },
-    });
+    },
+  });
+}
+
+let _instance: ReturnType<typeof createAuth> | undefined;
+
+export function getAuth(): ReturnType<typeof createAuth> {
+  if (!_instance) {
+    _instance = createAuth();
   }
   return _instance;
 }
