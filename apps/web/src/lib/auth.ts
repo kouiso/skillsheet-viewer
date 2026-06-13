@@ -13,26 +13,31 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 import { createDb } from '@skillsheet/db';
 
-function getAuthDb() {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error('DATABASE_URL is not set');
-  return createDb(url);
-}
+let _instance: ReturnType<typeof betterAuth> | undefined;
 
-export const auth = betterAuth({
-  secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.BETTER_AUTH_URL,
-  database: drizzleAdapter(getAuthDb(), {
-    provider: 'pg',
-  }),
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false,
-  },
-  session: {
-    cookieCache: {
-      enabled: true,
-      maxAge: 60 * 60 * 24 * 7,
-    },
-  },
-});
+// Lazy singleton — DATABASE_URL is only available at request time (Vercel runtime),
+// not during `next build` static analysis.
+export function getAuth(): ReturnType<typeof betterAuth> {
+  if (!_instance) {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error('DATABASE_URL is not set');
+    _instance = betterAuth({
+      secret: process.env.BETTER_AUTH_SECRET,
+      baseURL: process.env.BETTER_AUTH_URL,
+      database: drizzleAdapter(createDb(url), {
+        provider: 'pg',
+      }),
+      emailAndPassword: {
+        enabled: true,
+        requireEmailVerification: false,
+      },
+      session: {
+        cookieCache: {
+          enabled: true,
+          maxAge: 60 * 60 * 24 * 7,
+        },
+      },
+    });
+  }
+  return _instance;
+}

@@ -1,7 +1,7 @@
 import { headers } from 'next/headers';
 import { cookies } from 'next/headers';
 
-import { auth } from '@/lib/auth';
+import { getAuth } from '@/lib/auth';
 import { SESSION_COOKIE_NAME, verifySessionToken } from './session';
 
 /**
@@ -13,7 +13,7 @@ import { SESSION_COOKIE_NAME, verifySessionToken } from './session';
  */
 export async function isEditor(): Promise<boolean> {
   // 1. Better Auth セッション確認
-  const session = await auth.api.getSession({ headers: await headers() });
+  const session = await getAuth().api.getSession({ headers: await headers() });
   if (session?.user) return true;
 
   // 2. フォールバック: 従来の HMAC セッション cookie
