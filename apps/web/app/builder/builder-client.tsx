@@ -1,14 +1,11 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useRef, useState, useTransition } from 'react';
-
 import {
+  closestCenter,
   DndContext,
   type DragEndEvent,
   KeyboardSensor,
   PointerSensor,
-  closestCenter,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -20,6 +17,8 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Eye, EyeOff, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
@@ -59,11 +58,7 @@ const SortableBlock = ({
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex gap-2 rounded-lg border border-border bg-card p-3 shadow-sm"
-    >
+    <div ref={setNodeRef} style={style} className="flex gap-2 rounded-lg border border-border bg-card p-3 shadow-sm">
       <button
         type="button"
         className="mt-1 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
@@ -203,9 +198,7 @@ const BuilderClient = ({ initialMarkdowns }: BuilderClientProps) => {
         {/* ライブプレビュー */}
         {showPreview && (
           <div className="rounded-lg border border-border bg-card">
-            <div className="border-b border-border px-4 py-2 text-sm font-medium text-muted-foreground">
-              プレビュー
-            </div>
+            <div className="border-b border-border px-4 py-2 text-sm font-medium text-muted-foreground">プレビュー</div>
             <SkillSheetViewer skillSheet={{ title: 'プレビュー', content: previewContent }} compareMode />
           </div>
         )}

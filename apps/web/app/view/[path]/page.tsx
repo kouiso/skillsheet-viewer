@@ -1,4 +1,4 @@
-import { type Metadata } from 'next';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';

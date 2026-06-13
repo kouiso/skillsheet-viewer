@@ -122,20 +122,20 @@ export async function getSkillSheet(): Promise<SkillSheet> {
  * transaction() はサポートされる。
  */
 export async function saveSkillSheetBlocks(markdowns: string[]): Promise<void> {
-  const db = getDb()
-  const sheetId = await getOrCreateSheetId(db)
+  const db = getDb();
+  const sheetId = await getOrCreateSheetId(db);
 
-  const cleaned = markdowns.map((m) => m.trimEnd()).filter((m) => m.trim().length > 0)
+  const cleaned = markdowns.map((m) => m.trimEnd()).filter((m) => m.trim().length > 0);
 
   await db.transaction(async (tx) => {
-    await tx.delete(blocks).where(eq(blocks.sheetId, sheetId))
+    await tx.delete(blocks).where(eq(blocks.sheetId, sheetId));
     if (cleaned.length > 0) {
       await tx
         .insert(blocks)
-        .values(cleaned.map((markdown, order) => ({ sheetId, type: 'markdown' as const, order, data: { markdown } })))
+        .values(cleaned.map((markdown, order) => ({ sheetId, type: 'markdown' as const, order, data: { markdown } })));
     }
-    await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(eq(skillSheets.id, sheetId))
-  })
+    await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(eq(skillSheets.id, sheetId));
+  });
 }
 
-export { OWNER_ID, TITLE }
+export { OWNER_ID, TITLE };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * スクロール位置に基づいて現在アクティブな見出しIDを追跡するフック

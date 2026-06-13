@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
-
 import { Document, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import type { ReactNode } from 'react';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';

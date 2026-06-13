@@ -17,17 +17,22 @@
     "dev": "pnpm --filter @skillsheet/web dev",
     "build": "pnpm --filter @skillsheet/web build",
     "start": "pnpm --filter @skillsheet/web start",
-    "lint": "pnpm -r lint",
+    "lint": "biome check .",
+    "format": "biome format --write .",
     "type-check": "pnpm -r type-check",
     "test": "pnpm -r --if-present test",
     "db:generate": "pnpm --filter @skillsheet/db db:generate",
     "db:migrate": "pnpm --filter @skillsheet/db db:migrate"
   },
   "devDependencies": {
-    "prettier": "^3.3.3",
+    "@biomejs/biome": "^2.5.0",
     "typescript": "^5.7.3"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
   }
 }

@@ -1,9 +1,8 @@
 'use client';
 
+import { motion } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
-
-import { motion } from 'framer-motion';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
@@ -82,7 +81,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
 
     // 初回とcontent変更時にDOMから見出しを抽出
     extractHeadingsFromDOM();
-  }, [skillSheet.content]);
+  }, []);
 
   const scrollToHeading = (id: string) => {
     // IDにCSS特殊文字が含まれる可能性があるため、querySelector ではなく getElementById を使用
@@ -152,8 +151,6 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
                           handleImageClick(src);
                         }
                       }}
-                      role="button"
-                      tabIndex={0}
                     />
                   );
                 },

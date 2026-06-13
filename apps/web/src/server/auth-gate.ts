@@ -1,16 +1,21 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
+import { getAuth } from '@/lib/auth';
 import { SESSION_COOKIE_NAME, verifySessionToken } from './session';
 
 /**
  * 編集者（オーナー）認可の単一チェックポイント（DAL）。
- * 公開閲覧は誰でも可だが、ビルダーでの編集・保存はセッション cookie を要求する。
- * proxy/middleware ではなくサーバー側のこの関数で都度検証する（多層防御・CVE-2025-29927 回避）。
+ * Better Auth セッションを優先し、フォールバックとして既存 HMAC トークンも受け付ける。
  *
- * 当面は閲覧コード（VIEWER_CODE）で発行したセッションを編集ゲートに流用する
- * （プラン「まず自分専用」）。Phase 3 で Better Auth に置き換える。
+ * - Better Auth: /api/auth/[...all] 経由でサインインした場合
+ * - HMAC: 従来の /api/auth POST + VIEWER_CODE 経由（後方互換）
  */
 export async function isEditor(): Promise<boolean> {
+  // 1. Better Auth セッション確認
+  const session = await getAuth().api.getSession({ headers: await headers() });
+  if (session?.user) return true;
+
+  // 2. フォールバック: 従来の HMAC セッション cookie
   const store = await cookies();
   return verifySessionToken(store.get(SESSION_COOKIE_NAME)?.value);
 }

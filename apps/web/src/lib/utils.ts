@@ -1,4 +1,4 @@
-import { clsx, type ClassValue } from 'clsx';
+import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
 /** Tailwind クラスを条件付き結合＋競合解決するヘルパー（shadcn 標準） */

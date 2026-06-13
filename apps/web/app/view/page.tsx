@@ -1,6 +1,6 @@
-import { type Metadata } from 'next';
+import type { Metadata } from 'next';
 
-import { type SheetMeta } from '@/server/github-sheets';
+import type { SheetMeta } from '@/server/github-sheets';
 import { getCachedSheets } from '@/server/sheets-cache';
 
 import SheetsListClient from './sheets-list-client';

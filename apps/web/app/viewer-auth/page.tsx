@@ -1,10 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-
 import { motion } from 'framer-motion';
 import { LockKeyhole } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,7 +31,7 @@ const ViewerAuthPage = () => {
       if (res.ok) {
         // 認証後の遷移先。?next= が内部パスのときのみ許可（オープンリダイレクト防止）。
         const next = new URLSearchParams(window.location.search).get('next');
-        const dest = next && next.startsWith('/') && !next.startsWith('//') ? next : '/view';
+        const dest = next?.startsWith('/') && !next.startsWith('//') ? next : '/view';
         router.push(dest);
         return;
       }
