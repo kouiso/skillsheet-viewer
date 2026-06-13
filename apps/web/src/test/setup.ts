@@ -1,8 +1,8 @@
 import * as React from 'react';
 import '@testing-library/jest-dom';
-import type { ComponentProps } from 'react';
 
 import { cleanup } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest';
 
 import './icon.mock';
@@ -78,10 +78,20 @@ if (typeof localStorage === 'undefined' || typeof localStorage.clear !== 'functi
   Object.defineProperty(global, 'localStorage', {
     value: {
       getItem: (key: string) => storage[key] ?? null,
-      setItem: (key: string, value: string) => { storage[key] = value; },
-      removeItem: (key: string) => { delete storage[key]; },
-      clear: () => { Object.keys(storage).forEach(k => { delete storage[k]; }); },
-      get length() { return Object.keys(storage).length; },
+      setItem: (key: string, value: string) => {
+        storage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete storage[key];
+      },
+      clear: () => {
+        Object.keys(storage).forEach((k) => {
+          delete storage[k];
+        });
+      },
+      get length() {
+        return Object.keys(storage).length;
+      },
       key: (index: number) => Object.keys(storage)[index] ?? null,
     },
     writable: true,
@@ -93,10 +103,20 @@ if (typeof sessionStorage === 'undefined' || typeof sessionStorage.clear !== 'fu
   Object.defineProperty(global, 'sessionStorage', {
     value: {
       getItem: (key: string) => storage[key] ?? null,
-      setItem: (key: string, value: string) => { storage[key] = value; },
-      removeItem: (key: string) => { delete storage[key]; },
-      clear: () => { Object.keys(storage).forEach(k => { delete storage[k]; }); },
-      get length() { return Object.keys(storage).length; },
+      setItem: (key: string, value: string) => {
+        storage[key] = value;
+      },
+      removeItem: (key: string) => {
+        delete storage[key];
+      },
+      clear: () => {
+        Object.keys(storage).forEach((k) => {
+          delete storage[k];
+        });
+      },
+      get length() {
+        return Object.keys(storage).length;
+      },
       key: (index: number) => Object.keys(storage)[index] ?? null,
     },
     writable: true,

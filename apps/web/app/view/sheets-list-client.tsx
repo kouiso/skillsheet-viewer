@@ -1,14 +1,13 @@
 'use client';
 
+import { ArrowLeftRight, Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-
-import { ArrowLeftRight, Search } from 'lucide-react';
 
 import Header from '@/component/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { type SheetMeta } from '@/server/github-sheets';
+import type { SheetMeta } from '@/server/github-sheets';
 
 interface SheetsListClientProps {
   initialSheets: SheetMeta[];
