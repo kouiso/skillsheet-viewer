@@ -7,7 +7,7 @@
  *
  * Server-only. Never import this from a Client Component.
  */
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 
 import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks';
 import { type Database, getDb } from './client';
@@ -112,4 +112,30 @@ export async function getSkillSheet(): Promise<SkillSheet> {
   return { title: TITLE, content: blocksToMarkdown(blockList), blocks: blockList };
 }
 
-export { OWNER_ID, TITLE };
+/**
+ * Replace the owner's sheet blocks with the given ordered markdown segments
+ * (D&D builder save path). Empty/whitespace-only segments are dropped.
+ *
+ * delete→insert→update を1つのトランザクションで囲み原子性を保証する
+ * （途中失敗で旧ブロックだけ消える＝データ損失を防ぐ）。neon-http は
+ * 対話的トランザクションは非対応だが、このようなバッチ（中間読み取り無し）の
+ * transaction() はサポートされる。
+ */
+export async function saveSkillSheetBlocks(markdowns: string[]): Promise<void> {
+  const db = getDb()
+  const sheetId = await getOrCreateSheetId(db)
+
+  const cleaned = markdowns.map((m) => m.trimEnd()).filter((m) => m.trim().length > 0)
+
+  await db.transaction(async (tx) => {
+    await tx.delete(blocks).where(eq(blocks.sheetId, sheetId))
+    if (cleaned.length > 0) {
+      await tx
+        .insert(blocks)
+        .values(cleaned.map((markdown, order) => ({ sheetId, type: 'markdown' as const, order, data: { markdown } })))
+    }
+    await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(eq(skillSheets.id, sheetId))
+  })
+}
+
+export { OWNER_ID, TITLE }
