@@ -1,5 +1,7 @@
 'use server';
 
+import { revalidateTag } from 'next/cache';
+
 import { saveSkillSheetBlocks } from '@skillsheet/db';
 
 import { isEditor } from '@/server/auth-gate';
@@ -23,6 +25,7 @@ export async function saveBlocksAction(markdowns: string[]): Promise<SaveResult>
 
   try {
     await saveSkillSheetBlocks(markdowns);
+    revalidateTag('db-sheet', {});
     return { ok: true };
   } catch (err) {
     console.error('saveBlocksAction failed:', err);
