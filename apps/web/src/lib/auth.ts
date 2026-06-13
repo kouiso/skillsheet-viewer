@@ -19,8 +19,10 @@ import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 function createAuth() {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set');
+  const secret = process.env.BETTER_AUTH_SECRET;
+  if (!secret) throw new Error('BETTER_AUTH_SECRET is not set');
   return betterAuth({
-    secret: process.env.BETTER_AUTH_SECRET,
+    secret,
     baseURL: process.env.BETTER_AUTH_URL,
     database: drizzleAdapter(createDb(url), {
       provider: 'pg',

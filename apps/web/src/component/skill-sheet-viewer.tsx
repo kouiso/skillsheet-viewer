@@ -55,6 +55,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
   const headingIds = headings.map((h) => h.id);
   const activeId = useActiveHeading(headingIds);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: skillSheet.content はReactMarkdown経由でDOMに反映されるため、DOM再抽出のトリガーとして必要
   useEffect(() => {
     // レンダリング後にDOMから見出しを抽出
     const extractHeadingsFromDOM = () => {
@@ -81,7 +82,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
 
     // 初回とcontent変更時にDOMから見出しを抽出
     extractHeadingsFromDOM();
-  }, []);
+  }, [skillSheet.content]);
 
   const scrollToHeading = (id: string) => {
     // IDにCSS特殊文字が含まれる可能性があるため、querySelector ではなく getElementById を使用
@@ -141,17 +142,13 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
                 },
                 img({ src, alt, ...props }) {
                   return (
-                    <img
-                      src={src}
-                      alt={alt}
-                      {...props}
+                    <button
+                      type="button"
                       onClick={() => typeof src === 'string' && handleImageClick(src)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && typeof src === 'string') {
-                          handleImageClick(src);
-                        }
-                      }}
-                    />
+                      className="cursor-zoom-in border-0 bg-transparent p-0"
+                    >
+                      <img src={src} alt={alt} {...props} />
+                    </button>
                   );
                 },
               }}
