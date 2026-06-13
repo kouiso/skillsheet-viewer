@@ -8,10 +8,10 @@
  *
  * Server-only. Never import from Client Components.
  */
-import { betterAuth } from 'better-auth';
-import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 import { createDb } from '@skillsheet/db';
+import { betterAuth } from 'better-auth';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 // Lazy singleton — DATABASE_URL is only available at request time (Vercel runtime),
 // not during `next build` static analysis.

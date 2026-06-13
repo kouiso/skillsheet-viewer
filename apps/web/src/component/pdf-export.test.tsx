@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { SkillSheetPDF } from './pdf-export';
 
 // @react-pdf/renderer のモック
@@ -126,9 +126,7 @@ This is [a link](https://example.com).
   });
 
   it('should handle very long content', () => {
-    const longContent = Array(100)
-      .fill('これは長いテキストです。')
-      .join('\n\n');
+    const longContent = Array(100).fill('これは長いテキストです。').join('\n\n');
     const { container } = render(<SkillSheetPDF title={mockTitle} content={longContent} />);
     expect(container).toBeDefined();
   });

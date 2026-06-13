@@ -1,4 +1,4 @@
-import { type Metadata } from 'next';
+import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
 import { getCachedDbSheet } from '@/server/sheets-cache';

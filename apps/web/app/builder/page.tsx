@@ -1,7 +1,7 @@
-import { type Metadata } from 'next';
-import { redirect } from 'next/navigation';
-
 import { getSkillSheet } from '@skillsheet/db';
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { connection } from 'next/server';
 
 import { isEditor } from '@/server/auth-gate';
 
@@ -11,8 +11,9 @@ export const metadata: Metadata = {
   title: 'スキルシートビルダー | エンジニアスキルシート',
 };
 
-// cookies() に依存するため動的レンダリング（ビルド時プリレンダ対象外）。
+// DATABASE_URL はランタイム専用のため connection() で動的レンダリングを明示する。
 export default async function BuilderPage() {
+  await connection();
   if (!(await isEditor())) {
     redirect('/viewer-auth?next=/builder');
   }

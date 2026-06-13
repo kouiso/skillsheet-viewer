@@ -1,5 +1,5 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
+@import "tailwindcss";
+@import "tw-animate-css";
 @plugin '@tailwindcss/typography';
 
 /* ダークモードは .dark クラス戦略（theme-context が html.classList を切替） */
@@ -173,7 +173,7 @@ body {
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 0.9em;
-  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-family: "Fira Code", "Consolas", "Monaco", monospace;
   color: var(--accent-foreground);
 }
 .markdown-content table {

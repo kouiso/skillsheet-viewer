@@ -1,5 +1,4 @@
-import { headers } from 'next/headers';
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 
 import { getAuth } from '@/lib/auth';
 import { SESSION_COOKIE_NAME, verifySessionToken } from './session';
