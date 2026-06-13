@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default async function BuilderPage() {
   await connection();
   if (!(await isEditor())) {
-    redirect('/viewer-auth?next=/builder');
+    redirect('/login?next=/builder');
   }
 
   let initialMarkdowns: string[] = [];
