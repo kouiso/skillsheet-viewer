@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 
 import { createSessionToken, getSessionCookieOptions } from '@/server/session';
 
