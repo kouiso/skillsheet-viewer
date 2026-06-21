@@ -24,6 +24,8 @@ export async function saveBlocksAction(markdowns: string[]): Promise<SaveResult>
 
   try {
     await saveSkillSheetBlocks(markdowns);
+    // Next 16 の revalidateTag は第2引数必須。空の CacheLifeConfig({}) で
+    // 当該タグを即時失効させ、保存直後に /view/db が最新を読むようにする。
     revalidateTag('db-sheet', {});
     return { ok: true };
   } catch (err) {
