@@ -30,8 +30,6 @@ interface SkillSheetViewerProps {
   compareMode?: boolean;
 }
 
-const HEADING_EXTRACT_DELAY_MS = 100;
-
 // img src として許可するURLスキーム。http/https/相対パスのみ通し、
 // javascript: や data: 等は除外して XSS を防ぐ。
 const IMG_SRC_PROTOCOLS = ['http', 'https'] as const;
@@ -66,43 +64,65 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
   const [lightboxImages, setLightboxImages] = useState<{ src: string }[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
+  // 直近に抽出した見出しのシグネチャ。MutationObserver による再抽出時に
+  // 内容が変わっていなければ setState を抑止し、再描画→再抽出の無限ループを防ぐ。
+  const lastHeadingSigRef = useRef<string>('');
 
-  // 見出しIDのリストを作成
+  // 見出しIDのリストを作成。
+  // useActiveHeading には contentRef を渡し、見出し探索をこのビューア配下に scope する
+  // （比較モードで2ビューアが同一 ID を持っても互いに干渉しない）。
   const headingIds = headings.map((h) => h.id);
-  const activeId = useActiveHeading(headingIds);
+  const activeId = useActiveHeading(headingIds, contentRef);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: skillSheet.content はReactMarkdown経由でDOMに反映されるため、DOM再抽出のトリガーとして必要
   useEffect(() => {
-    // レンダリング後にDOMから見出しを抽出
-    const extractHeadingsFromDOM = () => {
-      // DOMが完全にレンダリングされるまで少し待つ
-      setTimeout(() => {
-        const markdownContent = contentRef.current;
-        if (!markdownContent) return;
+    const container = contentRef.current;
+    if (!container) return;
 
-        const headingElements = markdownContent.querySelectorAll('h1, h2, h3, h4, h5, h6');
-        const extractedHeadings: Heading[] = Array.from(headingElements)
-          .filter((el) => el.id) // IDがある要素のみ
-          .map((el) => {
-            const level = parseInt(el.tagName.substring(1), 10);
-            const text = el.textContent || '';
-            const id = el.id;
+    // contentRef 配下のレンダリング済み見出しから決定的に目次データを作る。
+    // ReactMarkdown + rehypeSlug は同一コミットで id 付き見出しを描画するため、
+    // 固定 setTimeout で描画完了を待つ必要はない（タイミング依存のレースを排除）。
+    const extractHeadings = () => {
+      const headingElements = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
+      const extractedHeadings: Heading[] = Array.from(headingElements)
+        .filter((el) => el.id) // IDがある要素のみ
+        .map((el) => ({
+          id: el.id,
+          text: el.textContent || '',
+          level: parseInt(el.tagName.substring(1), 10),
+        }));
 
-            return { id, text, level };
-          });
-
-        setHeadings(extractedHeadings);
+      // 内容が前回と同一なら setState しない（無限ループ防止）。
+      const signature = JSON.stringify(extractedHeadings);
+      if (signature === lastHeadingSigRef.current) {
         setMounted(true);
-      }, HEADING_EXTRACT_DELAY_MS); // ReactMarkdownのレンダリング完了を待つ
+        return;
+      }
+      lastHeadingSigRef.current = signature;
+
+      setHeadings(extractedHeadings);
+      setMounted(true);
     };
 
-    // 初回とcontent変更時にDOMから見出しを抽出
-    extractHeadingsFromDOM();
+    // 初回（effect コミット時点で DOM 反映済み）に同期抽出する。
+    extractHeadings();
+
+    // 念のため、配下 DOM の後続変化（遅延描画・画像差し替え等）も拾えるよう監視する。
+    // MutationObserver なら固定遅延に頼らず変化のタイミングで再抽出できる。
+    const observer = new MutationObserver(extractHeadings);
+    observer.observe(container, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
   }, [skillSheet.content]);
 
   const scrollToHeading = (id: string) => {
-    // IDにCSS特殊文字が含まれる可能性があるため、querySelector ではなく getElementById を使用
-    const element = document.getElementById(id);
+    // 比較モードでは両ビューアに同一 ID が存在しうるため document 全体ではなく
+    // このビューア配下に scope して目的の見出しを引く。
+    // ID に CSS 特殊文字が含まれうるため querySelector ではなく配下走査で一致を探す。
+    const root = contentRef.current;
+    const element = root
+      ? (Array.from(root.querySelectorAll<HTMLElement>('[id]')).find((el) => el.id === id) ?? null)
+      : document.getElementById(id);
     if (element) {
       const yOffset = -80; // ヘッダー分のオフセット
       const y = element.getBoundingClientRect().top + window.scrollY + yOffset;
