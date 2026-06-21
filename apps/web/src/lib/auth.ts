@@ -9,7 +9,7 @@
  * Server-only. Never import from Client Components.
  */
 
-import { createDb } from '@skillsheet/db';
+import { account, createDb, session, user, verification } from '@skillsheet/db';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
@@ -26,6 +26,7 @@ function createAuth() {
     baseURL: process.env.BETTER_AUTH_URL,
     database: drizzleAdapter(createDb(url), {
       provider: 'pg',
+      schema: { user, session, account, verification },
     }),
     emailAndPassword: {
       enabled: true,

@@ -933,3 +933,15 @@ skillsheet-viewer/
 
 総コード量: 509行
 ```
+
+---
+
+## 実装方針追記（2026-06-21・完成プラン M0）
+
+### デプロイ先
+- Vercel を本番デプロイ先として確定（設定・デプロイ済）。preview deploy + Neon で検証する。
+- ランタイム DB 依存（`DATABASE_URL`）はビルド時評価されないよう、DB ルートで `connection()` により動的化する。
+
+### GitHub 読み経路（P0-FILEPATH）
+- 主データ経路は DB（Neon）中心。GitHub 読み経路は副系統として維持する（後段で整備）。
+- `GITHUB_FILE_PATH` は単一ファイル名だが `listSheets()` はディレクトリ列挙を行う。DB 中心運用では初回シードに限定して影響は小さい。GitHub 閲覧経路を使う場合のみ実レイアウトに合わせて設定する。
