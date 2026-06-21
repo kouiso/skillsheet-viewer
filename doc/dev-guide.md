@@ -4,31 +4,30 @@
 
 ### 開発
 
-- `npm run dev` - 開発サーバーを起動
-- `npm run build` - 本番用ビルドを実行
-- `npm run preview` - ビルド後のプレビューサーバーを起動
+- `pnpm dev` - 開発サーバーを起動
+- `pnpm build` - 本番用ビルドを実行
+- `pnpm start` - ビルド後の本番サーバーを起動
 
 ### テスト
 
-- `npm test` - テストを実行
-- `npm run test:watch` - 監視モードでテストを実行
-- `npm run test:coverage` - カバレッジレポート付きでテスト実行
+- `pnpm test` - テストを実行
+- `pnpm --filter @skillsheet/web test:watch` - 監視モードでテストを実行
+- `pnpm --filter @skillsheet/web test:coverage` - カバレッジレポート付きでテスト実行
 
 ### コード品質
 
-- `npm run lint` - ESLint でコードをチェック
-- `npm run lint:type` - TypeScript 型チェック
+- `pnpm lint` - Biome でコードをチェック
+- `pnpm type-check` - TypeScript 型チェック
 
 ## プロジェクト構成
 
 ```
-src/
-├── components/     # Reactコンポーネント
-├── pages/         # ページコンポーネント
-├── hooks/         # カスタムフック
-├── utils/         # ユーティリティ関数
-├── types/         # TypeScript型定義
-└── lib/           # 外部ライブラリの設定
+apps/web/
+├── app/           # Next.js App Router（ページ・レイアウト・API Route）
+├── src/components/ # Reactコンポーネント
+├── src/hooks/      # カスタムフック
+├── src/util/       # ユーティリティ関数
+└── src/lib/        # 外部ライブラリの設定
 ```
 
 ## コーディング規約
@@ -60,13 +59,13 @@ src/
 
 ### カスタムスタイリング
 
-Material-UI のテーマに合わせてスタイルをカスタマイズ可能
+shadcn/ui と Tailwind CSS のデザイントークンに合わせてスタイルをカスタマイズ可能
 
 ## デバッグ
 
-### Vite の Hot Module Replacement (HMR)
+### Next.js の Fast Refresh
 
-開発サーバー起動中はファイル保存時に自動でページがリロードされます
+開発サーバー起動中はファイル保存時に自動でページが更新されます
 
 ### ブラウザ開発者ツール
 
@@ -80,13 +79,13 @@ Material-UI のテーマに合わせてスタイルをカスタマイズ可能
 1. `node_modules` を削除して再インストール
 
    ```bash
-   rm -rf node_modules package-lock.json
-   npm install
+   rm -rf node_modules pnpm-lock.yaml
+   pnpm install
    ```
 
 2. TypeScript のキャッシュをクリア
    ```bash
-   npm run build
+   pnpm build
    ```
 
 ### Markdown が表示されない
