@@ -13,7 +13,16 @@ import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks'
 import { type Database, getDb } from './client';
 import { blocks, skillSheets } from './schema';
 
-const OWNER_ID = 'kouiso';
+/**
+ * オーナー識別子。個人名のベタ書きを排し環境変数から取得する（引き継ぎ汚染防止）。
+ * 単一オーナー運用では Better Auth のオーナーアカウントに対応する安定IDを設定する。
+ * 書き込みは isEditor()（Better Auth セッション必須）でゲートされる。
+ */
+function getOwnerId(): string {
+  const id = process.env.SKILLSHEET_OWNER_ID;
+  if (!id) throw new Error('SKILLSHEET_OWNER_ID is not set');
+  return id;
+}
 const TITLE = 'エンジニアスキルシート';
 
 export interface SkillSheet {
@@ -54,17 +63,18 @@ export async function fetchMarkdownFromGitHub(): Promise<string> {
 }
 
 async function getOrCreateSheetId(db: Database): Promise<string> {
+  const ownerId = getOwnerId();
   const existing = await db
     .select({ id: skillSheets.id })
     .from(skillSheets)
-    .where(eq(skillSheets.ownerId, OWNER_ID))
+    .where(eq(skillSheets.ownerId, ownerId))
     .limit(1);
   if (existing[0]?.id) return existing[0].id;
 
   // owner_id unique + onConflictDoNothing guards against concurrent duplicate creation.
   const inserted = await db
     .insert(skillSheets)
-    .values({ ownerId: OWNER_ID, title: TITLE })
+    .values({ ownerId, title: TITLE })
     .onConflictDoNothing()
     .returning({ id: skillSheets.id });
   if (inserted[0]?.id) return inserted[0].id;
@@ -73,7 +83,7 @@ async function getOrCreateSheetId(db: Database): Promise<string> {
   const retry = await db
     .select({ id: skillSheets.id })
     .from(skillSheets)
-    .where(eq(skillSheets.ownerId, OWNER_ID))
+    .where(eq(skillSheets.ownerId, ownerId))
     .limit(1);
   return retry[0].id;
 }
@@ -138,4 +148,4 @@ export async function saveSkillSheetBlocks(markdowns: string[]): Promise<void> {
   });
 }
 
-export { OWNER_ID, TITLE };
+export { TITLE };
