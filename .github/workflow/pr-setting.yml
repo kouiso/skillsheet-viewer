@@ -24,7 +24,7 @@ jobs:
             console.log(`Branch name: ${branchName}`);
 
             console.log('Adding label based on branch name...');
-            if (branchName.startsWith('feature/')) {
+            if (branchName.startsWith('feature/') || branchName.startsWith('feat/')) {
               github.rest.issues.addLabels({
                 issue_number: context.issue.number,
                 owner: context.repo.owner,
