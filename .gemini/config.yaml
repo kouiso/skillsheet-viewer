@@ -1,4 +1,11 @@
 code_review:
   comment_language: ja
-  max_comments: 10
+  comment_severity_threshold: MEDIUM
+  max_review_comments: 10
   pull_request_scope: diff_only
+  pull_request_opened:
+    help: true
+    summary: true
+    code_review: true
+    include_drafts: false
+ignore_patterns: []
