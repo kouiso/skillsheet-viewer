@@ -1,9 +1,8 @@
 /**
  * Server-side skill sheet read path (NeonDB is the source of truth).
  *
- * Ported from the previous Vercel Function (`api/skillsheet.ts`) with no
- * behavior change: read ordered blocks from the DB, and on first request seed
- * them from the existing GitHub markdown source if the sheet is empty.
+ * Read ordered blocks from the DB, and on first request seed them from the
+ * existing GitHub markdown source if the sheet is empty.
  *
  * Server-only. Never import this from a Client Component.
  */

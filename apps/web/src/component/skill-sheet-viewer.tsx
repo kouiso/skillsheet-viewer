@@ -32,14 +32,30 @@ interface SkillSheetViewerProps {
 
 const HEADING_EXTRACT_DELAY_MS = 100;
 
+// img src として許可するURLスキーム。http/https/相対パスのみ通し、
+// javascript: や data: 等は除外して XSS を防ぐ。
+const IMG_SRC_PROTOCOLS = ['http', 'https'] as const;
+
+// src が http(s) または相対パスかを判定する（javascript:/data: 等を拒否）。
+const isSafeImageSrc = (src: string): boolean => {
+  // 相対パス（スキームを持たない）は許可する。
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(src)) return true;
+  return IMG_SRC_PROTOCOLS.some((p) => src.toLowerCase().startsWith(`${p}:`));
+};
+
 // rehype-raw が有効化する生HTML描画を details/summary タグに限定する。
 // style属性はデフォルトスキーマで除外済み（XSS防止）。
+// img の src は http/https/相対パスのみ許可し、javascript:/data: 等を除外する。
 const SANITIZE_SCHEMA = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames ?? []), 'details', 'summary'],
   attributes: {
     ...defaultSchema.attributes,
     details: ['open'],
+  },
+  protocols: {
+    ...defaultSchema.protocols,
+    src: [...IMG_SRC_PROTOCOLS],
   },
 };
 
@@ -95,9 +111,11 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
   };
 
   const handleImageClick = (src: string) => {
-    const images = Array.from((contentRef.current ?? document).querySelectorAll('img')).map((img) => ({
-      src: (img as HTMLImageElement).src,
-    }));
+    // 非 http(s)/相対 のスキームはライトボックスを開かない（XSS防止）。
+    if (!isSafeImageSrc(src)) return;
+    const images = Array.from((contentRef.current ?? document).querySelectorAll('img'))
+      .map((img) => ({ src: (img as HTMLImageElement).src }))
+      .filter((img) => isSafeImageSrc(img.src));
     setLightboxImages(images);
 
     // クリックされた画像のインデックスを見つける
@@ -130,8 +148,11 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
               components={{
                 code(props) {
                   const { className, children, ...rest } = props;
-                  const inline = (props as any).inline;
-                  if (inline) {
+                  // react-markdown v10 は inline prop を渡さないため、ブロックコードを
+                  // language-xxx className か改行の有無で判定する（無ければインライン）。
+                  const isBlock =
+                    /language-/.test(className ?? '') || /\n/.test(String(children));
+                  if (!isBlock) {
                     return (
                       <code className={className} {...rest}>
                         {children}
@@ -141,10 +162,12 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
                   return <CodeBlock className={className}>{children}</CodeBlock>;
                 },
                 img({ src, alt, ...props }) {
+                  // 安全なスキーム（http/https/相対）以外はそもそも描画しない。
+                  if (typeof src !== 'string' || !isSafeImageSrc(src)) return null;
                   return (
                     <button
                       type="button"
-                      onClick={() => typeof src === 'string' && handleImageClick(src)}
+                      onClick={() => handleImageClick(src)}
                       className="cursor-zoom-in border-0 bg-transparent p-0"
                     >
                       <img src={src} alt={alt} {...props} />

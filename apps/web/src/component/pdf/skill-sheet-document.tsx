@@ -1,5 +1,6 @@
 import { Document, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactNode } from 'react';
+import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
@@ -75,7 +76,9 @@ const styles = StyleSheet.create({
   bold: { fontWeight: 700 },
   italic: { fontStyle: 'italic' },
   strike: { textDecoration: 'line-through' },
-  inlineCode: { fontFamily: 'Courier', fontSize: 8.5, backgroundColor: COLOR.codeBg },
+  // Courier は CJK 字形を持たず日本語が tofu になるため、登録済みの Noto Sans JP を使う。
+  // 等幅よりも日本語が確実に描画されることを優先する。
+  inlineCode: { fontFamily: PDF_FONT_FAMILY, fontSize: 8.5, backgroundColor: COLOR.codeBg },
   link: { color: COLOR.primary, textDecoration: 'underline' },
   list: { marginBottom: 6, marginTop: 2 },
   listItem: { flexDirection: 'row', marginBottom: 2 },
@@ -93,7 +96,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLOR.codeBg,
     padding: 6,
     marginVertical: 6,
-    fontFamily: 'Courier',
+    // Courier は CJK 字形を持たないため、日本語を含むコードでも描画できる Noto Sans JP を使う。
+    fontFamily: PDF_FONT_FAMILY,
     fontSize: 8.5,
   },
   table: {
@@ -360,7 +364,11 @@ export interface SkillSheetDocumentProps {
  * フォント登録は呼び出し側で行う前提（ブラウザ: pdf/fonts.ts / Node: 検証スクリプト）。
  */
 export const SkillSheetDocument = ({ title, content }: SkillSheetDocumentProps) => {
-  const tree = unified().use(remarkParse).use(remarkGfm).parse(content) as unknown as MdNode;
+  // remark-breaks を加えてビューアと同じく単一改行（ソフトブレーク）を改行として扱う。
+  // remark-breaks は tree トランスフォーマのため parse だけでは適用されない。
+  // runSync まで通してプラグインの変換フェーズを実行する。
+  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkBreaks);
+  const tree = processor.runSync(processor.parse(content)) as unknown as MdNode;
 
   return (
     <Document title={title}>
