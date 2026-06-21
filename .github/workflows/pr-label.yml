@@ -1,0 +1,43 @@
+name: PR Label
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+jobs:
+  label:
+    name: Label by branch prefix
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add label based on branch name
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const branchName = context.payload.pull_request.head.ref;
+            const prefixLabels = [
+              ['feature/', 'feature'],
+              ['bugfix/', 'bugfix'],
+              ['fix/', 'bugfix'],
+              ['release/', 'release'],
+              ['hotfix/', 'hotfix'],
+              ['support/', 'support'],
+              ['chore/', 'chore'],
+            ];
+            const matched = prefixLabels.find(([prefix]) => branchName.startsWith(prefix));
+            if (!matched) {
+              core.info(`No label mapping for branch: ${branchName}`);
+              return;
+            }
+            const [, label] = matched;
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [label],
+            });
+            core.info(`Added label: ${label}`);

@@ -1,0 +1,20 @@
+---
+alwaysApply: true
+---
+
+# skillsheet-viewer AI 作業ルール
+
+このリポジトリでは、AI エージェントは以下を必ず守ること。
+
+- 応答・コメント・ドキュメントは日本語を基本にする。
+- 変更前に `AGENTS.md`、`CLAUDE.md`、`doc/` 配下の関連ドキュメントを確認する。
+- Node.js 22.x と pnpm 10.x を前提に、リポジトリルートで作業する。
+- 主要コマンド:
+  - `pnpm install --frozen-lockfile`
+  - `pnpm run lint`
+  - `pnpm run type-check`
+  - `pnpm run test`
+  - `pnpm run build`
+- TypeScript では `any` と不要な型アサーションを避け、型で根本解決する。
+- 修正後は関連する lint / typecheck / test / build を AI 自身が実行し、結果を確認してから完了報告する。
+- GitHub Actions は `.github/workflows/` 配下に置く。`.github/workflow/` は GitHub に認識されないため使用しない。

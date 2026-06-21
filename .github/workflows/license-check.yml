@@ -1,0 +1,72 @@
+name: License Check
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/**/package.json'
+      - 'packages/**/package.json'
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/**/package.json'
+      - 'packages/**/package.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  license-check:
+    name: License Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check production dependency licenses
+        run: |
+          pnpm licenses list --prod --json > licenses.json
+          node <<'NODE'
+          const fs = require('node:fs');
+          const disallowed = new Set([
+            'GPL',
+            'GPL-2.0',
+            'GPL-3.0',
+            'LGPL',
+            'LGPL-3.0',
+            'AGPL-3.0',
+            'SSPL',
+            'EUPL',
+            'CDDL-1.0',
+            'EPL-1.0',
+            'OPL-1.0',
+          ]);
+          const data = JSON.parse(fs.readFileSync('licenses.json', 'utf8'));
+          const packages = Array.isArray(data) ? data : Object.values(data).flat();
+          const violations = packages.filter((pkg) => disallowed.has(pkg.license));
+          if (violations.length > 0) {
+            console.error('Disallowed licenses found:');
+            for (const pkg of violations) {
+              console.error(`- ${pkg.name}@${pkg.version}: ${pkg.license}`);
+            }
+            process.exit(1);
+          }
+          console.log(`Checked ${packages.length} production packages. No disallowed licenses found.`);
+          NODE
