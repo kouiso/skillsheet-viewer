@@ -54,7 +54,9 @@ export function verifySessionToken(token: string | undefined): boolean {
 }
 
 export function getSessionCookieOptions() {
-  const secure = process.env.VERCEL_ENV === 'production' || process.env.VERCEL_ENV === 'preview';
+  // Vercel では VERCEL_ENV を優先。非 Vercel 環境では APP_ENV / NODE_ENV を見る。
+  const env = process.env.VERCEL_ENV ?? process.env.APP_ENV ?? process.env.NODE_ENV;
+  const secure = env === 'production' || env === 'preview';
   return {
     httpOnly: true,
     maxAge: SESSION_DURATION_SECONDS,
