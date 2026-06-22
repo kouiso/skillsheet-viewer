@@ -59,7 +59,7 @@ jobs:
               if (name.startsWith('doc/') || name.endsWith('.md')) labels.add('documentation');
               if (name.startsWith('apps/web/')) labels.add('web');
               if (name.startsWith('packages/db/')) labels.add('db');
-              if (/(^|/)package\.json$|^pnpm-lock\.yaml$/.test(name)) labels.add('dependencies');
+              if (/(^|\/)package\.json$|^pnpm-lock\.yaml$/.test(name)) labels.add('dependencies');
             }
 
             if (labels.size === 0) {
