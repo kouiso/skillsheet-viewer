@@ -37,7 +37,8 @@ function buildContent(): string {
   const skillRows = Array.from({ length: 40 }, (_, i) => `| 技術${i} | ${i}年 | 業務利用 |`).join('\n');
   const projects = Array.from(
     { length: 6 },
-    (_, i) => `\n### ■ プロジェクト${i + 1}\n\n大規模Webアプリケーションの設計・開発を担当しました。\n\n- 要件定義から運用までを一貫して担当\n- パフォーマンス改善で表示速度を改善\n`,
+    (_, i) =>
+      `\n### ■ プロジェクト${i + 1}\n\n大規模Webアプリケーションの設計・開発を担当しました。\n\n- 要件定義から運用までを一貫して担当\n- パフォーマンス改善で表示速度を改善\n`,
   ).join('\n');
 
   return [
@@ -77,9 +78,7 @@ describe('SkillSheetDocument（実バイト描画）', () => {
   });
 
   it('登録済み Noto Sans JP で日本語入りコードを含む非空の %PDF バッファを描画できる', async () => {
-    const buffer = await renderToBuffer(
-      <SkillSheetDocument title="山田太郎 スキルシート" content={buildContent()} />,
-    );
+    const buffer = await renderToBuffer(<SkillSheetDocument title="山田太郎 スキルシート" content={buildContent()} />);
 
     // 非空であること。
     expect(buffer.length).toBeGreaterThan(0);

@@ -9,10 +9,7 @@ import { type RefObject, useEffect, useState } from 'react';
  * インスタンスごとの `rootRef` 配下に scope することで干渉を防ぐ。
  * `rootRef` 未指定時は従来どおり document 全体から ID で探索する。
  */
-export const useActiveHeading = (
-  headingIds: string[],
-  rootRef?: RefObject<HTMLElement | null>,
-) => {
+export const useActiveHeading = (headingIds: string[], rootRef?: RefObject<HTMLElement | null>) => {
   const [activeId, setActiveId] = useState<string>('');
 
   // rootRef は ref オブジェクトなので参照は安定しており、effect の依存に含めても

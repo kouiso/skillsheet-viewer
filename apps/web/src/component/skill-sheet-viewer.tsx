@@ -170,8 +170,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
                   const { className, children, ...rest } = props;
                   // react-markdown v10 は inline prop を渡さないため、ブロックコードを
                   // language-xxx className か改行の有無で判定する（無ければインライン）。
-                  const isBlock =
-                    /language-/.test(className ?? '') || /\n/.test(String(children));
+                  const isBlock = /language-/.test(className ?? '') || /\n/.test(String(children));
                   if (!isBlock) {
                     return (
                       <code className={className} {...rest}>
