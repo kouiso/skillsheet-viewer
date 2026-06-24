@@ -689,3 +689,20 @@ src/
 
 お疲れ様でした! 🎉
 今日で認証機能が完成しました。明日はGitHub APIと連携してデータを取得します!
+
+---
+
+## 実装方針追記（2026-06-21・完成プラン M0/M1）
+
+### 認証の二系統分離
+- 編集者（更新する側）= Better Auth（email/password）。`isEditor()` は Better Auth セッション必須。
+- 閲覧者（見る側）= HMAC 署名 cookie（`VIEWER_CODE` / `/viewer-auth`）。閲覧専用で編集権限は一切持たない。
+- 旧来の「HMAC cookie を編集者認可にフォールバック」する挙動は廃止（権限混同の解消）。
+
+### owner_id の源（個人名リテラルの排除）
+- `packages/db` の `OWNER_ID = 'kouiso'` ベタ書きを廃止し、`SKILLSHEET_OWNER_ID` 環境変数から取得する。
+- 単一オーナー運用では、Better Auth で作成したオーナーアカウントに対応する安定IDを設定する。
+- 書き込みは `isEditor()`（Better Auth セッション必須）でゲートし、認証されたオーナーのみが保存できる。
+
+### DB ドライバ
+- Better Auth の対話的トランザクションに対応するため、`neon-http` から `neon-serverless`（WebSocket）ドライバへ移行。
