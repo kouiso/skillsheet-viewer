@@ -8,7 +8,7 @@
  *
  * Server-only. Never import this from a Client Component.
  */
-import { Pool, neonConfig } from '@neondatabase/serverless';
+import { neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from 'ws';
 
