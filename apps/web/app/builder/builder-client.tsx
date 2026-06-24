@@ -16,7 +16,7 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Eye, EyeOff, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
+import { Download, Eye, EyeOff, GripVertical, Plus, Save, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -98,6 +98,11 @@ const BuilderClient = ({ initialMarkdowns }: BuilderClientProps) => {
   const [isSaving, startSaving] = useTransition();
   const savedRef = useRef(false);
 
+  // 未保存変更の検知。最後に保存成功した時点の markdown スナップショットを保持し、
+  // 現在の内容と差分があれば dirty とみなす（保存成功で false に戻す）。
+  const lastSavedMarkdownsRef = useRef<string[]>(initialMarkdowns);
+  const [isDirty, setIsDirty] = useState(false);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -113,6 +118,27 @@ const BuilderClient = ({ initialMarkdowns }: BuilderClientProps) => {
     }, 300);
     return () => clearTimeout(timer);
   }, [items]);
+
+  // 現在の内容が最後の保存スナップショットと異なれば dirty にする。
+  useEffect(() => {
+    const current = items.map((i) => i.markdown);
+    const saved = lastSavedMarkdownsRef.current;
+    const dirty = current.length !== saved.length || current.some((m, i) => m !== saved[i]);
+    setIsDirty(dirty);
+  }, [items]);
+
+  // 未保存変更がある間だけ beforeunload を登録し、離脱時にネイティブ警告を出す。
+  // dirty でなくなる／アンマウント時にはリスナーを解除する。
+  useEffect(() => {
+    if (!isDirty) return;
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // 一部ブラウザは returnValue の設定でネイティブ確認を表示する。
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -135,11 +161,42 @@ const BuilderClient = ({ initialMarkdowns }: BuilderClientProps) => {
 
   const addBlock = () => setItems((prev) => [...prev, { id: newId(), markdown: '' }]);
 
+  // 現在の全ブロックを組み立てた markdown。バックアップ出力・空判定で使う。
+  const assembleMarkdown = () => items.map((i) => i.markdown).join('\n');
+
+  // 破壊的な編集の前に、現在の内容をファイルとしてダウンロードして復元ポイントを残す。
+  const handleExport = () => {
+    const content = assembleMarkdown();
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    anchor.download = `skillsheet-backup-${stamp}.md`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
+    toast.success('バックアップを書き出しました');
+  };
+
   const handleSave = () => {
+    const markdowns = items.map((i) => i.markdown);
+    // データ消失ガード: 全ブロックが空（空白のみ）なら、保存で全内容が消える。
+    // 明示的な確認が取れた場合のみ続行する。
+    const isAllEmpty = markdowns.every((m) => m.trim() === '');
+    if (isAllEmpty) {
+      const confirmed = window.confirm('全ブロックが空です。保存すると全内容が消えます。続けますか？');
+      if (!confirmed) return;
+    }
+
     startSaving(async () => {
-      const res = await saveBlocksAction(items.map((i) => i.markdown));
+      const res = await saveBlocksAction(markdowns);
       if (res.ok) {
         savedRef.current = true;
+        // 保存成功した内容をスナップショットとして記録し、dirty を解除する。
+        lastSavedMarkdownsRef.current = markdowns;
+        setIsDirty(false);
         toast.success('保存しました');
       } else if (res.error === 'unauthorized') {
         toast.error('セッションが切れました。再度認証してください。');
@@ -158,6 +215,10 @@ const BuilderClient = ({ initialMarkdowns }: BuilderClientProps) => {
             <Button variant="ghost" size="sm" onClick={() => setShowPreview((v) => !v)}>
               {showPreview ? <EyeOff className="mr-1.5 size-4" /> : <Eye className="mr-1.5 size-4" />}
               プレビュー
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="mr-1.5 size-4" />
+              バックアップ
             </Button>
             <Link href="/view" className="text-sm text-muted-foreground hover:text-foreground">
               閲覧へ

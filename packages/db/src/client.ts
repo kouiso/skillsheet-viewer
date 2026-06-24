@@ -1,23 +1,31 @@
 /**
  * Drizzle client for Neon serverless Postgres.
  *
- * Phase 1 uses the HTTP driver (`neon-http`) for single, non-interactive reads,
- * matching the previous Vercel Function implementation (zero behavior change).
- * When Better Auth lands, the auth/edit path will move to the WebSocket driver
- * (`neon-serverless`) to support interactive transactions and avoid the
- * `@neondatabase/serverless` >=1.0 tagged-template incompatibility.
+ * Uses the WebSocket driver (`neon-serverless`) so the auth/edit path (Better
+ * Auth) can run interactive transactions, and to avoid the
+ * `@neondatabase/serverless` >=1.0 tagged-template incompatibility of the HTTP
+ * driver. The pooled `DATABASE_URL` (`-pooler` host) is expected at runtime.
  *
  * Server-only. Never import this from a Client Component.
  */
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import { neonConfig, Pool } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
+import ws from 'ws';
 
-import { blocks, skillSheets } from './schema';
+import { account, blocks, session, skillSheets, user, verification } from './schema';
+
+// Node (Vercel nodejs runtime) may lack a global WebSocket; wire the `ws`
+// polyfill so the serverless driver can open its WebSocket connection.
+if (!neonConfig.webSocketConstructor) {
+  neonConfig.webSocketConstructor = ws;
+}
+
+const schema = { skillSheets, blocks, user, session, account, verification };
 
 export type Database = ReturnType<typeof createDb>;
 
 export function createDb(databaseUrl: string) {
-  return drizzle(neon(databaseUrl), { schema: { skillSheets, blocks } });
+  return drizzle(new Pool({ connectionString: databaseUrl }), { schema });
 }
 
 let cachedDb: Database | null = null;

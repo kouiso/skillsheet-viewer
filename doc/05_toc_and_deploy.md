@@ -933,3 +933,28 @@ skillsheet-viewer/
 
 総コード量: 509行
 ```
+
+---
+
+## 実装方針追記（2026-06-21・完成プラン M0）
+
+### デプロイ先
+- Vercel を本番デプロイ先として確定（設定・デプロイ済）。preview deploy + Neon で検証する。
+- ランタイム DB 依存（`DATABASE_URL`）はビルド時評価されないよう、DB ルートで `connection()` により動的化する。
+
+### GitHub 読み経路（P0-FILEPATH）
+- 主データ経路は DB（Neon）中心。GitHub 読み経路は副系統として維持する（後段で整備）。
+- `GITHUB_FILE_PATH` は単一ファイル名だが `listSheets()` はディレクトリ列挙を行う。DB 中心運用では初回シードに限定して影響は小さい。GitHub 閲覧経路を使う場合のみ実レイアウトに合わせて設定する。
+
+### DB マイグレーションの適用（P0-2）
+
+デプロイ時の DB スキーマ適用は、対象 DB が「新規」か「既存本番」かで手順が分かれます。
+
+- **新規（fresh）DB**: そのまま `pnpm db:migrate` を実行する。drizzle が全マイグレーションを正規手順で適用し、進捗管理テーブル `drizzle.__drizzle_migrations` も自動作成される。
+- **既存本番 DB**: テーブルが Better Auth CLI などで先に作られており、`pnpm db:migrate` をそのまま流すと「テーブルが既に存在する」で失敗する。最初に **1 回だけ baseline** を行い、`0000_init` / `0001_deep_switch` を「適用済み」として登録してから通常運用に移す。
+
+baseline の具体手順（確認用 SQL・登録 SQL・hash の出し方・推奨運用）は次のドキュメントにまとめてある:
+
+- `packages/db/drizzle/MIGRATION-BASELINE.md`
+
+baseline 後は、新規・既存どちらも `pnpm db:migrate` を通常のデプロイ手順として実行できる（新しいマイグレーションがある場合のみ適用される）。破壊的操作を含むため、本番 DB への実行前は Neon ブランチ等でバックアップを取ること。
