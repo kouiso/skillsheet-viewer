@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';
+import { isSheetFileName, isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';
 import { getCachedSheet } from '@/server/sheets-cache';
 
 import SheetViewClient from './sheet-view-client';
@@ -13,7 +13,7 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   // App Router の params は既にデコード済み（再 decodeURIComponent は % を含む名前で URIError を招く）。
   const { path } = await params;
-  if (!isValidSheetPath(path)) return {};
+  if (!isValidSheetPath(path) || !isSheetFileName(path)) return {};
   try {
     const sheet = await getCachedSheet(path);
     return {
@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
 export default async function SheetViewPage({ params }: PageProps) {
   const { path } = await params;
-  if (!isValidSheetPath(path)) notFound();
+  if (!isValidSheetPath(path) || !isSheetFileName(path)) notFound();
 
   let sheet: Awaited<ReturnType<typeof getCachedSheet>>;
   try {
