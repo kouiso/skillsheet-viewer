@@ -65,6 +65,38 @@ export function isValidSheetPath(path: string): boolean {
   return /^[\p{L}\p{N}_.-]+\.md$/u.test(path);
 }
 
+/**
+ * スキルシートとして一覧・表示しない Markdown ファイル名（リポジトリ設定 / AI 指示系）。
+ * データ源リポジトリのルートに混在しても閲覧側には出さない。比較は小文字で行う。
+ */
+const NON_SHEET_MARKDOWN: ReadonlySet<string> = new Set([
+  'readme.md',
+  'claude.md',
+  'agents.md',
+  'gemini.md',
+  'copilot.md',
+  'copilot-instructions.md',
+  'contributing.md',
+  'code_of_conduct.md',
+  'security.md',
+  'changelog.md',
+  'license.md',
+  'support.md',
+  'governance.md',
+  'maintainers.md',
+  'authors.md',
+  'notice.md',
+  'history.md',
+  'todo.md',
+]);
+
+/** ファイル名がスキルシートとして扱える .md か（設定 / AI 指示系・ドットファイルは除外）。 */
+export function isSheetFileName(name: string): boolean {
+  if (!name.endsWith('.md')) return false;
+  if (name.startsWith('.')) return false;
+  return !NON_SHEET_MARKDOWN.has(name.toLowerCase());
+}
+
 export async function listSheets(): Promise<SheetMeta[]> {
   const { token, owner, repo, branch } = getConfig();
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/?ref=${branch}`;
@@ -74,7 +106,7 @@ export async function listSheets(): Promise<SheetMeta[]> {
 
   const items = (await res.json()) as GitHubFileItem[];
   return items
-    .filter((item) => item.type === 'file' && item.name.endsWith('.md'))
+    .filter((item) => item.type === 'file' && isSheetFileName(item.name))
     .map((item) => ({
       path: item.path,
       title: item.name.replace(/\.md$/u, ''),
