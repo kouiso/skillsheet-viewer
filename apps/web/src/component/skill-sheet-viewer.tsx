@@ -41,6 +41,13 @@ const isSafeImageSrc = (src: string): boolean => {
   return IMG_SRC_PROTOCOLS.some((p) => src.toLowerCase().startsWith(`${p}:`));
 };
 
+// GFM の列 alignment（remark-rehype が th/td の properties.align に left/center/right で
+// 載せる。rehype-sanitize の defaultSchema は align を保持する）を inline text-align へ。
+// 未指定列は left（GitHub 既定・従来挙動）。CSS の固定 text-align は撤去済みのため、
+// この inline スタイルが桁揃えの唯一の決定要因になる。
+const cellTextAlign = (align: unknown): 'left' | 'center' | 'right' =>
+  align === 'center' ? 'center' : align === 'right' ? 'right' : 'left';
+
 // rehype-raw が有効化する生HTML描画を details/summary タグに限定する。
 // style属性はデフォルトスキーマで除外済み（XSS防止）。
 // img の src は http/https/相対パスのみ許可し、javascript:/data: 等を除外する。
@@ -191,6 +198,22 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
                     >
                       <img src={src} alt={alt} {...props} />
                     </button>
+                  );
+                },
+                // GFM の列 alignment を inline text-align として適用する（sanitize 後の
+                // hast node.properties.align から読む）。globals.css の固定 left は撤去済み。
+                th({ node, children, style, ...props }) {
+                  return (
+                    <th {...props} style={{ ...style, textAlign: cellTextAlign(node?.properties?.align) }}>
+                      {children}
+                    </th>
+                  );
+                },
+                td({ node, children, style, ...props }) {
+                  return (
+                    <td {...props} style={{ ...style, textAlign: cellTextAlign(node?.properties?.align) }}>
+                      {children}
+                    </td>
                   );
                 },
               }}
