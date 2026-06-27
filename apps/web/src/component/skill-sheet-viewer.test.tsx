@@ -59,4 +59,25 @@ describe('SkillSheetViewer', () => {
     // テーブルも通常どおり描画される
     expect(screen.getByText('TypeScript')).toBeInTheDocument();
   });
+
+  it('GFM の列 alignment を th/td の inline text-align として適用する', async () => {
+    const ALIGN_TABLE = `| 左 | 中 | 右 |
+| :--- | :---: | ---: |
+| a | b | c |
+`;
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: ALIGN_TABLE }} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('a')).toBeInTheDocument();
+    });
+
+    const markdown = document.querySelector('.markdown-content') as HTMLElement;
+    // ヘッダ（th）に列ごとの alignment が反映される
+    const headers = Array.from(markdown.querySelectorAll('th')) as HTMLTableCellElement[];
+    expect(headers.map((th) => th.style.textAlign)).toEqual(['left', 'center', 'right']);
+    // 本文（td）にも同じ alignment が反映される
+    const cells = Array.from(markdown.querySelectorAll('tbody td')) as HTMLTableCellElement[];
+    expect(cells.map((td) => td.style.textAlign)).toEqual(['left', 'center', 'right']);
+  });
 });
