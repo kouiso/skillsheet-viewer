@@ -8,7 +8,16 @@
  */
 import { asc, eq, sql } from 'drizzle-orm';
 
-import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks';
+import {
+  type Block,
+  type BlockInput,
+  blocksToMarkdown,
+  isBlockInputEmpty,
+  isMarkdownBlockData,
+  isTableBlockData,
+  normalizeTableBlockData,
+  splitMarkdownIntoBlocks,
+} from './blocks';
 import { type Database, getDb } from './client';
 import { blocks, skillSheets } from './schema';
 
@@ -105,45 +114,77 @@ async function ensureSeeded(db: Database): Promise<string> {
   return sheetId;
 }
 
+/**
+ * DB の 1 行を検証付きで Block へ変換する。
+ * 壊れた/未知の JSON は生 cast で通さず、不正なら null を返して skip する
+ * （TableBlockEditor 等が壊れたデータで crash しないようにする読み込み側の防御）。
+ */
+function rowToBlock(id: string, type: string, order: number, data: unknown): Block | null {
+  if (type === 'markdown' && isMarkdownBlockData(data)) {
+    return { id, type: 'markdown', order, data };
+  }
+  if (type === 'table' && isTableBlockData(data)) {
+    return { id, type: 'table', order, data: normalizeTableBlockData(data) };
+  }
+  return null;
+}
+
 /** Read the skill sheet from the DB, seeding from GitHub on first access. */
 export async function getSkillSheet(): Promise<SkillSheet> {
   const db = getDb();
   const sheetId = await ensureSeeded(db);
+  const [sheet] = await db
+    .select({ title: skillSheets.title })
+    .from(skillSheets)
+    .where(eq(skillSheets.id, sheetId))
+    .limit(1);
   const rows = await db.select().from(blocks).where(eq(blocks.sheetId, sheetId)).orderBy(asc(blocks.order));
 
-  const blockList: Block[] = rows.map((r) => ({
-    id: r.id,
-    type: r.type as Block['type'],
-    order: r.order,
-    data: r.data as Block['data'],
-  }));
+  const blockList: Block[] = rows
+    .map((r) => rowToBlock(r.id, r.type, r.order, r.data))
+    .filter((b): b is Block => b !== null);
 
-  return { title: TITLE, content: blocksToMarkdown(blockList), blocks: blockList };
+  // タイトルは DB 正本。null/空のときのみ既定値（TITLE）へフォールバックする。
+  const title = sheet?.title && sheet.title.trim().length > 0 ? sheet.title : TITLE;
+
+  return { title, content: blocksToMarkdown(blockList), blocks: blockList };
+}
+
+/** 保存前にブロック入力を正規化する（markdown は末尾空白除去、table は行を列数へ正規化）。 */
+function normalizeBlockInput(block: BlockInput): BlockInput {
+  if (block.type === 'markdown') return { type: 'markdown', data: { markdown: block.data.markdown.trimEnd() } };
+  return { type: 'table', data: normalizeTableBlockData(block.data) };
 }
 
 /**
- * Replace the owner's sheet blocks with the given ordered markdown segments
- * (D&D builder save path). Empty/whitespace-only segments are dropped.
+ * Replace the owner's sheet blocks with the given typed blocks and persist the
+ * title (D&D builder save path). 空ブロックは type 別に判定して drop し、
+ * 残ったブロックに index で order を連番再付与する（gap 無し＝unique 制約と整合）。
  *
  * delete→insert→update を1つのトランザクションで囲み原子性を保証する
  * （途中失敗で旧ブロックだけ消える＝データ損失を防ぐ）。neon-http は
  * 対話的トランザクションは非対応だが、このようなバッチ（中間読み取り無し）の
  * transaction() はサポートされる。
  */
-export async function saveSkillSheetBlocks(markdowns: string[]): Promise<void> {
+export async function saveSkillSheetBlocks(title: string, blocksInput: BlockInput[]): Promise<void> {
   const db = getDb();
   const sheetId = await getOrCreateSheetId(db);
 
-  const cleaned = markdowns.map((m) => m.trimEnd()).filter((m) => m.trim().length > 0);
+  const cleaned = blocksInput.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
+  // title は notNull のため空のときは既定値を保存する（読み込み側もフォールバックする）。
+  const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
   await db.transaction(async (tx) => {
     await tx.delete(blocks).where(eq(blocks.sheetId, sheetId));
     if (cleaned.length > 0) {
       await tx
         .insert(blocks)
-        .values(cleaned.map((markdown, order) => ({ sheetId, type: 'markdown' as const, order, data: { markdown } })));
+        .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
     }
-    await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(eq(skillSheets.id, sheetId));
+    await tx
+      .update(skillSheets)
+      .set({ title: resolvedTitle, updatedAt: sql`now()` })
+      .where(eq(skillSheets.id, sheetId));
   });
 }
 
