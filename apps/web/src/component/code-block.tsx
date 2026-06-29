@@ -1,5 +1,5 @@
 import { Check, Copy } from 'lucide-react';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vs, vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
@@ -14,7 +14,7 @@ interface CodeBlockProps {
 
 const COPIED_RESET_MS = 2000;
 
-const CodeBlock = ({ children, className }: CodeBlockProps) => {
+const CodeBlock = memo(function CodeBlock({ children, className }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
   const { mode } = useThemeMode();
   const isDark = mode === 'dark';
@@ -71,6 +71,6 @@ const CodeBlock = ({ children, className }: CodeBlockProps) => {
       </SyntaxHighlighter>
     </div>
   );
-};
+});
 
 export default CodeBlock;

@@ -1,25 +1,26 @@
+import { connection } from 'next/server';
 import type { Metadata } from 'next';
 
-import type { SheetMeta } from '@/server/github-sheets';
-import { getCachedSheets } from '@/server/sheets-cache';
+import type { SheetSummary } from '@skillsheet/db';
+import { getCachedDbSheets } from '@/server/sheets-cache';
 
-import SheetsListClient from './sheets-list-client';
+import DbSheetsListClient from './db-sheets-list-client';
 
 export const metadata: Metadata = {
   title: 'スキルシート一覧 | エンジニアスキルシート',
 };
 
 export default async function SheetsListPage() {
-  // この一覧は静的プリレンダ対象のため throw でビルドを止めず、取得失敗は error 状態として渡す。
-  // listSheets() は真に空のリポジトリのみ [] を返し、システムエラー時は throw するので、
-  // 「0件」と「取得失敗」をクライアントで別UIに分岐できる（誤って空表示しない）。
-  let sheets: SheetMeta[] = [];
+  // DATABASE_URL はランタイム専用。connection() で動的レンダリングを確保する。
+  await connection();
+
+  let sheets: SheetSummary[] = [];
   let hasError = false;
   try {
-    sheets = await getCachedSheets();
+    sheets = await getCachedDbSheets();
   } catch (err) {
-    console.error('Failed to fetch sheets:', err);
+    console.error('Failed to fetch DB sheets:', err);
     hasError = true;
   }
-  return <SheetsListClient initialSheets={sheets} hasError={hasError} />;
+  return <DbSheetsListClient initialSheets={sheets} hasError={hasError} />;
 }

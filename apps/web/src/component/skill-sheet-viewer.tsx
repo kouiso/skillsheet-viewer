@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -64,6 +64,74 @@ const SANITIZE_SCHEMA = {
   },
 };
 
+// remark/rehype プラグイン配列はモジュールスコープで固定し、毎レンダーの新規生成を防ぐ。
+const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
+const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA] as [typeof rehypeSanitize, typeof SANITIZE_SCHEMA], rehypeSlug];
+
+interface MarkdownContentProps {
+  content: string;
+  onImageClick: (src: string) => void;
+  contentRef: React.RefObject<HTMLDivElement | null>;
+}
+
+// Markdown本文はactiveIdに依存しないためメモ化してスクロール再描画を防ぐ。
+const MarkdownContent = memo(function MarkdownContent({
+  content,
+  onImageClick,
+  contentRef,
+}: MarkdownContentProps) {
+  return (
+    <div className="markdown-content" ref={contentRef}>
+      <ReactMarkdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
+        components={{
+          code(props) {
+            const { className, children, ...rest } = props;
+            const isBlock = /language-/.test(className ?? '') || /\n/.test(String(children));
+            if (!isBlock) {
+              return (
+                <code className={className} {...rest}>
+                  {children}
+                </code>
+              );
+            }
+            return <CodeBlock className={className}>{children}</CodeBlock>;
+          },
+          img({ src, alt, ...props }) {
+            if (typeof src !== 'string' || !isSafeImageSrc(src)) return null;
+            return (
+              <button
+                type="button"
+                onClick={() => onImageClick(src)}
+                className="cursor-zoom-in border-0 bg-transparent p-0"
+              >
+                <img src={src} alt={alt} {...props} />
+              </button>
+            );
+          },
+          th({ node, children, style, ...props }) {
+            return (
+              <th {...props} style={{ ...style, textAlign: cellTextAlign(node?.properties?.align) }}>
+                {children}
+              </th>
+            );
+          },
+          td({ node, children, style, ...props }) {
+            return (
+              <td {...props} style={{ ...style, textAlign: cellTextAlign(node?.properties?.align) }}>
+                {children}
+              </td>
+            );
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  );
+});
+
 const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerProps) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
@@ -75,10 +143,8 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
   // 内容が変わっていなければ setState を抑止し、再描画→再抽出の無限ループを防ぐ。
   const lastHeadingSigRef = useRef<string>('');
 
-  // 見出しIDのリストを作成。
-  // useActiveHeading には contentRef を渡し、見出し探索をこのビューア配下に scope する
-  // （比較モードで2ビューアが同一 ID を持っても互いに干渉しない）。
-  const headingIds = headings.map((h) => h.id);
+  // headingIds を useMemo で安定化。IntersectionObserver の再作成を最小限に抑える。
+  const headingIds = useMemo(() => headings.map((h) => h.id), [headings]);
   const activeId = useActiveHeading(headingIds, contentRef);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: skillSheet.content はReactMarkdown経由でDOMに反映されるため、DOM再抽出のトリガーとして必要
@@ -137,7 +203,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
     }
   };
 
-  const handleImageClick = (src: string) => {
+  const handleImageClick = useCallback((src: string) => {
     // 非 http(s)/相対 のスキームはライトボックスを開かない（XSS防止）。
     if (!isSafeImageSrc(src)) return;
     const images = Array.from((contentRef.current ?? document).querySelectorAll('img'))
@@ -149,7 +215,7 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
     const index = images.findIndex((img) => img.src === src);
     setCurrentImageIndex(index);
     setLightboxOpen(true);
-  };
+  }, []);
 
   return (
     <div className="flex min-h-screen">
@@ -168,59 +234,11 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
         <div className="rounded-2xl border border-border bg-card p-4 shadow-elevation-2 sm:p-6 md:p-8">
           <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
 
-          <div className="markdown-content" ref={contentRef}>
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm, remarkBreaks]}
-              rehypePlugins={[rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA], rehypeSlug]}
-              components={{
-                code(props) {
-                  const { className, children, ...rest } = props;
-                  // react-markdown v10 は inline prop を渡さないため、ブロックコードを
-                  // language-xxx className か改行の有無で判定する（無ければインライン）。
-                  const isBlock = /language-/.test(className ?? '') || /\n/.test(String(children));
-                  if (!isBlock) {
-                    return (
-                      <code className={className} {...rest}>
-                        {children}
-                      </code>
-                    );
-                  }
-                  return <CodeBlock className={className}>{children}</CodeBlock>;
-                },
-                img({ src, alt, ...props }) {
-                  // 安全なスキーム（http/https/相対）以外はそもそも描画しない。
-                  if (typeof src !== 'string' || !isSafeImageSrc(src)) return null;
-                  return (
-                    <button
-                      type="button"
-                      onClick={() => handleImageClick(src)}
-                      className="cursor-zoom-in border-0 bg-transparent p-0"
-                    >
-                      <img src={src} alt={alt} {...props} />
-                    </button>
-                  );
-                },
-                // GFM の列 alignment を inline text-align として適用する（sanitize 後の
-                // hast node.properties.align から読む）。globals.css の固定 left は撤去済み。
-                th({ node, children, style, ...props }) {
-                  return (
-                    <th {...props} style={{ ...style, textAlign: cellTextAlign(node?.properties?.align) }}>
-                      {children}
-                    </th>
-                  );
-                },
-                td({ node, children, style, ...props }) {
-                  return (
-                    <td {...props} style={{ ...style, textAlign: cellTextAlign(node?.properties?.align) }}>
-                      {children}
-                    </td>
-                  );
-                },
-              }}
-            >
-              {skillSheet.content}
-            </ReactMarkdown>
-          </div>
+          <MarkdownContent
+            content={skillSheet.content}
+            onImageClick={handleImageClick}
+            contentRef={contentRef}
+          />
         </div>
       </motion.main>
 
