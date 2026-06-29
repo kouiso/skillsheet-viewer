@@ -3,9 +3,13 @@
 import {
   closestCenter,
   DndContext,
+  DragOverlay,
   type DragEndEvent,
+  type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
@@ -481,6 +485,67 @@ const SortableBlock = ({
   );
 };
 
+type PaletteBlockType = 'markdown' | 'table';
+
+const PALETTE_ITEMS: { blockType: PaletteBlockType; label: string; icon: React.ReactNode }[] = [
+  { blockType: 'markdown', label: 'テキスト', icon: <Plus className="size-3.5" /> },
+  { blockType: 'table', label: 'テーブル', icon: <Table className="size-3.5" /> },
+];
+
+/** パレット上のドラッグ可能チップ。canvas へドロップすると対応ブロックを挿入する。 */
+const PaletteChip = ({ blockType, label, icon }: (typeof PALETTE_ITEMS)[number]) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `palette-${blockType}`,
+    data: { fromPalette: true, blockType },
+  });
+  return (
+    <button
+      ref={setNodeRef}
+      type="button"
+      {...listeners}
+      {...attributes}
+      className={`flex cursor-grab items-center gap-1 rounded border border-dashed border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary active:cursor-grabbing ${
+        isDragging ? 'opacity-40' : ''
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+};
+
+/** ドラッグ中のオーバーレイ用プレースホルダ。 */
+const DragPreview = ({ blockType }: { blockType: PaletteBlockType }) => (
+  <div className="flex items-center gap-1 rounded border border-primary bg-primary/10 px-3 py-1.5 text-sm text-primary shadow-md">
+    {blockType === 'markdown' ? <Plus className="size-3.5" /> : <Table className="size-3.5" />}
+    {blockType === 'markdown' ? 'テキスト' : 'テーブル'}
+  </div>
+);
+
+/** キャンバス全体のドロップゾーン。パレットから D&amp;D したとき、既存ブロックの間隔以外の空白領域でもドロップを受け付ける。 */
+const CanvasDroppable = ({ children }: { children: React.ReactNode }) => {
+  const { setNodeRef, isOver } = useDroppable({ id: 'canvas-drop' });
+  return (
+    <div ref={setNodeRef} className={`min-h-16 rounded-md transition-colors ${isOver ? 'bg-primary/5 ring-1 ring-primary/20' : ''}`}>
+      {children}
+    </div>
+  );
+};
+
+/** パレットからドロップされたブロック型に対応する初期 EditorItem を生成する。 */
+const createPaletteItem = (blockType: PaletteBlockType): EditorItem => {
+  if (blockType === 'markdown') return { id: newId(), type: 'markdown', markdown: '' };
+  return {
+    id: newId(),
+    type: 'table',
+    columns: [
+      { label: '項目', align: 'left' },
+      { label: '内容', align: 'left' },
+    ],
+    rows: [['', '']],
+  };
+};
+
 const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, activeSheetId }: BuilderClientProps) => {
   const router = useRouter();
   const [items, setItems] = useState<EditorItem[]>(() => initialBlocks.map(blockToItem));
@@ -490,6 +555,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [isSheetOp, startSheetOp] = useTransition();
   const [sheets, setSheets] = useState<SheetSummary[]>(initialSheets);
   const savedRef = useRef(false);
+  const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
 
   // 未保存変更の検知。最後に保存成功した時点のスナップショット（タイトル＋組み立て markdown）を
   // 保持し、現在の内容と差分があれば dirty とみなす（保存成功で更新）。
@@ -530,8 +596,31 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [isDirty]);
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const blockType = event.active.data.current?.blockType as PaletteBlockType | undefined;
+    setActivePaletteType(blockType ?? null);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    setActivePaletteType(null);
+
+    // パレットからのドロップ: over が既存ブロックなら直後に、canvas なら末尾に挿入
+    if (active.data.current?.fromPalette) {
+      const blockType = active.data.current.blockType as PaletteBlockType;
+      const newItem = createPaletteItem(blockType);
+      setItems((prev) => {
+        if (!over || over.id === 'canvas-drop') return [...prev, newItem];
+        const idx = prev.findIndex((i) => i.id === over.id);
+        if (idx === -1) return [...prev, newItem];
+        const next = [...prev];
+        next.splice(idx + 1, 0, newItem);
+        return next;
+      });
+      return;
+    }
+
+    // 既存ブロックの並べ替え
     if (!over || active.id === over.id) return;
     setItems((prev) => {
       const oldIndex = prev.findIndex((i) => i.id === active.id);
@@ -752,29 +841,44 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             />
           </div>
 
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-              <div className="space-y-3">
-                {items.map((item) => (
-                  <SortableBlock
-                    key={item.id}
-                    item={item}
-                    onMarkdownChange={updateMarkdown}
-                    onTableChange={updateTable}
-                    onSkillsChange={updateSkills}
-                    onExperienceChange={updateExperience}
-                    onDelete={deleteBlock}
-                  />
-                ))}
-              </div>
-            </SortableContext>
-          </DndContext>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+            {/* パレット: ドラッグしてキャンバスへドロップ */}
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
+              <span className="text-xs text-muted-foreground">ドラッグして追加:</span>
+              {PALETTE_ITEMS.map((p) => (
+                <PaletteChip key={p.blockType} {...p} />
+              ))}
+            </div>
 
-          {items.length === 0 && (
-            <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              ブロックがありません。下のボタンでテキスト・テーブル・スキル一覧・職務経歴を追加してください。
-            </p>
-          )}
+            {/* キャンバス */}
+            <CanvasDroppable>
+              <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <SortableBlock
+                      key={item.id}
+                      item={item}
+                      onMarkdownChange={updateMarkdown}
+                      onTableChange={updateTable}
+                      onSkillsChange={updateSkills}
+                      onExperienceChange={updateExperience}
+                      onDelete={deleteBlock}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+              {items.length === 0 && (
+                <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                  ブロックがありません。パレットからドラッグするか、下のボタンで追加してください。
+                </p>
+              )}
+            </CanvasDroppable>
+
+            {/* ドラッグ中のオーバーレイ（パレットチップのゴースト） */}
+            <DragOverlay>
+              {activePaletteType && <DragPreview blockType={activePaletteType} />}
+            </DragOverlay>
+          </DndContext>
 
           <div className="flex gap-2">
             <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
