@@ -12,6 +12,7 @@ import {
 import { revalidateTag } from 'next/cache';
 
 import { isEditor } from '@/server/auth-gate';
+import { getTemplate } from './templates';
 
 export interface SaveResult {
   ok: boolean;
@@ -69,9 +70,10 @@ export async function listSheetsAction(): Promise<{ ok: true; sheets: SheetSumma
   }
 }
 
-/** 新規シートを作成して ID を返す。 */
+/** 新規シートを作成して ID を返す。templateId を渡すとテンプレートブロックを初期値として挿入する。 */
 export async function createSheetAction(
   title: string,
+  templateId?: string,
 ): Promise<{ ok: true; sheetId: string } | { ok: false; error: string }> {
   if (!(await isEditor())) {
     return { ok: false, error: 'unauthorized' };
@@ -80,7 +82,8 @@ export async function createSheetAction(
     return { ok: false, error: 'invalid title' };
   }
   try {
-    const sheetId = await createSheet(title);
+    const initialBlocks: BlockInput[] | undefined = templateId ? getTemplate(templateId)?.blocks : undefined;
+    const sheetId = await createSheet(title, initialBlocks);
     revalidateTag('db-sheet', {});
     return { ok: true, sheetId };
   } catch (err) {
