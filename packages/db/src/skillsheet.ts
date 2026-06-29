@@ -6,7 +6,7 @@
  *
  * Server-only. Never import this from a Client Component.
  */
-import { asc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 
 import {
   type Block,
@@ -37,6 +37,12 @@ export interface SkillSheet {
   title: string;
   content: string;
   blocks: Block[];
+}
+
+export interface SheetSummary {
+  id: string;
+  title: string;
+  updatedAt: Date;
 }
 
 /**
@@ -70,41 +76,41 @@ export async function fetchMarkdownFromGitHub(): Promise<string> {
   return Buffer.from(data.content.replace(/\n/g, ''), 'base64').toString('utf-8');
 }
 
-async function getOrCreateSheetId(db: Database): Promise<string> {
+/** オーナーの最初のシートを取得、なければ作成して ID を返す（シード用デフォルトシート）。 */
+async function getOrCreateDefaultSheetId(db: Database): Promise<string> {
   const ownerId = getOwnerId();
   const existing = await db
     .select({ id: skillSheets.id })
     .from(skillSheets)
     .where(eq(skillSheets.ownerId, ownerId))
+    .orderBy(asc(skillSheets.updatedAt))
     .limit(1);
   if (existing[0]?.id) return existing[0].id;
 
-  // owner_id unique + onConflictDoNothing guards against concurrent duplicate creation.
   const inserted = await db
     .insert(skillSheets)
     .values({ ownerId, title: TITLE })
-    .onConflictDoNothing()
     .returning({ id: skillSheets.id });
   if (inserted[0]?.id) return inserted[0].id;
 
-  // Another request won the race: re-read.
+  // 競合: 別リクエストが先に作成した場合
   const retry = await db
     .select({ id: skillSheets.id })
     .from(skillSheets)
     .where(eq(skillSheets.ownerId, ownerId))
+    .orderBy(asc(skillSheets.updatedAt))
     .limit(1);
   return retry[0].id;
 }
 
 async function ensureSeeded(db: Database): Promise<string> {
-  const sheetId = await getOrCreateSheetId(db);
+  const sheetId = await getOrCreateDefaultSheetId(db);
 
   const existingBlocks = await db.select({ id: blocks.id }).from(blocks).where(eq(blocks.sheetId, sheetId)).limit(1);
   if (existingBlocks.length === 0) {
     const markdown = await fetchMarkdownFromGitHub();
     const segments = splitMarkdownIntoBlocks(markdown);
     if (segments.length > 0) {
-      // (sheet_id, order) unique + onConflictDoNothing guards against concurrent seeding.
       await db
         .insert(blocks)
         .values(segments.map((data, order) => ({ sheetId, type: 'markdown', order, data })))
@@ -129,10 +135,7 @@ function rowToBlock(id: string, type: string, order: number, data: unknown): Blo
   return null;
 }
 
-/** Read the skill sheet from the DB, seeding from GitHub on first access. */
-export async function getSkillSheet(): Promise<SkillSheet> {
-  const db = getDb();
-  const sheetId = await ensureSeeded(db);
+async function fetchSheetById(db: Database, sheetId: string): Promise<SkillSheet> {
   const [sheet] = await db
     .select({ title: skillSheets.title })
     .from(skillSheets)
@@ -144,10 +147,54 @@ export async function getSkillSheet(): Promise<SkillSheet> {
     .map((r) => rowToBlock(r.id, r.type, r.order, r.data))
     .filter((b): b is Block => b !== null);
 
-  // タイトルは DB 正本。null/空のときのみ既定値（TITLE）へフォールバックする。
   const title = sheet?.title && sheet.title.trim().length > 0 ? sheet.title : TITLE;
-
   return { title, content: blocksToMarkdown(blockList), blocks: blockList };
+}
+
+/** オーナーのシート一覧を返す（updatedAt 降順）。 */
+export async function listSheets(): Promise<SheetSummary[]> {
+  const db = getDb();
+  const ownerId = getOwnerId();
+  const rows = await db
+    .select({ id: skillSheets.id, title: skillSheets.title, updatedAt: skillSheets.updatedAt })
+    .from(skillSheets)
+    .where(eq(skillSheets.ownerId, ownerId))
+    .orderBy(asc(skillSheets.updatedAt));
+  return rows;
+}
+
+/** 新規シートを作成して ID を返す。 */
+export async function createSheet(title: string): Promise<string> {
+  const db = getDb();
+  const ownerId = getOwnerId();
+  const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
+  const inserted = await db
+    .insert(skillSheets)
+    .values({ ownerId, title: resolvedTitle })
+    .returning({ id: skillSheets.id });
+  return inserted[0].id;
+}
+
+/** 指定シートを削除する（ブロックも cascade で削除される）。 */
+export async function deleteSheet(sheetId: string): Promise<void> {
+  const db = getDb();
+  const ownerId = getOwnerId();
+  await db
+    .delete(skillSheets)
+    .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)));
+}
+
+/** 指定 ID のシートを読む。ID 未指定またはデフォルト読み込み時は GitHub シードを実行する。 */
+export async function getSkillSheetById(sheetId: string): Promise<SkillSheet> {
+  const db = getDb();
+  return fetchSheetById(db, sheetId);
+}
+
+/** Read the skill sheet from the DB, seeding from GitHub on first access. */
+export async function getSkillSheet(): Promise<SkillSheet> {
+  const db = getDb();
+  const sheetId = await ensureSeeded(db);
+  return fetchSheetById(db, sheetId);
 }
 
 /** 保存前にブロック入力を正規化する（markdown は末尾空白除去、table は行を列数へ正規化）。 */
@@ -157,34 +204,31 @@ function normalizeBlockInput(block: BlockInput): BlockInput {
 }
 
 /**
- * Replace the owner's sheet blocks with the given typed blocks and persist the
- * title (D&D builder save path). 空ブロックは type 別に判定して drop し、
- * 残ったブロックに index で order を連番再付与する（gap 無し＝unique 制約と整合）。
- *
- * delete→insert→update を1つのトランザクションで囲み原子性を保証する
- * （途中失敗で旧ブロックだけ消える＝データ損失を防ぐ）。neon-http は
- * 対話的トランザクションは非対応だが、このようなバッチ（中間読み取り無し）の
- * transaction() はサポートされる。
+ * 指定シートのブロックを保存する。sheetId を明示することで複数シートに対応。
+ * sheetId が未指定のときはオーナーのデフォルトシートへ保存する（後方互換）。
  */
-export async function saveSkillSheetBlocks(title: string, blocksInput: BlockInput[]): Promise<void> {
+export async function saveSkillSheetBlocks(
+  title: string,
+  blocksInput: BlockInput[],
+  sheetId?: string,
+): Promise<void> {
   const db = getDb();
-  const sheetId = await getOrCreateSheetId(db);
+  const resolvedSheetId = sheetId ?? (await getOrCreateDefaultSheetId(db));
 
   const cleaned = blocksInput.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
-  // title は notNull のため空のときは既定値を保存する（読み込み側もフォールバックする）。
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
   await db.transaction(async (tx) => {
-    await tx.delete(blocks).where(eq(blocks.sheetId, sheetId));
+    await tx.delete(blocks).where(eq(blocks.sheetId, resolvedSheetId));
     if (cleaned.length > 0) {
       await tx
         .insert(blocks)
-        .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
+        .values(cleaned.map((block, order) => ({ sheetId: resolvedSheetId, type: block.type, order, data: block.data })));
     }
     await tx
       .update(skillSheets)
       .set({ title: resolvedTitle, updatedAt: sql`now()` })
-      .where(eq(skillSheets.id, sheetId));
+      .where(eq(skillSheets.id, resolvedSheetId));
   });
 }
 
