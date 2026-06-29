@@ -22,6 +22,8 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   type Block,
   type BlockInput,
+  type ExperienceBlockData,
+  experienceBlockToMarkdown,
   isBlockInputEmpty,
   type SkillEntry,
   skillsBlockToMarkdown,
@@ -59,7 +61,8 @@ type SheetSummary = { id: string; title: string; updatedAt: Date };
 type EditorItem =
   | { id: string; type: 'markdown'; markdown: string }
   | { id: string; type: 'table'; columns: TableColumn[]; rows: string[][] }
-  | { id: string; type: 'skills'; category: string; skills: SkillEntry[] };
+  | { id: string; type: 'skills'; category: string; skills: SkillEntry[] }
+  | ({ id: string; type: 'experience' } & ExperienceBlockData);
 
 interface BuilderClientProps {
   initialBlocks: Block[];
@@ -79,19 +82,28 @@ const blockToItem = (block: Block, index: number): EditorItem => {
   const id = `block-${index}`;
   if (block.type === 'markdown') return { id, type: 'markdown', markdown: block.data.markdown };
   if (block.type === 'skills') return { id, type: 'skills', category: block.data.category, skills: block.data.skills };
+  if (block.type === 'experience') return { id, type: 'experience', ...block.data };
   return { id, type: 'table', columns: block.data.columns, rows: block.data.rows };
 };
 
 const itemToBlockInput = (item: EditorItem): BlockInput => {
   if (item.type === 'markdown') return { type: 'markdown', data: { markdown: item.markdown } };
   if (item.type === 'skills') return { type: 'skills', data: { category: item.category, skills: item.skills } };
+  if (item.type === 'experience') {
+    const { company, startDate, endDate, role, description } = item;
+    return { type: 'experience', data: { company, startDate, endDate, role, description } };
+  }
   return { type: 'table', data: { columns: item.columns, rows: item.rows } };
 };
 
-// 1 ブロックを markdown 文字列へ（table/skills は GFM 表へ変換）。プレビュー/バックアップ/dirty で共有。
+// 1 ブロックを markdown 文字列へ（table/skills/experience は GFM 表・セクションへ変換）。
 const itemToMarkdown = (item: EditorItem): string => {
   if (item.type === 'markdown') return item.markdown;
   if (item.type === 'skills') return skillsBlockToMarkdown({ category: item.category, skills: item.skills });
+  if (item.type === 'experience') {
+    const { company, startDate, endDate, role, description } = item;
+    return experienceBlockToMarkdown({ company, startDate, endDate, role, description });
+  }
   return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
 };
 
@@ -343,17 +355,72 @@ const SkillsBlockEditor = ({
   );
 };
 
+const ExperienceBlockEditor = ({
+  data,
+  onChange,
+}: {
+  data: ExperienceBlockData;
+  onChange: (data: ExperienceBlockData) => void;
+}) => {
+  const set = (field: keyof ExperienceBlockData, value: string) => onChange({ ...data, [field]: value });
+  return (
+    <div className="min-w-0 flex-1 space-y-2 text-sm">
+      <input
+        value={data.company}
+        onChange={(e) => set('company', e.target.value)}
+        placeholder="会社名"
+        aria-label="会社名"
+        className="w-full rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <div className="flex gap-2">
+        <input
+          value={data.startDate}
+          onChange={(e) => set('startDate', e.target.value)}
+          placeholder="開始（例: 2020-04）"
+          aria-label="開始年月"
+          className="flex-1 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        <span className="self-center text-muted-foreground">〜</span>
+        <input
+          value={data.endDate}
+          onChange={(e) => set('endDate', e.target.value)}
+          placeholder="終了（空欄=現在）"
+          aria-label="終了年月"
+          className="flex-1 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+      </div>
+      <input
+        value={data.role}
+        onChange={(e) => set('role', e.target.value)}
+        placeholder="職種（例: フロントエンドエンジニア）"
+        aria-label="職種"
+        className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <textarea
+        value={data.description}
+        onChange={(e) => set('description', e.target.value)}
+        rows={4}
+        placeholder="業務内容"
+        aria-label="業務内容"
+        className="w-full resize-y rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+    </div>
+  );
+};
+
 const SortableBlock = ({
   item,
   onMarkdownChange,
   onTableChange,
   onSkillsChange,
+  onExperienceChange,
   onDelete,
 }: {
   item: EditorItem;
   onMarkdownChange: (id: string, markdown: string) => void;
   onTableChange: (id: string, columns: TableColumn[], rows: string[][]) => void;
   onSkillsChange: (id: string, category: string, skills: SkillEntry[]) => void;
+  onExperienceChange: (id: string, data: ExperienceBlockData) => void;
   onDelete: (id: string) => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -388,6 +455,11 @@ const SortableBlock = ({
           category={item.category}
           skills={item.skills}
           onChange={(category, skills) => onSkillsChange(item.id, category, skills)}
+        />
+      ) : item.type === 'experience' ? (
+        <ExperienceBlockEditor
+          data={{ company: item.company, startDate: item.startDate, endDate: item.endDate, role: item.role, description: item.description }}
+          onChange={(data) => onExperienceChange(item.id, data)}
         />
       ) : (
         <TableBlockEditor
@@ -481,6 +553,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const updateSkills = (id: string, category: string, skills: SkillEntry[]) =>
     setItems((prev) => prev.map((i) => (i.id === id && i.type === 'skills' ? { ...i, category, skills } : i)));
 
+  const updateExperience = (id: string, data: ExperienceBlockData) =>
+    setItems((prev) => prev.map((i) => (i.id === id && i.type === 'experience' ? { ...i, ...data } : i)));
+
   const deleteBlock = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
 
   const addMarkdownBlock = () => setItems((prev) => [...prev, { id: newId(), type: 'markdown', markdown: '' }]);
@@ -505,6 +580,12 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     setItems((prev) => [
       ...prev,
       { id: newId(), type: 'skills', category: '', skills: [{ name: '', years: 0, level: '' }] },
+    ]);
+
+  const addExperienceBlock = () =>
+    setItems((prev) => [
+      ...prev,
+      { id: newId(), type: 'experience', company: '', startDate: '', endDate: '', role: '', description: '' },
     ]);
 
   // 破壊的な編集の前に、現在の内容をファイルとしてダウンロードして復元ポイントを残す。
@@ -681,6 +762,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                     onMarkdownChange={updateMarkdown}
                     onTableChange={updateTable}
                     onSkillsChange={updateSkills}
+                    onExperienceChange={updateExperience}
                     onDelete={deleteBlock}
                   />
                 ))}
@@ -690,7 +772,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
           {items.length === 0 && (
             <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-              ブロックがありません。下のボタンでテキストかテーブルを追加してください。
+              ブロックがありません。下のボタンでテキスト・テーブル・スキル一覧・職務経歴を追加してください。
             </p>
           )}
 
@@ -706,6 +788,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             <Button variant="outline" onClick={addSkillsBlock} className="flex-1">
               <Plus className="mr-1.5 size-4" />
               スキル一覧
+            </Button>
+            <Button variant="outline" onClick={addExperienceBlock} className="flex-1">
+              <Plus className="mr-1.5 size-4" />
+              職務経歴
             </Button>
           </div>
         </div>
