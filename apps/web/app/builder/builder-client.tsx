@@ -34,6 +34,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  FileText,
   GripVertical,
   Plus,
   Save,
@@ -41,13 +42,16 @@ import {
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { Button } from '@/components/ui/button';
 
-import { saveBlocksAction } from './actions';
+import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
+
+type SheetSummary = { id: string; title: string; updatedAt: Date };
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
 type EditorItem =
@@ -57,6 +61,8 @@ type EditorItem =
 interface BuilderClientProps {
   initialBlocks: Block[];
   initialTitle: string;
+  sheets: SheetSummary[];
+  activeSheetId: string;
 }
 
 const newId = () =>
@@ -296,11 +302,14 @@ const SortableBlock = ({
   );
 };
 
-const BuilderClient = ({ initialBlocks, initialTitle }: BuilderClientProps) => {
+const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, activeSheetId }: BuilderClientProps) => {
+  const router = useRouter();
   const [items, setItems] = useState<EditorItem[]>(() => initialBlocks.map(blockToItem));
   const [title, setTitle] = useState(initialTitle);
   const [showPreview, setShowPreview] = useState(true);
   const [isSaving, startSaving] = useTransition();
+  const [isSheetOp, startSheetOp] = useTransition();
+  const [sheets, setSheets] = useState<SheetSummary[]>(initialSheets);
   const savedRef = useRef(false);
 
   // 未保存変更の検知。最後に保存成功した時点のスナップショット（タイトル＋組み立て markdown）を
@@ -382,6 +391,42 @@ const BuilderClient = ({ initialBlocks, initialTitle }: BuilderClientProps) => {
     ]);
 
   // 破壊的な編集の前に、現在の内容をファイルとしてダウンロードして復元ポイントを残す。
+  const handleCreateSheet = () => {
+    const newTitle = window.prompt('新しいシートのタイトルを入力してください', '新しいスキルシート');
+    if (!newTitle?.trim()) return;
+    startSheetOp(async () => {
+      const res = await createSheetAction(newTitle.trim());
+      if (res.ok) {
+        router.push(`/builder?sheet=${res.sheetId}`);
+      } else {
+        toast.error('シートの作成に失敗しました');
+      }
+    });
+  };
+
+  const handleDeleteSheet = (sheetId: string, sheetTitle: string) => {
+    if (sheets.length <= 1) {
+      toast.error('最後のシートは削除できません');
+      return;
+    }
+    if (!window.confirm(`「${sheetTitle}」を削除しますか？この操作は元に戻せません。`)) return;
+    startSheetOp(async () => {
+      const res = await deleteSheetAction(sheetId);
+      if (res.ok) {
+        const remaining = sheets.filter((s) => s.id !== sheetId);
+        setSheets(remaining);
+        if (sheetId === activeSheetId) {
+          router.push(`/builder?sheet=${remaining[0]?.id ?? ''}`);
+        } else {
+          router.refresh();
+        }
+        toast.success('シートを削除しました');
+      } else {
+        toast.error('シートの削除に失敗しました');
+      }
+    });
+  };
+
   const handleExport = () => {
     const content = assembleMarkdown(items);
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
@@ -406,7 +451,7 @@ const BuilderClient = ({ initialBlocks, initialTitle }: BuilderClientProps) => {
       if (!confirmed) return;
     }
 
-    const payload = { title, blocks: items.map(itemToBlockInput) };
+    const payload = { title, blocks: items.map(itemToBlockInput), sheetId: activeSheetId };
     const savedSnapshot = snapshot(items, title);
 
     startSaving(async () => {
@@ -453,6 +498,49 @@ const BuilderClient = ({ initialBlocks, initialTitle }: BuilderClientProps) => {
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2">
         {/* エディタ */}
         <div className="space-y-3">
+          {/* シートセレクター */}
+          <div className="rounded-lg border border-border bg-card p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">シート一覧</span>
+              <button
+                type="button"
+                onClick={handleCreateSheet}
+                disabled={isSheetOp}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+              >
+                <Plus className="size-3.5" />
+                新規シート
+              </button>
+            </div>
+            <ul className="space-y-1">
+              {sheets.map((sheet) => (
+                <li key={sheet.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/builder?sheet=${sheet.id}`)}
+                    className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
+                      sheet.id === activeSheetId
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    <FileText className="size-3.5 shrink-0" />
+                    <span className="truncate">{sheet.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSheet(sheet.id, sheet.title)}
+                    disabled={isSheetOp || sheets.length <= 1}
+                    aria-label={`「${sheet.title}」を削除`}
+                    className="rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           <div>
             <label htmlFor="sheet-title" className="mb-1 block text-sm font-medium text-muted-foreground">
               タイトル
