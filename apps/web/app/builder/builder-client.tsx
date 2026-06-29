@@ -23,6 +23,8 @@ import {
   type Block,
   type BlockInput,
   isBlockInputEmpty,
+  type SkillEntry,
+  skillsBlockToMarkdown,
   type TableAlign,
   type TableColumn,
   tableBlockToMarkdown,
@@ -56,7 +58,8 @@ type SheetSummary = { id: string; title: string; updatedAt: Date };
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
 type EditorItem =
   | { id: string; type: 'markdown'; markdown: string }
-  | { id: string; type: 'table'; columns: TableColumn[]; rows: string[][] };
+  | { id: string; type: 'table'; columns: TableColumn[]; rows: string[][] }
+  | { id: string; type: 'skills'; category: string; skills: SkillEntry[] };
 
 interface BuilderClientProps {
   initialBlocks: Block[];
@@ -75,17 +78,22 @@ const newId = () =>
 const blockToItem = (block: Block, index: number): EditorItem => {
   const id = `block-${index}`;
   if (block.type === 'markdown') return { id, type: 'markdown', markdown: block.data.markdown };
+  if (block.type === 'skills') return { id, type: 'skills', category: block.data.category, skills: block.data.skills };
   return { id, type: 'table', columns: block.data.columns, rows: block.data.rows };
 };
 
-const itemToBlockInput = (item: EditorItem): BlockInput =>
-  item.type === 'markdown'
-    ? { type: 'markdown', data: { markdown: item.markdown } }
-    : { type: 'table', data: { columns: item.columns, rows: item.rows } };
+const itemToBlockInput = (item: EditorItem): BlockInput => {
+  if (item.type === 'markdown') return { type: 'markdown', data: { markdown: item.markdown } };
+  if (item.type === 'skills') return { type: 'skills', data: { category: item.category, skills: item.skills } };
+  return { type: 'table', data: { columns: item.columns, rows: item.rows } };
+};
 
-// 1 ブロックを markdown 文字列へ（table は GFM 表へ変換）。プレビュー/バックアップ/dirty で共有。
-const itemToMarkdown = (item: EditorItem): string =>
-  item.type === 'markdown' ? item.markdown : tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
+// 1 ブロックを markdown 文字列へ（table/skills は GFM 表へ変換）。プレビュー/バックアップ/dirty で共有。
+const itemToMarkdown = (item: EditorItem): string => {
+  if (item.type === 'markdown') return item.markdown;
+  if (item.type === 'skills') return skillsBlockToMarkdown({ category: item.category, skills: item.skills });
+  return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
+};
 
 const assembleMarkdown = (items: EditorItem[]): string => items.map(itemToMarkdown).join('\n');
 
@@ -244,15 +252,108 @@ const TableBlockEditor = ({
   );
 };
 
+const SkillsBlockEditor = ({
+  category,
+  skills,
+  onChange,
+}: {
+  category: string;
+  skills: SkillEntry[];
+  onChange: (category: string, skills: SkillEntry[]) => void;
+}) => {
+  const setCategory = (v: string) => onChange(v, skills);
+  const setSkill = (i: number, field: keyof SkillEntry, value: string | number) =>
+    onChange(category, skills.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)));
+  const addSkill = () => onChange(category, [...skills, { name: '', years: 0, level: '' }]);
+  const removeSkill = (i: number) => onChange(category, skills.filter((_, idx) => idx !== i));
+
+  return (
+    <div className="min-w-0 flex-1 space-y-2">
+      <input
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        placeholder="カテゴリ（例: プログラミング言語）"
+        className="w-full rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+      />
+      <table className="w-full border-collapse text-sm">
+        <thead>
+          <tr>
+            <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
+            <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-20">経験年数</th>
+            <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">習熟度</th>
+            <th className="border border-border px-1 py-1 w-8" />
+          </tr>
+        </thead>
+        <tbody>
+          {skills.map((s, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: スキル行は順序で管理
+            <tr key={i}>
+              <td className="border border-border p-1">
+                <input
+                  value={s.name}
+                  onChange={(e) => setSkill(i, 'name', e.target.value)}
+                  placeholder="TypeScript"
+                  aria-label={`スキル${i + 1}の名称`}
+                  className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </td>
+              <td className="border border-border p-1">
+                <input
+                  type="number"
+                  min={0}
+                  max={50}
+                  value={s.years}
+                  onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
+                  aria-label={`スキル${i + 1}の経験年数`}
+                  className="w-full rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </td>
+              <td className="border border-border p-1">
+                <input
+                  value={s.level}
+                  onChange={(e) => setSkill(i, 'level', e.target.value)}
+                  placeholder="実務経験あり"
+                  aria-label={`スキル${i + 1}の習熟度`}
+                  className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                />
+              </td>
+              <td className="border border-border p-1 text-center">
+                <button
+                  type="button"
+                  onClick={() => removeSkill(i)}
+                  aria-label={`スキル${i + 1}を削除`}
+                  className="rounded p-1 text-muted-foreground hover:text-destructive"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button
+        type="button"
+        onClick={addSkill}
+        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+      >
+        <Plus className="size-3.5" />
+        スキルを追加
+      </button>
+    </div>
+  );
+};
+
 const SortableBlock = ({
   item,
   onMarkdownChange,
   onTableChange,
+  onSkillsChange,
   onDelete,
 }: {
   item: EditorItem;
   onMarkdownChange: (id: string, markdown: string) => void;
   onTableChange: (id: string, columns: TableColumn[], rows: string[][]) => void;
+  onSkillsChange: (id: string, category: string, skills: SkillEntry[]) => void;
   onDelete: (id: string) => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -281,6 +382,12 @@ const SortableBlock = ({
           rows={Math.min(12, Math.max(3, item.markdown.split('\n').length))}
           className="min-w-0 flex-1 resize-y rounded-md border border-input bg-background p-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           placeholder="Markdown を入力..."
+        />
+      ) : item.type === 'skills' ? (
+        <SkillsBlockEditor
+          category={item.category}
+          skills={item.skills}
+          onChange={(category, skills) => onSkillsChange(item.id, category, skills)}
         />
       ) : (
         <TableBlockEditor
@@ -371,6 +478,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const updateTable = (id: string, columns: TableColumn[], rows: string[][]) =>
     setItems((prev) => prev.map((i) => (i.id === id && i.type === 'table' ? { ...i, columns, rows } : i)));
 
+  const updateSkills = (id: string, category: string, skills: SkillEntry[]) =>
+    setItems((prev) => prev.map((i) => (i.id === id && i.type === 'skills' ? { ...i, category, skills } : i)));
+
   const deleteBlock = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
 
   const addMarkdownBlock = () => setItems((prev) => [...prev, { id: newId(), type: 'markdown', markdown: '' }]);
@@ -388,6 +498,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         ],
         rows: [['', '']],
       },
+    ]);
+
+  // 既定スキル一覧は空エントリ 1 行。
+  const addSkillsBlock = () =>
+    setItems((prev) => [
+      ...prev,
+      { id: newId(), type: 'skills', category: '', skills: [{ name: '', years: 0, level: '' }] },
     ]);
 
   // 破壊的な編集の前に、現在の内容をファイルとしてダウンロードして復元ポイントを残す。
@@ -563,6 +680,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                     item={item}
                     onMarkdownChange={updateMarkdown}
                     onTableChange={updateTable}
+                    onSkillsChange={updateSkills}
                     onDelete={deleteBlock}
                   />
                 ))}
@@ -584,6 +702,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             <Button variant="outline" onClick={addTableBlock} className="flex-1">
               <Table className="mr-1.5 size-4" />
               テーブル
+            </Button>
+            <Button variant="outline" onClick={addSkillsBlock} className="flex-1">
+              <Plus className="mr-1.5 size-4" />
+              スキル一覧
             </Button>
           </div>
         </div>
