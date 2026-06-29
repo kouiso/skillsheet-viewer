@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Database, FileDown, FileText, Moon, PencilLine, Sun } from 'lucide-react';
+import { FileDown, FileText, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -33,17 +33,6 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
         </div>
 
         <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" asChild aria-label="DB版スキルシート">
-                <Link href="/view/db">
-                  <Database />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>DB版スキルシート</TooltipContent>
-          </Tooltip>
-
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー">
