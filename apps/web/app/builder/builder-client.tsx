@@ -58,6 +58,7 @@ import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { Button } from '@/components/ui/button';
 
 import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
+import { TEMPLATES } from './templates';
 
 type SheetSummary = { id: string; title: string; updatedAt: Date };
 
@@ -554,6 +555,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [isSaving, startSaving] = useTransition();
   const [isSheetOp, startSheetOp] = useTransition();
   const [sheets, setSheets] = useState<SheetSummary[]>(initialSheets);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
+  const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
   const savedRef = useRef(false);
   const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
 
@@ -677,12 +681,18 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       { id: newId(), type: 'experience', company: '', startDate: '', endDate: '', role: '', description: '' },
     ]);
 
-  // 破壊的な編集の前に、現在の内容をファイルとしてダウンロードして復元ポイントを残す。
   const handleCreateSheet = () => {
-    const newTitle = window.prompt('新しいシートのタイトルを入力してください', '新しいスキルシート');
-    if (!newTitle?.trim()) return;
+    setNewSheetTitle('新しいスキルシート');
+    setNewSheetTemplateId(TEMPLATES[0].id);
+    setShowCreateDialog(true);
+  };
+
+  const handleConfirmCreate = () => {
+    const title = newSheetTitle.trim();
+    if (!title) return;
+    setShowCreateDialog(false);
     startSheetOp(async () => {
-      const res = await createSheetAction(newTitle.trim());
+      const res = await createSheetAction(title, newSheetTemplateId);
       if (res.ok) {
         router.push(`/builder?sheet=${res.sheetId}`);
       } else {
@@ -759,6 +769,52 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
   return (
     <div className="min-h-screen">
+      {/* テンプレート選択ダイアログ */}
+      {showCreateDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-card p-6 shadow-xl">
+            <h2 className="mb-4 text-base font-semibold">新規シートを作成</h2>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="new-sheet-title" className="mb-1 block text-sm font-medium text-muted-foreground">
+                  タイトル
+                </label>
+                <input
+                  id="new-sheet-title"
+                  value={newSheetTitle}
+                  onChange={(e) => setNewSheetTitle(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmCreate(); if (e.key === 'Escape') setShowCreateDialog(false); }}
+                  autoFocus
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <div>
+                <label htmlFor="new-sheet-template" className="mb-1 block text-sm font-medium text-muted-foreground">
+                  テンプレート
+                </label>
+                <select
+                  id="new-sheet-template"
+                  value={newSheetTemplateId}
+                  onChange={(e) => setNewSheetTemplateId(e.target.value)}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setShowCreateDialog(false)}>
+                キャンセル
+              </Button>
+              <Button size="sm" onClick={handleConfirmCreate} disabled={!newSheetTitle.trim()}>
+                作成
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <h1 className="text-lg font-bold">スキルシートビルダー</h1>
