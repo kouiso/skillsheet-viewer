@@ -171,8 +171,8 @@ export async function listSheets(): Promise<SheetSummary[]> {
   return rows;
 }
 
-/** 新規シートを作成して ID を返す。 */
-export async function createSheet(title: string): Promise<string> {
+/** 新規シートを作成して ID を返す。initialBlocks を渡すとテンプレートブロックを初期値として挿入する。 */
+export async function createSheet(title: string, initialBlocks?: BlockInput[]): Promise<string> {
   const db = getDb();
   const ownerId = getOwnerId();
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
@@ -180,7 +180,16 @@ export async function createSheet(title: string): Promise<string> {
     .insert(skillSheets)
     .values({ ownerId, title: resolvedTitle })
     .returning({ id: skillSheets.id });
-  return inserted[0].id;
+  const sheetId = inserted[0].id;
+  if (initialBlocks && initialBlocks.length > 0) {
+    const cleaned = initialBlocks.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
+    if (cleaned.length > 0) {
+      await db
+        .insert(blocks)
+        .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
+    }
+  }
+  return sheetId;
 }
 
 /** 指定シートを削除する（ブロックも cascade で削除される）。 */
