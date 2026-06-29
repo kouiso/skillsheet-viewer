@@ -43,7 +43,8 @@ describe('BuilderClient', () => {
   it('「テキスト」で空ブロックが増える', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: 'テキスト' }));
+    // パレットチップと下部ボタンの両方に「テキスト」ボタンがあるため末尾（下部ボタン）を使う
+    await user.click(screen.getAllByRole('button', { name: 'テキスト' }).at(-1)!);
     expect(screen.getAllByPlaceholderText('Markdown を入力...')).toHaveLength(2);
   });
 
@@ -75,7 +76,8 @@ describe('BuilderClient', () => {
   it('「テーブル」追加→セル入力が table ブロックとして保存 payload に入る', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={[]} initialTitle="t" {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: 'テーブル' }));
+    // パレットチップと下部ボタンの両方に「テーブル」ボタンがあるため末尾（下部ボタン）を使う
+    await user.click(screen.getAllByRole('button', { name: 'テーブル' }).at(-1)!);
     // 既定テーブル: 2 列（項目/内容）＋空 1 行。1 行 1 列にセル入力する。
     await user.type(screen.getByLabelText('1行1列'), 'PHP');
     await user.click(screen.getByRole('button', { name: /保存/ }));
