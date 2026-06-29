@@ -8,7 +8,7 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
-export type BlockType = 'markdown' | 'table';
+export type BlockType = 'markdown' | 'table' | 'skills';
 
 export interface MarkdownBlockData {
   markdown: string;
@@ -29,6 +29,19 @@ export interface TableBlockData {
   rows: string[][];
 }
 
+/** スキル一覧の 1 エントリ（名称・経験年数・習熟度）。 */
+export interface SkillEntry {
+  name: string;
+  years: number;
+  level: string;
+}
+
+/** スキル一覧ブロックの構造化データ。カテゴリ名＋スキルの配列。 */
+export interface SkillsBlockData {
+  category: string;
+  skills: SkillEntry[];
+}
+
 interface MarkdownBlock {
   id: string;
   type: 'markdown';
@@ -43,17 +56,27 @@ interface TableBlock {
   data: TableBlockData;
 }
 
+interface SkillsBlock {
+  id: string;
+  type: 'skills';
+  order: number;
+  data: SkillsBlockData;
+}
+
 /**
  * スキルシートを構成する 1 ブロック。type と data を一致させた判別ユニオン。
  * id は DB の行 ID、order は 0 始まりの表示順。
  */
-export type Block = MarkdownBlock | TableBlock;
+export type Block = MarkdownBlock | TableBlock | SkillsBlock;
 
 /**
  * 保存時にクライアント/サーバ間で受け渡すブロック入力（id/order を持たない）。
  * order は配列インデックスで決まるため不要。
  */
-export type BlockInput = { type: 'markdown'; data: MarkdownBlockData } | { type: 'table'; data: TableBlockData };
+export type BlockInput =
+  | { type: 'markdown'; data: MarkdownBlockData }
+  | { type: 'table'; data: TableBlockData }
+  | { type: 'skills'; data: SkillsBlockData };
 
 // --- バリデータ（zod を入れず DB パッケージの依存を増やさない軽量判定） -----
 
@@ -83,12 +106,28 @@ export function isTableBlockData(data: unknown): data is TableBlockData {
   return rows.every((row) => Array.isArray(row) && row.every((cell) => typeof cell === 'string'));
 }
 
+export function isSkillsBlockData(data: unknown): data is SkillsBlockData {
+  if (typeof data !== 'object' || data === null) return false;
+  const { category, skills } = data as { category?: unknown; skills?: unknown };
+  if (typeof category !== 'string') return false;
+  if (!Array.isArray(skills)) return false;
+  return skills.every(
+    (s) =>
+      typeof s === 'object' &&
+      s !== null &&
+      typeof (s as SkillEntry).name === 'string' &&
+      typeof (s as SkillEntry).years === 'number' &&
+      typeof (s as SkillEntry).level === 'string',
+  );
+}
+
 /** untyped な入力（クライアント由来）が正当な BlockInput かを判定する。 */
 export function isBlockInput(value: unknown): value is BlockInput {
   if (typeof value !== 'object' || value === null) return false;
   const { type, data } = value as { type?: unknown; data?: unknown };
   if (type === 'markdown') return isMarkdownBlockData(data);
   if (type === 'table') return isTableBlockData(data);
+  if (type === 'skills') return isSkillsBlockData(data);
   return false;
 }
 
@@ -110,6 +149,9 @@ export function normalizeTableBlockData(data: TableBlockData): TableBlockData {
  */
 export function isBlockInputEmpty(block: BlockInput): boolean {
   if (block.type === 'markdown') return block.data.markdown.trim().length === 0;
+  if (block.type === 'skills') {
+    return block.data.category.trim().length === 0 && block.data.skills.length === 0;
+  }
   const { columns, rows } = block.data;
   if (columns.length === 0) return true;
   const allLabelsEmpty = columns.every((c) => c.label.trim() === '');
@@ -150,9 +192,22 @@ export function tableBlockToMarkdown(data: TableBlockData): string {
   return [headerLine, alignLine, ...bodyLines].join('\n');
 }
 
+/** スキル一覧ブロックを GFM markdown 表へ変換する。 */
+export function skillsBlockToMarkdown(data: SkillsBlockData): string {
+  const header = data.category.trim().length > 0 ? `### ${data.category}\n\n` : '';
+  if (data.skills.length === 0) return `${header}| スキル | 経験年数 | 習熟度 |\n| :--- | :---: | :--- |`;
+  const headerLine = '| スキル | 経験年数 | 習熟度 |';
+  const alignLine = '| :--- | :---: | :--- |';
+  const bodyLines = data.skills.map(
+    (s) => `| ${escapeCell(s.name)} | ${s.years > 0 ? `${s.years}年` : '-'} | ${escapeCell(s.level)} |`,
+  );
+  return `${header}${[headerLine, alignLine, ...bodyLines].join('\n')}`;
+}
+
 function blockToMarkdown(block: Block): string {
   if (block.type === 'markdown') return block.data.markdown;
   if (block.type === 'table') return tableBlockToMarkdown(block.data);
+  if (block.type === 'skills') return skillsBlockToMarkdown(block.data);
   // 判別ユニオン上は到達不能だが、DB 由来の未知 type を silent に undefined 連結
   // しないよう loud に失敗させる（壊れたデータを見えるエラーにする）。
   throw new Error(`blocksToMarkdown: unknown block type: ${(block as { type: string }).type}`);

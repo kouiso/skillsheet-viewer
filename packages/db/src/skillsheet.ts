@@ -14,6 +14,7 @@ import {
   blocksToMarkdown,
   isBlockInputEmpty,
   isMarkdownBlockData,
+  isSkillsBlockData,
   isTableBlockData,
   normalizeTableBlockData,
   splitMarkdownIntoBlocks,
@@ -132,6 +133,9 @@ function rowToBlock(id: string, type: string, order: number, data: unknown): Blo
   if (type === 'table' && isTableBlockData(data)) {
     return { id, type: 'table', order, data: normalizeTableBlockData(data) };
   }
+  if (type === 'skills' && isSkillsBlockData(data)) {
+    return { id, type: 'skills', order, data };
+  }
   return null;
 }
 
@@ -200,6 +204,7 @@ export async function getSkillSheet(): Promise<SkillSheet> {
 /** 保存前にブロック入力を正規化する（markdown は末尾空白除去、table は行を列数へ正規化）。 */
 function normalizeBlockInput(block: BlockInput): BlockInput {
   if (block.type === 'markdown') return { type: 'markdown', data: { markdown: block.data.markdown.trimEnd() } };
+  if (block.type === 'skills') return block;
   return { type: 'table', data: normalizeTableBlockData(block.data) };
 }
 
