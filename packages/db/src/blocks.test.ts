@@ -7,8 +7,11 @@ import {
   isBlockInput,
   isBlockInputEmpty,
   isMarkdownBlockData,
+  isSkillsBlockData,
   isTableBlockData,
   normalizeTableBlockData,
+  type SkillsBlockData,
+  skillsBlockToMarkdown,
   splitMarkdownIntoBlocks,
   type TableBlockData,
   tableBlockToMarkdown,
@@ -122,6 +125,41 @@ describe('tableBlockToMarkdown', () => {
   });
 });
 
+const SKILLS: SkillsBlockData = {
+  category: 'プログラミング言語',
+  skills: [
+    { name: 'TypeScript', years: 3, level: '実務経験あり' },
+    { name: 'Go', years: 1, level: '業務利用可' },
+  ],
+};
+
+describe('skillsBlockToMarkdown', () => {
+  it('カテゴリ見出し＋スキル表を出力する', () => {
+    const md = skillsBlockToMarkdown(SKILLS);
+    expect(md).toContain('### プログラミング言語');
+    expect(md).toContain('| スキル | 経験年数 | 習熟度 |');
+    expect(md).toContain('| TypeScript | 3年 | 実務経験あり |');
+    expect(md).toContain('| Go | 1年 | 業務利用可 |');
+  });
+
+  it('カテゴリ空文字のときは見出し行を出力しない', () => {
+    const md = skillsBlockToMarkdown({ ...SKILLS, category: '' });
+    expect(md).not.toContain('###');
+    expect(md).toContain('| TypeScript |');
+  });
+
+  it('スキルが 0 件のときは空の表ヘッダを出力する', () => {
+    const md = skillsBlockToMarkdown({ category: '', skills: [] });
+    expect(md).toContain('| スキル | 経験年数 | 習熟度 |');
+    expect(md).toContain('| :--- | :---: | :--- |');
+  });
+
+  it('years=0 は "-" で出力する', () => {
+    const md = skillsBlockToMarkdown({ category: '', skills: [{ name: 'Rust', years: 0, level: '学習中' }] });
+    expect(md).toContain('| Rust | - | 学習中 |');
+  });
+});
+
 describe('blocksToMarkdown — type 別 dispatch', () => {
   it('markdown と table を混在して 1 本の markdown に連結する', () => {
     const blocks: Block[] = [
@@ -139,6 +177,17 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
       { id: 'b', type: 'markdown', order: 1, data: { markdown: 'B' } },
     ];
     expect(blocksToMarkdown(blocks)).toBe('A\nB');
+  });
+
+  it('skills ブロックを GFM 表に変換して連結する', () => {
+    const blocks: Block[] = [
+      { id: 'm', type: 'markdown', order: 0, data: { markdown: '## スキル' } },
+      { id: 's', type: 'skills', order: 1, data: SKILLS },
+    ];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toContain('## スキル');
+    expect(md).toContain('### プログラミング言語');
+    expect(md).toContain('| TypeScript | 3年 | 実務経験あり |');
   });
 });
 
@@ -161,9 +210,22 @@ describe('バリデータ', () => {
     expect(isTableBlockData({ columns: [{ label: 'a', align: 'left' }], rows: [[1]] })).toBe(false);
   });
 
+  it('isSkillsBlockData', () => {
+    expect(isSkillsBlockData(SKILLS)).toBe(true);
+    expect(isSkillsBlockData({ category: 'x', skills: [] })).toBe(true);
+    // category が文字列でない
+    expect(isSkillsBlockData({ category: 1, skills: [] })).toBe(false);
+    // skills が配列でない
+    expect(isSkillsBlockData({ category: 'x', skills: 'y' })).toBe(false);
+    // スキルエントリが不正（years が文字列）
+    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: '3', level: 'ok' }] })).toBe(false);
+    expect(isSkillsBlockData(null)).toBe(false);
+  });
+
   it('isBlockInput', () => {
     expect(isBlockInput({ type: 'markdown', data: { markdown: 'x' } })).toBe(true);
     expect(isBlockInput({ type: 'table', data: TABLE })).toBe(true);
+    expect(isBlockInput({ type: 'skills', data: SKILLS })).toBe(true);
     expect(isBlockInput({ type: 'unknown', data: {} })).toBe(false);
     expect(isBlockInput({ type: 'table', data: { columns: [], rows: [] } })).toBe(false);
   });
@@ -185,6 +247,11 @@ describe('バリデータ', () => {
     expect(isBlockInputEmpty(emptyTable)).toBe(true);
     // label があれば空ではない
     expect(isBlockInputEmpty({ type: 'table', data: TABLE })).toBe(false);
+    // skills: カテゴリ空 かつ スキル 0 件 → 空
+    expect(isBlockInputEmpty({ type: 'skills', data: { category: '', skills: [] } })).toBe(true);
+    expect(isBlockInputEmpty({ type: 'skills', data: { category: '  ', skills: [] } })).toBe(true);
+    // スキルがあれば空ではない
+    expect(isBlockInputEmpty({ type: 'skills', data: SKILLS })).toBe(false);
   });
 
   it('normalizeTableBlockData は行を列数へ正規化する', () => {
