@@ -1,0 +1,76 @@
+name: PR Labeler
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    name: Label pull request
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    steps:
+      - name: Add labels from branch and changed files
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const pull = context.payload.pull_request;
+            const labels = new Set();
+            const branchName = pull.head.ref;
+
+            const branchLabelMap = [
+              [/^feature\//, 'feature'],
+              [/^feat\//, 'feature'],
+              [/^bugfix\//, 'bugfix'],
+              [/^fix\//, 'bugfix'],
+              [/^hotfix\//, 'hotfix'],
+              [/^release\//, 'release'],
+              [/^support\//, 'support'],
+              [/^docs?\//, 'documentation'],
+              [/^ci\//, 'ci'],
+              [/^chore\//, 'chore'],
+            ];
+
+            for (const [pattern, label] of branchLabelMap) {
+              if (pattern.test(branchName)) {
+                labels.add(label);
+              }
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pull.number,
+              per_page: 100,
+            });
+
+            for (const file of files) {
+              const name = file.filename;
+              if (name.startsWith('.github/')) labels.add('ci');
+              if (name.startsWith('doc/') || name.endsWith('.md')) labels.add('documentation');
+              if (name.startsWith('apps/web/')) labels.add('web');
+              if (name.startsWith('packages/db/')) labels.add('db');
+              if (/(^|\/)package\.json$|^pnpm-lock\.yaml$/.test(name)) labels.add('dependencies');
+            }
+
+            if (labels.size === 0) {
+              core.info('No matching labels found.');
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pull.number,
+              labels: [...labels],
+            });
+            core.info(`Added labels: ${[...labels].join(', ')}`);
