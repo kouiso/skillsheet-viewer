@@ -2,16 +2,20 @@ import { sql } from 'drizzle-orm';
 import { boolean, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
 /**
- * スキルシート本体。将来のマルチユーザー化を見据え owner_id を持つ
- * （#21 時点では単一オーナー前提）。owner_id は一意（1オーナー1シート）。
+ * スキルシート本体。将来のマルチユーザー化を見据え owner_id を持つ。
+ * #50 で複数シート対応のため owner_id の unique 制約を除去し、代わりにインデックスを追加。
  */
-export const skillSheets = pgTable('skill_sheets', {
-  id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  ownerId: text('owner_id').notNull().unique(),
-  title: text('title').notNull(),
-  theme: text('theme').notNull().default('light'),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
-});
+export const skillSheets = pgTable(
+  'skill_sheets',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    ownerId: text('owner_id').notNull(),
+    title: text('title').notNull(),
+    theme: text('theme').notNull().default('light'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
+  },
+  (table) => [index('skill_sheets_owner_id_idx').on(table.ownerId)],
+);
 
 /**
  * スキルシートを構成する順序付きブロック。
