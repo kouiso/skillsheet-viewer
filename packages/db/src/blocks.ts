@@ -8,7 +8,7 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
-export type BlockType = 'markdown' | 'table' | 'skills';
+export type BlockType = 'markdown' | 'table' | 'skills' | 'experience';
 
 export interface MarkdownBlockData {
   markdown: string;
@@ -42,6 +42,17 @@ export interface SkillsBlockData {
   skills: SkillEntry[];
 }
 
+/** 職務経歴ブロックの構造化データ。 */
+export interface ExperienceBlockData {
+  company: string;
+  /** 期間（開始）例: "2020-01" */
+  startDate: string;
+  /** 期間（終了）。空文字 = 現在 */
+  endDate: string;
+  role: string;
+  description: string;
+}
+
 interface MarkdownBlock {
   id: string;
   type: 'markdown';
@@ -63,11 +74,18 @@ interface SkillsBlock {
   data: SkillsBlockData;
 }
 
+interface ExperienceBlock {
+  id: string;
+  type: 'experience';
+  order: number;
+  data: ExperienceBlockData;
+}
+
 /**
  * スキルシートを構成する 1 ブロック。type と data を一致させた判別ユニオン。
  * id は DB の行 ID、order は 0 始まりの表示順。
  */
-export type Block = MarkdownBlock | TableBlock | SkillsBlock;
+export type Block = MarkdownBlock | TableBlock | SkillsBlock | ExperienceBlock;
 
 /**
  * 保存時にクライアント/サーバ間で受け渡すブロック入力（id/order を持たない）。
@@ -76,7 +94,8 @@ export type Block = MarkdownBlock | TableBlock | SkillsBlock;
 export type BlockInput =
   | { type: 'markdown'; data: MarkdownBlockData }
   | { type: 'table'; data: TableBlockData }
-  | { type: 'skills'; data: SkillsBlockData };
+  | { type: 'skills'; data: SkillsBlockData }
+  | { type: 'experience'; data: ExperienceBlockData };
 
 // --- バリデータ（zod を入れず DB パッケージの依存を増やさない軽量判定） -----
 
@@ -121,6 +140,18 @@ export function isSkillsBlockData(data: unknown): data is SkillsBlockData {
   );
 }
 
+export function isExperienceBlockData(data: unknown): data is ExperienceBlockData {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d.company === 'string' &&
+    typeof d.startDate === 'string' &&
+    typeof d.endDate === 'string' &&
+    typeof d.role === 'string' &&
+    typeof d.description === 'string'
+  );
+}
+
 /** untyped な入力（クライアント由来）が正当な BlockInput かを判定する。 */
 export function isBlockInput(value: unknown): value is BlockInput {
   if (typeof value !== 'object' || value === null) return false;
@@ -128,6 +159,7 @@ export function isBlockInput(value: unknown): value is BlockInput {
   if (type === 'markdown') return isMarkdownBlockData(data);
   if (type === 'table') return isTableBlockData(data);
   if (type === 'skills') return isSkillsBlockData(data);
+  if (type === 'experience') return isExperienceBlockData(data);
   return false;
 }
 
@@ -146,11 +178,16 @@ export function normalizeTableBlockData(data: TableBlockData): TableBlockData {
 /**
  * 「空ブロック」判定（保存時の drop と、全消し保存ガードで共有する単一の真実）。
  * markdown: trim して空 / table: 列ゼロ、または（全列 label 空 かつ 全セル空）。
+ * skills: カテゴリ空 かつ スキル 0 件。experience: 会社名・職種・業務内容が全て空。
  */
 export function isBlockInputEmpty(block: BlockInput): boolean {
   if (block.type === 'markdown') return block.data.markdown.trim().length === 0;
   if (block.type === 'skills') {
     return block.data.category.trim().length === 0 && block.data.skills.length === 0;
+  }
+  if (block.type === 'experience') {
+    const { company, role, description } = block.data;
+    return company.trim().length === 0 && role.trim().length === 0 && description.trim().length === 0;
   }
   const { columns, rows } = block.data;
   if (columns.length === 0) return true;
@@ -204,10 +241,28 @@ export function skillsBlockToMarkdown(data: SkillsBlockData): string {
   return `${header}${[headerLine, alignLine, ...bodyLines].join('\n')}`;
 }
 
+/** 職務経歴ブロックを markdown へ変換する。 */
+export function experienceBlockToMarkdown(data: ExperienceBlockData): string {
+  const { company, startDate, endDate, role, description } = data;
+  const period = [startDate, endDate || '現在'].filter(Boolean).join('〜');
+  const heading = company.trim().length > 0 ? `### ${company}（${period}）` : `### （${period}）`;
+  const lines: string[] = [heading, ''];
+  lines.push('| 項目 | 内容 |');
+  lines.push('| :--- | :--- |');
+  lines.push(`| 期間 | ${period} |`);
+  if (role.trim().length > 0) lines.push(`| 職種 | ${escapeCell(role)} |`);
+  if (description.trim().length > 0) {
+    lines.push('');
+    lines.push(description.trim());
+  }
+  return lines.join('\n');
+}
+
 function blockToMarkdown(block: Block): string {
   if (block.type === 'markdown') return block.data.markdown;
   if (block.type === 'table') return tableBlockToMarkdown(block.data);
   if (block.type === 'skills') return skillsBlockToMarkdown(block.data);
+  if (block.type === 'experience') return experienceBlockToMarkdown(block.data);
   // 判別ユニオン上は到達不能だが、DB 由来の未知 type を silent に undefined 連結
   // しないよう loud に失敗させる（壊れたデータを見えるエラーにする）。
   throw new Error(`blocksToMarkdown: unknown block type: ${(block as { type: string }).type}`);
