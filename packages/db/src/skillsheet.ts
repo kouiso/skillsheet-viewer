@@ -13,6 +13,7 @@ import {
   type BlockInput,
   blocksToMarkdown,
   isBlockInputEmpty,
+  isExperienceBlockData,
   isMarkdownBlockData,
   isSkillsBlockData,
   isTableBlockData,
@@ -136,6 +137,9 @@ function rowToBlock(id: string, type: string, order: number, data: unknown): Blo
   if (type === 'skills' && isSkillsBlockData(data)) {
     return { id, type: 'skills', order, data };
   }
+  if (type === 'experience' && isExperienceBlockData(data)) {
+    return { id, type: 'experience', order, data };
+  }
   return null;
 }
 
@@ -205,6 +209,7 @@ export async function getSkillSheet(): Promise<SkillSheet> {
 function normalizeBlockInput(block: BlockInput): BlockInput {
   if (block.type === 'markdown') return { type: 'markdown', data: { markdown: block.data.markdown.trimEnd() } };
   if (block.type === 'skills') return block;
+  if (block.type === 'experience') return block;
   return { type: 'table', data: normalizeTableBlockData(block.data) };
 }
 

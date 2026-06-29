@@ -4,8 +4,11 @@ import {
   type Block,
   type BlockInput,
   blocksToMarkdown,
+  type ExperienceBlockData,
+  experienceBlockToMarkdown,
   isBlockInput,
   isBlockInputEmpty,
+  isExperienceBlockData,
   isMarkdownBlockData,
   isSkillsBlockData,
   isTableBlockData,
@@ -50,11 +53,8 @@ describe('splitMarkdownIntoBlocks', () => {
 
   it('構造境界（見出し / <details>）ごとにブロックが分かれる', () => {
     const segments = splitMarkdownIntoBlocks(SAMPLE);
-    // 先頭ブロックは「## 技術者プロファイル」から始まる
     expect(segments[0].markdown.startsWith('## 技術者プロファイル')).toBe(true);
-    // <details> は独立したブロックの先頭になる
     expect(segments.some((s) => s.markdown.startsWith('<details'))).toBe(true);
-    // 各見出しレベル(##/###/####)が境界になっている
     expect(segments.some((s) => s.markdown.startsWith('## 経歴'))).toBe(true);
     expect(segments.some((s) => s.markdown.startsWith('### ◆ 株式会社az'))).toBe(true);
     expect(segments.some((s) => s.markdown.startsWith('#### ■ 1. mypappy'))).toBe(true);
@@ -62,7 +62,6 @@ describe('splitMarkdownIntoBlocks', () => {
 
   it('order は 0 始まりの昇順で連結順を決める', () => {
     const segments = splitMarkdownIntoBlocks(SAMPLE);
-    // 逆順に並べても order でソートして連結されるため元に戻る
     const reversed = toBlocks(segments)
       .map((b) => ({ ...b }))
       .reverse();
@@ -160,6 +159,40 @@ describe('skillsBlockToMarkdown', () => {
   });
 });
 
+const EXP: ExperienceBlockData = {
+  company: '株式会社サンプル',
+  startDate: '2020-04',
+  endDate: '2023-03',
+  role: 'フロントエンドエンジニア',
+  description: 'React/TypeScript による SPA 開発',
+};
+
+describe('experienceBlockToMarkdown', () => {
+  it('会社名・期間・職種・業務内容を含む markdown を出力する', () => {
+    const md = experienceBlockToMarkdown(EXP);
+    expect(md).toContain('### 株式会社サンプル（2020-04〜2023-03）');
+    expect(md).toContain('| 期間 | 2020-04〜2023-03 |');
+    expect(md).toContain('| 職種 | フロントエンドエンジニア |');
+    expect(md).toContain('React/TypeScript による SPA 開発');
+  });
+
+  it('endDate が空のとき「現在」と表示する', () => {
+    const md = experienceBlockToMarkdown({ ...EXP, endDate: '' });
+    expect(md).toContain('〜現在');
+    expect(md).toContain('| 期間 | 2020-04〜現在 |');
+  });
+
+  it('role が空のとき職種行を省略する', () => {
+    const md = experienceBlockToMarkdown({ ...EXP, role: '' });
+    expect(md).not.toContain('| 職種 |');
+  });
+
+  it('description が空のとき本文を省略する', () => {
+    const md = experienceBlockToMarkdown({ ...EXP, description: '' });
+    expect(md).not.toContain('React/TypeScript');
+  });
+});
+
 describe('blocksToMarkdown — type 別 dispatch', () => {
   it('markdown と table を混在して 1 本の markdown に連結する', () => {
     const blocks: Block[] = [
@@ -189,6 +222,17 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
     expect(md).toContain('### プログラミング言語');
     expect(md).toContain('| TypeScript | 3年 | 実務経験あり |');
   });
+
+  it('experience ブロックを markdown セクションへ変換して連結する', () => {
+    const blocks: Block[] = [
+      { id: 'm', type: 'markdown', order: 0, data: { markdown: '## 経歴' } },
+      { id: 'e', type: 'experience', order: 1, data: EXP },
+    ];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toContain('## 経歴');
+    expect(md).toContain('### 株式会社サンプル');
+    expect(md).toContain('フロントエンドエンジニア');
+  });
 });
 
 describe('バリデータ', () => {
@@ -200,32 +244,34 @@ describe('バリデータ', () => {
 
   it('isTableBlockData', () => {
     expect(isTableBlockData(TABLE)).toBe(true);
-    // 列ゼロは不正
     expect(isTableBlockData({ columns: [], rows: [] })).toBe(false);
-    // align が列挙外
     expect(isTableBlockData({ columns: [{ label: 'a', align: 'middle' }], rows: [] })).toBe(false);
-    // rows が配列でない
     expect(isTableBlockData({ columns: [{ label: 'a', align: 'left' }], rows: 'x' })).toBe(false);
-    // セルが文字列でない
     expect(isTableBlockData({ columns: [{ label: 'a', align: 'left' }], rows: [[1]] })).toBe(false);
   });
 
   it('isSkillsBlockData', () => {
     expect(isSkillsBlockData(SKILLS)).toBe(true);
     expect(isSkillsBlockData({ category: 'x', skills: [] })).toBe(true);
-    // category が文字列でない
     expect(isSkillsBlockData({ category: 1, skills: [] })).toBe(false);
-    // skills が配列でない
     expect(isSkillsBlockData({ category: 'x', skills: 'y' })).toBe(false);
-    // スキルエントリが不正（years が文字列）
     expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: '3', level: 'ok' }] })).toBe(false);
     expect(isSkillsBlockData(null)).toBe(false);
+  });
+
+  it('isExperienceBlockData', () => {
+    expect(isExperienceBlockData(EXP)).toBe(true);
+    expect(isExperienceBlockData({ company: '', startDate: '', endDate: '', role: '', description: '' })).toBe(true);
+    expect(isExperienceBlockData({ company: 'x', startDate: '2020', endDate: '', role: '' })).toBe(false);
+    expect(isExperienceBlockData({ company: 1, startDate: '', endDate: '', role: '', description: '' })).toBe(false);
+    expect(isExperienceBlockData(null)).toBe(false);
   });
 
   it('isBlockInput', () => {
     expect(isBlockInput({ type: 'markdown', data: { markdown: 'x' } })).toBe(true);
     expect(isBlockInput({ type: 'table', data: TABLE })).toBe(true);
     expect(isBlockInput({ type: 'skills', data: SKILLS })).toBe(true);
+    expect(isBlockInput({ type: 'experience', data: EXP })).toBe(true);
     expect(isBlockInput({ type: 'unknown', data: {} })).toBe(false);
     expect(isBlockInput({ type: 'table', data: { columns: [], rows: [] } })).toBe(false);
   });
@@ -233,7 +279,6 @@ describe('バリデータ', () => {
   it('isBlockInputEmpty', () => {
     expect(isBlockInputEmpty({ type: 'markdown', data: { markdown: '   ' } })).toBe(true);
     expect(isBlockInputEmpty({ type: 'markdown', data: { markdown: 'x' } })).toBe(false);
-    // 列ゼロ、または全 label 空 かつ 全セル空 → 空
     const emptyTable: BlockInput = {
       type: 'table',
       data: {
@@ -245,13 +290,13 @@ describe('バリデータ', () => {
       },
     };
     expect(isBlockInputEmpty(emptyTable)).toBe(true);
-    // label があれば空ではない
     expect(isBlockInputEmpty({ type: 'table', data: TABLE })).toBe(false);
-    // skills: カテゴリ空 かつ スキル 0 件 → 空
     expect(isBlockInputEmpty({ type: 'skills', data: { category: '', skills: [] } })).toBe(true);
     expect(isBlockInputEmpty({ type: 'skills', data: { category: '  ', skills: [] } })).toBe(true);
-    // スキルがあれば空ではない
     expect(isBlockInputEmpty({ type: 'skills', data: SKILLS })).toBe(false);
+    expect(isBlockInputEmpty({ type: 'experience', data: { company: '', startDate: '', endDate: '', role: '', description: '' } })).toBe(true);
+    expect(isBlockInputEmpty({ type: 'experience', data: { company: '  ', startDate: '', endDate: '', role: '  ', description: '' } })).toBe(true);
+    expect(isBlockInputEmpty({ type: 'experience', data: EXP })).toBe(false);
   });
 
   it('normalizeTableBlockData は行を列数へ正規化する', () => {
