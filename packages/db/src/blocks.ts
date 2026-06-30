@@ -8,7 +8,7 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
-export type BlockType = 'markdown' | 'table' | 'skills' | 'experience';
+export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
 export interface MarkdownBlockData {
   markdown: string;
@@ -53,6 +53,76 @@ export interface ExperienceBlockData {
   description: string;
 }
 
+/** プロフィールブロックのメタ情報。 */
+export interface ProfileMeta {
+  age?: string;
+  work?: string;
+  station?: string;
+  education?: string;
+}
+
+/** プロフィールブロックの構造化データ。 */
+export interface ProfileBlockData {
+  name: string;
+  title: string;
+  pr: string;
+  strengths: string[];
+  meta: ProfileMeta;
+}
+
+/** 統計ブロックの 1 アイテム（数値・単位・ラベル）。 */
+export interface StatItem {
+  value: string;
+  unit: string;
+  label: string;
+}
+
+/** 4 枠統計ブロックの構造化データ。 */
+export interface StatsBlockData {
+  items: StatItem[];
+}
+
+/** 案件ブロックの会社情報。 */
+export interface CompanyInfo {
+  id: string;
+  name: string;
+  kind: string;
+  period: string;
+  note: string;
+}
+
+/** 案件ブロックの技術スタック。 */
+export interface ProjectTech {
+  lang: string[];
+  fw: string[];
+  db: string[];
+  infra: string[];
+  tools: string[];
+  collab: string[];
+}
+
+/** 案件ブロックの 1 案件エントリ。 */
+export interface ProjectItem {
+  id: string;
+  companyId: string;
+  title: string;
+  scope: string;
+  period: string;
+  role: string;
+  team: string;
+  tech: ProjectTech;
+  process: string[];
+  duties: string;
+  acquired: string;
+  comment: string;
+}
+
+/** 案件ブロックの構造化データ（会社情報 + 案件一覧）。 */
+export interface ProjectBlockData {
+  companies: CompanyInfo[];
+  items: ProjectItem[];
+}
+
 interface MarkdownBlock {
   id: string;
   type: 'markdown';
@@ -81,11 +151,32 @@ interface ExperienceBlock {
   data: ExperienceBlockData;
 }
 
+interface ProfileBlock {
+  id: string;
+  type: 'profile';
+  order: number;
+  data: ProfileBlockData;
+}
+
+interface StatsBlock {
+  id: string;
+  type: 'stats';
+  order: number;
+  data: StatsBlockData;
+}
+
+interface ProjectBlock {
+  id: string;
+  type: 'project';
+  order: number;
+  data: ProjectBlockData;
+}
+
 /**
  * スキルシートを構成する 1 ブロック。type と data を一致させた判別ユニオン。
  * id は DB の行 ID、order は 0 始まりの表示順。
  */
-export type Block = MarkdownBlock | TableBlock | SkillsBlock | ExperienceBlock;
+export type Block = MarkdownBlock | TableBlock | SkillsBlock | ExperienceBlock | ProfileBlock | StatsBlock | ProjectBlock;
 
 /**
  * 保存時にクライアント/サーバ間で受け渡すブロック入力（id/order を持たない）。
@@ -95,7 +186,10 @@ export type BlockInput =
   | { type: 'markdown'; data: MarkdownBlockData }
   | { type: 'table'; data: TableBlockData }
   | { type: 'skills'; data: SkillsBlockData }
-  | { type: 'experience'; data: ExperienceBlockData };
+  | { type: 'experience'; data: ExperienceBlockData }
+  | { type: 'profile'; data: ProfileBlockData }
+  | { type: 'stats'; data: StatsBlockData }
+  | { type: 'project'; data: ProjectBlockData };
 
 // --- バリデータ（zod を入れず DB パッケージの依存を増やさない軽量判定） -----
 
@@ -152,6 +246,62 @@ export function isExperienceBlockData(data: unknown): data is ExperienceBlockDat
   );
 }
 
+export function isProfileBlockData(data: unknown): data is ProfileBlockData {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as Record<string, unknown>;
+  if (typeof d.name !== 'string') return false;
+  if (typeof d.title !== 'string') return false;
+  if (typeof d.pr !== 'string') return false;
+  if (!Array.isArray(d.strengths) || !d.strengths.every((s) => typeof s === 'string')) return false;
+  if (typeof d.meta !== 'object' || d.meta === null) return false;
+  return true;
+}
+
+export function isStatsBlockData(data: unknown): data is StatsBlockData {
+  if (typeof data !== 'object' || data === null) return false;
+  const { items } = data as { items?: unknown };
+  if (!Array.isArray(items)) return false;
+  return items.every(
+    (item) =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as StatItem).value === 'string' &&
+      typeof (item as StatItem).unit === 'string' &&
+      typeof (item as StatItem).label === 'string',
+  );
+}
+
+function isProjectTech(t: unknown): t is ProjectTech {
+  if (typeof t !== 'object' || t === null) return false;
+  const tech = t as Record<string, unknown>;
+  const keys: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
+  return keys.every((k) => Array.isArray(tech[k]) && (tech[k] as unknown[]).every((v) => typeof v === 'string'));
+}
+
+export function isProjectBlockData(data: unknown): data is ProjectBlockData {
+  if (typeof data !== 'object' || data === null) return false;
+  const d = data as Record<string, unknown>;
+  if (!Array.isArray(d.companies)) return false;
+  if (!Array.isArray(d.items)) return false;
+  const companiesOk = d.companies.every(
+    (c) =>
+      typeof c === 'object' &&
+      c !== null &&
+      typeof (c as CompanyInfo).id === 'string' &&
+      typeof (c as CompanyInfo).name === 'string',
+  );
+  if (!companiesOk) return false;
+  return d.items.every(
+    (item) =>
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as ProjectItem).id === 'string' &&
+      typeof (item as ProjectItem).companyId === 'string' &&
+      isProjectTech((item as ProjectItem).tech) &&
+      Array.isArray((item as ProjectItem).process),
+  );
+}
+
 /** untyped な入力（クライアント由来）が正当な BlockInput かを判定する。 */
 export function isBlockInput(value: unknown): value is BlockInput {
   if (typeof value !== 'object' || value === null) return false;
@@ -160,6 +310,9 @@ export function isBlockInput(value: unknown): value is BlockInput {
   if (type === 'table') return isTableBlockData(data);
   if (type === 'skills') return isSkillsBlockData(data);
   if (type === 'experience') return isExperienceBlockData(data);
+  if (type === 'profile') return isProfileBlockData(data);
+  if (type === 'stats') return isStatsBlockData(data);
+  if (type === 'project') return isProjectBlockData(data);
   return false;
 }
 
@@ -188,6 +341,13 @@ export function isBlockInputEmpty(block: BlockInput): boolean {
   if (block.type === 'experience') {
     const { company, role, description } = block.data;
     return company.trim().length === 0 && role.trim().length === 0 && description.trim().length === 0;
+  }
+  if (block.type === 'profile') {
+    return block.data.name.trim().length === 0 && block.data.title.trim().length === 0;
+  }
+  if (block.type === 'stats') return block.data.items.length === 0;
+  if (block.type === 'project') {
+    return block.data.companies.length === 0 && block.data.items.length === 0;
   }
   const { columns, rows } = block.data;
   if (columns.length === 0) return true;
@@ -258,14 +418,87 @@ export function experienceBlockToMarkdown(data: ExperienceBlockData): string {
   return lines.join('\n');
 }
 
+/** プロフィールブロックを markdown へ変換する。 */
+export function profileBlockToMarkdown(data: ProfileBlockData): string {
+  const lines: string[] = [];
+  if (data.name.trim()) lines.push(`# ${data.name}`);
+  if (data.title.trim()) lines.push(`\n**${data.title}**`);
+  if (data.pr.trim()) lines.push(`\n${data.pr}`);
+  if (data.strengths.length > 0) {
+    lines.push('\n**強み**');
+    for (const s of data.strengths) lines.push(`- ${s}`);
+  }
+  const meta = data.meta;
+  const metaItems: string[] = [];
+  if (meta.age) metaItems.push(`| 年齢 | ${escapeCell(meta.age)} |`);
+  if (meta.work) metaItems.push(`| 勤務形態 | ${escapeCell(meta.work)} |`);
+  if (meta.station) metaItems.push(`| 最寄り駅 | ${escapeCell(meta.station)} |`);
+  if (meta.education) metaItems.push(`| 学歴 | ${escapeCell(meta.education)} |`);
+  if (metaItems.length > 0) {
+    lines.push('\n| 項目 | 内容 |');
+    lines.push('| :--- | :--- |');
+    lines.push(...metaItems);
+  }
+  return lines.join('\n');
+}
+
+/** 統計ブロックを markdown へ変換する。 */
+export function statsBlockToMarkdown(data: StatsBlockData): string {
+  if (data.items.length === 0) return '';
+  const headerLine = `| ${data.items.map((i) => escapeCell(i.label)).join(' | ')} |`;
+  const alignLine = `| ${data.items.map(() => ':---:').join(' | ')} |`;
+  const valueLine = `| ${data.items.map((i) => escapeCell(`${i.value}${i.unit}`)).join(' | ')} |`;
+  return [headerLine, alignLine, valueLine].join('\n');
+}
+
+/** 案件ブロックを markdown へ変換する。 */
+export function projectBlockToMarkdown(data: ProjectBlockData): string {
+  const companyMap = new Map(data.companies.map((c) => [c.id, c]));
+  const lines: string[] = [];
+  for (const item of data.items) {
+    const company = companyMap.get(item.companyId);
+    const companyName = company?.name ?? '(不明な会社)';
+    lines.push(`### ${companyName} — ${item.title}`);
+    lines.push('');
+    lines.push('| 項目 | 内容 |');
+    lines.push('| :--- | :--- |');
+    if (item.period) lines.push(`| 期間 | ${escapeCell(item.period)} |`);
+    if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
+    if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
+    if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
+    const tech = item.tech;
+    const techParts: string[] = [
+      ...tech.lang, ...tech.fw, ...tech.db, ...tech.infra, ...tech.tools, ...tech.collab,
+    ];
+    if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
+    if (item.process.length > 0) lines.push(`| 担当工程 | ${escapeCell(item.process.join(', '))} |`);
+    if (item.duties.trim()) {
+      lines.push('');
+      lines.push('**業務内容**');
+      lines.push('');
+      lines.push(item.duties.trim());
+    }
+    if (item.acquired.trim()) {
+      lines.push('');
+      lines.push('**習得スキル・実績**');
+      lines.push('');
+      lines.push(item.acquired.trim());
+    }
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
 function blockToMarkdown(block: Block): string {
   if (block.type === 'markdown') return block.data.markdown;
   if (block.type === 'table') return tableBlockToMarkdown(block.data);
   if (block.type === 'skills') return skillsBlockToMarkdown(block.data);
   if (block.type === 'experience') return experienceBlockToMarkdown(block.data);
-  // 判別ユニオン上は到達不能だが、DB 由来の未知 type を silent に undefined 連結
-  // しないよう loud に失敗させる（壊れたデータを見えるエラーにする）。
-  throw new Error(`blocksToMarkdown: unknown block type: ${(block as { type: string }).type}`);
+  if (block.type === 'profile') return profileBlockToMarkdown(block.data);
+  if (block.type === 'stats') return statsBlockToMarkdown(block.data);
+  if (block.type === 'project') return projectBlockToMarkdown(block.data);
+  // 型システム上は到達不能。DB 由来の未知 type は "" を返して他ブロックを壊さない。
+  return '';
 }
 
 // 構造境界: レベル2〜4の見出し、または <details> ブロックの開始行。

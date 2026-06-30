@@ -6,67 +6,74 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
-  デザイントークン: 旧 MUI テーマ(src/theme/theme.ts)の Material 風配色を CSS 変数で踏襲する。
-  indigo(#6366f1) / pink(#ec4899)、角丸 12px、Noto/Hiragino タイポ、elevation 影。
+  Console デザイントークン。
+  ティール単色 / radius 4px(lg 6px) / 影なしヘアライン / IBM Plex Sans JP。
+  ライト: bg #f6f8f8, surface #fff, surface2 #f0f3f3, text #10171a, muted #4a565c,
+          border #dce3e4, accent #0d9488, accentSoft #ecfaf8.
+  ダーク: bg #0a0d0f, surface #0f1316, surface2 #141a1e, text #e6edf0, muted #8b969d,
+          border #1d262b, accent #14b8a6, accentSoft #0c2320.
+  WCAG AA:
+    muted-text/bg 7.1:1 ✅  primary-dark(link)/bg 5.8:1 ✅  accent-dark/dark-surface 7.8:1 ✅
+    primary(btn)/white-text 3.7:1 ⚠ ボタン大テキスト用許容 (large-text 3:1 OK)
 */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f6f8f8;
+  --foreground: #10171a;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #10171a;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #6366f1;
-  --primary-light: #818cf8;
-  --primary-dark: #4f46e5;
+  --popover-foreground: #10171a;
+  --primary: #0d9488;
+  --primary-light: #14b8a6;
+  --primary-dark: #08665e;
   --primary-foreground: #ffffff;
-  --secondary: #ec4899;
-  --secondary-light: #f472b6;
-  --secondary-dark: #db2777;
+  --secondary: #0d9488;
+  --secondary-light: #14b8a6;
+  --secondary-dark: #08665e;
   --secondary-foreground: #ffffff;
-  --muted: #f1f5f9;
-  --muted-foreground: #475569;
-  --accent: #eef2ff;
-  --accent-foreground: #4f46e5;
+  --muted: #f0f3f3;
+  --muted-foreground: #4a565c;
+  --accent: #ecfaf8;
+  --accent-foreground: #08665e;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #6366f1;
-  --radius: 0.75rem;
+  --border: #dce3e4;
+  --input: #dce3e4;
+  --ring: #0d9488;
+  --radius: 0.25rem;
 
-  /* Material elevation 影 */
-  --elevation-1: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --elevation-2: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --elevation-3: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --elevation-4: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --elevation-8: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  /* Console: 影なし（ヘアライン境界のみ）— キーは保持し none へ remap */
+  --elevation-1: none;
+  --elevation-2: none;
+  --elevation-3: none;
+  --elevation-4: none;
+  --elevation-8: none;
 }
 
 .dark {
-  --background: #0f172a;
-  --foreground: #f1f5f9;
-  --card: #1e293b;
-  --card-foreground: #f1f5f9;
-  --popover: #1e293b;
-  --popover-foreground: #f1f5f9;
-  --primary: #818cf8;
-  --primary-light: #a5b4fc;
-  --primary-dark: #6366f1;
-  --primary-foreground: #0f172a;
-  --secondary: #f472b6;
-  --secondary-light: #f9a8d4;
-  --secondary-dark: #ec4899;
-  --secondary-foreground: #0f172a;
-  --muted: #1e293b;
-  --muted-foreground: #cbd5e1;
-  --accent: #312e81;
-  --accent-foreground: #c7d2fe;
+  --background: #0a0d0f;
+  --foreground: #e6edf0;
+  --card: #0f1316;
+  --card-foreground: #e6edf0;
+  --popover: #0f1316;
+  --popover-foreground: #e6edf0;
+  --primary: #14b8a6;
+  --primary-light: #2dd4bf;
+  --primary-dark: #0d9488;
+  --primary-foreground: #0a0d0f;
+  --secondary: #14b8a6;
+  --secondary-light: #2dd4bf;
+  --secondary-dark: #0d9488;
+  --secondary-foreground: #0a0d0f;
+  --muted: #141a1e;
+  --muted-foreground: #8b969d;
+  --accent: #0c2320;
+  --accent-foreground: #2dd4bf;
   --destructive: #ef4444;
-  --destructive-foreground: #0f172a;
-  --border: #334155;
-  --input: #334155;
-  --ring: #818cf8;
+  --destructive-foreground: #0a0d0f;
+  --border: #1d262b;
+  --input: #1d262b;
+  --ring: #14b8a6;
 }
 
 /* CSS 変数を Tailwind のテーマトークンへ公開（bg-primary, text-foreground 等が使える） */
@@ -95,10 +102,10 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-xl: 8px;
 
   --shadow-elevation-1: var(--elevation-1);
   --shadow-elevation-2: var(--elevation-2);
@@ -107,8 +114,9 @@
   --shadow-elevation-8: var(--elevation-8);
 
   --font-sans:
-    'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, -apple-system,
-    BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+    'IBM Plex Sans JP', 'IBM Plex Sans', 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN',
+    'Hiragino Sans', Meiryo, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
 }
 
 * {
@@ -219,7 +227,7 @@ body {
   font-style: italic;
   color: var(--muted-foreground);
   background-color: var(--muted);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
 }
 .markdown-content a {
   color: var(--primary);

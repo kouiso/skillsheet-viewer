@@ -4,17 +4,19 @@ import { useState } from 'react';
 
 import { toast } from 'sonner';
 
+import type { Block } from '@skillsheet/db/blocks';
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 
 interface SheetViewClientProps {
   title: string;
   content: string;
+  blocks?: Block[];
 }
 
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
-const SheetViewClient = ({ title, content }: SheetViewClientProps) => {
+const SheetViewClient = ({ title, content, blocks }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const handleDownloadPdf = async () => {
@@ -51,7 +53,7 @@ const SheetViewClient = ({ title, content }: SheetViewClientProps) => {
   return (
     <div>
       <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
-      <SkillSheetViewer skillSheet={{ title, content }} />
+      <SkillSheetViewer skillSheet={{ title, content }} blocks={blocks} />
     </div>
   );
 };

@@ -11,10 +11,19 @@ import remarkGfm from 'remark-gfm';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 
+import type { Block } from '@skillsheet/db/blocks';
+import {
+  experienceBlockToMarkdown,
+  tableBlockToMarkdown,
+} from '@skillsheet/db/blocks';
 import { useActiveHeading } from '@/hooks/use-active-heading';
 
 import CodeBlock from './code-block';
 import TableOfContents from './table-of-contents';
+import { ProfileIntro } from './blocks/ProfileIntro';
+import { StatRow } from './blocks/StatRow';
+import { SkillMatrix } from './blocks/SkillMatrix';
+import { ProjectCard } from './blocks/ProjectCard';
 
 interface Heading {
   id: string;
@@ -27,6 +36,7 @@ interface SkillSheetViewerProps {
     title: string;
     content: string;
   };
+  blocks?: Block[];
   compareMode?: boolean;
 }
 
@@ -71,17 +81,15 @@ const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA] as [typeof 
 interface MarkdownContentProps {
   content: string;
   onImageClick: (src: string) => void;
-  contentRef: React.RefObject<HTMLDivElement | null>;
 }
 
 // Markdown本文はactiveIdに依存しないためメモ化してスクロール再描画を防ぐ。
 const MarkdownContent = memo(function MarkdownContent({
   content,
   onImageClick,
-  contentRef,
 }: MarkdownContentProps) {
   return (
-    <div className="markdown-content" ref={contentRef}>
+    <div className="markdown-content">
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}
@@ -132,7 +140,15 @@ const MarkdownContent = memo(function MarkdownContent({
   );
 });
 
-const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerProps) => {
+// markdown/table/experience → markdown文字列, skills/profile/stats/project → null（React コンポーネントで描画）
+function blockToMarkdownContent(block: Block): string | null {
+  if (block.type === 'markdown') return block.data.markdown;
+  if (block.type === 'table') return tableBlockToMarkdown(block.data);
+  if (block.type === 'experience') return experienceBlockToMarkdown(block.data);
+  return null;
+}
+
+const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillSheetViewerProps) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -147,25 +163,27 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
   const headingIds = useMemo(() => headings.map((h) => h.id), [headings]);
   const activeId = useActiveHeading(headingIds, contentRef);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: skillSheet.content はReactMarkdown経由でDOMに反映されるため、DOM再抽出のトリガーとして必要
+  // blocks モード時は blocks の id+order を、レガシーモードは content をキーにして
+  // 見出し再抽出をトリガーする。
+  const contentKey = blocks
+    ? blocks.map((b) => `${b.id}:${b.order}`).join(',')
+    : skillSheet.content;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: contentKey はDOM再抽出のトリガーとして必要
   useEffect(() => {
     const container = contentRef.current;
     if (!container) return;
 
-    // contentRef 配下のレンダリング済み見出しから決定的に目次データを作る。
-    // ReactMarkdown + rehypeSlug は同一コミットで id 付き見出しを描画するため、
-    // 固定 setTimeout で描画完了を待つ必要はない（タイミング依存のレースを排除）。
     const extractHeadings = () => {
       const headingElements = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
       const extractedHeadings: Heading[] = Array.from(headingElements)
-        .filter((el) => el.id) // IDがある要素のみ
+        .filter((el) => el.id)
         .map((el) => ({
           id: el.id,
           text: el.textContent || '',
           level: parseInt(el.tagName.substring(1), 10),
         }));
 
-      // 内容が前回と同一なら setState しない（無限ループ防止）。
       const signature = JSON.stringify(extractedHeadings);
       if (signature === lastHeadingSigRef.current) {
         setMounted(true);
@@ -177,41 +195,33 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
       setMounted(true);
     };
 
-    // 初回（effect コミット時点で DOM 反映済み）に同期抽出する。
     extractHeadings();
 
-    // 念のため、配下 DOM の後続変化（遅延描画・画像差し替え等）も拾えるよう監視する。
-    // MutationObserver なら固定遅延に頼らず変化のタイミングで再抽出できる。
     const observer = new MutationObserver(extractHeadings);
     observer.observe(container, { childList: true, subtree: true });
 
     return () => observer.disconnect();
-  }, [skillSheet.content]);
+  }, [contentKey]);
 
   const scrollToHeading = (id: string) => {
-    // 比較モードでは両ビューアに同一 ID が存在しうるため document 全体ではなく
-    // このビューア配下に scope して目的の見出しを引く。
-    // ID に CSS 特殊文字が含まれうるため querySelector ではなく配下走査で一致を探す。
     const root = contentRef.current;
     const element = root
       ? (Array.from(root.querySelectorAll<HTMLElement>('[id]')).find((el) => el.id === id) ?? null)
       : document.getElementById(id);
     if (element) {
-      const yOffset = -80; // ヘッダー分のオフセット
+      const yOffset = -80;
       const y = element.getBoundingClientRect().top + window.scrollY + yOffset;
       window.scrollTo({ top: y, behavior: 'smooth' });
     }
   };
 
   const handleImageClick = useCallback((src: string) => {
-    // 非 http(s)/相対 のスキームはライトボックスを開かない（XSS防止）。
     if (!isSafeImageSrc(src)) return;
     const images = Array.from((contentRef.current ?? document).querySelectorAll('img'))
       .map((img) => ({ src: (img as HTMLImageElement).src }))
       .filter((img) => isSafeImageSrc(img.src));
     setLightboxImages(images);
 
-    // クリックされた画像のインデックスを見つける
     const index = images.findIndex((img) => img.src === src);
     setCurrentImageIndex(index);
     setLightboxOpen(true);
@@ -231,14 +241,44 @@ const SkillSheetViewer = ({ skillSheet, compareMode = false }: SkillSheetViewerP
         transition={{ duration: 0.5 }}
         className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6"
       >
-        <div className="rounded-2xl border border-border bg-card p-4 shadow-elevation-2 sm:p-6 md:p-8">
-          <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
-
-          <MarkdownContent
-            content={skillSheet.content}
-            onImageClick={handleImageClick}
-            contentRef={contentRef}
-          />
+        <div ref={contentRef} className="rounded border border-border bg-card p-4 sm:p-6 md:p-8">
+          {blocks ? (
+            <div className="space-y-0">
+              {blocks.map((block) => {
+                const mdContent = blockToMarkdownContent(block);
+                if (mdContent !== null) {
+                  return (
+                    <MarkdownContent
+                      key={block.id}
+                      content={mdContent}
+                      onImageClick={handleImageClick}
+                    />
+                  );
+                }
+                if (block.type === 'profile') {
+                  return <ProfileIntro key={block.id} data={block.data} />;
+                }
+                if (block.type === 'stats') {
+                  return <StatRow key={block.id} data={block.data} />;
+                }
+                if (block.type === 'skills') {
+                  return <SkillMatrix key={block.id} data={block.data} />;
+                }
+                if (block.type === 'project') {
+                  return <ProjectCard key={block.id} data={block.data} />;
+                }
+                return null;
+              })}
+            </div>
+          ) : (
+            <>
+              <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
+              <MarkdownContent
+                content={skillSheet.content}
+                onImageClick={handleImageClick}
+              />
+            </>
+          )}
         </div>
       </motion.main>
 
