@@ -15,7 +15,10 @@ import {
   isBlockInputEmpty,
   isExperienceBlockData,
   isMarkdownBlockData,
+  isProfileBlockData,
+  isProjectBlockData,
   isSkillsBlockData,
+  isStatsBlockData,
   isTableBlockData,
   normalizeTableBlockData,
   splitMarkdownIntoBlocks,
@@ -140,6 +143,15 @@ function rowToBlock(id: string, type: string, order: number, data: unknown): Blo
   if (type === 'experience' && isExperienceBlockData(data)) {
     return { id, type: 'experience', order, data };
   }
+  if (type === 'profile' && isProfileBlockData(data)) {
+    return { id, type: 'profile', order, data };
+  }
+  if (type === 'stats' && isStatsBlockData(data)) {
+    return { id, type: 'stats', order, data };
+  }
+  if (type === 'project' && isProjectBlockData(data)) {
+    return { id, type: 'project', order, data };
+  }
   return null;
 }
 
@@ -219,6 +231,9 @@ function normalizeBlockInput(block: BlockInput): BlockInput {
   if (block.type === 'markdown') return { type: 'markdown', data: { markdown: block.data.markdown.trimEnd() } };
   if (block.type === 'skills') return block;
   if (block.type === 'experience') return block;
+  if (block.type === 'profile') return block;
+  if (block.type === 'stats') return block;
+  if (block.type === 'project') return block;
   return { type: 'table', data: normalizeTableBlockData(block.data) };
 }
 

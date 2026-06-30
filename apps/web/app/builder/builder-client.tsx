@@ -29,8 +29,14 @@ import {
   type ExperienceBlockData,
   experienceBlockToMarkdown,
   isBlockInputEmpty,
+  profileBlockToMarkdown,
+  type ProfileBlockData,
+  projectBlockToMarkdown,
+  type ProjectBlockData,
   type SkillEntry,
   skillsBlockToMarkdown,
+  statsBlockToMarkdown,
+  type StatsBlockData,
   type TableAlign,
   type TableColumn,
   tableBlockToMarkdown,
@@ -67,7 +73,10 @@ type EditorItem =
   | { id: string; type: 'markdown'; markdown: string }
   | { id: string; type: 'table'; columns: TableColumn[]; rows: string[][] }
   | { id: string; type: 'skills'; category: string; skills: SkillEntry[] }
-  | ({ id: string; type: 'experience' } & ExperienceBlockData);
+  | ({ id: string; type: 'experience' } & ExperienceBlockData)
+  | ({ id: string; type: 'profile' } & ProfileBlockData)
+  | { id: string; type: 'stats'; data: StatsBlockData }
+  | { id: string; type: 'project'; data: ProjectBlockData };
 
 interface BuilderClientProps {
   initialBlocks: Block[];
@@ -85,31 +94,69 @@ const newId = () =>
 // （newId() は乱数/時刻依存でハイドレーション不整合を起こす）。追加ブロックのみ newId()。
 const blockToItem = (block: Block, index: number): EditorItem => {
   const id = `block-${index}`;
-  if (block.type === 'markdown') return { id, type: 'markdown', markdown: block.data.markdown };
-  if (block.type === 'skills') return { id, type: 'skills', category: block.data.category, skills: block.data.skills };
-  if (block.type === 'experience') return { id, type: 'experience', ...block.data };
-  return { id, type: 'table', columns: block.data.columns, rows: block.data.rows };
+  switch (block.type) {
+    case 'markdown':
+      return { id, type: 'markdown', markdown: block.data.markdown };
+    case 'table':
+      return { id, type: 'table', columns: block.data.columns, rows: block.data.rows };
+    case 'skills':
+      return { id, type: 'skills', category: block.data.category, skills: block.data.skills };
+    case 'experience':
+      return { id, type: 'experience', ...block.data };
+    case 'profile':
+      return { id, type: 'profile', ...block.data };
+    case 'stats':
+      return { id, type: 'stats', data: block.data };
+    case 'project':
+      return { id, type: 'project', data: block.data };
+  }
 };
 
 const itemToBlockInput = (item: EditorItem): BlockInput => {
-  if (item.type === 'markdown') return { type: 'markdown', data: { markdown: item.markdown } };
-  if (item.type === 'skills') return { type: 'skills', data: { category: item.category, skills: item.skills } };
-  if (item.type === 'experience') {
-    const { company, startDate, endDate, role, description } = item;
-    return { type: 'experience', data: { company, startDate, endDate, role, description } };
+  switch (item.type) {
+    case 'markdown':
+      return { type: 'markdown', data: { markdown: item.markdown } };
+    case 'table':
+      return { type: 'table', data: { columns: item.columns, rows: item.rows } };
+    case 'skills':
+      return { type: 'skills', data: { category: item.category, skills: item.skills } };
+    case 'experience': {
+      const { company, startDate, endDate, role, description } = item;
+      return { type: 'experience', data: { company, startDate, endDate, role, description } };
+    }
+    case 'profile': {
+      const { name, title, pr, strengths, meta } = item;
+      return { type: 'profile', data: { name, title, pr, strengths, meta } };
+    }
+    case 'stats':
+      return { type: 'stats', data: item.data };
+    case 'project':
+      return { type: 'project', data: item.data };
   }
-  return { type: 'table', data: { columns: item.columns, rows: item.rows } };
 };
 
 // 1 ブロックを markdown 文字列へ（table/skills/experience は GFM 表・セクションへ変換）。
 const itemToMarkdown = (item: EditorItem): string => {
-  if (item.type === 'markdown') return item.markdown;
-  if (item.type === 'skills') return skillsBlockToMarkdown({ category: item.category, skills: item.skills });
-  if (item.type === 'experience') {
-    const { company, startDate, endDate, role, description } = item;
-    return experienceBlockToMarkdown({ company, startDate, endDate, role, description });
+  switch (item.type) {
+    case 'markdown':
+      return item.markdown;
+    case 'table':
+      return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
+    case 'skills':
+      return skillsBlockToMarkdown({ category: item.category, skills: item.skills });
+    case 'experience': {
+      const { company, startDate, endDate, role, description } = item;
+      return experienceBlockToMarkdown({ company, startDate, endDate, role, description });
+    }
+    case 'profile': {
+      const { name, title, pr, strengths, meta } = item;
+      return profileBlockToMarkdown({ name, title, pr, strengths, meta });
+    }
+    case 'stats':
+      return statsBlockToMarkdown(item.data);
+    case 'project':
+      return projectBlockToMarkdown(item.data);
   }
-  return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
 };
 
 const assembleMarkdown = (items: EditorItem[]): string => items.map(itemToMarkdown).join('\n');
@@ -466,6 +513,21 @@ const SortableBlock = ({
           data={{ company: item.company, startDate: item.startDate, endDate: item.endDate, role: item.role, description: item.description }}
           onChange={(data) => onExperienceChange(item.id, data)}
         />
+      ) : item.type === 'profile' ? (
+        <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          <span className="font-medium">プロフィール:</span> {item.name || '(未入力)'} — {item.title || '(役職未入力)'}
+          <p className="mt-0.5 text-xs opacity-70">※ 案件エディタタブで編集</p>
+        </div>
+      ) : item.type === 'stats' ? (
+        <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          <span className="font-medium">統計:</span> {item.data.items.map((i) => `${i.value}${i.unit} ${i.label}`).join(' / ') || '(未入力)'}
+          <p className="mt-0.5 text-xs opacity-70">※ 案件エディタタブで編集</p>
+        </div>
+      ) : item.type === 'project' ? (
+        <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          <span className="font-medium">案件:</span> {item.data.companies.length} 社 / {item.data.items.length} 件
+          <p className="mt-0.5 text-xs opacity-70">※ 案件エディタタブで編集</p>
+        </div>
       ) : (
         <TableBlockEditor
           columns={item.columns}

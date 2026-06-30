@@ -27,7 +27,7 @@ export default async function DbSheetByIdPage({ params }: Props) {
 
   try {
     const sheet = await getCachedDbSheetById(id);
-    return <SheetViewClient title={sheet.title} content={sheet.content} />;
+    return <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} />;
   } catch (err) {
     console.error('Failed to load sheet:', id, err);
     notFound();
