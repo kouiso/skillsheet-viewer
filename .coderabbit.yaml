@@ -19,7 +19,7 @@ reviews:
       instructions: |
         API ルート。次を確認:
         - [A/N] サーバ側で認可を検証しているか。編集 API は Better Auth セッション、閲覧 API は HMAC VIEWER_CODE で検証する。2系統を取り違えていないか。
-        - [Next16/F] revalidateTag は expire を明示しているか（未指定だと TTL まで stale になる）。
+        - [Next16/F] revalidateTag が第2引数（profile: string | CacheLifeConfig）を指定しているか（TypeScriptの型エラー防止）。また TTL 付きキャッシュは expire を明示しているか（未指定だと TTL まで stale になる）。
         - [C/D] catch で失敗を空配列/null に握り潰して「0件」と混同していないか。404 とシステムエラーを区別しているか（SheetNotFoundError のみ notFound()、他は再スロー）。
         - [I] 外部 API レスポンスを型検証せず参照していないか。as any / @ts-ignore を指摘。
 
@@ -27,6 +27,7 @@ reviews:
       instructions: |
         サーバ専用ロジック・認証ゲート。次を確認:
         - [A] auth-gate/viewer-gate が session.user の有無だけでなく所有者（owner id/allowlist）まで検証しているか。
+        - Better Auth の getAuth() 等の認証メソッドを呼び出す前に、必要な環境変数（BETTER_AUTH_SECRET, DATABASE_URL 等）が設定されているか確認しているか（未設定時の例外とログ汚染防止）。
         - [G] Origin/host 比較は new URL(origin).host の完全一致か（部分一致・substring 比較を security-medium として指摘）。timingSafeEqual は長さの違う生の秘密値を直接比較していないか（SHA-256 ハッシュ後に比較すること）。
 
     - path: "apps/web/app/**/*.{ts,tsx}"
@@ -39,10 +40,13 @@ reviews:
         - [M] "use client" ファイルから @skillsheet/db 等のサーバ専用モジュールを import していないか。
         - [H] anchor.click() 直後の同期 URL.revokeObjectURL を指摘する（setTimeout で遅延させ、遅延値は定数化すること）。PR#49・PR#44 で2回指摘された再発パターン。
         - [G] rehype-raw / dangerouslySetInnerHTML に rehype-sanitize が併用されているか。
+        - クリック可能な画像（Lightbox等）を実装する際、<img> に role="button" や tabIndex を付与するのではなく、<button type="button"> で囲んでいるか（アクセシビリティ・リンター警告防止）。
+        - ユーザー入力による重い描画処理（Markdownパース等）のステート更新をデバウンスしているか。初期表示は即時計算すること。
+        - SSRコンポーネントで一意なIDを生成する際、ハイドレーションエラー防止のため決定論的なインデックスベースIDを使っているか（ランダムIDはクライアント動的追加時のみ）。
 
     - path: "**/*pdf*.{ts,tsx}"
       instructions: |
         @react-pdf/renderer 固有。次を確認:
         - wrap={undefined} のバグ（テーブル重なりの原因）を指摘。
-        - 未登録フォントスタイル（italic 等）の使用を指摘。
+        - CJKフォント（Noto Sans JP等）で italic を使用する際、Regular/Bold フォントファイルを italic スタイルとして登録しているか（文字化け・豆腐化防止）。
         - "use client" 境界を超えた server-side import を指摘。
