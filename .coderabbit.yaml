@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "ja-JP"
+tone_instructions: "簡潔・具体的に。指摘は必ず『何が・なぜ問題か・修正例』をセットで。重大度を明示する。"
+reviews:
+  profile: assertive
+  high_level_summary: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "packages/db/**/*.ts"
+      instructions: |
+        DBレイヤ。次を必ず確認:
+        - [IDOR/A] sheetId/userId を受けて delete/update/insert する前に、その行が現在の ownerId/セッションに属するか検証しているか。検証なしの所有権前提アクセスを security-high として指摘。
+        - [Tx/B] 複数の DB 書き込み（insert+insert / delete→insert）は db.transaction で囲んでいるか。seed/初期化に onConflict ガードがあるか。
+        - [K] 「空」を一律除外するフィルタが、意図的に空のドメインデータ（テンプレの空ブロック等）を落としていないか。
+
+    - path: "apps/web/app/api/**/*.ts"
+      instructions: |
+        API ルート。次を確認:
+        - [A/N] サーバ側で認可を検証しているか。編集 API は Better Auth セッション、閲覧 API は HMAC VIEWER_CODE で検証する。2系統を取り違えていないか。
+        - [Next16/F] revalidateTag は expire を明示しているか（未指定だと TTL まで stale になる）。
+        - [C/D] catch で失敗を空配列/null に握り潰して「0件」と混同していないか。404 とシステムエラーを区別しているか（SheetNotFoundError のみ notFound()、他は再スロー）。
+        - [I] 外部 API レスポンスを型検証せず参照していないか。as any / @ts-ignore を指摘。
+
+    - path: "apps/web/src/server/**/*.ts"
+      instructions: |
+        サーバ専用ロジック・認証ゲート。次を確認:
+        - [A] auth-gate/viewer-gate が session.user の有無だけでなく所有者（owner id/allowlist）まで検証しているか。
+        - [G] Origin/host 比較は new URL(origin).host の完全一致か（部分一致・substring 比較を security-medium として指摘）。timingSafeEqual は長さの違う生の秘密値を直接比較していないか（SHA-256 ハッシュ後に比較すること）。
+
+    - path: "apps/web/app/**/*.{ts,tsx}"
+      instructions: |
+        App Router / RSC / Client Component。次を確認:
+        - [E] App Router の params は既にデコード済み。decodeURIComponent の再適用を指摘。パス検証の正規表現が [a-zA-Z0-9] 等で日本語（非ASCII）を弾いていないか（Unicode \p{L}\p{N} を推奨）。
+        - [Next16/F] props 由来の初期 state を持つ Client Component に、親が key（例: key={activeSheetId}）を渡さずシート切替で stale state になっていないか。critical として指摘。
+        - [F] 未保存ガード（dirty check）が beforeunload のみで、アプリ内 Link 遷移を素通りさせていないか。
+        - [F] 複数描画されうるコンポーネントで document.querySelector を使っていないか（useRef でスコープすること）。
+        - [M] "use client" ファイルから @skillsheet/db 等のサーバ専用モジュールを import していないか。
+        - [H] anchor.click() 直後の同期 URL.revokeObjectURL を指摘する（setTimeout で遅延させ、遅延値は定数化すること）。PR#49・PR#44 で2回指摘された再発パターン。
+        - [G] rehype-raw / dangerouslySetInnerHTML に rehype-sanitize が併用されているか。
+
+    - path: "**/*pdf*.{ts,tsx}"
+      instructions: |
+        @react-pdf/renderer 固有。次を確認:
+        - wrap={undefined} のバグ（テーブル重なりの原因）を指摘。
+        - 未登録フォントスタイル（italic 等）の使用を指摘。
+        - "use client" 境界を超えた server-side import を指摘。
