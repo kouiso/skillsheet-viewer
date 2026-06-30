@@ -44,9 +44,26 @@ reviews:
         - ユーザー入力による重い描画処理（Markdownパース等）のステート更新をデバウンスしているか。初期表示は即時計算すること。
         - SSRコンポーネントで一意なIDを生成する際、ハイドレーションエラー防止のため決定論的なインデックスベースIDを使っているか（ランダムIDはクライアント動的追加時のみ）。
 
+    - path: "apps/web/src/**/*.{ts,tsx}"
+      instructions: |
+        apps/web/src 配下の Client Component・ユーティリティ。次を確認:
+        - [M] "use client" ファイルから @skillsheet/db 等のサーバ専用モジュールを import していないか。
+        - [G] rehype-raw / dangerouslySetInnerHTML に rehype-sanitize が併用されているか。
+        - [F] 複数描画されうるコンポーネントで document.querySelector を使っていないか（useRef でスコープすること）。
+        - [H] anchor.click() 直後の同期 URL.revokeObjectURL を指摘する（setTimeout 遅延＋定数化）。
+        - クリック可能な画像（Lightbox等）を <button type="button"> で囲んでいるか。
+        - デバウンス・SSR 決定論的ID については apps/web/app/**/*.{ts,tsx} の指示と同様。
+
     - path: "**/*pdf*.{ts,tsx}"
       instructions: |
         @react-pdf/renderer 固有。次を確認:
+        - wrap={undefined} のバグ（テーブル重なりの原因）を指摘。
+        - CJKフォント（Noto Sans JP等）で italic を使用する際、Regular/Bold フォントファイルを italic スタイルとして登録しているか（文字化け・豆腐化防止）。
+        - "use client" 境界を超えた server-side import を指摘。
+
+    - path: "**/pdf/**/*.{ts,tsx}"
+      instructions: |
+        @react-pdf/renderer 固有（pdf/ ディレクトリ配下）。次を確認:
         - wrap={undefined} のバグ（テーブル重なりの原因）を指摘。
         - CJKフォント（Noto Sans JP等）で italic を使用する際、Regular/Bold フォントファイルを italic スタイルとして登録しているか（文字化け・豆腐化防止）。
         - "use client" 境界を超えた server-side import を指摘。

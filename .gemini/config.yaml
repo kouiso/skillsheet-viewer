@@ -1,4 +1,4 @@
 code_review:
   comment_language: ja
-  max_comments: 30
+  max_review_comments: 30
   pull_request_scope: diff_only
