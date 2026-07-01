@@ -54,6 +54,9 @@ secret
 .npm
 playground.nnb
 
+# archives / handoff bundles
+*.zip
+
 # seo
 sitemap*.xml
 robots.txt
