@@ -153,6 +153,9 @@ type RenderGroup = { kind: 'skills'; blocks: Extract<Block, { type: 'skills' }>[
 function groupBlocks(blocks: Block[]): RenderGroup[] {
   const groups: RenderGroup[] = [];
   for (const block of blocks) {
+    // SkillMatrix は空の skills ブロックを null 描画するため、グループにも含めない
+    // （含めると中身が空の枠線コンテナだけが描画されてしまう）。
+    if (block.type === 'skills' && block.data.skills.length === 0) continue;
     const lastGroup = groups.at(-1);
     if (block.type === 'skills') {
       if (lastGroup?.kind === 'skills') {
@@ -168,6 +171,8 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
 }
 
 const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillSheetViewerProps) => {
+  // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
+  const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -261,7 +266,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
         <div ref={contentRef} className="rounded border border-border bg-card p-4 sm:p-6 md:p-8">
           {blocks ? (
             <div className="space-y-0">
-              {groupBlocks(blocks).map((group) => {
+              {groupedBlocks.map((group) => {
                 if (group.kind === 'skills') {
                   const key = group.blocks.map((b) => b.id).join('-');
                   return (
