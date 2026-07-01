@@ -64,6 +64,7 @@ import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { Button } from '@/components/ui/button';
 
 import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
+import { ProjectEditor } from './project-editor';
 import { TEMPLATES } from './templates';
 
 type SheetSummary = { id: string; title: string; updatedAt: Date };
@@ -622,6 +623,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
   const savedRef = useRef(false);
   const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
+  const [activeTab, setActiveTab] = useState<'blocks' | 'project'>('blocks');
 
   // 未保存変更の検知。最後に保存成功した時点のスナップショット（タイトル＋組み立て markdown）を
   // 保持し、現在の内容と差分があれば dirty とみなす（保存成功で更新）。
@@ -742,6 +744,21 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       ...prev,
       { id: newId(), type: 'experience', company: '', startDate: '', endDate: '', role: '', description: '' },
     ]);
+
+  const updateProjectData = (data: ProjectBlockData) => {
+    setItems((prev) => {
+      const idx = prev.findIndex((i) => i.type === 'project');
+      if (idx === -1) return [...prev, { id: newId(), type: 'project', data }];
+      return prev.map((i) => (i.type === 'project' ? { ...i, data } : i));
+    });
+  };
+
+  const ensureProjectBlock = () => {
+    setItems((prev) => {
+      if (prev.some((i) => i.type === 'project')) return prev;
+      return [...prev, { id: newId(), type: 'project', data: { companies: [], items: [] } }];
+    });
+  };
 
   const handleCreateSheet = () => {
     setNewSheetTitle('新しいスキルシート');
@@ -959,7 +976,47 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             />
           </div>
 
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          {/* タブ切り替え */}
+          <div className="flex border-b border-border">
+            <button
+              type="button"
+              onClick={() => setActiveTab('blocks')}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === 'blocks'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              ブロック編集
+            </button>
+            <button
+              type="button"
+              onClick={() => { setActiveTab('project'); ensureProjectBlock(); }}
+              className={`px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === 'project'
+                  ? 'border-b-2 border-primary text-primary'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              案件エディタ
+            </button>
+          </div>
+
+          {activeTab === 'project' && (() => {
+            const projectItem = items.find((i) => i.type === 'project') as
+              | ({ id: string; type: 'project'; data: ProjectBlockData })
+              | undefined;
+            return (
+              <div className="rounded border border-border bg-card p-3">
+                <ProjectEditor
+                  data={projectItem?.data ?? { companies: [], items: [] }}
+                  onChange={updateProjectData}
+                />
+              </div>
+            );
+          })()}
+
+          {activeTab === 'blocks' && <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             {/* パレット: ドラッグしてキャンバスへドロップ */}
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
               <span className="text-xs text-muted-foreground">ドラッグして追加:</span>
@@ -996,9 +1053,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             <DragOverlay>
               {activePaletteType && <DragPreview blockType={activePaletteType} />}
             </DragOverlay>
-          </DndContext>
+          </DndContext>}
 
-          <div className="flex gap-2">
+          {activeTab === 'blocks' && <div className="flex gap-2">
             <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
               <Plus className="mr-1.5 size-4" />
               テキスト
@@ -1015,7 +1072,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               <Plus className="mr-1.5 size-4" />
               職務経歴
             </Button>
-          </div>
+          </div>}
         </div>
 
         {/* ライブプレビュー */}
