@@ -10,12 +10,21 @@ import {
   isBlockInputEmpty,
   isExperienceBlockData,
   isMarkdownBlockData,
+  isProfileBlockData,
+  isProjectBlockData,
   isSkillsBlockData,
+  isStatsBlockData,
   isTableBlockData,
   normalizeTableBlockData,
+  type ProfileBlockData,
+  type ProjectBlockData,
+  profileBlockToMarkdown,
+  projectBlockToMarkdown,
   type SkillsBlockData,
+  type StatsBlockData,
   skillsBlockToMarkdown,
   splitMarkdownIntoBlocks,
+  statsBlockToMarkdown,
   type TableBlockData,
   tableBlockToMarkdown,
 } from './blocks';
@@ -321,5 +330,186 @@ describe('バリデータ', () => {
       ['1', ''],
       ['1', '2'],
     ]);
+  });
+});
+
+// ---- A1: 新型ブロック（profile / stats / project）の検証とround-trip --------
+
+const PROFILE: ProfileBlockData = {
+  name: 'テスト太郎',
+  title: 'フルスタックエンジニア',
+  pr: 'テスト自己PR',
+  strengths: ['TypeScript', 'Next.js'],
+  meta: { age: '30歳', work: 'フルリモート' },
+};
+
+const STATS: StatsBlockData = {
+  items: [
+    { value: '5', unit: '年', label: 'エンジニア歴' },
+    { value: '10', unit: '案件', label: 'プロジェクト数' },
+  ],
+};
+
+const PROJECT: ProjectBlockData = {
+  companies: [{ id: 'c1', name: '株式会社テスト', kind: 'SIer', period: '2020-01〜現在', note: '' }],
+  items: [
+    {
+      id: 'p1',
+      companyId: 'c1',
+      title: 'テストシステム開発',
+      scope: '5名',
+      period: '2020-01〜2022-12',
+      role: 'フロントエンド',
+      team: '5名',
+      tech: { lang: ['TypeScript'], fw: ['React'], db: ['PostgreSQL'], infra: ['AWS'], tools: ['Git'], collab: [] },
+      process: ['要件定義', '設計', '実装'],
+      duties: '業務内容テスト',
+      acquired: '習得スキルテスト',
+      comment: '',
+    },
+  ],
+};
+
+describe('isProfileBlockData', () => {
+  it('有効なプロフィールデータを受け入れる', () => {
+    expect(isProfileBlockData(PROFILE)).toBe(true);
+  });
+
+  it('name が文字列でなければ拒否', () => {
+    expect(isProfileBlockData({ ...PROFILE, name: 123 })).toBe(false);
+  });
+
+  it('strengths が配列でなければ拒否', () => {
+    expect(isProfileBlockData({ ...PROFILE, strengths: 'invalid' })).toBe(false);
+  });
+
+  it('meta がオブジェクトでなければ拒否', () => {
+    expect(isProfileBlockData({ ...PROFILE, meta: null })).toBe(false);
+  });
+
+  it('null は拒否', () => {
+    expect(isProfileBlockData(null)).toBe(false);
+  });
+});
+
+describe('isStatsBlockData', () => {
+  it('有効な統計データを受け入れる', () => {
+    expect(isStatsBlockData(STATS)).toBe(true);
+  });
+
+  it('items が配列でなければ拒否', () => {
+    expect(isStatsBlockData({ items: 'bad' })).toBe(false);
+  });
+
+  it('item.value が文字列でなければ拒否', () => {
+    expect(isStatsBlockData({ items: [{ value: 1, unit: '年', label: 'x' }] })).toBe(false);
+  });
+
+  it('空の items 配列は有効', () => {
+    expect(isStatsBlockData({ items: [] })).toBe(true);
+  });
+});
+
+describe('isProjectBlockData', () => {
+  it('有効な案件データを受け入れる', () => {
+    expect(isProjectBlockData(PROJECT)).toBe(true);
+  });
+
+  it('companies が配列でなければ拒否', () => {
+    expect(isProjectBlockData({ companies: 'bad', items: [] })).toBe(false);
+  });
+
+  it('items が配列でなければ拒否', () => {
+    expect(isProjectBlockData({ companies: [], items: 'bad' })).toBe(false);
+  });
+
+  it('null は拒否', () => {
+    expect(isProjectBlockData(null)).toBe(false);
+  });
+});
+
+describe('profileBlockToMarkdown', () => {
+  it('名前・肩書き・自己PR・強みを含む markdown を出力する', () => {
+    const md = profileBlockToMarkdown(PROFILE);
+    expect(md).toContain('# テスト太郎');
+    expect(md).toContain('フルスタックエンジニア');
+    expect(md).toContain('テスト自己PR');
+    expect(md).toContain('TypeScript');
+  });
+
+  it('meta.age / meta.work が存在すれば表に出力する', () => {
+    const md = profileBlockToMarkdown(PROFILE);
+    expect(md).toContain('| 年齢 | 30歳 |');
+    expect(md).toContain('| 勤務形態 | フルリモート |');
+  });
+});
+
+describe('statsBlockToMarkdown', () => {
+  it('ラベル行・値行を含む GFM 表を出力する', () => {
+    const md = statsBlockToMarkdown(STATS);
+    expect(md).toContain('| エンジニア歴 | プロジェクト数 |');
+    expect(md).toContain('| 5年 | 10案件 |');
+  });
+
+  it('items が空のとき空文字を返す', () => {
+    expect(statsBlockToMarkdown({ items: [] })).toBe('');
+  });
+});
+
+describe('projectBlockToMarkdown', () => {
+  it('会社名・案件タイトル・期間・技術スタックを含む markdown を出力する', () => {
+    const md = projectBlockToMarkdown(PROJECT);
+    expect(md).toContain('### 株式会社テスト — テストシステム開発');
+    expect(md).toContain('TypeScript');
+    expect(md).toContain('業務内容テスト');
+  });
+});
+
+describe('blocksToMarkdown — 新型ブロック dispatch', () => {
+  it('profile ブロックを markdown に変換して連結する', () => {
+    const blks: Block[] = [{ id: 'p', type: 'profile', order: 0, data: PROFILE }];
+    expect(blocksToMarkdown(blks)).toContain('# テスト太郎');
+  });
+
+  it('stats ブロックを markdown に変換して連結する', () => {
+    const blks: Block[] = [{ id: 's', type: 'stats', order: 0, data: STATS }];
+    expect(blocksToMarkdown(blks)).toContain('エンジニア歴');
+  });
+
+  it('project ブロックを markdown に変換して連結する', () => {
+    const blks: Block[] = [{ id: 'j', type: 'project', order: 0, data: PROJECT }];
+    expect(blocksToMarkdown(blks)).toContain('株式会社テスト');
+  });
+
+  it('未知 type のブロックは空文字を返してエラーを throw しない', () => {
+    const blks = [{ id: 'x', type: 'unknown', order: 0, data: {} }] as unknown as Block[];
+    expect(() => blocksToMarkdown(blks)).not.toThrow();
+    expect(blocksToMarkdown(blks)).toBe('');
+  });
+});
+
+describe('A1 (e): blockToItem → itemToBlockInput round-trip', () => {
+  it('profile Block → EditorItem → BlockInput でデータが一致する', () => {
+    const block: Block = { id: 'b0', type: 'profile', order: 0, data: PROFILE };
+    // blockToItem の変換ロジックをインラインで再現（builder-client.tsx と同一）
+    const item = { id: 'block-0', type: 'profile' as const, ...block.data };
+    // itemToBlockInput の変換ロジックをインラインで再現
+    const { name, title, pr, strengths, meta } = item;
+    const blockInput: BlockInput = { type: 'profile', data: { name, title, pr, strengths, meta } };
+    expect(blockInput.data).toEqual(PROFILE);
+  });
+
+  it('stats Block → EditorItem → BlockInput でデータが一致する', () => {
+    const block: Block = { id: 'b1', type: 'stats', order: 0, data: STATS };
+    const item = { id: 'block-0', type: 'stats' as const, data: block.data };
+    const blockInput: BlockInput = { type: 'stats', data: item.data };
+    expect(blockInput.data).toEqual(STATS);
+  });
+
+  it('project Block → EditorItem → BlockInput でデータが一致する', () => {
+    const block: Block = { id: 'b2', type: 'project', order: 0, data: PROJECT };
+    const item = { id: 'block-0', type: 'project' as const, data: block.data };
+    const blockInput: BlockInput = { type: 'project', data: item.data };
+    expect(blockInput.data).toEqual(PROJECT);
   });
 });

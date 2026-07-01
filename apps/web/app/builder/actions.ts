@@ -2,6 +2,7 @@
 
 import {
   type BlockInput,
+  ConflictError,
   createSheet,
   deleteSheet,
   isBlockInput,
@@ -23,6 +24,8 @@ export interface SaveBlocksPayload {
   title: string;
   blocks: BlockInput[];
   sheetId?: string;
+  /** A3 並行保存ガード: 編集開始時の updatedAt を渡すと競合を検出して中断する。 */
+  expectedUpdatedAt?: Date;
 }
 
 /**
@@ -45,12 +48,15 @@ export async function saveBlocksAction(payload: SaveBlocksPayload): Promise<Save
   }
 
   try {
-    await saveSkillSheetBlocks(payload.title, payload.blocks, payload.sheetId);
+    await saveSkillSheetBlocks(payload.title, payload.blocks, payload.sheetId, payload.expectedUpdatedAt);
     // Next 16 の revalidateTag は第2引数必須。空の CacheLifeConfig({}) で
     // 当該タグを即時失効させ、保存直後に /view/db が最新を読むようにする。
     revalidateTag('db-sheet', {});
     return { ok: true };
   } catch (err) {
+    if (err instanceof ConflictError) {
+      return { ok: false, error: 'conflict' as const };
+    }
     console.error('saveBlocksAction failed:', err);
     return { ok: false, error: 'save failed' };
   }
