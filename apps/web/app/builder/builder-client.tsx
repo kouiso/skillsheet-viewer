@@ -642,6 +642,12 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
   const [activeTab, setActiveTab] = useState<'blocks' | 'project'>('blocks');
 
+  // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
+  // 保存成功時は new Date() で更新し、次回保存時の基準にする。
+  const savedUpdatedAtRef = useRef<Date | undefined>(
+    initialSheets.find((s) => s.id === activeSheetId)?.updatedAt,
+  );
+
   // 未保存変更の検知。最後に保存成功した時点のスナップショット（タイトル＋組み立て markdown）を
   // 保持し、現在の内容と差分があれば dirty とみなす（保存成功で更新）。
   const lastSavedSnapshotRef = useRef<string>(snapshot(initialBlocks.map(blockToItem), initialTitle));
@@ -844,19 +850,30 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       if (!confirmed) return;
     }
 
-    const payload = { title, blocks: items.map(itemToBlockInput), sheetId: activeSheetId };
+    const payload = {
+      title,
+      blocks: items.map(itemToBlockInput),
+      sheetId: activeSheetId,
+      expectedUpdatedAt: savedUpdatedAtRef.current,
+    };
     const savedSnapshot = snapshot(items, title);
 
     startSaving(async () => {
       const res = await saveBlocksAction(payload);
       if (res.ok) {
         savedRef.current = true;
+        savedUpdatedAtRef.current = new Date();
         // 保存成功した内容をスナップショットとして記録し、dirty を解除する。
         lastSavedSnapshotRef.current = savedSnapshot;
         setIsDirty(false);
         toast.success('保存しました');
       } else if (res.error === 'unauthorized') {
         toast.error('セッションが切れました。再度認証してください。');
+      } else if (res.error === 'conflict') {
+        const reload = window.confirm(
+          'このシートは別のセッションで更新されています。ページをリロードして最新版を確認しますか？',
+        );
+        if (reload) router.refresh();
       } else {
         toast.error('保存に失敗しました');
       }
@@ -916,23 +933,23 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         </div>
       )}
       <header className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <h1 className="text-lg font-bold">スキルシートビルダー</h1>
-          <div className="flex items-center gap-2">
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+          <h1 className="min-w-0 truncate text-lg font-bold">スキルシートビルダー</h1>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <Button variant="ghost" size="sm" onClick={() => setShowPreview((v) => !v)}>
-              {showPreview ? <EyeOff className="mr-1.5 size-4" /> : <Eye className="mr-1.5 size-4" />}
-              プレビュー
+              {showPreview ? <EyeOff className="size-4 sm:mr-1.5" /> : <Eye className="size-4 sm:mr-1.5" />}
+              <span className="hidden sm:inline">プレビュー</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExport}>
+            <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={handleExport}>
               <Download className="mr-1.5 size-4" />
               バックアップ
             </Button>
-            <Link href="/view" className="text-sm text-muted-foreground hover:text-foreground">
+            <Link href="/view" className="hidden text-sm text-muted-foreground hover:text-foreground sm:inline">
               閲覧へ
             </Link>
             <Button onClick={handleSave} disabled={isSaving}>
-              <Save className="mr-1.5 size-4" />
-              {isSaving ? '保存中...' : '保存'}
+              <Save className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">{isSaving ? '保存中...' : '保存'}</span>
             </Button>
           </div>
         </div>
