@@ -28,20 +28,19 @@ export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
       {data.category && (
         <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">{data.category}</h3>
       )}
-      <div className="grid gap-2 sm:grid-cols-2">
+      <div className="grid gap-2.5">
         {data.skills.map((skill, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
-          <div key={i} className="flex items-center gap-3">
-            <span className="w-28 shrink-0 truncate text-sm text-foreground">{skill.name}</span>
-            <div className="flex-1">
-              <div className="h-1.5 w-full rounded-full bg-muted">
-                <div className={`h-1.5 rounded-full bg-primary ${getLevelWidth(skill.level)}`} />
-              </div>
+          <div key={i} className="space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate text-sm text-foreground">{skill.name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {skill.years > 0 ? `${skill.years}年` : '-'} {skill.level}
+              </span>
             </div>
-            <span className="w-12 shrink-0 text-right text-xs text-muted-foreground">
-              {skill.years > 0 ? `${skill.years}年` : '-'}
-            </span>
-            <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">{skill.level}</span>
+            <div className="h-1.5 w-full rounded-full bg-muted">
+              <div className={`h-1.5 rounded-full bg-primary ${getLevelWidth(skill.level)}`} />
+            </div>
           </div>
         ))}
       </div>
