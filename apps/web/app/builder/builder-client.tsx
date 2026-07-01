@@ -3,8 +3,8 @@
 import {
   closestCenter,
   DndContext,
-  DragOverlay,
   type DragEndEvent,
+  DragOverlay,
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
@@ -29,14 +29,14 @@ import {
   type ExperienceBlockData,
   experienceBlockToMarkdown,
   isBlockInputEmpty,
-  profileBlockToMarkdown,
   type ProfileBlockData,
-  projectBlockToMarkdown,
   type ProjectBlockData,
+  profileBlockToMarkdown,
+  projectBlockToMarkdown,
   type SkillEntry,
+  type StatsBlockData,
   skillsBlockToMarkdown,
   statsBlockToMarkdown,
-  type StatsBlockData,
   type TableAlign,
   type TableColumn,
   tableBlockToMarkdown,
@@ -328,9 +328,16 @@ const SkillsBlockEditor = ({
 }) => {
   const setCategory = (v: string) => onChange(v, skills);
   const setSkill = (i: number, field: keyof SkillEntry, value: string | number) =>
-    onChange(category, skills.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)));
+    onChange(
+      category,
+      skills.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)),
+    );
   const addSkill = () => onChange(category, [...skills, { name: '', years: 0, level: '' }]);
-  const removeSkill = (i: number) => onChange(category, skills.filter((_, idx) => idx !== i));
+  const removeSkill = (i: number) =>
+    onChange(
+      category,
+      skills.filter((_, idx) => idx !== i),
+    );
 
   return (
     <div className="min-w-0 flex-1 space-y-2">
@@ -511,7 +518,13 @@ const SortableBlock = ({
         />
       ) : item.type === 'experience' ? (
         <ExperienceBlockEditor
-          data={{ company: item.company, startDate: item.startDate, endDate: item.endDate, role: item.role, description: item.description }}
+          data={{
+            company: item.company,
+            startDate: item.startDate,
+            endDate: item.endDate,
+            role: item.role,
+            description: item.description,
+          }}
           onChange={(data) => onExperienceChange(item.id, data)}
         />
       ) : item.type === 'profile' ? (
@@ -521,7 +534,8 @@ const SortableBlock = ({
         </div>
       ) : item.type === 'stats' ? (
         <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-          <span className="font-medium">統計:</span> {item.data.items.map((i) => `${i.value}${i.unit} ${i.label}`).join(' / ') || '(未入力)'}
+          <span className="font-medium">統計:</span>{' '}
+          {item.data.items.map((i) => `${i.value}${i.unit} ${i.label}`).join(' / ') || '(未入力)'}
           <p className="mt-0.5 text-xs opacity-70">※ 案件エディタタブで編集</p>
         </div>
       ) : item.type === 'project' ? (
@@ -590,7 +604,10 @@ const DragPreview = ({ blockType }: { blockType: PaletteBlockType }) => (
 const CanvasDroppable = ({ children }: { children: React.ReactNode }) => {
   const { setNodeRef, isOver } = useDroppable({ id: 'canvas-drop' });
   return (
-    <div ref={setNodeRef} className={`min-h-16 rounded-md transition-colors ${isOver ? 'bg-primary/5 ring-1 ring-primary/20' : ''}`}>
+    <div
+      ref={setNodeRef}
+      className={`min-h-16 rounded-md transition-colors ${isOver ? 'bg-primary/5 ring-1 ring-primary/20' : ''}`}
+    >
       {children}
     </div>
   );
@@ -862,8 +879,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   id="new-sheet-title"
                   value={newSheetTitle}
                   onChange={(e) => setNewSheetTitle(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleConfirmCreate(); if (e.key === 'Escape') setShowCreateDialog(false); }}
-                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleConfirmCreate();
+                    if (e.key === 'Escape') setShowCreateDialog(false);
+                  }}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
@@ -878,7 +897,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   {TEMPLATES.map((t) => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -941,9 +962,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                     type="button"
                     onClick={() => router.push(`/builder?sheet=${sheet.id}`)}
                     className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
-                      sheet.id === activeSheetId
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-muted'
+                      sheet.id === activeSheetId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                     }`}
                   >
                     <FileText className="size-3.5 shrink-0" />
@@ -991,7 +1010,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             </button>
             <button
               type="button"
-              onClick={() => { setActiveTab('project'); ensureProjectBlock(); }}
+              onClick={() => {
+                setActiveTab('project');
+                ensureProjectBlock();
+              }}
               className={`px-4 py-2 text-sm font-medium transition-colors ${
                 activeTab === 'project'
                   ? 'border-b-2 border-primary text-primary'
@@ -1002,77 +1024,85 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             </button>
           </div>
 
-          {activeTab === 'project' && (() => {
-            const projectItem = items.find((i) => i.type === 'project') as
-              | ({ id: string; type: 'project'; data: ProjectBlockData })
-              | undefined;
-            return (
-              <div className="rounded border border-border bg-card p-3">
-                <ProjectEditor
-                  data={projectItem?.data ?? { companies: [], items: [] }}
-                  onChange={updateProjectData}
-                />
-              </div>
-            );
-          })()}
-
-          {activeTab === 'blocks' && <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            {/* パレット: ドラッグしてキャンバスへドロップ */}
-            <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
-              <span className="text-xs text-muted-foreground">ドラッグして追加:</span>
-              {PALETTE_ITEMS.map((p) => (
-                <PaletteChip key={p.blockType} {...p} />
-              ))}
-            </div>
-
-            {/* キャンバス */}
-            <CanvasDroppable>
-              <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-                <div className="space-y-3">
-                  {items.map((item) => (
-                    <SortableBlock
-                      key={item.id}
-                      item={item}
-                      onMarkdownChange={updateMarkdown}
-                      onTableChange={updateTable}
-                      onSkillsChange={updateSkills}
-                      onExperienceChange={updateExperience}
-                      onDelete={deleteBlock}
-                    />
-                  ))}
+          {activeTab === 'project' &&
+            (() => {
+              const projectItem = items.find((i) => i.type === 'project') as
+                | { id: string; type: 'project'; data: ProjectBlockData }
+                | undefined;
+              return (
+                <div className="rounded border border-border bg-card p-3">
+                  <ProjectEditor
+                    data={projectItem?.data ?? { companies: [], items: [] }}
+                    onChange={updateProjectData}
+                  />
                 </div>
-              </SortableContext>
-              {items.length === 0 && (
-                <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
-                  ブロックがありません。パレットからドラッグするか、下のボタンで追加してください。
-                </p>
-              )}
-            </CanvasDroppable>
+              );
+            })()}
 
-            {/* ドラッグ中のオーバーレイ（パレットチップのゴースト） */}
-            <DragOverlay>
-              {activePaletteType && <DragPreview blockType={activePaletteType} />}
-            </DragOverlay>
-          </DndContext>}
+          {activeTab === 'blocks' && (
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              {/* パレット: ドラッグしてキャンバスへドロップ */}
+              <div className="flex flex-wrap items-center gap-2 rounded-md border border-dashed border-border bg-muted/30 px-3 py-2">
+                <span className="text-xs text-muted-foreground">ドラッグして追加:</span>
+                {PALETTE_ITEMS.map((p) => (
+                  <PaletteChip key={p.blockType} {...p} />
+                ))}
+              </div>
 
-          {activeTab === 'blocks' && <div className="flex gap-2">
-            <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
-              <Plus className="mr-1.5 size-4" />
-              テキスト
-            </Button>
-            <Button variant="outline" onClick={addTableBlock} className="flex-1">
-              <Table className="mr-1.5 size-4" />
-              テーブル
-            </Button>
-            <Button variant="outline" onClick={addSkillsBlock} className="flex-1">
-              <Plus className="mr-1.5 size-4" />
-              スキル一覧
-            </Button>
-            <Button variant="outline" onClick={addExperienceBlock} className="flex-1">
-              <Plus className="mr-1.5 size-4" />
-              職務経歴
-            </Button>
-          </div>}
+              {/* キャンバス */}
+              <CanvasDroppable>
+                <SortableContext items={items.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-3">
+                    {items.map((item) => (
+                      <SortableBlock
+                        key={item.id}
+                        item={item}
+                        onMarkdownChange={updateMarkdown}
+                        onTableChange={updateTable}
+                        onSkillsChange={updateSkills}
+                        onExperienceChange={updateExperience}
+                        onDelete={deleteBlock}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+                {items.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+                    ブロックがありません。パレットからドラッグするか、下のボタンで追加してください。
+                  </p>
+                )}
+              </CanvasDroppable>
+
+              {/* ドラッグ中のオーバーレイ（パレットチップのゴースト） */}
+              <DragOverlay>{activePaletteType && <DragPreview blockType={activePaletteType} />}</DragOverlay>
+            </DndContext>
+          )}
+
+          {activeTab === 'blocks' && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
+                <Plus className="mr-1.5 size-4" />
+                テキスト
+              </Button>
+              <Button variant="outline" onClick={addTableBlock} className="flex-1">
+                <Table className="mr-1.5 size-4" />
+                テーブル
+              </Button>
+              <Button variant="outline" onClick={addSkillsBlock} className="flex-1">
+                <Plus className="mr-1.5 size-4" />
+                スキル一覧
+              </Button>
+              <Button variant="outline" onClick={addExperienceBlock} className="flex-1">
+                <Plus className="mr-1.5 size-4" />
+                職務経歴
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* ライブプレビュー */}
