@@ -92,10 +92,7 @@ async function getOrCreateDefaultSheetId(db: Database): Promise<string> {
     .limit(1);
   if (existing[0]?.id) return existing[0].id;
 
-  const inserted = await db
-    .insert(skillSheets)
-    .values({ ownerId, title: TITLE })
-    .returning({ id: skillSheets.id });
+  const inserted = await db.insert(skillSheets).values({ ownerId, title: TITLE }).returning({ id: skillSheets.id });
   if (inserted[0]?.id) return inserted[0].id;
 
   // 競合: 別リクエストが先に作成した場合
@@ -208,9 +205,7 @@ export async function createSheet(title: string, initialBlocks?: BlockInput[]): 
 export async function deleteSheet(sheetId: string): Promise<void> {
   const db = getDb();
   const ownerId = getOwnerId();
-  await db
-    .delete(skillSheets)
-    .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)));
+  await db.delete(skillSheets).where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)));
 }
 
 /** 指定 ID のシートを読む。ID 未指定またはデフォルト読み込み時は GitHub シードを実行する。 */
@@ -241,11 +236,7 @@ function normalizeBlockInput(block: BlockInput): BlockInput {
  * 指定シートのブロックを保存する。sheetId を明示することで複数シートに対応。
  * sheetId が未指定のときはオーナーのデフォルトシートへ保存する（後方互換）。
  */
-export async function saveSkillSheetBlocks(
-  title: string,
-  blocksInput: BlockInput[],
-  sheetId?: string,
-): Promise<void> {
+export async function saveSkillSheetBlocks(title: string, blocksInput: BlockInput[], sheetId?: string): Promise<void> {
   const db = getDb();
   const resolvedSheetId = sheetId ?? (await getOrCreateDefaultSheetId(db));
 
@@ -257,7 +248,9 @@ export async function saveSkillSheetBlocks(
     if (cleaned.length > 0) {
       await tx
         .insert(blocks)
-        .values(cleaned.map((block, order) => ({ sheetId: resolvedSheetId, type: block.type, order, data: block.data })));
+        .values(
+          cleaned.map((block, order) => ({ sheetId: resolvedSheetId, type: block.type, order, data: block.data })),
+        );
     }
     await tx
       .update(skillSheets)

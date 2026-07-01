@@ -294,8 +294,18 @@ describe('バリデータ', () => {
     expect(isBlockInputEmpty({ type: 'skills', data: { category: '', skills: [] } })).toBe(true);
     expect(isBlockInputEmpty({ type: 'skills', data: { category: '  ', skills: [] } })).toBe(true);
     expect(isBlockInputEmpty({ type: 'skills', data: SKILLS })).toBe(false);
-    expect(isBlockInputEmpty({ type: 'experience', data: { company: '', startDate: '', endDate: '', role: '', description: '' } })).toBe(true);
-    expect(isBlockInputEmpty({ type: 'experience', data: { company: '  ', startDate: '', endDate: '', role: '  ', description: '' } })).toBe(true);
+    expect(
+      isBlockInputEmpty({
+        type: 'experience',
+        data: { company: '', startDate: '', endDate: '', role: '', description: '' },
+      }),
+    ).toBe(true);
+    expect(
+      isBlockInputEmpty({
+        type: 'experience',
+        data: { company: '  ', startDate: '', endDate: '', role: '  ', description: '' },
+      }),
+    ).toBe(true);
     expect(isBlockInputEmpty({ type: 'experience', data: EXP })).toBe(false);
   });
 

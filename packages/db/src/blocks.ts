@@ -176,7 +176,14 @@ interface ProjectBlock {
  * スキルシートを構成する 1 ブロック。type と data を一致させた判別ユニオン。
  * id は DB の行 ID、order は 0 始まりの表示順。
  */
-export type Block = MarkdownBlock | TableBlock | SkillsBlock | ExperienceBlock | ProfileBlock | StatsBlock | ProjectBlock;
+export type Block =
+  | MarkdownBlock
+  | TableBlock
+  | SkillsBlock
+  | ExperienceBlock
+  | ProfileBlock
+  | StatsBlock
+  | ProjectBlock;
 
 /**
  * 保存時にクライアント/サーバ間で受け渡すブロック入力（id/order を持たない）。
@@ -467,9 +474,7 @@ export function projectBlockToMarkdown(data: ProjectBlockData): string {
     if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
     const tech = item.tech;
-    const techParts: string[] = [
-      ...tech.lang, ...tech.fw, ...tech.db, ...tech.infra, ...tech.tools, ...tech.collab,
-    ];
+    const techParts: string[] = [...tech.lang, ...tech.fw, ...tech.db, ...tech.infra, ...tech.tools, ...tech.collab];
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
     if (item.process.length > 0) lines.push(`| 担当工程 | ${escapeCell(item.process.join(', '))} |`);
     if (item.duties.trim()) {
