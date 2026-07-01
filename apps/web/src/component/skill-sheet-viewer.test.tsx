@@ -1,3 +1,4 @@
+import type { Block } from '@skillsheet/db/blocks';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -79,5 +80,38 @@ describe('SkillSheetViewer', () => {
     // 本文（td）にも同じ alignment が反映される
     const cells = Array.from(markdown.querySelectorAll('tbody td')) as HTMLTableCellElement[];
     expect(cells.map((td) => td.style.textAlign)).toEqual(['left', 'center', 'right']);
+  });
+
+  it('連続する skills ブロックを1つのグループにまとめ、空の skills ブロックは描画しない（A4）', async () => {
+    const blocks: Block[] = [
+      {
+        id: 'b1',
+        type: 'skills',
+        order: 0,
+        data: { category: '言語', skills: [{ name: 'TS', years: 3, level: '★★☆' }] },
+      },
+      {
+        id: 'b2',
+        type: 'skills',
+        order: 1,
+        data: { category: 'DB', skills: [{ name: 'PG', years: 2, level: '★☆☆' }] },
+      },
+      { id: 'b3', type: 'skills', order: 2, data: { category: '空', skills: [] } },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('TS')).toBeInTheDocument();
+    });
+
+    // 2つの非空 skills ブロックが1つの枠線コンテナにまとまる（独立カード2個ではない）。
+    const categoryHeadings = screen.getAllByText(/^(言語|DB)$/);
+    expect(categoryHeadings).toHaveLength(2);
+    const containers = new Set(categoryHeadings.map((h) => h.closest('.divide-y')));
+    expect(containers.size).toBe(1);
+    expect(containers.has(null)).toBe(false);
+
+    // 空の skills ブロック（category: '空'）はどこにも描画されない。
+    expect(screen.queryByText('空')).toBeNull();
   });
 });
