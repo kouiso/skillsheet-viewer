@@ -5,18 +5,21 @@ import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
+import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
 import PDF_FONT_FAMILY from './constants';
 import { shouldTableWrap } from './table-layout';
 
-// Console テーマ（globals.css の light トークン）に合わせたデザイントークン
+// Console テーマ（globals.css の light トークン）に合わせたデザイントークン。
+// 値は design-tokens.ts を単一の真実として import し、globals.css との乖離を
+// design-tokens.test.ts で機械検証する（PDF は CSS 変数を直接解決できないため）。
 const COLOR = {
-  primary: '#0d9488',
-  primaryDark: '#08665e',
-  text: '#10171a',
-  textSecondary: '#4a565c',
-  divider: '#dce3e4',
-  headerBg: '#f0f3f3',
-  codeBg: '#f0f3f3',
+  primary: DESIGN_TOKENS_LIGHT.primary,
+  primaryDark: DESIGN_TOKENS_LIGHT.primaryDark,
+  text: DESIGN_TOKENS_LIGHT.foreground,
+  textSecondary: DESIGN_TOKENS_LIGHT.mutedForeground,
+  divider: DESIGN_TOKENS_LIGHT.border,
+  headerBg: DESIGN_TOKENS_LIGHT.muted,
+  codeBg: DESIGN_TOKENS_LIGHT.muted,
 } as const;
 
 // ロジック中で使う数値（マジックナンバー回避のため定数化）
