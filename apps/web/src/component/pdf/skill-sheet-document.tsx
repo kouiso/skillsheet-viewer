@@ -8,15 +8,15 @@ import { unified } from 'unified';
 import PDF_FONT_FAMILY from './constants';
 import { shouldTableWrap } from './table-layout';
 
-// ビューア（src/index.css のライトテーマトークン）に合わせたデザイントークン
+// Console テーマ（globals.css の light トークン）に合わせたデザイントークン
 const COLOR = {
-  primary: '#6366f1',
-  primaryDark: '#4f46e5',
-  text: '#0f172a',
-  textSecondary: '#475569',
-  divider: '#e2e8f0',
-  headerBg: '#f8fafc',
-  codeBg: '#f1f5f9',
+  primary: '#0d9488',
+  primaryDark: '#08665e',
+  text: '#10171a',
+  textSecondary: '#4a565c',
+  divider: '#dce3e4',
+  headerBg: '#f0f3f3',
+  codeBg: '#f0f3f3',
 } as const;
 
 // ロジック中で使う数値（マジックナンバー回避のため定数化）
