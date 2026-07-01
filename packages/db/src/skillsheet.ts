@@ -257,26 +257,27 @@ export async function saveSkillSheetBlocks(
   const db = getDb();
   const ownerId = getOwnerId();
 
-  let resolvedSheetId: string;
-  if (sheetId) {
-    // A2: 所有者検証 — DELETE 前に sheet が現オーナーのものか確認する。
-    const [existing] = await db
-      .select({ ownerId: skillSheets.ownerId })
-      .from(skillSheets)
-      .where(eq(skillSheets.id, sheetId))
-      .limit(1);
-    if (!existing || existing.ownerId !== ownerId) {
-      throw new Error('Forbidden: sheet does not belong to the current owner');
-    }
-    resolvedSheetId = sheetId;
-  } else {
-    resolvedSheetId = await getOrCreateDefaultSheetId(db);
-  }
-
   const cleaned = blocksInput.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
   await db.transaction(async (tx) => {
+    let resolvedSheetId: string;
+    if (sheetId) {
+      // A2: 所有者検証 — deleteSheet と同じく、DELETE と同一トランザクション内で
+      // id+ownerId を照合する（別クエリにすると TOCTOU の隙が生まれるため避ける）。
+      const [existing] = await tx
+        .select({ id: skillSheets.id })
+        .from(skillSheets)
+        .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)))
+        .limit(1);
+      if (!existing) {
+        throw new Error('Forbidden: sheet does not belong to the current owner');
+      }
+      resolvedSheetId = sheetId;
+    } else {
+      resolvedSheetId = await getOrCreateDefaultSheetId(db);
+    }
+
     // A3: 並行保存ガード — 別セッションが先に保存していたら中断する。
     if (expectedUpdatedAt) {
       const [current] = await tx
