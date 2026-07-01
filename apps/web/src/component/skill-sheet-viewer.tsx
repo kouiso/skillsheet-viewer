@@ -146,7 +146,33 @@ function blockToMarkdownContent(block: Block): string | null {
   return null;
 }
 
+type RenderGroup = { kind: 'skills'; blocks: Extract<Block, { type: 'skills' }>[] } | { kind: 'single'; block: Block };
+
+// 連続する skills ブロックを1つの描画グループにまとめる。
+// A4: 6個の独立したマトリクスではなく、1つの SkillMatrix コンテナ内にカテゴリを並べて表示する。
+function groupBlocks(blocks: Block[]): RenderGroup[] {
+  const groups: RenderGroup[] = [];
+  for (const block of blocks) {
+    // SkillMatrix は空の skills ブロックを null 描画するため、グループにも含めない
+    // （含めると中身が空の枠線コンテナだけが描画されてしまう）。
+    if (block.type === 'skills' && block.data.skills.length === 0) continue;
+    const lastGroup = groups.at(-1);
+    if (block.type === 'skills') {
+      if (lastGroup?.kind === 'skills') {
+        lastGroup.blocks.push(block);
+      } else {
+        groups.push({ kind: 'skills', blocks: [block] });
+      }
+    } else {
+      groups.push({ kind: 'single', block });
+    }
+  }
+  return groups;
+}
+
 const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillSheetViewerProps) => {
+  // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
+  const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -240,7 +266,18 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
         <div ref={contentRef} className="rounded border border-border bg-card p-4 sm:p-6 md:p-8">
           {blocks ? (
             <div className="space-y-0">
-              {blocks.map((block) => {
+              {groupedBlocks.map((group) => {
+                if (group.kind === 'skills') {
+                  const key = group.blocks.map((b) => b.id).join('-');
+                  return (
+                    <div key={key} className="mb-6 divide-y divide-border rounded border border-border p-4 sm:p-5">
+                      {group.blocks.map((block) => (
+                        <SkillMatrix key={block.id} data={block.data} className="mb-0 py-3 first:pt-0 last:pb-0" />
+                      ))}
+                    </div>
+                  );
+                }
+                const block = group.block;
                 const mdContent = blockToMarkdownContent(block);
                 if (mdContent !== null) {
                   return <MarkdownContent key={block.id} content={mdContent} onImageClick={handleImageClick} />;
@@ -250,9 +287,6 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
                 }
                 if (block.type === 'stats') {
                   return <StatRow key={block.id} data={block.data} />;
-                }
-                if (block.type === 'skills') {
-                  return <SkillMatrix key={block.id} data={block.data} />;
                 }
                 if (block.type === 'project') {
                   return <ProjectCard key={block.id} data={block.data} />;
