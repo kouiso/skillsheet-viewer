@@ -930,23 +930,28 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         </div>
       )}
       <header className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <h1 className="text-lg font-bold">スキルシートビルダー</h1>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowPreview((v) => !v)}>
-              {showPreview ? <EyeOff className="mr-1.5 size-4" /> : <Eye className="mr-1.5 size-4" />}
-              プレビュー
+        <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
+          <h1 className="min-w-0 truncate text-lg font-bold">スキルシートビルダー</h1>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowPreview((v) => !v)}
+              aria-label={showPreview ? 'プレビューを非表示' : 'プレビューを表示'}
+            >
+              {showPreview ? <EyeOff className="size-4 sm:mr-1.5" /> : <Eye className="size-4 sm:mr-1.5" />}
+              <span className="hidden sm:inline">プレビュー</span>
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExport}>
+            <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={handleExport}>
               <Download className="mr-1.5 size-4" />
               バックアップ
             </Button>
-            <Link href="/view" className="text-sm text-muted-foreground hover:text-foreground">
+            <Link href="/view" className="hidden text-sm text-muted-foreground hover:text-foreground sm:inline">
               閲覧へ
             </Link>
-            <Button onClick={handleSave} disabled={isSaving}>
-              <Save className="mr-1.5 size-4" />
-              {isSaving ? '保存中...' : '保存'}
+            <Button onClick={handleSave} disabled={isSaving} aria-label={isSaving ? '保存中' : '保存'}>
+              <Save className="size-4 sm:mr-1.5" />
+              <span className="hidden sm:inline">{isSaving ? '保存中...' : '保存'}</span>
             </Button>
           </div>
         </div>
