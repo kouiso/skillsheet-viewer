@@ -270,9 +270,16 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
                 if (group.kind === 'skills') {
                   const key = group.blocks.map((b) => b.id).join('-');
                   return (
-                    <div key={key} className="mb-6 divide-y divide-border rounded border border-border p-4 sm:p-5">
+                    <div
+                      key={key}
+                      className="mb-6 grid grid-cols-1 gap-4 rounded border border-border p-4 sm:p-5 md:grid-cols-2 lg:grid-cols-3"
+                    >
                       {group.blocks.map((block) => (
-                        <SkillMatrix key={block.id} data={block.data} className="mb-0 py-3 first:pt-0 last:pb-0" />
+                        <SkillMatrix
+                          key={block.id}
+                          data={block.data}
+                          className="mb-0 rounded-md border border-border/60 p-3"
+                        />
                       ))}
                     </div>
                   );

@@ -104,10 +104,10 @@ describe('SkillSheetViewer', () => {
       expect(screen.getByText('TS')).toBeInTheDocument();
     });
 
-    // 2つの非空 skills ブロックが1つの枠線コンテナにまとまる（独立カード2個ではない）。
+    // 2つの非空 skills ブロックが1つのグリッドコンテナにまとまる（独立カード2個ではない）。
     const categoryHeadings = screen.getAllByText(/^(言語|DB)$/);
     expect(categoryHeadings).toHaveLength(2);
-    const containers = new Set(categoryHeadings.map((h) => h.closest('.divide-y')));
+    const containers = new Set(categoryHeadings.map((h) => h.closest('.grid')));
     expect(containers.size).toBe(1);
     expect(containers.has(null)).toBe(false);
 
