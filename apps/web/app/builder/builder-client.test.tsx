@@ -62,11 +62,13 @@ describe('BuilderClient', () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenCalledWith({
-      title: 'マイシート',
-      blocks: [{ type: 'markdown', data: { markdown: '## A' } }],
-      sheetId: 'sheet-1',
-    });
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'マイシート',
+        blocks: [{ type: 'markdown', data: { markdown: '## A' } }],
+        sheetId: 'sheet-1',
+      }),
+    );
   });
 
   it('プレビューに連結 Markdown が反映される', () => {
@@ -83,22 +85,24 @@ describe('BuilderClient', () => {
     // 既定テーブル: 2 列（項目/内容）＋空 1 行。1 行 1 列にセル入力する。
     await user.type(screen.getByLabelText('1行1列'), 'PHP');
     await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenCalledWith({
-      title: 't',
-      sheetId: 'sheet-1',
-      blocks: [
-        {
-          type: 'table',
-          data: {
-            columns: [
-              { label: '項目', align: 'left' },
-              { label: '内容', align: 'left' },
-            ],
-            rows: [['PHP', '']],
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 't',
+        sheetId: 'sheet-1',
+        blocks: [
+          {
+            type: 'table',
+            data: {
+              columns: [
+                { label: '項目', align: 'left' },
+                { label: '内容', align: 'left' },
+              ],
+              rows: [['PHP', '']],
+            },
           },
-        },
-      ],
-    });
+        ],
+      }),
+    );
   });
 
   it('タイトル入力が保存 payload に反映される', async () => {
@@ -108,10 +112,12 @@ describe('BuilderClient', () => {
     await user.clear(titleInput);
     await user.type(titleInput, '新タイトル');
     await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenCalledWith({
-      title: '新タイトル',
-      blocks: [{ type: 'markdown', data: { markdown: '## A' } }],
-      sheetId: 'sheet-1',
-    });
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '新タイトル',
+        blocks: [{ type: 'markdown', data: { markdown: '## A' } }],
+        sheetId: 'sheet-1',
+      }),
+    );
   });
 });

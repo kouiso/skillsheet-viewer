@@ -8,6 +8,14 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 
+/** 並行保存競合を示すエラー（saveSkillSheetBlocks から throw され actions 層で識別する）。 */
+export class ConflictError extends Error {
+  constructor() {
+    super('Conflict: sheet was modified by another session');
+    this.name = 'ConflictError';
+  }
+}
+
 import {
   type Block,
   type BlockInput,
@@ -235,15 +243,52 @@ function normalizeBlockInput(block: BlockInput): BlockInput {
 /**
  * 指定シートのブロックを保存する。sheetId を明示することで複数シートに対応。
  * sheetId が未指定のときはオーナーのデフォルトシートへ保存する（後方互換）。
+ *
+ * A2: sheetId 指定時はオーナー検証を実施（他人のシートを破壊しない）。
+ * A3: expectedUpdatedAt を指定すると、トランザクション内でシートの updatedAt が
+ *     それより新しい場合に ConflictError を throw する（並行保存ガード）。
  */
-export async function saveSkillSheetBlocks(title: string, blocksInput: BlockInput[], sheetId?: string): Promise<void> {
+export async function saveSkillSheetBlocks(
+  title: string,
+  blocksInput: BlockInput[],
+  sheetId?: string,
+  expectedUpdatedAt?: Date,
+): Promise<void> {
   const db = getDb();
-  const resolvedSheetId = sheetId ?? (await getOrCreateDefaultSheetId(db));
+  const ownerId = getOwnerId();
+
+  let resolvedSheetId: string;
+  if (sheetId) {
+    // A2: 所有者検証 — DELETE 前に sheet が現オーナーのものか確認する。
+    const [existing] = await db
+      .select({ ownerId: skillSheets.ownerId })
+      .from(skillSheets)
+      .where(eq(skillSheets.id, sheetId))
+      .limit(1);
+    if (!existing || existing.ownerId !== ownerId) {
+      throw new Error('Forbidden: sheet does not belong to the current owner');
+    }
+    resolvedSheetId = sheetId;
+  } else {
+    resolvedSheetId = await getOrCreateDefaultSheetId(db);
+  }
 
   const cleaned = blocksInput.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
   await db.transaction(async (tx) => {
+    // A3: 並行保存ガード — 別セッションが先に保存していたら中断する。
+    if (expectedUpdatedAt) {
+      const [current] = await tx
+        .select({ updatedAt: skillSheets.updatedAt })
+        .from(skillSheets)
+        .where(eq(skillSheets.id, resolvedSheetId))
+        .limit(1);
+      if (current && current.updatedAt > expectedUpdatedAt) {
+        throw new ConflictError();
+      }
+    }
+
     await tx.delete(blocks).where(eq(blocks.sheetId, resolvedSheetId));
     if (cleaned.length > 0) {
       await tx
