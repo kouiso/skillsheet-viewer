@@ -26,8 +26,8 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         <div className="flex items-center gap-2">
-          <FileText className="size-7 text-primary" />
-          <span className="bg-linear-to-br from-primary to-secondary bg-clip-text text-lg font-bold text-transparent">
+          <FileText className="size-5 text-primary" />
+          <span className="font-mono text-sm font-semibold tracking-wider text-foreground">
             {title}
           </span>
         </div>
