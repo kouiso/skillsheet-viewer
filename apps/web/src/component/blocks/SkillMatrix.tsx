@@ -10,9 +10,9 @@ const LEVEL_WIDTH: Record<string, string> = {
   '★★★': 'w-full',
   '★★☆': 'w-2/3',
   '★☆☆': 'w-1/3',
-  '上級': 'w-full',
-  '中級': 'w-2/3',
-  '初級': 'w-1/3',
+  上級: 'w-full',
+  中級: 'w-2/3',
+  初級: 'w-1/3',
 };
 
 function getLevelWidth(level: string): string {
@@ -25,9 +25,7 @@ export const SkillMatrix = ({ data }: SkillMatrixProps) => {
   return (
     <div className="mb-6">
       {data.category && (
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-          {data.category}
-        </h3>
+        <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">{data.category}</h3>
       )}
       <div className="grid gap-2 sm:grid-cols-2">
         {data.skills.map((skill, i) => (

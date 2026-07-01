@@ -1,12 +1,11 @@
 'use client';
 
+import type { SheetSummary } from '@skillsheet/db';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-
 import Header from '@/component/header';
 import { Input } from '@/components/ui/input';
-import type { SheetSummary } from '@skillsheet/db';
 
 interface DbSheetsListClientProps {
   initialSheets: SheetSummary[];
@@ -48,7 +47,9 @@ const DbSheetsListClient = ({ initialSheets, hasError = false }: DbSheetsListCli
             </div>
           ) : filtered.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
-              {initialSheets.length === 0 ? 'シートがまだありません（ビルダーで作成してください）' : 'シートが見つかりません'}
+              {initialSheets.length === 0
+                ? 'シートがまだありません（ビルダーで作成してください）'
+                : 'シートが見つかりません'}
             </p>
           ) : (
             <ul className="divide-y divide-border">

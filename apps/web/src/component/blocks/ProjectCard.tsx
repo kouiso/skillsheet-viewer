@@ -52,9 +52,7 @@ export const ProjectCard = ({ data }: ProjectCardProps) => {
               {items.map((item) => (
                 <ProjectItem key={item.id} item={item} />
               ))}
-              {items.length === 0 && (
-                <p className="px-4 py-3 text-sm text-muted-foreground">案件なし</p>
-              )}
+              {items.length === 0 && <p className="px-4 py-3 text-sm text-muted-foreground">案件なし</p>}
             </div>
           </div>
         );
@@ -86,9 +84,7 @@ const ProjectItem = ({ item }: { item: ProjectBlockData['items'][number] }) => {
     <div className="px-4 py-4">
       <div className="mb-2 flex flex-wrap items-start justify-between gap-2">
         <h4 className="font-semibold text-foreground">{item.title || '(タイトル未入力)'}</h4>
-        {item.period && (
-          <span className="shrink-0 text-xs text-muted-foreground">{item.period}</span>
-        )}
+        {item.period && <span className="shrink-0 text-xs text-muted-foreground">{item.period}</span>}
       </div>
 
       <div className="mb-3 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-3">
@@ -133,9 +129,11 @@ const ProjectItem = ({ item }: { item: ProjectBlockData['items'][number] }) => {
             {techEntries.map(([key, values]) => (
               <div key={key} className="flex flex-wrap items-baseline gap-1 text-xs">
                 <span className="shrink-0 text-muted-foreground">{TECH_LABELS[key] ?? key}:</span>
-                {values.map((v, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
-                  <span key={i} className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-foreground">
+                {values.map((v) => (
+                  <span
+                    key={v}
+                    className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-foreground"
+                  >
                     {v}
                   </span>
                 ))}

@@ -1,6 +1,6 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
-import type { Metadata } from 'next';
 
 import { getCachedDbSheetById } from '@/server/sheets-cache';
 

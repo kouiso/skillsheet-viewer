@@ -21,17 +21,11 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
   return (
     <section className="mb-8 border-b border-border pb-8">
       <div className="flex flex-col gap-1">
-        {data.name && (
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{data.name}</h1>
-        )}
-        {data.title && (
-          <p className="text-lg font-medium text-primary">{data.title}</p>
-        )}
+        {data.name && <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">{data.name}</h1>}
+        {data.title && <p className="text-lg font-medium text-primary">{data.title}</p>}
       </div>
 
-      {data.pr && (
-        <p className="mt-4 leading-relaxed text-foreground/80">{data.pr}</p>
-      )}
+      {data.pr && <p className="mt-4 leading-relaxed text-foreground/80">{data.pr}</p>}
 
       {data.strengths.length > 0 && (
         <div className="mt-4">

@@ -1,4 +1,4 @@
-import { getSkillSheet, getSkillSheetById, listSheets as dbListSheets } from '@skillsheet/db';
+import { listSheets as dbListSheets, getSkillSheet, getSkillSheetById } from '@skillsheet/db';
 import { unstable_cache } from 'next/cache';
 
 import { fetchSheetFile, listSheets as githubListSheets } from '@/server/github-sheets';
@@ -23,11 +23,10 @@ export const getCachedDbSheets = unstable_cache(() => dbListSheets(), ['db-sheet
 });
 
 // 指定 ID のシートを読む（/view/db/[id] が使う）。
-export const getCachedDbSheetById = unstable_cache(
-  (id: string) => getSkillSheetById(id),
-  ['db-sheet-by-id'],
-  { tags: ['db-sheet'], revalidate: 60 },
-);
+export const getCachedDbSheetById = unstable_cache((id: string) => getSkillSheetById(id), ['db-sheet-by-id'], {
+  tags: ['db-sheet'],
+  revalidate: 60,
+});
 
 // デフォルトシート（後方互換 /view/db 単体表示）。
 export const getCachedDbSheet = unstable_cache(() => getSkillSheet(), ['db-sheet'], {

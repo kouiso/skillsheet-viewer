@@ -1,18 +1,30 @@
 'use client';
 
-import { Trash2, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@skillsheet/db/blocks';
+import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
-import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@skillsheet/db/blocks';
-
 const PROCESS_OPTIONS = [
-  '要件定義', '基本設計', '詳細設計', '実装', 'テスト', '運用・保守',
-  'インフラ構築', 'PM', 'スクラム', 'コードレビュー',
+  '要件定義',
+  '基本設計',
+  '詳細設計',
+  '実装',
+  'テスト',
+  '運用・保守',
+  'インフラ構築',
+  'PM',
+  'スクラム',
+  'コードレビュー',
 ];
 
 const TECH_KEYS: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
 const TECH_LABELS: Record<keyof ProjectTech, string> = {
-  lang: '言語', fw: 'FW/ライブラリ', db: 'DB', infra: 'インフラ', tools: 'ツール', collab: 'コラボ',
+  lang: '言語',
+  fw: 'FW/ライブラリ',
+  db: 'DB',
+  infra: 'インフラ',
+  tools: 'ツール',
+  collab: 'コラボ',
 };
 
 const newId = () =>
@@ -46,7 +58,10 @@ const emptyCompany = (): CompanyInfo => ({
 // タグをカンマ区切りテキストと配列で相互変換するヘルパー
 const tagsToText = (tags: string[]) => tags.join(', ');
 const textToTags = (text: string): string[] =>
-  text.split(',').map((t) => t.trim()).filter(Boolean);
+  text
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean);
 
 interface CompanyFormProps {
   company: CompanyInfo;
@@ -107,9 +122,7 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
     onChange({ tech: { ...project.tech, [key]: textToTags(text) } });
   };
   const toggleProcess = (p: string) => {
-    const next = project.process.includes(p)
-      ? project.process.filter((x) => x !== p)
-      : [...project.process, p];
+    const next = project.process.includes(p) ? project.process.filter((x) => x !== p) : [...project.process, p];
     onChange({ process: next });
   };
 
@@ -256,9 +269,7 @@ interface ProjectEditorProps {
 }
 
 export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
-    data.companies[0]?.id ?? null,
-  );
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(data.companies[0]?.id ?? null);
   const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
 
   const addCompany = () => {
@@ -299,9 +310,7 @@ export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
   };
 
   const selectedCompany = data.companies.find((c) => c.id === selectedCompanyId);
-  const companyProjects = selectedCompanyId
-    ? data.items.filter((p) => p.companyId === selectedCompanyId)
-    : [];
+  const companyProjects = selectedCompanyId ? data.items.filter((p) => p.companyId === selectedCompanyId) : [];
 
   return (
     <div className="flex gap-4 min-h-0">
@@ -327,9 +336,7 @@ export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
               setExpandedProjectId(null);
             }}
             className={`w-full truncate rounded px-2 py-1.5 text-left text-sm transition-colors ${
-              company.id === selectedCompanyId
-                ? 'bg-primary text-primary-foreground'
-                : 'hover:bg-muted text-foreground'
+              company.id === selectedCompanyId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground'
             }`}
           >
             {company.name || '(会社名未入力)'}
@@ -374,9 +381,7 @@ export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
                   <div key={proj.id} className="rounded border border-border">
                     <button
                       type="button"
-                      onClick={() =>
-                        setExpandedProjectId(expandedProjectId === proj.id ? null : proj.id)
-                      }
+                      onClick={() => setExpandedProjectId(expandedProjectId === proj.id ? null : proj.id)}
                       className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
                     >
                       {expandedProjectId === proj.id ? (
@@ -384,12 +389,8 @@ export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
                       ) : (
                         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                       )}
-                      <span className="flex-1 truncate font-medium">
-                        {proj.title || '(タイトル未入力)'}
-                      </span>
-                      {proj.period && (
-                        <span className="shrink-0 text-xs text-muted-foreground">{proj.period}</span>
-                      )}
+                      <span className="flex-1 truncate font-medium">{proj.title || '(タイトル未入力)'}</span>
+                      {proj.period && <span className="shrink-0 text-xs text-muted-foreground">{proj.period}</span>}
                     </button>
 
                     {expandedProjectId === proj.id && (
@@ -414,9 +415,7 @@ export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
           </>
         ) : (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            {data.companies.length === 0
-              ? '左の「+」から会社を追加してください'
-              : '左から会社を選択してください'}
+            {data.companies.length === 0 ? '左の「+」から会社を追加してください' : '左から会社を選択してください'}
           </p>
         )}
       </div>
