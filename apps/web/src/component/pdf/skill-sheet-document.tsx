@@ -239,6 +239,7 @@ function renderList(node: MdNode, key: number): ReactNode {
   return (
     <View key={key} style={styles.list}>
       {(node.children ?? []).map((item, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: mdast リストアイテムは安定 id を持たない
         <View key={i} style={styles.listItem}>
           <Text style={styles.listBullet}>{ordered ? `${i + 1}.` : '•'}</Text>
           <View style={styles.listContent}>{renderBlocks(item.children)}</View>
@@ -291,6 +292,7 @@ function renderTable(node: MdNode, key: number): ReactNode {
   return (
     <View key={key} style={styles.table} wrap={shouldTableWrap(rows.length)}>
       {rows.map((row, ri) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: mdast テーブル行は安定 id を持たない
         <View key={ri} style={styles.tableRow}>
           {(row.children ?? []).map((cell, ci) => renderTableCell(cell, ci, columnCount, align, ri === 0))}
         </View>
