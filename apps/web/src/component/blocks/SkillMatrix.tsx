@@ -4,6 +4,7 @@ import type { SkillsBlockData } from '@skillsheet/db/blocks';
 
 interface SkillMatrixProps {
   data: SkillsBlockData;
+  className?: string;
 }
 
 const LEVEL_WIDTH: Record<string, string> = {
@@ -19,11 +20,11 @@ function getLevelWidth(level: string): string {
   return LEVEL_WIDTH[level] ?? 'w-1/2';
 }
 
-export const SkillMatrix = ({ data }: SkillMatrixProps) => {
+export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
   if (data.skills.length === 0) return null;
 
   return (
-    <div className="mb-6">
+    <div className={className}>
       {data.category && (
         <h3 className="mb-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground">{data.category}</h3>
       )}
