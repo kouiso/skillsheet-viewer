@@ -8,14 +8,6 @@
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
 
-/** 並行保存競合を示すエラー（saveSkillSheetBlocks から throw され actions 層で識別する）。 */
-export class ConflictError extends Error {
-  constructor() {
-    super('Conflict: sheet was modified by another session');
-    this.name = 'ConflictError';
-  }
-}
-
 import {
   type Block,
   type BlockInput,
@@ -33,6 +25,14 @@ import {
 } from './blocks';
 import { type Database, getDb } from './client';
 import { blocks, skillSheets } from './schema';
+
+/** 並行保存競合を示すエラー（saveSkillSheetBlocks から throw され actions 層で識別する）。 */
+export class ConflictError extends Error {
+  constructor() {
+    super('Conflict: sheet was modified by another session');
+    this.name = 'ConflictError';
+  }
+}
 
 /**
  * オーナー識別子。個人名のベタ書きを排し環境変数から取得する（引き継ぎ汚染防止）。
@@ -279,13 +279,19 @@ export async function saveSkillSheetBlocks(
     }
 
     // A3: 並行保存ガード — 別セッションが先に保存していたら中断する。
+    // for('update') で行ロックを取得し、Read Committed 下でも他トランザクションの
+    // コミット待ちにして古い updatedAt を読まないようにする（ロストアップデート防止）。
     if (expectedUpdatedAt) {
       const [current] = await tx
         .select({ updatedAt: skillSheets.updatedAt })
         .from(skillSheets)
         .where(eq(skillSheets.id, resolvedSheetId))
+        .for('update')
         .limit(1);
-      if (current && current.updatedAt > expectedUpdatedAt) {
+      // Server Actions 経由のシリアライズで Date が string 化される可能性に備え、
+      // 比較前に必ず Date へ正規化してから getTime() で比較する。
+      const expectedTime = new Date(expectedUpdatedAt).getTime();
+      if (current && current.updatedAt.getTime() > expectedTime) {
         throw new ConflictError();
       }
     }
