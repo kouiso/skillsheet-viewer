@@ -1,7 +1,6 @@
-import { connection } from 'next/server';
-import type { Metadata } from 'next';
-
 import type { SheetSummary } from '@skillsheet/db';
+import type { Metadata } from 'next';
+import { connection } from 'next/server';
 import { getCachedDbSheets } from '@/server/sheets-cache';
 
 import DbSheetsListClient from './db-sheets-list-client';

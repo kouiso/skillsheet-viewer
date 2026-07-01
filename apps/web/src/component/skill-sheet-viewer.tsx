@@ -12,18 +12,14 @@ import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 
 import type { Block } from '@skillsheet/db/blocks';
-import {
-  experienceBlockToMarkdown,
-  tableBlockToMarkdown,
-} from '@skillsheet/db/blocks';
+import { experienceBlockToMarkdown, tableBlockToMarkdown } from '@skillsheet/db/blocks';
 import { useActiveHeading } from '@/hooks/use-active-heading';
-
+import { ProfileIntro } from './blocks/ProfileIntro';
+import { ProjectCard } from './blocks/ProjectCard';
+import { SkillMatrix } from './blocks/SkillMatrix';
+import { StatRow } from './blocks/StatRow';
 import CodeBlock from './code-block';
 import TableOfContents from './table-of-contents';
-import { ProfileIntro } from './blocks/ProfileIntro';
-import { StatRow } from './blocks/StatRow';
-import { SkillMatrix } from './blocks/SkillMatrix';
-import { ProjectCard } from './blocks/ProjectCard';
 
 interface Heading {
   id: string;
@@ -76,7 +72,11 @@ const SANITIZE_SCHEMA = {
 
 // remark/rehype プラグイン配列はモジュールスコープで固定し、毎レンダーの新規生成を防ぐ。
 const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
-const REHYPE_PLUGINS = [rehypeRaw, [rehypeSanitize, SANITIZE_SCHEMA] as [typeof rehypeSanitize, typeof SANITIZE_SCHEMA], rehypeSlug];
+const REHYPE_PLUGINS = [
+  rehypeRaw,
+  [rehypeSanitize, SANITIZE_SCHEMA] as [typeof rehypeSanitize, typeof SANITIZE_SCHEMA],
+  rehypeSlug,
+];
 
 interface MarkdownContentProps {
   content: string;
@@ -84,10 +84,7 @@ interface MarkdownContentProps {
 }
 
 // Markdown本文はactiveIdに依存しないためメモ化してスクロール再描画を防ぐ。
-const MarkdownContent = memo(function MarkdownContent({
-  content,
-  onImageClick,
-}: MarkdownContentProps) {
+const MarkdownContent = memo(function MarkdownContent({ content, onImageClick }: MarkdownContentProps) {
   return (
     <div className="markdown-content">
       <ReactMarkdown
@@ -114,6 +111,7 @@ const MarkdownContent = memo(function MarkdownContent({
                 onClick={() => onImageClick(src)}
                 className="cursor-zoom-in border-0 bg-transparent p-0"
               >
+                {/* biome-ignore lint/performance/noImgElement: ライトボックス内の任意画像は next/image と相性が悪い */}
                 <img src={src} alt={alt} {...props} />
               </button>
             );
@@ -165,9 +163,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
 
   // blocks モード時は blocks の id+order を、レガシーモードは content をキーにして
   // 見出し再抽出をトリガーする。
-  const contentKey = blocks
-    ? blocks.map((b) => `${b.id}:${b.order}`).join(',')
-    : skillSheet.content;
+  const contentKey = blocks ? blocks.map((b) => `${b.id}:${b.order}`).join(',') : skillSheet.content;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: contentKey はDOM再抽出のトリガーとして必要
   useEffect(() => {
@@ -247,13 +243,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
               {blocks.map((block) => {
                 const mdContent = blockToMarkdownContent(block);
                 if (mdContent !== null) {
-                  return (
-                    <MarkdownContent
-                      key={block.id}
-                      content={mdContent}
-                      onImageClick={handleImageClick}
-                    />
-                  );
+                  return <MarkdownContent key={block.id} content={mdContent} onImageClick={handleImageClick} />;
                 }
                 if (block.type === 'profile') {
                   return <ProfileIntro key={block.id} data={block.data} />;
@@ -273,10 +263,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
           ) : (
             <>
               <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
-              <MarkdownContent
-                content={skillSheet.content}
-                onImageClick={handleImageClick}
-              />
+              <MarkdownContent content={skillSheet.content} onImageClick={handleImageClick} />
             </>
           )}
         </div>
