@@ -642,12 +642,6 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
   const [activeTab, setActiveTab] = useState<'blocks' | 'project'>('blocks');
 
-  // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
-  // 保存成功時は new Date() で更新し、次回保存時の基準にする。
-  const savedUpdatedAtRef = useRef<Date | undefined>(
-    initialSheets.find((s) => s.id === activeSheetId)?.updatedAt,
-  );
-
   // 未保存変更の検知。最後に保存成功した時点のスナップショット（タイトル＋組み立て markdown）を
   // 保持し、現在の内容と差分があれば dirty とみなす（保存成功で更新）。
   const lastSavedSnapshotRef = useRef<string>(snapshot(initialBlocks.map(blockToItem), initialTitle));
@@ -850,30 +844,19 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       if (!confirmed) return;
     }
 
-    const payload = {
-      title,
-      blocks: items.map(itemToBlockInput),
-      sheetId: activeSheetId,
-      expectedUpdatedAt: savedUpdatedAtRef.current,
-    };
+    const payload = { title, blocks: items.map(itemToBlockInput), sheetId: activeSheetId };
     const savedSnapshot = snapshot(items, title);
 
     startSaving(async () => {
       const res = await saveBlocksAction(payload);
       if (res.ok) {
         savedRef.current = true;
-        savedUpdatedAtRef.current = new Date();
         // 保存成功した内容をスナップショットとして記録し、dirty を解除する。
         lastSavedSnapshotRef.current = savedSnapshot;
         setIsDirty(false);
         toast.success('保存しました');
       } else if (res.error === 'unauthorized') {
         toast.error('セッションが切れました。再度認証してください。');
-      } else if (res.error === 'conflict') {
-        const reload = window.confirm(
-          'このシートは別のセッションで更新されています。ページをリロードして最新版を確認しますか？',
-        );
-        if (reload) router.refresh();
       } else {
         toast.error('保存に失敗しました');
       }
