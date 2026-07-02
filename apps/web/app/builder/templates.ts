@@ -94,6 +94,28 @@ export const TEMPLATES: SheetTemplate[] = [
       },
     ],
   },
+  {
+    id: 'console-dashboard',
+    label: 'ダッシュボード（プロフィール・統計・案件）',
+    blocks: [
+      {
+        type: 'profile',
+        data: { name: '', title: '', pr: '', strengths: [], meta: {} },
+      },
+      {
+        type: 'stats',
+        data: { items: [] },
+      },
+      {
+        type: 'skills',
+        data: { category: 'プログラミング言語', skills: [{ name: '', years: 0, level: '' }] },
+      },
+      {
+        type: 'project',
+        data: { companies: [], items: [] },
+      },
+    ],
+  },
 ];
 
 export function getTemplate(id: string): SheetTemplate | undefined {
