@@ -1,8 +1,7 @@
+import { SkillSheetNotFoundError } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
-
-import { SkillSheetNotFoundError } from '@skillsheet/db';
 
 import { getCachedDbSheetById } from '@/server/sheets-cache';
 
