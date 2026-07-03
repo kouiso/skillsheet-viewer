@@ -31,7 +31,9 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
                 }`}
               />
               <div className="flex flex-wrap items-baseline gap-4">
-                <span className="min-w-[132px] font-mono text-[11.5px] text-accent-text">{item.period || '(期間未入力)'}</span>
+                <span className="min-w-[132px] font-mono text-[11.5px] text-accent-text">
+                  {item.period || '(期間未入力)'}
+                </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[14.5px] font-semibold text-foreground">{item.title || '(タイトル未入力)'}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">

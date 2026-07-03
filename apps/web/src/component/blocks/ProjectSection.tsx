@@ -84,7 +84,14 @@ export function ProjectSection({ data }: ProjectSectionProps) {
         </div>
         <div className="space-y-4">
           {filtered.map(({ item, no, tech }) => (
-            <ProjectCard key={item.id} item={item} no={no} company={companyMap.get(item.companyId)} activeTech={activeTech} tech={tech} />
+            <ProjectCard
+              key={item.id}
+              item={item}
+              no={no}
+              company={companyMap.get(item.companyId)}
+              activeTech={activeTech}
+              tech={tech}
+            />
           ))}
           {filtered.length === 0 && (
             <p className="rounded border border-dashed border-border py-8 text-center text-sm text-muted-foreground">

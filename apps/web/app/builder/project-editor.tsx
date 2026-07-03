@@ -238,7 +238,9 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
       {/* 業務内容・習得スキル・コメント */}
       <div className="space-y-2">
         <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">要約（工程の俯瞰カードに表示。空欄なら業務内容を使用）</p>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">
+            要約（工程の俯瞰カードに表示。空欄なら業務内容を使用）
+          </p>
           <textarea
             value={project.summary ?? ''}
             onChange={(e) => onChange({ summary: e.target.value })}

@@ -90,7 +90,7 @@ const TECH_LABEL_MAP: Record<string, keyof ProjectTech> = {
   インフラ: 'infra',
   外部サービス: 'tools',
   開発ツール: 'tools',
-  'コラボレーションツール': 'collab',
+  コラボレーションツール: 'collab',
 };
 
 function emptyTech(): ProjectTech {
@@ -121,7 +121,15 @@ function splitTechValues(value: string): string[] {
 
 // --- 担当工程テーブル（ヘッダ行=7ラベル固定順、データ行=●マーク）--------------------------
 // ソース側のテーブル見出し文字列（列位置の特定にのみ使う）。
-const PROCESS_HEADER_ORDER = ['要件定義', '基本設計', '詳細設計', '実装・単体', '結合テスト', '総合テスト', '保守・運用'];
+const PROCESS_HEADER_ORDER = [
+  '要件定義',
+  '基本設計',
+  '詳細設計',
+  '実装・単体',
+  '結合テスト',
+  '総合テスト',
+  '保守・運用',
+];
 // process.ts の EXACT_MATCH_MAP に完全一致する builder 語彙（出力する文字列はこちらを使う）。
 // 「実装・単体」→「実装」、「保守・運用」→「運用・保守」の語彙差を吸収する（ここを合わせないと
 // normalizeProcess が該当工程を other 扱いにしてしまい、集計から丸ごと消える）。
@@ -225,7 +233,7 @@ function parseProjectBlock(headingText: string, bodyLines: string[], companyId: 
   let role = '';
   let team = '';
   const overviewExtra: string[] = [];
-  for (const line of sections['プロジェクト概要'] ?? []) {
+  for (const line of sections.プロジェクト概要 ?? []) {
     const row = parseTableRow(line);
     if (!row) continue;
     const [label, value] = row;
@@ -236,7 +244,7 @@ function parseProjectBlock(headingText: string, bodyLines: string[], companyId: 
   }
 
   const tech = emptyTech();
-  for (const line of sections['技術スタック'] ?? []) {
+  for (const line of sections.技術スタック ?? []) {
     const row = parseTableRow(line);
     if (!row) continue;
     const [label, value] = row;
@@ -245,9 +253,9 @@ function parseProjectBlock(headingText: string, bodyLines: string[], companyId: 
     tech[bucket].push(...splitTechValues(value));
   }
 
-  const process = parseProcessSection(sections['担当工程'] ?? []);
+  const process = parseProcessSection(sections.担当工程 ?? []);
 
-  const commentText = (sections['コメント'] ?? []).join('\n');
+  const commentText = (sections.コメント ?? []).join('\n');
   const { duties, acquired, comment } = parseCommentSection(commentText);
 
   return {
@@ -354,7 +362,10 @@ async function main() {
       skippedExistingProject = true;
     } else throw new Error(`未対応の既存ブロック type=${r.type} order=${r.order}（データ消失防止のため中断）`);
   }
-  if (skippedExistingProject) console.log('NOTE: 既存の project ブロックは無視し、legacy markdown（無ければ /tmp/real_markdown.md）から再構築します');
+  if (skippedExistingProject)
+    console.log(
+      'NOTE: 既存の project ブロックは無視し、legacy markdown（無ければ /tmp/real_markdown.md）から再構築します',
+    );
 
   const fallbackMarkdownPath = '/tmp/real_markdown.md';
   const fullMarkdown =
