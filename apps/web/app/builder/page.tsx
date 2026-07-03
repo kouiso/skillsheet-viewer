@@ -52,6 +52,7 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
 
   return (
     <BuilderClient
+      key={activeSheetId}
       initialBlocks={initialBlocks}
       initialTitle={initialTitle}
       sheets={sheets}

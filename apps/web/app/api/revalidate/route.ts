@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { revalidateTag } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -13,10 +13,11 @@ export const dynamic = 'force-dynamic';
  * 認証: `REVALIDATE_SECRET` を `Authorization: Bearer <secret>` か `?secret=` で照合。
  */
 function safeEqual(a: string, b: string): boolean {
-  const ba = Buffer.from(a, 'utf-8');
-  const bb = Buffer.from(b, 'utf-8');
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
+  // 長さの早期returnはタイミング攻撃で秘密の長さを漏らすため、
+  // 両方を固定長のSHA-256ハッシュにしてから比較する。
+  const ha = createHash('sha256').update(a, 'utf-8').digest();
+  const hb = createHash('sha256').update(b, 'utf-8').digest();
+  return timingSafeEqual(ha, hb);
 }
 
 export async function POST(req: NextRequest) {
