@@ -1,110 +1,123 @@
 # 開発ガイド
 
+すべてのコマンドはリポジトリルートで実行します（pnpm workspaces モノレポ）。
+
 ## コマンド
 
-package.jsonのscriptの箇所を参照
-npm-run-allで様々なコマンドを一括で動かせるようにしています。
+### 開発
 
-以下のコマンドはpackage.jsonにはコメントを書くとエラーを起こすので、ここで説明が必要なものは記載していく。
+- `pnpm dev` - 開発サーバーを起動（`apps/web`）
+- `pnpm build` - 本番用ビルドを実行
+- `pnpm start` - ビルド後のサーバーを起動
 
-- `devs:scss`など複数形になっているもの。
-  - 何らかの理由で、npm run allによって自動起動したくないものを複数形にした。打ち間違えではない。いずれ解決したいもの。
+### テスト
 
-- `"build": "run-s build:*",`
-  - // buildだけはaspidaとorvalを吐き出してからbuild:serverをやったほうがいいので、順次実行させるためにnpm-run-allを使っている
+- `pnpm test` - 全パッケージのテストを実行（vitest）
+- `pnpm --filter @skillsheet/web test:watch` - 監視モードでテスト実行
+- `pnpm --filter @skillsheet/web test:coverage` - カバレッジ付きでテスト実行
 
-- `"compile": "npm run build:compile",`
-  - github actionでは実行しないが、ファイル等を生成させておくために実行するコマンド。github actionのときには、orvalやaspidaを吐き出すことが出来ないので、このようにしておく。
+### コード品質
 
-## パッケージ管理
+- `pnpm lint` - Biome でコードをチェック（`biome check`）
+- `pnpm format` - Biome でフォーマット（`biome format --write`）
+- `pnpm -r type-check` - TypeScript 型チェック（全パッケージ）
 
-npm を使用します。理由としては、
+### DB（Drizzle）
 
-- yarnやpnpmはasdfで使用ができないこと
-- yarnのバージョンで大きく挙動が異なるため却下した
+- `pnpm db:generate` - スキーマからマイグレーションを生成
+- `pnpm db:migrate` - マイグレーションを適用
 
-## Debugger
+## プロジェクト構成
 
-任意の位置で実行を止めて変数確認やコード実行が可能
-
-1. ブレイククポイントを設定 (任意の行をクリックし、赤丸を付ける)
-1. backend 起動状態で、VSCode の `Next.js: debug full stack`
-   を実行するとデバッガーがアタッチされる
+```
+.
+├── apps/
+│   └── web/                 # Next.js 16 アプリ（App Router）
+│       ├── app/             # ルーティング（App Router: page.tsx / layout.tsx / route.ts）
+│       └── src/
+│           ├── component/   # 機能コンポーネント（PDF 含む）
+│           ├── components/  # shadcn/ui ベースの UI 部品
+│           ├── context/     # React Context
+│           ├── hooks/       # カスタムフック
+│           ├── lib/         # 認証クライアントなどの共通設定
+│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション）
+│           └── util/        # ユーティリティ関数
+└── packages/
+    └── db/                  # Drizzle ORM + Neon（スキルシートの正本）
+```
 
 ## コーディング規約
 
-- ディレクトリ・ファイル
-  - 超基本的なことだが、全てのコンポーネント関数はパスカルケースで定義する。カスタムフックはキャメルケースで定義する。
+### ファイル・ディレクトリ
 
-  - すべてのディレクトリ・ファイル名は ケバブケース & **単数形** とする
-    → 単数形・複数形は議論の余地有りだが、日本語話者にとって可算名詞・不可算名詞の区別は難しいため、すべて単数に統一することで混乱を避ける
+- ファイル名・ディレクトリ名は英語小文字のケバブケースで統一
+- サーバー専用モジュール（`apps/web/src/server` や `packages/db`）は Client Component から import しない
 
-  - 本リポジトリではNext.jsのApp Routerを採用した。
-  - 原則ドメイン/urlごとにcomponentやpageを分割する。
-  - ドメインの垣根を越える場合に初めて、app直下に該当のフォルダを配置することが検討される
-    → dir構成に関しては議論の余地有りだが、ドメイン/url毎に管理することで『あのコンポーネントどこだっけ？』を無くす狙い
-    例: 認証系 【auth】の画面ならば、(auth)/sing-up/page.tsx, URLは/sign-up, (auth)/component/button/google-auth-button.tsx
+### TypeScript
 
-  - スタイルは`scss module`以前まで使用していたが、MUIに全切り替えする。sass が 残っていたら気付いたらMUIへの移行をお願いしたい
+- 明示的な型定義を推奨
+- `as` による型アサーションは必要最小限に留める
 
-- 環境変数
-  - ローカルにのみ影響を及ぼす環境変数は `_` prefix をつける
+### React / Next.js
 
-- 文法
-  - `as` による型推論上書きは外部からの入力を受ける場合以外は使用しない
-    - 例: `const foo = bar as string` // NG
+- App Router 前提。サーバーで完結する処理は React Server Components 側に置く
+- クライアント側でのみ必要なもの（PDF レンダリング等）は動的 import を使う
+- 関数コンポーネントを使用し、ロジックはカスタムフックへ分離
 
-- eslint系統
-  - exportが必要な際には、原則そのファイル内で主体とするものをexportしたい場合、export defaultを使用する。つまりexport defaultを使用していないのに、named exportは禁止とする。
+### スタイリング
 
-- URLや画面遷移の取り扱いについて
-  - 画面遷移時に, `useNavigate`等を使用して、画面遷移を行うが、これらはroute dir内にある `PAGE_CONSTANT`を使用すること。
-    ※ Next.jsでdynamic routingのobjectを出力する方法があった気がするのでそれを要調査
+- Tailwind CSS v4 + shadcn/ui（Radix UI）を使用
+- 共通 UI 部品は `apps/web/src/components/ui` に集約
 
-## api型定義自動生成
+## Markdown レンダリング
 
-apiの型定義を手動で作るのは面倒。。。
-そう思い、ここではopenapi.ymlを使った型定義の自動生成を積極的に取り入れています。
+### react-markdown
 
-### 下準備
+- スキルシートはブロック列を Markdown に組み立てて react-markdown で表示
+- GitHub Flavored Markdown 相当の記法に対応
 
-- 対象リポジトリ: `horsemanager-backend`
-  - 本repositoryでは、上記対象repositoryを起動していればコマンドを実行するだけで、swagger-jsonを自動で見に行くので、コマンドを実行するだけです。
+## PDF 出力
 
-  下記の両方とも`npm run compile`をやれば、自動生成される。
+- `@react-pdf/renderer` を使用
+- バンドルサイズと SSR の都合上、クライアント側で動的 import する
 
-#### apiクライアント
+## 認証
 
-- aspida
-  - キャッシュを使用しない通常のapiでは[aspidaのREADME](https://github.com/aspida/aspida/blob/main/packages/aspida/docs/ja/README.md)を使用する。
+詳細は `prompt/prompt.md` の「認証の2系統設計」を参照。
 
-- orval
-  - キャッシュ管理したいものは上記のaspidaに加えて[orvalのREADME](https://orval.dev/)を使用する
-  - orvalを使用すればaxiosと@tanstack/react-queryを使ってopenapi.ymlを見てソースコードを自動生成してくれる。
+- 編集者ログイン: Better Auth（`apps/web/src/lib/auth.ts` / `server/auth-gate.ts`）
+- 閲覧コード: HMAC + VIEWER_CODE（`server/session.ts` / `server/viewer-gate.ts`）
 
-上記を踏まえ、本repositoryでは以下のように使い分ける。
+## デバッグ
 
-- キャッシュが必要ないものに関しては、aspida
-- キャッシュでデータ保持をさせたいものに関しては、orvalを使う
+### Next.js の Fast Refresh
 
-## その他ライブラリについて
+開発サーバー起動中はファイル保存時に自動で再描画されます。
 
-特に無し
+### ブラウザ開発者ツール
 
-# SCSS Coding Guidelines
+- React Developer Tools でコンポーネント構造を確認
+- Network タブで API 通信を監視
 
-このプロジェクトでは、SCSSのクラス命名規則としてBEM（Block Element Modifier）を使用します。以下のガイドラインに従ってください。
+## トラブルシューティング
 
-## 基本ルール
+### ビルド・依存エラー
 
-1. **Block**: コンポーネントのルートクラス。PascalCaseで命名します。
-2. **Element**: Blockの一部である要素。Block名の後にアンダースコア（\_）を付けてPascalCaseで命名します。
-3. **Modifier**: BlockまたはElementのバリエーション。アンダースコア（\_）を付けてcamelCaseで命名します。
+1. `node_modules` を削除して再インストール
 
-## 注意点
+   ```bash
+   rm -rf node_modules apps/web/node_modules packages/db/node_modules
+   pnpm install
+   ```
 
-- **Block**はPascalCaseで命名します。
-- **Element**はBlock名の後にアンダースコア（\_）を付けてPascalCaseで命名します。
-- **Modifier**はアンダースコア（\_）を付けてcamelCaseで命名します。
-- **Element**はBlockの中にネストして記述します。
-- **Modifier**は対応するBlockまたはElementの中にネストして記述します。
+2. 型エラーの切り分け
+
+   ```bash
+   pnpm -r type-check
+   ```
+
+### スキルシートが表示されない
+
+- `DATABASE_URL` が正しく設定されているか確認
+- マイグレーションが適用済みか確認（`pnpm db:migrate`）
+- 閲覧時は `VIEWER_CODE` による HMAC 閲覧用セッションが有効か確認

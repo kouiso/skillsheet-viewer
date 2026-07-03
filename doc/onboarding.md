@@ -1,31 +1,26 @@
 # ONBOARDING
 
-チームにジョインしてフロントエンドを立ち上げるところまで
+チームにジョインしてアプリケーションを立ち上げるところまで
 
 ## prerequisite
 
-セットアップとその後の開発に必要な依存をインストール
+セットアップとその後の開発に必要な依存をインストールします。
 
-- Machine: MacOS or Windows WSL2
-- Homebrew
-- NodeJS: バージョンは.tool-versionsファイル参照
+- Machine: macOS or Windows WSL2
+- Node.js: v22.x
+- パッケージマネージャ: pnpm
+- ランタイム管理: [mise](https://mise.jdx.dev/)（Node 22.x を固定）
 
 <details>
-<summary>複数のnodeバージョン管理</summary>
-
-※複数の node バージョン管理が必要な場合は各自バージョン管理ツールを導入して管理する
-まだ未導入であればプラグイン式で全言語の環境管理ができる[asdf](https://asdf-vm.com/guide/getting-started.html#_3-install-asdf)がおすすめ
+<summary>mise を使った Node バージョン管理</summary>
 
 ```bash
-# brewを手動インストール後、以下を実行
+# mise をインストール後（リンク先参照）、プロジェクトディレクトリ直下で実行
+mise install
+# プロジェクトの .mise.toml / .tool-versions に従って Node 22.x が入る
 
-※ asdfはinstall後パスを繋げて下さい。
-$HOME/.asdf/shims/
-# バージョン管理
-brew install jq asdf
-
-asdf install
-asdf reshim
+# pnpm が未導入なら有効化
+corepack enable
 ```
 
 </details>
@@ -34,36 +29,60 @@ asdf reshim
 
 ### 環境変数
 
-- dev環境の.envを以下のURLから取得する
-  [develop]()
-  localの開発環境もこれで動かします。
+このアプリはスキルシートの正本を Neon Postgres に保存します。ローカル開発では以下のサーバー専用の値が必要です。`.env`（コミット禁止）または実行環境側に設定します。
 
-```bash
-# firebaseの認証情報
-NEXT_PUBLIC_API_KEY=
-NEXT_PUBLIC_AUTH_DOMAIN=
-NEXT_PUBLIC_PROJECT_ID=
-NEXT_PUBLIC_STORAGE_BUCKET=
-NEXT_PUBLIC_MESSAGING_SENDER_ID=
-NEXT_PUBLIC_APP_ID=
-NEXT_PUBLIC_MEASUREMENT_ID=
-```
+- `DATABASE_URL` — Neon Postgres 接続文字列
+- `VIEWER_CODE` — 閲覧コード（HMAC 閲覧用セッションの発行に使用）
+- Better Auth 用のシークレット（編集者ログインを使う場合）
+
+値が不明な場合はチームに確認してください。
 
 ## セットアップ手順
 
-- `npm ci` で packageをinstall
-- `npm run build` で ビルド実行
-- `npm run dev` で packageをinstall
+1. **依存パッケージのインストール**
+
+   ```bash
+   pnpm install
+   ```
+
+2. **DB マイグレーションの適用**
+
+   ```bash
+   pnpm db:migrate
+   ```
+
+3. **開発サーバーの起動**
+
+   ```bash
+   pnpm dev
+   ```
+
+   - `apps/web` の開発サーバーが起動します
+   - デフォルトでは `http://localhost:3000` でアクセス可能
+
+4. **本番ビルド**
+
+   ```bash
+   pnpm build
+   ```
+
+   - Next.js の本番ビルドを実行します
+
+## テスト・型チェック
 
 ```bash
-npm ci
-npm run build
-npm run dev
+pnpm -r type-check            # 全パッケージ型チェック
+pnpm -r --if-present test     # 全テスト（vitest）
 ```
 
-(知っておくと便利)
+## 技術スタック
 
-- `npm run lint`
-  - 実行するとprettier, eslint, stylelintのコードチェックが順次に走る
-- `npm run fix`
-  - 実行するとprettier, eslint, stylelintのコードチェックが順次に走る
+- **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
+- **フレームワーク**: Next.js 16（App Router / React Server Components）
+- **言語**: TypeScript
+- **UI**: Tailwind CSS v4 + shadcn/ui（Radix UI）
+- **Markdown**: react-markdown
+- **PDF**: @react-pdf/renderer（クライアント側で動的 import）
+- **DB / ORM**: Drizzle ORM + Neon serverless Postgres
+- **認証**: Better Auth（編集者ログイン）+ HMAC の閲覧コード（VIEWER_CODE）
+- **テスト**: Vitest
