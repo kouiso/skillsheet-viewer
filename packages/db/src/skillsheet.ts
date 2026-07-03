@@ -41,6 +41,14 @@ export class ConflictError extends Error {
   }
 }
 
+/** 指定 ID のシートが存在しないことを示すエラー（getSkillSheetById から throw される）。 */
+export class SkillSheetNotFoundError extends Error {
+  constructor(sheetId: string) {
+    super('Sheet not found: ' + sheetId);
+    this.name = 'SkillSheetNotFoundError';
+  }
+}
+
 /**
  * オーナー識別子。個人名のベタ書きを排し環境変数から取得する（引き継ぎ汚染防止）。
  * 単一オーナー運用では Better Auth のオーナーアカウントに対応する安定IDを設定する。
@@ -173,12 +181,15 @@ function rowToBlock(id: string, type: string, order: number, data: unknown): Blo
   return null;
 }
 
-async function fetchSheetById(db: Database, sheetId: string): Promise<SkillSheet> {
+async function fetchSheetById(db: Database, sheetId: string, requireExists = false): Promise<SkillSheet> {
   const [sheet] = await db
     .select({ title: skillSheets.title })
     .from(skillSheets)
     .where(eq(skillSheets.id, sheetId))
     .limit(1);
+  if (requireExists && !sheet) {
+    throw new SkillSheetNotFoundError(sheetId);
+  }
   const rows = await db.select().from(blocks).where(eq(blocks.sheetId, sheetId)).orderBy(asc(blocks.order));
 
   const blockList: Block[] = rows
@@ -240,7 +251,7 @@ export async function deleteSheet(sheetId: string): Promise<void> {
 /** 指定 ID のシートを読む。ID 未指定またはデフォルト読み込み時は GitHub シードを実行する。 */
 export async function getSkillSheetById(sheetId: string): Promise<SkillSheet> {
   const db = getDb();
-  return fetchSheetById(db, sheetId);
+  return fetchSheetById(db, sheetId, true);
 }
 
 /** Read the skill sheet from the DB, seeding from GitHub on first access. */
