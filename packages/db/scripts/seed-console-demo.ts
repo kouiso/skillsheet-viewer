@@ -141,7 +141,18 @@ const RAW_PROJECTS: RawProject[] = [
     duration: '継続中',
     role: 'フルスタック / EM',
     team: 13,
-    tech: ['TypeScript', 'React Native', 'Expo', 'NestJS', 'GraphQL', 'Prisma', 'Next.js', 'AWS', 'Terraform', 'Firebase'],
+    tech: [
+      'TypeScript',
+      'React Native',
+      'Expo',
+      'NestJS',
+      'GraphQL',
+      'Prisma',
+      'Next.js',
+      'AWS',
+      'Terraform',
+      'Firebase',
+    ],
     process: [1, 1, 1, 1, 1, 1, 1],
     summary:
       'モバイル・バックエンド・Web・管理画面の4リポジトリすべてに主要メンバーとして横断参画。チャット・本人確認(eKYC)・課金演出、通知基盤とN+1解消、CI/CD・AIレビュー基盤の構築までフルスタックで担当。',
@@ -154,7 +165,18 @@ const RAW_PROJECTS: RawProject[] = [
     duration: '継続中',
     role: 'フルスタック / EM',
     team: 13,
-    tech: ['TypeScript', 'Next.js', 'React', 'Tailwind CSS', 'Sanity', 'Cloudflare Workers', 'BigQuery', 'Terraform', 'GCP', 'Playwright'],
+    tech: [
+      'TypeScript',
+      'Next.js',
+      'React',
+      'Tailwind CSS',
+      'Sanity',
+      'Cloudflare Workers',
+      'BigQuery',
+      'Terraform',
+      'GCP',
+      'Playwright',
+    ],
     process: [1, 1, 1, 1, 1, 1, 1],
     summary:
       '立ち上げ初期から参画し、アプリ開発・インフラ・開発基盤を一貫して担当。Terraformによる GCP インフラの単独構築、E2E・VRT・アクセシビリティを含む品質基盤、CSP・シークレット管理などセキュリティの作り込みを実施。',
@@ -320,7 +342,17 @@ const FW = new Set([
   'Hasura',
   'Vite',
 ]);
-const DB = new Set(['MySQL', 'PostgreSQL', 'Aurora', 'Firestore', 'Prisma', 'DynamoDB', 'MongoDB', 'Redis', 'pgvector']);
+const DB = new Set([
+  'MySQL',
+  'PostgreSQL',
+  'Aurora',
+  'Firestore',
+  'Prisma',
+  'DynamoDB',
+  'MongoDB',
+  'Redis',
+  'pgvector',
+]);
 const INFRA = new Set([
   'AWS',
   'GCP',
