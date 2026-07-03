@@ -1,15 +1,22 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:base"],
-  "dependencyDashboard": false,
+  "dependencyDashboard": true,
   "rebaseWhen": "never",
   "schedule": ["after 8pm on Friday"],
   "prHourlyLimit": 10,
   "prConcurrentLimit": 10,
   "labels": ["renovate"],
   "rangeStrategy": "bump",
+  "separateMajorMinor": true,
   "requiredStatusChecks": ["ci"],
   "packageRules": [
+    {
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["renovate", "major-update"],
+      "addLabels": ["needs-review"]
+    },
     {
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
@@ -25,18 +32,16 @@
       "automerge": true
     },
     {
-      "managers": ["npm"],
-      "matchPackageNames": ["*"],
+      "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies"],
-      "groupName": "本番環境依存関係",
+      "groupName": "本番環境依存関係（minor/patch）",
       "groupSlug": "production-dependencies",
       "automerge": true
     },
     {
-      "managers": ["npm"],
-      "matchPackageNames": ["*"],
+      "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["devDependencies"],
-      "groupName": "開発環境依存関係",
+      "groupName": "開発環境依存関係（minor/patch）",
       "groupSlug": "dev-dependencies",
       "automerge": true
     },
@@ -45,6 +50,13 @@
       "groupName": "GitHub Actions",
       "labels": ["renovate", "github-actions"],
       "automerge": true
+    },
+    {
+      "matchPackageNames": ["next", "react", "react-dom"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "groupName": "コアフレームワーク major アップデート",
+      "labels": ["renovate", "major-update", "needs-review"]
     }
   ],
   "npm": {

@@ -1,7 +1,7 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.js
 .yarn/install-state.gz
@@ -17,7 +17,7 @@ logs
 dist
 dist-ssr
 stats.html
-/.next/
+.next/
 /out/
 stats.html
 /build
@@ -53,6 +53,9 @@ secret
 /temp
 .npm
 playground.nnb
+
+# archives / handoff bundles
+*.zip
 
 # seo
 sitemap*.xml
