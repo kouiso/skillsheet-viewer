@@ -37,7 +37,7 @@ export class ConflictError extends Error {
 /** 指定 ID のシートが存在しないことを示すエラー（getSkillSheetById から throw される）。 */
 export class SkillSheetNotFoundError extends Error {
   constructor(sheetId: string) {
-    super('Sheet not found: ' + sheetId);
+    super(`Sheet not found: ${sheetId}`);
     this.name = 'SkillSheetNotFoundError';
   }
 }
