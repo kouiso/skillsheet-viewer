@@ -1,5 +1,19 @@
 {
   "permissions": {
     "default": "byPassPermission"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/project-env-healer-gate.sh",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
   }
 }
