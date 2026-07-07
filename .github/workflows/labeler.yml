@@ -23,7 +23,7 @@ jobs:
     if: github.event.pull_request.draft == false
     steps:
       - name: Add labels from branch and changed files
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const pull = context.payload.pull_request;

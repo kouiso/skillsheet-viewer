@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:base"],
+  "extends": ["config:recommended"],
   "dependencyDashboard": true,
   "rebaseWhen": "never",
   "schedule": ["after 8pm on Friday"],
@@ -9,7 +9,6 @@
   "labels": ["renovate"],
   "rangeStrategy": "bump",
   "separateMajorMinor": true,
-  "requiredStatusChecks": ["ci"],
   "packageRules": [
     {
       "matchUpdateTypes": ["major"],
@@ -22,13 +21,8 @@
       "automerge": true
     },
     {
-      "groupName": "リンター関連パッケージ",
-      "matchPackagePatterns": ["eslint", "prettier", "stylelint"],
-      "automerge": true
-    },
-    {
       "groupName": "型定義パッケージ",
-      "matchPackagePatterns": ["^@types/"],
+      "matchPackageNames": ["@types/**"],
       "automerge": true
     },
     {
