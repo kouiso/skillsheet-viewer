@@ -206,23 +206,28 @@ export async function createSheet(title: string, initialBlocks?: BlockInput[]): 
   const db = getDb();
   const ownerId = getOwnerId();
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
-  const inserted = await db
-    .insert(skillSheets)
-    .values({ ownerId, title: resolvedTitle })
-    .returning({ id: skillSheets.id });
-  const sheetId = inserted[0]?.id;
-  if (!sheetId) {
-    throw new Error('Failed to create sheet: INSERT returned no id');
-  }
-  if (initialBlocks && initialBlocks.length > 0) {
-    const cleaned = initialBlocks.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
-    if (cleaned.length > 0) {
-      await db
-        .insert(blocks)
-        .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
+
+  // skillSheets への insert と blocks への insert を同一トランザクションで囲み、
+  // ブロック挿入が失敗したときにシートだけが残る不整合を防ぐ（原子性の担保）。
+  return db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(skillSheets)
+      .values({ ownerId, title: resolvedTitle })
+      .returning({ id: skillSheets.id });
+    const sheetId = inserted[0]?.id;
+    if (!sheetId) {
+      throw new Error('Failed to create sheet: INSERT returned no id');
     }
-  }
-  return sheetId;
+    if (initialBlocks && initialBlocks.length > 0) {
+      const cleaned = initialBlocks.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
+      if (cleaned.length > 0) {
+        await tx
+          .insert(blocks)
+          .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
+      }
+    }
+    return sheetId;
+  });
 }
 
 /** 指定シートを削除する（ブロックも cascade で削除される）。 */
