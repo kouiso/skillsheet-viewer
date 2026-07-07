@@ -3,19 +3,10 @@ import '@testing-library/jest-dom';
 
 import { cleanup } from '@testing-library/react';
 import type { ComponentProps } from 'react';
-import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest';
+import { afterEach, expect, vi } from 'vitest';
 
 import './icon.mock';
 import ResizeObserverMock from './mock/resize-observer.mock';
-
-// MSWのセットアップ
-beforeAll(() => {
-  // MSWのサーバーをセットアップ
-});
-
-afterAll(() => {
-  // MSWのサーバーをクリーンアップ
-});
 
 // テスト用のユーティリティ関数
 export interface CustomMatchers<R = unknown> {
