@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const isEditorMock = vi.fn();
 vi.mock('@/server/auth-gate', () => ({ isEditor: () => isEditorMock() }));
-vi.mock('next/cache', () => ({ revalidateTag: vi.fn() }));
+vi.mock('next/cache', () => ({ updateTag: vi.fn() }));
 
 vi.mock('@skillsheet/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@skillsheet/db')>();
