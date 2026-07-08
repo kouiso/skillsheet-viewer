@@ -353,62 +353,66 @@ const SkillsBlockEditor = ({
         placeholder="カテゴリ（例: プログラミング言語）"
         className="w-full rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
-            <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-20">経験年数</th>
-            <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">習熟度</th>
-            <th className="border border-border px-1 py-1 w-8" />
-          </tr>
-        </thead>
-        <tbody>
-          {skills.map((s, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: スキル行は順序で管理
-            <tr key={i}>
-              <td className="border border-border p-1">
-                <input
-                  value={s.name}
-                  onChange={(e) => setSkill(i, 'name', e.target.value)}
-                  placeholder="TypeScript"
-                  aria-label={`スキル${i + 1}の名称`}
-                  className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </td>
-              <td className="border border-border p-1">
-                <input
-                  type="number"
-                  min={0}
-                  max={50}
-                  value={s.years}
-                  onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
-                  aria-label={`スキル${i + 1}の経験年数`}
-                  className="w-full rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </td>
-              <td className="border border-border p-1">
-                <input
-                  value={s.level}
-                  onChange={(e) => setSkill(i, 'level', e.target.value)}
-                  placeholder="実務経験あり"
-                  aria-label={`スキル${i + 1}の習熟度`}
-                  className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </td>
-              <td className="border border-border p-1 text-center">
-                <button
-                  type="button"
-                  onClick={() => removeSkill(i)}
-                  aria-label={`スキル${i + 1}を削除`}
-                  className="rounded p-1 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
+              <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-20">
+                経験年数
+              </th>
+              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">習熟度</th>
+              <th className="border border-border px-1 py-1 w-8" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {skills.map((s, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: スキル行は順序で管理
+              <tr key={i}>
+                <td className="border border-border p-1">
+                  <input
+                    value={s.name}
+                    onChange={(e) => setSkill(i, 'name', e.target.value)}
+                    placeholder="TypeScript"
+                    aria-label={`スキル${i + 1}の名称`}
+                    className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </td>
+                <td className="border border-border p-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    value={s.years}
+                    onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
+                    aria-label={`スキル${i + 1}の経験年数`}
+                    className="w-full rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </td>
+                <td className="border border-border p-1">
+                  <input
+                    value={s.level}
+                    onChange={(e) => setSkill(i, 'level', e.target.value)}
+                    placeholder="実務経験あり"
+                    aria-label={`スキル${i + 1}の習熟度`}
+                    className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </td>
+                <td className="border border-border p-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeSkill(i)}
+                    aria-label={`スキル${i + 1}を削除`}
+                    className="rounded p-1 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <button
         type="button"
         onClick={addSkill}
