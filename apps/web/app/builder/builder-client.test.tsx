@@ -105,6 +105,38 @@ describe('BuilderClient', () => {
     );
   });
 
+  it('シート切替（key={activeSheetId} での再マウント）で内容とタイトルが新シートの値にリセットされる', () => {
+    // page.tsx は router.push('/builder?sheet=X') による同一ルート遷移で
+    // <BuilderClient key={activeSheetId} .../> を再レンダーする。key が
+    // activeSheetId 込みでないと state が前シートの値のまま残り、保存時に
+    // 別シートを誤った内容で上書きするバグが再発する（page.tsx 参照）。
+    const sheetA = { id: 'sheet-a', title: 'シートA', updatedAt: new Date() };
+    const sheetB = { id: 'sheet-b', title: 'シートB', updatedAt: new Date() };
+    const { rerender } = render(
+      <BuilderClient
+        key="sheet-a"
+        initialBlocks={mdBlocks(['## Aの内容'])}
+        initialTitle="シートA"
+        sheets={[sheetA, sheetB]}
+        activeSheetId="sheet-a"
+      />,
+    );
+    expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Aの内容');
+    expect(screen.getByLabelText('タイトル')).toHaveValue('シートA');
+
+    rerender(
+      <BuilderClient
+        key="sheet-b"
+        initialBlocks={mdBlocks(['## Bの内容'])}
+        initialTitle="シートB"
+        sheets={[sheetA, sheetB]}
+        activeSheetId="sheet-b"
+      />,
+    );
+    expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Bの内容');
+    expect(screen.getByLabelText('タイトル')).toHaveValue('シートB');
+  });
+
   it('タイトル入力が保存 payload に反映される', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="旧" {...defaultProps} />);
