@@ -33,7 +33,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Next 16 の revalidateTag は第2引数必須。空 CacheLifeConfig で即時失効。
-  revalidateTag('sheets', {});
+  // Route Handler は Server Action ではないため updateTag は使えない。
+  // { expire: 0 } で即時失効（次リクエストはブロッキング再検証）を明示する。
+  // 空の {} は expire 未指定＝即時失効の保証が無く、本番で無効化されない不具合があった。
+  revalidateTag('sheets', { expire: 0 });
   return NextResponse.json({ ok: true, revalidated: 'sheets' });
 }

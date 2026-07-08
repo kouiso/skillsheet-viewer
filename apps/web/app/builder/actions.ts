@@ -10,7 +10,7 @@ import {
   type SheetSummary,
   saveSkillSheetBlocks,
 } from '@skillsheet/db';
-import { revalidateTag } from 'next/cache';
+import { updateTag } from 'next/cache';
 
 import { isEditor } from '@/server/auth-gate';
 import { getTemplate } from './templates';
@@ -57,9 +57,10 @@ export async function saveBlocksAction(payload: SaveBlocksPayload): Promise<Save
     // 型定義上 Date でも実行時は string の可能性がある。明示的に正規化する。
     const expectedUpdatedAt = payload.expectedUpdatedAt ? new Date(payload.expectedUpdatedAt) : undefined;
     const { updatedAt } = await saveSkillSheetBlocks(payload.title, payload.blocks, payload.sheetId, expectedUpdatedAt);
-    // Next 16 の revalidateTag は第2引数必須。空の CacheLifeConfig({}) で
-    // 当該タグを即時失効させ、保存直後に /view/db が最新を読むようにする。
-    revalidateTag('db-sheet', {});
+    // updateTag は Server Action 専用の read-your-own-writes API。
+    // revalidateTag('db-sheet', {}) は expire 未指定で即時失効の保証が無く、
+    // 保存直後に /view/db が古いキャッシュを返し続ける不具合があった（本番で実機確認）。
+    updateTag('db-sheet');
     return { ok: true, savedUpdatedAt: updatedAt };
   } catch (err) {
     if (err instanceof ConflictError) {
@@ -98,7 +99,7 @@ export async function createSheetAction(
   try {
     const initialBlocks: BlockInput[] | undefined = templateId ? getTemplate(templateId)?.blocks : undefined;
     const sheetId = await createSheet(title, initialBlocks);
-    revalidateTag('db-sheet', {});
+    updateTag('db-sheet');
     return { ok: true, sheetId };
   } catch (err) {
     console.error('createSheetAction failed:', err);
@@ -116,7 +117,7 @@ export async function deleteSheetAction(sheetId: string): Promise<SaveResult> {
   }
   try {
     await deleteSheet(sheetId);
-    revalidateTag('db-sheet', {});
+    updateTag('db-sheet');
     return { ok: true };
   } catch (err) {
     console.error('deleteSheetAction failed:', err);
