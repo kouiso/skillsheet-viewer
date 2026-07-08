@@ -148,6 +148,22 @@ describe('BuilderClient', () => {
     expect(screen.getByLabelText('タイトル')).toHaveValue('シートB');
   });
 
+  it('スキルブロックのテーブルは overflow-x-auto でラップされる（375px モバイル横スクロール回帰テスト）', () => {
+    // ラッパー無しだとテーブルがページ全体を横に押し広げ、/builder が 375px 幅で
+    // 横スクロールしてしまう不具合があった（本番実機で scrollWidth 548px > 375px を確認）。
+    const skillsBlock: Block[] = [
+      {
+        id: 'skills-1',
+        type: 'skills',
+        order: 0,
+        data: { category: '言語', skills: [{ name: 'TypeScript', years: 5, level: '実務経験あり' }] },
+      },
+    ];
+    render(<BuilderClient initialBlocks={skillsBlock} initialTitle="t" {...defaultProps} />);
+    const table = screen.getByRole('table');
+    expect(table.parentElement).toHaveClass('overflow-x-auto');
+  });
+
   it('タイトル入力が保存 payload に反映される', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="旧" {...defaultProps} />);
