@@ -40,6 +40,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             key={tech}
             type="button"
             onClick={() => onToggle(tech)}
+            aria-pressed={active.includes(tech)}
             className={`chip ${active.includes(tech) ? 'on' : ''}`}
           >
             {tech}
