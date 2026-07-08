@@ -203,13 +203,15 @@ describe('experienceBlockToMarkdown', () => {
 });
 
 describe('blocksToMarkdown — type 別 dispatch', () => {
-  it('markdown と table を混在して 1 本の markdown に連結する', () => {
+  it('markdown と table を混在して 1 本の markdown に連結する（table 等の非 markdown 型が隣接する境界は空行区切り）', () => {
+    // GFM テーブルは直前が空行でないと段落へ lazy continuation として飲み込まれ、
+    // テーブルとして認識されない（区切り行がそのまま生テキスト表示される不具合の再発防止）。
     const blocks: Block[] = [
       { id: 'm', type: 'markdown', order: 0, data: { markdown: '## 見出し' } },
       { id: 't', type: 'table', order: 1, data: TABLE },
     ];
     expect(blocksToMarkdown(blocks)).toBe(
-      ['## 見出し', '| 左 | 中 | 右 |', '| :--- | :---: | ---: |', '| a | b | c |'].join('\n'),
+      ['## 見出し', '', '| 左 | 中 | 右 |', '| :--- | :---: | ---: |', '| a | b | c |'].join('\n'),
     );
   });
 
