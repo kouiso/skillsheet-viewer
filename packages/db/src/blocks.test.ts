@@ -76,6 +76,16 @@ describe('splitMarkdownIntoBlocks', () => {
       .reverse();
     expect(blocksToMarkdown(reversed)).toBe(SAMPLE);
   });
+
+  it('空文字列は空文字の1セグメントを返す（例外を投げない）', () => {
+    expect(splitMarkdownIntoBlocks('')).toEqual([{ markdown: '' }]);
+  });
+
+  it('空白のみの文字列は1つのセグメントとして返す', () => {
+    const segments = splitMarkdownIntoBlocks('   \n\n  ');
+    expect(segments).toHaveLength(1);
+    expect(segments[0].markdown).toBe('   \n\n  ');
+  });
 });
 
 const TABLE: TableBlockData = {
@@ -487,6 +497,11 @@ describe('blocksToMarkdown — 新型ブロック dispatch', () => {
     const blks = [{ id: 'x', type: 'unknown', order: 0, data: {} }] as unknown as Block[];
     expect(() => blocksToMarkdown(blks)).not.toThrow();
     expect(blocksToMarkdown(blks)).toBe('');
+  });
+
+  it('空配列は空文字を返してエラーを throw しない', () => {
+    expect(() => blocksToMarkdown([])).not.toThrow();
+    expect(blocksToMarkdown([])).toBe('');
   });
 });
 
