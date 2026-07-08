@@ -18,6 +18,11 @@ import { getTemplate } from './templates';
 export interface SaveResult {
   ok: boolean;
   error?: string;
+  /**
+   * A4: 保存成功時のサーバー時刻 updatedAt。クライアントはこれを次回保存の
+   * expectedUpdatedAt に用いる（クライアント時計とのズレによる誤 Conflict を防ぐ）。
+   */
+  savedUpdatedAt?: Date;
 }
 
 export interface SaveBlocksPayload {
@@ -48,11 +53,16 @@ export async function saveBlocksAction(payload: SaveBlocksPayload): Promise<Save
   }
 
   try {
-    await saveSkillSheetBlocks(payload.title, payload.blocks, payload.sheetId, payload.expectedUpdatedAt);
+    const { updatedAt } = await saveSkillSheetBlocks(
+      payload.title,
+      payload.blocks,
+      payload.sheetId,
+      payload.expectedUpdatedAt,
+    );
     // Next 16 の revalidateTag は第2引数必須。空の CacheLifeConfig({}) で
     // 当該タグを即時失効させ、保存直後に /view/db が最新を読むようにする。
     revalidateTag('db-sheet', {});
-    return { ok: true };
+    return { ok: true, savedUpdatedAt: updatedAt };
   } catch (err) {
     if (err instanceof ConflictError) {
       return { ok: false, error: 'conflict' as const };

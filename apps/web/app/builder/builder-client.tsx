@@ -859,7 +859,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       const res = await saveBlocksAction(payload);
       if (res.ok) {
         savedRef.current = true;
-        savedUpdatedAtRef.current = new Date();
+        // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
+        // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。返却が無い
+        // 古い経路のみ new Date() にフォールバックする。
+        savedUpdatedAtRef.current = res.savedUpdatedAt ?? new Date();
         // 保存成功した内容をスナップショットとして記録し、dirty を解除する。
         lastSavedSnapshotRef.current = savedSnapshot;
         setIsDirty(false);
