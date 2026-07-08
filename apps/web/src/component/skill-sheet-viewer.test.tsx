@@ -114,4 +114,26 @@ describe('SkillSheetViewer', () => {
     // 空の skills ブロック（category: '空'）はどこにも描画されない。
     expect(screen.queryByText('空')).toBeNull();
   });
+
+  it('SkillMatrix グリッドの列最小幅が min(240px,100%) でコンテナ幅を超えない（320px 幅での横スクロール回帰防止）', async () => {
+    const blocks: Block[] = [
+      {
+        id: 'b1',
+        type: 'skills',
+        order: 0,
+        data: { category: '言語', skills: [{ name: 'TS', years: 3, level: '★★☆' }] },
+      },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('TS')).toBeInTheDocument();
+    });
+
+    const grid = document.querySelector('[class*="grid-template-columns"]') as HTMLElement;
+    expect(grid).not.toBeNull();
+    // 固定 240px の minmax だけだと 320px 幅で列自体がコンテナよりはみ出す
+    // （実機/Playwright 計測で確認済み）。min() でコンテナ幅を上限にキャップする。
+    expect(grid.className).toContain('minmax(min(240px,100%),1fr)');
+  });
 });

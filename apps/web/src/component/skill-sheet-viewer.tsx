@@ -279,7 +279,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
                   return (
                     <section key={key}>
                       <SectionHead kicker="Skill Matrix" title="スキルマトリクス" />
-                      <div className="grid gap-4 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+                      <div className="grid gap-4 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
                         {group.blocks.map((block) => (
                           <SkillMatrix key={block.id} data={block.data} className="mb-0" />
                         ))}
