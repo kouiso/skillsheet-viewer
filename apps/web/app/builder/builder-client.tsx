@@ -69,6 +69,9 @@ import { TEMPLATES } from './templates';
 
 type SheetSummary = { id: string; title: string; updatedAt: Date };
 
+const REVOKE_DELAY_MS = 100;
+const PREVIEW_DEBOUNCE_MS = 300;
+
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
 type EditorItem =
   | { id: string; type: 'markdown'; markdown: string }
@@ -656,13 +659,20 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   );
 
   // プレビューは重い（Markdown パース＋ハイライト）ため、入力のたびではなく
-  // 300ms デバウンスして更新し、タイピングのラグを防ぐ。初期値は即時反映。
+  // デバウンスして更新し、タイピングのラグを防ぐ。初期値・初回レンダリングは即時反映。
   const [previewContent, setPreviewContent] = useState(() => assembleMarkdown(items));
+  const isFirstPreviewRender = useRef(true);
 
   useEffect(() => {
+    // useState の初期値で既に assembleMarkdown(items) 評価済みのため、
+    // マウント直後の再計算は不要（重い Markdown パース処理の二重実行を避ける）。
+    if (isFirstPreviewRender.current) {
+      isFirstPreviewRender.current = false;
+      return;
+    }
     const timer = setTimeout(() => {
       setPreviewContent(assembleMarkdown(items));
-    }, 300);
+    }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [items]);
 
@@ -834,7 +844,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    // モバイル/Firefox はダウンロード処理が非同期のため、即時 revoke だと失敗しうる。
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, REVOKE_DELAY_MS);
     toast.success('バックアップを書き出しました');
   };
 
