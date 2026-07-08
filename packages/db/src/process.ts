@@ -56,7 +56,7 @@ export interface NormalizedProcess {
  * builder の自由文字列 process[] を、表示用の7段 done/uncertain/other へ変換する。
  * 完全一致のみで判定し、対応表にない文字列は全て other へ（実績を消さない）。
  */
-export function normalizeProcess(labels: string[]): NormalizedProcess {
+export function normalizeProcess(labels: string[] = []): NormalizedProcess {
   const done = new Array(PROCESS_LABELS.length).fill(false) as boolean[];
   const uncertain = new Array(PROCESS_LABELS.length).fill(false) as boolean[];
   const other: string[] = [];
@@ -81,6 +81,7 @@ export function normalizeProcess(labels: string[]): NormalizedProcess {
 const RANGE_SEPARATORS = ['—', '〜', '~', '－'];
 
 function splitPeriodRange(period: string): [string, string] {
+  if (typeof period !== 'string' || period.length === 0) return ['', ''];
   for (const sep of RANGE_SEPARATORS) {
     const idx = period.indexOf(sep);
     if (idx > -1) return [period.slice(0, idx).trim(), period.slice(idx + sep.length).trim()];
@@ -114,6 +115,7 @@ export function parseStart(period: string): number | null {
 /** period の期間表現から表示用の duration 文字列を導出する（"現在" 終端は「継続中」）。 */
 export function deriveDuration(period: string): string {
   const [startToken, endToken] = splitPeriodRange(period);
+  if (!startToken) return '';
   if (!endToken || /現在/.test(endToken)) return '継続中';
   const start = parseYearMonth(startToken);
   const end = parseYearMonth(endToken);
@@ -130,10 +132,11 @@ const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', '
 
 /** 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。 */
 export function flattenTech(tech: ProjectTech): string[] {
+  if (!tech) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const key of TECH_BUCKET_ORDER) {
-    for (const value of tech[key]) {
+    for (const value of tech[key] ?? []) {
       if (!seen.has(value)) {
         seen.add(value);
         out.push(value);

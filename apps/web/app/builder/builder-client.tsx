@@ -664,9 +664,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const isFirstPreviewRender = useRef(true);
 
   useEffect(() => {
+    // useState の初期値で既に assembleMarkdown(items) 評価済みのため、
+    // マウント直後の再計算は不要（重い Markdown パース処理の二重実行を避ける）。
     if (isFirstPreviewRender.current) {
       isFirstPreviewRender.current = false;
-      setPreviewContent(assembleMarkdown(items));
       return;
     }
     const timer = setTimeout(() => {

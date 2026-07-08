@@ -16,8 +16,8 @@ export function ProcessStepper({ done, uncertain, compact = false }: ProcessStep
   return (
     <div className="flex items-end gap-1.5">
       {PROCESS_LABELS.map((label, i) => {
-        const isDone = done[i];
-        const isUncertain = uncertain[i];
+        const isDone = done?.[i] ?? false;
+        const isUncertain = uncertain?.[i] ?? false;
         const title = isDone
           ? `${label}：経験あり`
           : isUncertain
