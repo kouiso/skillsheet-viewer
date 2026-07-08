@@ -98,4 +98,20 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
     }
   });
+
+  it('多列テーブル＋長い未分割トークン(URL)を含む内容でもスローせず描画できる（セルの overflow:hidden 回帰防止）', async () => {
+    // 8列テーブル＋URLのような区切り文字のない長いトークンは、修正前は
+    // 折返し後の最終行がセル境界を超えて隣列へ視覚的にはみ出していた
+    // （PDFをラスタライズして実際に確認済み）。tableCell に overflow: 'hidden'
+    // を追加し、セル幅内にクリップされるよう修正した。
+    const header = '| 列A | 列B | 列C | 列D | 列E | 列F | 列G | 列H |';
+    const sep = '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |';
+    const row =
+      '| https://example.com/very/long/unbroken/url/path/xxxxxxxxxxxxxxxxxxxxxxxxxx | b | c | d | e | f | g | h |';
+    const content = ['## 多列テーブル', '', header, sep, row, ''].join('\n');
+
+    const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+  });
 });

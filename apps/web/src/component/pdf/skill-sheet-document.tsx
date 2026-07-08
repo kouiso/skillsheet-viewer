@@ -117,6 +117,7 @@ const styles = StyleSheet.create({
     flexBasis: 0,
     flexShrink: 1,
     minWidth: 0,
+    overflow: 'hidden',
     borderRightWidth: 1,
     borderRightColor: COLOR.divider,
     borderBottomWidth: 1,
