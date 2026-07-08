@@ -19,7 +19,7 @@ export default async function DbSheetPage() {
   // 生の 500 を出さず、対処手順を案内するフォールバック UI を表示する。
   try {
     const sheet = await getCachedDbSheet();
-    return <SheetViewClient title={sheet.title} content={sheet.content} />;
+    return <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} />;
   } catch (err) {
     console.error('Failed to load DB skill sheet:', err);
     return (

@@ -45,6 +45,8 @@ const emptyProject = (companyId: string): ProjectItem => ({
   duties: '',
   acquired: '',
   comment: '',
+  summary: '',
+  duration: '',
 });
 
 const emptyCompany = (): CompanyInfo => ({
@@ -162,6 +164,12 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
             className="rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
+        <input
+          value={project.duration ?? ''}
+          onChange={(e) => onChange({ duration: e.target.value })}
+          placeholder="期間の長さ（例: 3ヶ月）。空欄なら期間から自動算出"
+          className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        />
         <div className="grid grid-cols-2 gap-2">
           <input
             value={project.role ?? ''}
@@ -229,6 +237,18 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
 
       {/* 業務内容・習得スキル・コメント */}
       <div className="space-y-2">
+        <div>
+          <p className="mb-1 text-xs font-medium text-muted-foreground">
+            要約（工程の俯瞰カードに表示。空欄なら業務内容を使用）
+          </p>
+          <textarea
+            value={project.summary ?? ''}
+            onChange={(e) => onChange({ summary: e.target.value })}
+            placeholder="案件の要約を1〜3文で記載"
+            rows={2}
+            className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
         <div>
           <p className="mb-1 text-xs font-medium text-muted-foreground">業務内容</p>
           <textarea

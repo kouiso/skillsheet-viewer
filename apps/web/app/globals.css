@@ -48,6 +48,17 @@
   --elevation-3: none;
   --elevation-4: none;
   --elevation-8: none;
+
+  /* ハンドオフ redesign2（console.light）のトークン語彙。既存トークンとは別名で追加し非破壊。 */
+  --surface2: #f0f3f3;
+  --faint: #8a969c;
+  --track: #e6ecec;
+  --chip-bg: #eef3f3;
+  --chip-text: #34424a;
+  --accent-text: #0b7d72;
+  --on-accent: #ffffff;
+  --bar-round: 1px;
+  --head-weight: 600;
 }
 
 .dark {
@@ -74,6 +85,15 @@
   --border: #1d262b;
   --input: #1d262b;
   --ring: #14b8a6;
+
+  /* ハンドオフ redesign2（console.dark）のトークン語彙。 */
+  --surface2: #141a1e;
+  --faint: #5a656c;
+  --track: #192227;
+  --chip-bg: #141b1f;
+  --chip-text: #aeb9bf;
+  --accent-text: #5eead4;
+  --on-accent: #03110f;
 }
 
 /* CSS 変数を Tailwind のテーマトークンへ公開（bg-primary, text-foreground 等が使える） */
@@ -101,6 +121,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-surface2: var(--surface2);
+  --color-faint: var(--faint);
+  --color-track: var(--track);
+  --color-chip-bg: var(--chip-bg);
+  --color-chip-text: var(--chip-text);
+  --color-accent-text: var(--accent-text);
+  --color-on-accent: var(--on-accent);
 
   --radius-sm: 2px;
   --radius-md: 4px;
@@ -264,4 +292,48 @@ body {
 }
 .markdown-content summary {
   cursor: pointer;
+}
+
+/* --- Console ダッシュボード用コンポーネントクラス（トークン参照・ライト/ダーク共通） --- */
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  background-color: var(--chip-bg);
+  color: var(--chip-text);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+.chip.on {
+  background-color: var(--primary);
+  color: var(--on-accent);
+}
+
+.barTrack {
+  width: 100%;
+  height: 6px;
+  border-radius: var(--bar-round);
+  background-color: var(--track);
+  overflow: hidden;
+}
+.barFill {
+  height: 100%;
+  border-radius: var(--bar-round);
+  background-color: var(--primary);
 }

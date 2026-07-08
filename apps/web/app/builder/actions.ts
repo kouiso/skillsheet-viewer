@@ -53,12 +53,10 @@ export async function saveBlocksAction(payload: SaveBlocksPayload): Promise<Save
   }
 
   try {
-    const { updatedAt } = await saveSkillSheetBlocks(
-      payload.title,
-      payload.blocks,
-      payload.sheetId,
-      payload.expectedUpdatedAt,
-    );
+    // Server Action 境界を越えると Date は ISO 文字列にシリアライズされるため、
+    // 型定義上 Date でも実行時は string の可能性がある。明示的に正規化する。
+    const expectedUpdatedAt = payload.expectedUpdatedAt ? new Date(payload.expectedUpdatedAt) : undefined;
+    const { updatedAt } = await saveSkillSheetBlocks(payload.title, payload.blocks, payload.sheetId, expectedUpdatedAt);
     // Next 16 の revalidateTag は第2引数必須。空の CacheLifeConfig({}) で
     // 当該タグを即時失効させ、保存直後に /view/db が最新を読むようにする。
     revalidateTag('db-sheet', {});
