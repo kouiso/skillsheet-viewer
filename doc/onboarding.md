@@ -17,7 +17,7 @@
 ```bash
 # mise をインストール後（リンク先参照）、プロジェクトディレクトリ直下で実行
 mise install
-# プロジェクトの .mise.toml / .tool-versions に従って Node 22.x が入る
+# プロジェクトの mise.toml に従って Node 22.x が入る
 
 # pnpm が未導入なら有効化
 corepack enable

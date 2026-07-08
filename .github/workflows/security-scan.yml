@@ -49,3 +49,20 @@ jobs:
       # high 以上のみをブロックする一貫した閾値にする。
       - name: Audit all dependencies (including dev)
         run: pnpm audit --audit-level high
+
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # HMAC/認証シークレットを扱うため、履歴を含めて秘匿情報の混入を検査する。
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

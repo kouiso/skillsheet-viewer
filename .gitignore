@@ -19,11 +19,9 @@ dist-ssr
 stats.html
 .next/
 /out/
-stats.html
 /build
 
 # typescript output
-*.module.scss.d.ts
 *.tsbuildinfo
 next-env.d.ts
 
@@ -44,7 +42,6 @@ next-env.d.ts
 !.env.example
 secret
 *.local
-*.module.scss.d.ts
 
 # vercel
 .vercel

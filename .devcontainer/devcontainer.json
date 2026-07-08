@@ -1,91 +1,34 @@
 {
-  "name": "horsemanager-admin",
-  "dockerComposeFile": ["../docker-compose.yaml"],
-  "service": "frontend",
-  "workspaceFolder": "/app",
-  "initializeCommand": "/bin/bash .devcontainer/script/initialize.sh",
+  "name": "skillsheet-viewer",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "features": {
+    "ghcr.io/devcontainers-contrib/features/pnpm:2": {}
+  },
+  "workspaceFolder": "/workspaces/skillsheet-viewer",
+  "forwardPorts": [3000],
+  "postCreateCommand": "pnpm install",
   "customizations": {
     "vscode": {
       "extensions": [
+        "biomejs.biome",
         "mosapride.zenkaku",
         "EditorConfig.EditorConfig",
-        "dbaeumer.vscode-eslint",
-        "esbenp.prettier-vscode",
-        "stylelint.vscode-stylelint",
-        "formulahendry.auto-rename-tag",
         "github.vscode-github-actions",
-        "wayou.vscode-todo-highlight",
-        "formulahendry.auto-rename-tag",
-        "gruntfuggly.todo-tree",
-        "donjayamanne.typescript-notebook",
         "anthropic.claude-code"
       ],
       "settings": {
-        "git.path": "/usr/bin",
-        // For markdown: GitHub同様、mdファイルは改行で見た目通り改行する
-        "markdown.preview.breaks": true,
-        // For js/ts
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "biomejs.biome",
         "editor.codeActionsOnSave": {
-          "source.fixAll.eslint": "explicit",
-          "source.organizeImports": "explicit"
+          "source.organizeImports.biome": "explicit",
+          "quickfix.biome": "explicit"
         },
-        "[json]": {
-          "editor.formatOnSave": true
-        },
-        "[javascript]": {
-          "editor.formatOnSave": true
-        },
-        "[typescript]": {
-          "editor.formatOnSave": true
-        },
-        // For scss
-        "scss.validate": false,
-        "stylelint.configFile": "./.stylelintrc.yml",
-        "stylelint.validate": ["scss"],
-        "[scss]": {
-          "editor.formatOnSave": false,
-          "editor.codeActionsOnSave": {
-            "source.fixAll.stylelint": "explicit"
-          }
-        },
-        // package.jsonにコメントをつけるため、jsonc(コメント付きJSON)として扱う
+        "markdown.preview.breaks": true,
         "files.associations": {
           "package.json": "jsonc"
-        },
-        // for todo tree
-        "todo-tree.highlights.defaultHighlight": {
-          "type": "whole-line",
-          "foreground": "white",
-          "background": "green",
-          "opacity": 50
-        },
-        "todo-tree.general.tags": ["TODO", "FIXME", "BUG", "HACK", "NOTE", "WARNING", "ENHANCE"],
-        "todo-tree.regex.regex": "(//)\\s*($TAGS).*(\\n\\s*//\\s{2,}.*)*"
+        }
       }
     }
   },
-  "containerEnv": {
-    "ENV_FILE": ".devcontainer/.env"
-  },
-  "postCreateCommand": "/bin/bash .devcontainer/script/post-create.sh",
-  "postStartCommand": "mkdir -p /home/node/.claude && echo '{\"permissions\":{\"defaultMode\":\"bypassPermissions\"}}' > /home/node/.claude/settings.local.json",
-  "containerUser": "root",
-  "forwardPorts": [13000, 19229],
-  "features": {
-    "ghcr.io/devcontainers/features/node:1": {
-      "nodeGypDependencies": true,
-      "installYarnUsingApt": true,
-      "version": "latest",
-      "nvmVersion": "latest"
-    },
-    "ghcr.io/audacioustux/devcontainers/taskfile:1": {
-      "version": "latest"
-    }
-  },
-  "mounts": [
-    "source=${localWorkspaceFolder}/.devcontainer/.claude,target=/home/node/.claude,type=bind,consistency=cached",
-    "source=${localWorkspaceFolder}/.devcontainer/.claude.json,target=/home/node/.claude.json,type=bind,consistency=cached"
-  ],
-  "remoteUser": "node",
-  "updateRemoteUserUID": true
+  "remoteUser": "node"
 }

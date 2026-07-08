@@ -17,7 +17,7 @@
     "dev": "pnpm --filter @skillsheet/web dev",
     "build": "pnpm --filter @skillsheet/web build",
     "start": "pnpm --filter @skillsheet/web start",
-    "lint": "biome check .",
+    "lint": "biome check . --error-on-warnings",
     "format": "biome format --write .",
     "type-check": "pnpm -r type-check",
     "test": "pnpm -r --if-present test",
