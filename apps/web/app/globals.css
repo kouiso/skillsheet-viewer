@@ -51,7 +51,7 @@
 
   /* ハンドオフ redesign2（console.light）のトークン語彙。既存トークンとは別名で追加し非破壊。 */
   --surface2: #f0f3f3;
-  --faint: #8a969c;
+  --faint: #647079; /* 元 #8a969c は白背景 3.0:1 で WCAG AA(4.5:1) 未達だったため修正（2026-07-08 自己レビュー） */
   --track: #e6ecec;
   --chip-bg: #eef3f3;
   --chip-text: #34424a;
@@ -88,7 +88,7 @@
 
   /* ハンドオフ redesign2（console.dark）のトークン語彙。 */
   --surface2: #141a1e;
-  --faint: #5a656c;
+  --faint: #818c94; /* 元 #5a656c は card 背景 3.1:1 で WCAG AA(4.5:1) 未達だったため修正（2026-07-08 自己レビュー） */
   --track: #192227;
   --chip-bg: #141b1f;
   --chip-text: #aeb9bf;
