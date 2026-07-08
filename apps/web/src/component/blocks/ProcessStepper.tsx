@@ -27,7 +27,7 @@ export function ProcessStepper({ done, uncertain, compact = false }: ProcessStep
           <div key={label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
             {!compact && (
               <span
-                className={`whitespace-nowrap font-mono text-[10px] ${isDone || isUncertain ? 'text-accent-text' : 'text-faint'}`}
+                className={`text-center font-mono text-[10px] leading-tight ${isDone || isUncertain ? 'text-accent-text' : 'text-faint'}`}
               >
                 {label}
               </span>
