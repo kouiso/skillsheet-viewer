@@ -982,7 +982,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2">
         {/* エディタ */}
-        <div className="space-y-3">
+        {/* min-w-0: CSS Grid アイテムは既定で min-width:auto のため、子の truncate/
+            overflow-x-auto が効かず内容量でトラック自体が押し広げられる（grid blowout）。
+            375px でページ全体が横スクロールする不具合の根本原因だった（実機確認）。 */}
+        <div className="min-w-0 space-y-3">
           {/* シートセレクター */}
           <div className="rounded-lg border border-border bg-card p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -1149,7 +1152,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
         {/* ライブプレビュー */}
         {showPreview && (
-          <div className="rounded-lg border border-border bg-card">
+          <div className="min-w-0 rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-2 text-sm font-medium text-muted-foreground">プレビュー</div>
             <SkillSheetViewer
               skillSheet={{ title: title.trim() || 'プレビュー', content: previewContent }}
