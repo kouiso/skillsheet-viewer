@@ -1129,7 +1129,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
           )}
 
           {activeTab === 'blocks' && (
-            <div className="flex gap-2">
+            // flex-wrap: 4ボタンが flex-1 均等割りだと 375px 幅でラベルの最小幅を
+            // 確保しきれず横スクロールの原因になっていた（実機確認）。折り返し可能にする。
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
                 <Plus className="mr-1.5 size-4" />
                 テキスト
