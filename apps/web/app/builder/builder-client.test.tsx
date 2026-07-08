@@ -8,7 +8,9 @@ import BuilderClient from './builder-client';
 // 重いビューア（lightbox/IntersectionObserver 依存）はプレビュー描画を素朴にモック
 vi.mock('@/component/skill-sheet-viewer', () => ({
   default: ({ skillSheet }: { skillSheet: { content: string } }) => (
-    <div data-testid="preview">{skillSheet.content}</div>
+    <div data-testid="preview" data-raw={skillSheet.content}>
+      {skillSheet.content}
+    </div>
   ),
 }));
 
@@ -74,6 +76,15 @@ describe('BuilderClient', () => {
   it('プレビューに連結 Markdown が反映される', () => {
     render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
     expect(screen.getByTestId('preview')).toHaveTextContent('## A ## B');
+  });
+
+  it('ブロック間は空行(\\n\\n)で結合される（GFM テーブル認識の回帰テスト）', () => {
+    // 単一改行(\n)だと GFM テーブルが直前の段落に lazy continuation として飲み込まれ、
+    // テーブル区切り行 (:---:) がそのまま生テキストとして表示される不具合があった
+    // （builder-client.tsx の assembleMarkdown 参照）。
+    render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
+    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    expect(raw).toBe('## A\n\n## B');
   });
 
   it('「テーブル」追加→セル入力が table ブロックとして保存 payload に入る', async () => {

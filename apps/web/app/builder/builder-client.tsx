@@ -163,7 +163,10 @@ const itemToMarkdown = (item: EditorItem): string => {
   }
 };
 
-const assembleMarkdown = (items: EditorItem[]): string => items.map(itemToMarkdown).join('\n');
+// ブロック間は空行区切り（\n\n）が必須。単一改行だと GFM テーブルが直前の段落に
+// 「lazy continuation」として飲み込まれ、テーブルとして認識されずヘッダー/区切り行
+// (:---:) がそのまま生テキストとして表示される不具合があった（PDF/プレビュー実機確認）。
+const assembleMarkdown = (items: EditorItem[]): string => items.map(itemToMarkdown).join('\n\n');
 
 // dirty 比較用スナップショット（タイトル＋組み立て済み markdown 文字列）。
 // typed item を直接比較せず、保存される最終形（markdown）で差分を見る。
