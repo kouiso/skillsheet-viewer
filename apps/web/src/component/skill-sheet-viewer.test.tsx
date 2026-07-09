@@ -124,13 +124,13 @@ describe('SkillSheetViewer', () => {
         data: { category: '言語', skills: [{ name: 'TS', years: 3, level: '★★☆' }] },
       },
     ];
-    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+    const { container } = render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
 
     await waitFor(() => {
       expect(screen.getByText('TS')).toBeInTheDocument();
     });
 
-    const grid = document.querySelector('[class*="grid-template-columns"]') as HTMLElement;
+    const grid = container.querySelector('[class*="grid-template-columns"]') as HTMLElement;
     expect(grid).not.toBeNull();
     // 固定 240px の minmax だけだと 320px 幅で列自体がコンテナよりはみ出す
     // （実機/Playwright 計測で確認済み）。min() でコンテナ幅を上限にキャップする。
