@@ -388,7 +388,7 @@ const SkillsBlockEditor = ({
                     onChange={(e) => setSkill(i, 'name', e.target.value)}
                     placeholder="TypeScript"
                     aria-label={`スキル${i + 1}の名称`}
-                    className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
                 <td className="border border-border p-1">
@@ -408,7 +408,7 @@ const SkillsBlockEditor = ({
                     onChange={(e) => setSkill(i, 'level', e.target.value)}
                     placeholder="実務経験あり"
                     aria-label={`スキル${i + 1}の習熟度`}
-                    className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
                 <td className="border border-border p-1 text-center">
