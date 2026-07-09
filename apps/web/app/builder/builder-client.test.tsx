@@ -78,13 +78,29 @@ describe('BuilderClient', () => {
     expect(screen.getByTestId('preview')).toHaveTextContent('## A ## B');
   });
 
-  it('ブロック間は空行(\\n\\n)で結合される（GFM テーブル認識の回帰テスト）', () => {
+  it('隣接 markdown ブロック同士は単一改行(\\n)で結合される', () => {
+    // サーバ側 blocksToMarkdown と同じく markdown 分割のラウンドトリップ無損失性を保つ。
+    render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
+    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    expect(raw).toBe('## A\n## B');
+  });
+
+  it('markdown と非 markdown の隣接は空行(\\n\\n)で結合される（GFM テーブル認識の回帰テスト）', () => {
     // 単一改行(\n)だと GFM テーブルが直前の段落に lazy continuation として飲み込まれ、
     // テーブル区切り行 (:---:) がそのまま生テキストとして表示される不具合があった
     // （builder-client.tsx の assembleMarkdown 参照）。
-    render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
+    const blocks: Block[] = [
+      { id: 'markdown-1', type: 'markdown', order: 0, data: { markdown: '## A' } },
+      {
+        id: 'table-1',
+        type: 'table',
+        order: 1,
+        data: { columns: [{ label: '項目', align: 'left' }], rows: [['内容']] },
+      },
+    ];
+    render(<BuilderClient initialBlocks={blocks} initialTitle="t" {...defaultProps} />);
     const raw = screen.getByTestId('preview').getAttribute('data-raw');
-    expect(raw).toBe('## A\n\n## B');
+    expect(raw).toBe('## A\n\n| 項目 |\n| :--- |\n| 内容 |');
   });
 
   it('「テーブル」追加→セル入力が table ブロックとして保存 payload に入る', async () => {
