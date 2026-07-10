@@ -74,7 +74,7 @@ const REVOKE_DELAY_MS = 100;
 const PREVIEW_DEBOUNCE_MS = 300;
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
-type EditorItem =
+export type EditorItem =
   | { id: string; type: 'markdown'; markdown: string }
   | { id: string; type: 'table'; columns: TableColumn[]; rows: string[][] }
   | { id: string; type: 'skills'; category: string; skills: SkillEntry[] }
@@ -167,7 +167,7 @@ const itemToMarkdown = (item: EditorItem): string => {
 // 連結規則はサーバ側 blocksToMarkdown と共有の blockJoinSeparator に一元化する。
 // 手コピーで 2 箇所に規則が重複していたのを解消し、markdown 分割の無損失性と
 // GFM テーブルが直前段落へ lazy continuation として飲み込まれない区切りを両立する。
-const assembleMarkdown = (items: EditorItem[]): string => {
+export const assembleMarkdown = (items: EditorItem[]): string => {
   let result = '';
   let prev: EditorItem | undefined;
   for (let i = 0; i < items.length; i++) {
