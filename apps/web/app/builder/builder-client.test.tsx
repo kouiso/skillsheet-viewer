@@ -103,6 +103,24 @@ describe('BuilderClient', () => {
     expect(raw).toBe('## A\n\n| 項目 |\n| :--- |\n| 内容 |');
   });
 
+  it('markdown ブロック同士でも 2 本目が GFM テーブルで始まる場合は空行(\\n\\n)で結合される', () => {
+    // 生 markdown ブロックとして貼られたテーブル（type=markdown だが先頭がテーブル行）は、
+    // 単一改行だと直前段落へ lazy continuation として飲み込まれる。共有 blockJoinSeparator
+    // で先頭テーブル行を検出し \n\n 区切りにする（サーバ blocksToMarkdown と対称）。
+    const blocks: Block[] = [
+      { id: 'markdown-0', type: 'markdown', order: 0, data: { markdown: '経歴の概要テキスト。' } },
+      {
+        id: 'markdown-1',
+        type: 'markdown',
+        order: 1,
+        data: { markdown: '| 言語 | 経験 |\n| :--- | :--- |\n| TS | 3年 |' },
+      },
+    ];
+    render(<BuilderClient initialBlocks={blocks} initialTitle="t" {...defaultProps} />);
+    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    expect(raw).toBe('経歴の概要テキスト。\n\n| 言語 | 経験 |\n| :--- | :--- |\n| TS | 3年 |');
+  });
+
   it('「テーブル」追加→セル入力が table ブロックとして保存 payload に入る', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={[]} initialTitle="t" {...defaultProps} />);
