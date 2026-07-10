@@ -10,7 +10,7 @@ skillsheet-viewer - kouiso プロジェクト
 
 ### Setup
 ```bash
-npm install
+pnpm install --frozen-lockfile
 ```
 
 ### Code Style
@@ -19,5 +19,5 @@ npm install
 
 ### Testing
 ```bash
-npm test
+pnpm -r --if-present test
 ```

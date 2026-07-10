@@ -1,3 +1,4 @@
+import { SkillSheetNotFoundError } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
@@ -29,7 +30,11 @@ export default async function DbSheetByIdPage({ params }: Props) {
     const sheet = await getCachedDbSheetById(id);
     return <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} />;
   } catch (err) {
+    if (err instanceof SkillSheetNotFoundError) {
+      notFound();
+    }
+    // DB接続エラー等のシステムエラーは 404 で隠さず再スローし、error.tsx に委ねる。
     console.error('Failed to load sheet:', id, err);
-    notFound();
+    throw err;
   }
 }

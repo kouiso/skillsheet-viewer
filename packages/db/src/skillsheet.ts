@@ -26,11 +26,26 @@ import {
 import { type Database, getDb } from './client';
 import { blocks, skillSheets } from './schema';
 
+/**
+ * Database か、そのトランザクションハンドル（`db.transaction` のコールバック引数）の
+ * いずれかを受け取れる型。トランザクション内のヘルパーが外側の `db` ではなく `tx` を
+ * 使えるようにして、原子性を保つ（A2）。
+ */
+type DbOrTx = Database | Parameters<Parameters<Database['transaction']>[0]>[0];
+
 /** 並行保存競合を示すエラー（saveSkillSheetBlocks から throw され actions 層で識別する）。 */
 export class ConflictError extends Error {
   constructor() {
     super('Conflict: sheet was modified by another session');
     this.name = 'ConflictError';
+  }
+}
+
+/** 指定 ID のシートが存在しないことを示すエラー（getSkillSheetById から throw される）。 */
+export class SkillSheetNotFoundError extends Error {
+  constructor(sheetId: string) {
+    super(`Sheet not found: ${sheetId}`);
+    this.name = 'SkillSheetNotFoundError';
   }
 }
 
@@ -90,7 +105,7 @@ export async function fetchMarkdownFromGitHub(): Promise<string> {
 }
 
 /** オーナーの最初のシートを取得、なければ作成して ID を返す（シード用デフォルトシート）。 */
-async function getOrCreateDefaultSheetId(db: Database): Promise<string> {
+async function getOrCreateDefaultSheetId(db: DbOrTx): Promise<string> {
   const ownerId = getOwnerId();
   const existing = await db
     .select({ id: skillSheets.id })
@@ -110,7 +125,13 @@ async function getOrCreateDefaultSheetId(db: Database): Promise<string> {
     .where(eq(skillSheets.ownerId, ownerId))
     .orderBy(asc(skillSheets.updatedAt))
     .limit(1);
-  return retry[0].id;
+  const retryId = retry[0]?.id;
+  if (!retryId) {
+    // INSERT が 0 行を返し、再 SELECT でも見つからない稀なレース。黙って undefined を
+    // 返すと下流で TypeError になるため、明示的に落として原因を分かるようにする。
+    throw new Error('Failed to resolve default sheet id after insert conflict');
+  }
+  return retryId;
 }
 
 async function ensureSeeded(db: Database): Promise<string> {
@@ -160,12 +181,15 @@ function rowToBlock(id: string, type: string, order: number, data: unknown): Blo
   return null;
 }
 
-async function fetchSheetById(db: Database, sheetId: string): Promise<SkillSheet> {
+async function fetchSheetById(db: Database, sheetId: string, requireExists = false): Promise<SkillSheet> {
   const [sheet] = await db
     .select({ title: skillSheets.title })
     .from(skillSheets)
     .where(eq(skillSheets.id, sheetId))
     .limit(1);
+  if (requireExists && !sheet) {
+    throw new SkillSheetNotFoundError(sheetId);
+  }
   const rows = await db.select().from(blocks).where(eq(blocks.sheetId, sheetId)).orderBy(asc(blocks.order));
 
   const blockList: Block[] = rows
@@ -193,20 +217,28 @@ export async function createSheet(title: string, initialBlocks?: BlockInput[]): 
   const db = getDb();
   const ownerId = getOwnerId();
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
-  const inserted = await db
-    .insert(skillSheets)
-    .values({ ownerId, title: resolvedTitle })
-    .returning({ id: skillSheets.id });
-  const sheetId = inserted[0].id;
-  if (initialBlocks && initialBlocks.length > 0) {
-    const cleaned = initialBlocks.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
-    if (cleaned.length > 0) {
-      await db
-        .insert(blocks)
-        .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
+
+  // skillSheets への insert と blocks への insert を同一トランザクションで囲み、
+  // ブロック挿入が失敗したときにシートだけが残る不整合を防ぐ（原子性の担保）。
+  return db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(skillSheets)
+      .values({ ownerId, title: resolvedTitle })
+      .returning({ id: skillSheets.id });
+    const sheetId = inserted[0]?.id;
+    if (!sheetId) {
+      throw new Error('Failed to create sheet: INSERT returned no id');
     }
-  }
-  return sheetId;
+    if (initialBlocks && initialBlocks.length > 0) {
+      const cleaned = initialBlocks.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
+      if (cleaned.length > 0) {
+        await tx
+          .insert(blocks)
+          .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
+      }
+    }
+    return sheetId;
+  });
 }
 
 /** 指定シートを削除する（ブロックも cascade で削除される）。 */
@@ -219,7 +251,7 @@ export async function deleteSheet(sheetId: string): Promise<void> {
 /** 指定 ID のシートを読む。ID 未指定またはデフォルト読み込み時は GitHub シードを実行する。 */
 export async function getSkillSheetById(sheetId: string): Promise<SkillSheet> {
   const db = getDb();
-  return fetchSheetById(db, sheetId);
+  return fetchSheetById(db, sheetId, true);
 }
 
 /** Read the skill sheet from the DB, seeding from GitHub on first access. */
@@ -253,14 +285,14 @@ export async function saveSkillSheetBlocks(
   blocksInput: BlockInput[],
   sheetId?: string,
   expectedUpdatedAt?: Date,
-): Promise<void> {
+): Promise<{ updatedAt: Date }> {
   const db = getDb();
   const ownerId = getOwnerId();
 
   const cleaned = blocksInput.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
-  await db.transaction(async (tx) => {
+  return db.transaction(async (tx) => {
     let resolvedSheetId: string;
     if (sheetId) {
       // A2: 所有者検証 — deleteSheet と同じく、DELETE と同一トランザクション内で
@@ -275,7 +307,9 @@ export async function saveSkillSheetBlocks(
       }
       resolvedSheetId = sheetId;
     } else {
-      resolvedSheetId = await getOrCreateDefaultSheetId(db);
+      // トランザクション内では外側の db ではなく tx を使い、デフォルトシートの
+      // 作成も同一トランザクションに含める（ロールバック時に残留させない）。
+      resolvedSheetId = await getOrCreateDefaultSheetId(tx);
     }
 
     // A3: 並行保存ガード — 別セッションが先に保存していたら中断する。
@@ -304,10 +338,17 @@ export async function saveSkillSheetBlocks(
           cleaned.map((block, order) => ({ sheetId: resolvedSheetId, type: block.type, order, data: block.data })),
         );
     }
-    await tx
+    const [updated] = await tx
       .update(skillSheets)
       .set({ title: resolvedTitle, updatedAt: sql`now()` })
-      .where(eq(skillSheets.id, resolvedSheetId));
+      .where(eq(skillSheets.id, resolvedSheetId))
+      .returning({ updatedAt: skillSheets.updatedAt });
+    if (!updated) {
+      throw new Error('Failed to update sheet: row not found');
+    }
+    // 保存後のサーバー時刻の updatedAt を返す。クライアントはこれを次回の
+    // expectedUpdatedAt に用いることで、クライアント時計とのズレによる誤 Conflict を防ぐ（A4）。
+    return { updatedAt: updated.updatedAt };
   });
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type Block,
   type BlockInput,
+  blockJoinSeparator,
   blocksToMarkdown,
   type ExperienceBlockData,
   experienceBlockToMarkdown,
@@ -75,6 +76,16 @@ describe('splitMarkdownIntoBlocks', () => {
       .map((b) => ({ ...b }))
       .reverse();
     expect(blocksToMarkdown(reversed)).toBe(SAMPLE);
+  });
+
+  it('空文字列は空文字の1セグメントを返す（例外を投げない）', () => {
+    expect(splitMarkdownIntoBlocks('')).toEqual([{ markdown: '' }]);
+  });
+
+  it('空白のみの文字列は1つのセグメントとして返す', () => {
+    const segments = splitMarkdownIntoBlocks('   \n\n  ');
+    expect(segments).toHaveLength(1);
+    expect(segments[0].markdown).toBe('   \n\n  ');
   });
 });
 
@@ -203,13 +214,15 @@ describe('experienceBlockToMarkdown', () => {
 });
 
 describe('blocksToMarkdown — type 別 dispatch', () => {
-  it('markdown と table を混在して 1 本の markdown に連結する', () => {
+  it('markdown と table を混在して 1 本の markdown に連結する（table 等の非 markdown 型が隣接する境界は空行区切り）', () => {
+    // GFM テーブルは直前が空行でないと段落へ lazy continuation として飲み込まれ、
+    // テーブルとして認識されない（区切り行がそのまま生テキスト表示される不具合の再発防止）。
     const blocks: Block[] = [
       { id: 'm', type: 'markdown', order: 0, data: { markdown: '## 見出し' } },
       { id: 't', type: 'table', order: 1, data: TABLE },
     ];
     expect(blocksToMarkdown(blocks)).toBe(
-      ['## 見出し', '| 左 | 中 | 右 |', '| :--- | :---: | ---: |', '| a | b | c |'].join('\n'),
+      ['## 見出し', '', '| 左 | 中 | 右 |', '| :--- | :---: | ---: |', '| a | b | c |'].join('\n'),
     );
   });
 
@@ -241,6 +254,59 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
     expect(md).toContain('## 経歴');
     expect(md).toContain('### 株式会社サンプル');
     expect(md).toContain('フロントエンドエンジニア');
+  });
+});
+
+describe('blockJoinSeparator — 連結セパレータの単一の真実', () => {
+  const TABLE_MD = ['| a | b |', '| :--- | :--- |', '| 1 | 2 |'].join('\n');
+
+  it('markdown 同士は原則 \\n（ラウンドトリップ無損失を維持）', () => {
+    expect(blockJoinSeparator('markdown', 'markdown', '本文段落')).toBe('\n');
+  });
+
+  it('後続 markdown が GFM テーブル行で始まる場合は \\n\\n（飲み込み防止）', () => {
+    expect(blockJoinSeparator('markdown', 'markdown', TABLE_MD)).toBe('\n\n');
+  });
+
+  it('先頭に空行があってもテーブル始まりを検出する', () => {
+    expect(blockJoinSeparator('markdown', 'markdown', `\n\n${TABLE_MD}`)).toBe('\n\n');
+  });
+
+  it('先頭がインデント付きテーブル行でも検出する', () => {
+    expect(blockJoinSeparator('markdown', 'markdown', '  | a |\n  | :--- |')).toBe('\n\n');
+  });
+
+  it('非 markdown 型が絡む隣接は常に \\n\\n', () => {
+    expect(blockJoinSeparator('markdown', 'table', TABLE_MD)).toBe('\n\n');
+    expect(blockJoinSeparator('table', 'markdown', '本文')).toBe('\n\n');
+    expect(blockJoinSeparator('skills', 'stats', '')).toBe('\n\n');
+  });
+});
+
+describe('blocksToMarkdown — markdown ブロック同士でも 2 本目がテーブル始まりなら空行区切り', () => {
+  const TABLE_MD = ['| 言語 | 経験 |', '| :--- | :--- |', '| TS | 3年 |'].join('\n');
+
+  it('段落 + テーブル始まりの markdown ブロックは空行で区切られテーブルが飲み込まれない', () => {
+    const blocks: Block[] = [
+      { id: 'p', type: 'markdown', order: 0, data: { markdown: '経歴の概要テキスト。' } },
+      { id: 't', type: 'markdown', order: 1, data: { markdown: TABLE_MD } },
+    ];
+    const md = blocksToMarkdown(blocks);
+    // テーブル直前が空行（\n\n）であることを確認する。
+    expect(md).toBe(`経歴の概要テキスト。\n\n${TABLE_MD}`);
+    // split→join のラウンドトリップで文字列が保存される（破壊されない）。
+    const reassembled = blocksToMarkdown(
+      splitMarkdownIntoBlocks(md).map((data, order) => ({ id: String(order), type: 'markdown' as const, order, data })),
+    );
+    expect(reassembled).toBe(md);
+  });
+
+  it('テーブルで始まらない markdown ブロック同士は従来どおり \\n 連結（無損失維持）', () => {
+    const blocks: Block[] = [
+      { id: 'a', type: 'markdown', order: 0, data: { markdown: '段落A' } },
+      { id: 'b', type: 'markdown', order: 1, data: { markdown: '段落B' } },
+    ];
+    expect(blocksToMarkdown(blocks)).toBe('段落A\n段落B');
   });
 });
 
@@ -485,6 +551,11 @@ describe('blocksToMarkdown — 新型ブロック dispatch', () => {
     const blks = [{ id: 'x', type: 'unknown', order: 0, data: {} }] as unknown as Block[];
     expect(() => blocksToMarkdown(blks)).not.toThrow();
     expect(blocksToMarkdown(blks)).toBe('');
+  });
+
+  it('空配列は空文字を返してエラーを throw しない', () => {
+    expect(() => blocksToMarkdown([])).not.toThrow();
+    expect(blocksToMarkdown([])).toBe('');
   });
 });
 

@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { revalidateTag } from 'next/cache';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -13,10 +13,11 @@ export const dynamic = 'force-dynamic';
  * 認証: `REVALIDATE_SECRET` を `Authorization: Bearer <secret>` か `?secret=` で照合。
  */
 function safeEqual(a: string, b: string): boolean {
-  const ba = Buffer.from(a, 'utf-8');
-  const bb = Buffer.from(b, 'utf-8');
-  if (ba.length !== bb.length) return false;
-  return timingSafeEqual(ba, bb);
+  // 長さの早期returnはタイミング攻撃で秘密の長さを漏らすため、
+  // 両方を固定長のSHA-256ハッシュにしてから比較する。
+  const ha = createHash('sha256').update(a, 'utf-8').digest();
+  const hb = createHash('sha256').update(b, 'utf-8').digest();
+  return timingSafeEqual(ha, hb);
 }
 
 export async function POST(req: NextRequest) {
@@ -32,7 +33,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Next 16 の revalidateTag は第2引数必須。空 CacheLifeConfig で即時失効。
-  revalidateTag('sheets', {});
+  // Route Handler は Server Action ではないため updateTag は使えない。
+  // { expire: 0 } で即時失効（次リクエストはブロッキング再検証）を明示する。
+  // 空の {} は expire 未指定＝即時失効の保証が無く、本番で無効化されない不具合があった。
+  revalidateTag('sheets', { expire: 0 });
   return NextResponse.json({ ok: true, revalidated: 'sheets' });
 }

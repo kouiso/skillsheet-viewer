@@ -18,6 +18,7 @@ jobs:
   node:
     name: Node (${{ matrix.check-type }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
@@ -32,7 +33,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # actions/setup-node の node-version-file は .nvmrc / .node-version /
+          # package.json / .tool-versions(asdf形式) のみ対応で、mise.toml の
+          # TOML 形式は解釈できない（1行目 "[tools]" をバージョン文字列として
+          # 誤読し失敗する）。mise.toml のバージョンと手動で同期させる。
+          node-version: '22.21.1'
           cache: 'pnpm'
 
       - name: Install dependencies

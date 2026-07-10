@@ -15,7 +15,8 @@ import type { Block } from '@skillsheet/db/blocks';
 import { experienceBlockToMarkdown, tableBlockToMarkdown } from '@skillsheet/db/blocks';
 import { useActiveHeading } from '@/hooks/use-active-heading';
 import { ProfileIntro } from './blocks/ProfileIntro';
-import { ProjectCard } from './blocks/ProjectCard';
+import { ProjectSection } from './blocks/ProjectSection';
+import { SectionHead } from './blocks/SectionHead';
 import { SkillMatrix } from './blocks/SkillMatrix';
 import { StatRow } from './blocks/StatRow';
 import CodeBlock from './code-block';
@@ -206,6 +207,9 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
 const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillSheetViewerProps) => {
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
   const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
+  // project ブロックを含むシートは「外枠カード無し・セクションが縦に並ぶダッシュボード」レイアウトにする。
+  // markdown/table/skills のみの既存シートは従来の単一カード＋max-w-4xlを維持する。
+  const isDashboard = useMemo(() => (blocks ?? []).some((b) => b.type === 'project'), [blocks]);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -284,8 +288,8 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
 
   return (
     <div className="flex min-h-screen">
-      {/* 目次（左サイドバー）— 比較モードでは非表示 */}
-      {mounted && !compareMode && (
+      {/* 目次（左サイドバー）— 比較モード、または構造化ダッシュボードで見出しが無い場合は非表示 */}
+      {mounted && !compareMode && (!blocks || headings.length > 0) && (
         <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />
       )}
 
@@ -294,27 +298,26 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:px-6"
+        className={`mx-auto w-full flex-1 px-4 py-8 sm:px-6 ${isDashboard ? 'max-w-6xl' : 'max-w-4xl'}`}
       >
-        <div ref={contentRef} className="rounded border border-border bg-card p-4 sm:p-6 md:p-8">
+        <div
+          ref={contentRef}
+          className={isDashboard ? 'space-y-10' : 'rounded border border-border bg-card p-4 sm:p-6 md:p-8'}
+        >
           {blocks ? (
-            <div className="space-y-0">
+            <div className={isDashboard ? 'space-y-10' : 'space-y-0'}>
               {groupedBlocks.map((group) => {
                 if (group.kind === 'skills') {
                   const key = group.blocks.map((b) => b.id).join('-');
                   return (
-                    <div
-                      key={key}
-                      className="mb-6 grid grid-cols-1 gap-4 rounded border border-border p-4 sm:p-5 md:grid-cols-2 lg:grid-cols-3"
-                    >
-                      {group.blocks.map((block) => (
-                        <SkillMatrix
-                          key={block.id}
-                          data={block.data}
-                          className="mb-0 rounded-md border border-border/60 p-3"
-                        />
-                      ))}
-                    </div>
+                    <section key={key}>
+                      <SectionHead kicker="Skill Matrix" title="スキルマトリクス" />
+                      <div className="grid gap-4 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
+                        {group.blocks.map((block) => (
+                          <SkillMatrix key={block.id} data={block.data} className="mb-0" />
+                        ))}
+                      </div>
+                    </section>
                   );
                 }
                 const block = group.block;
@@ -336,7 +339,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
                   return <StatRow key={block.id} data={block.data} />;
                 }
                 if (block.type === 'project') {
-                  return <ProjectCard key={block.id} data={block.data} />;
+                  return <ProjectSection key={block.id} data={block.data} />;
                 }
                 return null;
               })}

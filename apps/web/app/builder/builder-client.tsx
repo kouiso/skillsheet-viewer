@@ -26,6 +26,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   type Block,
   type BlockInput,
+  blockJoinSeparator,
   type ExperienceBlockData,
   experienceBlockToMarkdown,
   isBlockInputEmpty,
@@ -68,6 +69,9 @@ import { ProjectEditor } from './project-editor';
 import { TEMPLATES } from './templates';
 
 type SheetSummary = { id: string; title: string; updatedAt: Date };
+
+const REVOKE_DELAY_MS = 100;
+const PREVIEW_DEBOUNCE_MS = 300;
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
 type EditorItem =
@@ -160,7 +164,25 @@ const itemToMarkdown = (item: EditorItem): string => {
   }
 };
 
-const assembleMarkdown = (items: EditorItem[]): string => items.map(itemToMarkdown).join('\n');
+// 連結規則はサーバ側 blocksToMarkdown と共有の blockJoinSeparator に一元化する。
+// 手コピーで 2 箇所に規則が重複していたのを解消し、markdown 分割の無損失性と
+// GFM テーブルが直前段落へ lazy continuation として飲み込まれない区切りを両立する。
+const assembleMarkdown = (items: EditorItem[]): string => {
+  let result = '';
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (!item) continue;
+    const markdown = itemToMarkdown(item);
+    if (i === 0) {
+      result = markdown;
+      continue;
+    }
+    const prev = items[i - 1];
+    // prev は i>=1 なので通常存在するが、sparse 配列など不正入力でも落ちないよう防御する。
+    result += (prev ? blockJoinSeparator(prev.type, item.type, markdown) : '\n\n') + markdown;
+  }
+  return result;
+};
 
 // dirty 比較用スナップショット（タイトル＋組み立て済み markdown 文字列）。
 // typed item を直接比較せず、保存される最終形（markdown）で差分を見る。
@@ -347,62 +369,66 @@ const SkillsBlockEditor = ({
         placeholder="カテゴリ（例: プログラミング言語）"
         className="w-full rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr>
-            <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
-            <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-20">経験年数</th>
-            <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">習熟度</th>
-            <th className="border border-border px-1 py-1 w-8" />
-          </tr>
-        </thead>
-        <tbody>
-          {skills.map((s, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: スキル行は順序で管理
-            <tr key={i}>
-              <td className="border border-border p-1">
-                <input
-                  value={s.name}
-                  onChange={(e) => setSkill(i, 'name', e.target.value)}
-                  placeholder="TypeScript"
-                  aria-label={`スキル${i + 1}の名称`}
-                  className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </td>
-              <td className="border border-border p-1">
-                <input
-                  type="number"
-                  min={0}
-                  max={50}
-                  value={s.years}
-                  onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
-                  aria-label={`スキル${i + 1}の経験年数`}
-                  className="w-full rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </td>
-              <td className="border border-border p-1">
-                <input
-                  value={s.level}
-                  onChange={(e) => setSkill(i, 'level', e.target.value)}
-                  placeholder="実務経験あり"
-                  aria-label={`スキル${i + 1}の習熟度`}
-                  className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </td>
-              <td className="border border-border p-1 text-center">
-                <button
-                  type="button"
-                  onClick={() => removeSkill(i)}
-                  aria-label={`スキル${i + 1}を削除`}
-                  className="rounded p-1 text-muted-foreground hover:text-destructive"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </td>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr>
+              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
+              <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-20">
+                経験年数
+              </th>
+              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">習熟度</th>
+              <th className="border border-border px-1 py-1 w-8" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {skills.map((s, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: スキル行は順序で管理
+              <tr key={i}>
+                <td className="border border-border p-1">
+                  <input
+                    value={s.name}
+                    onChange={(e) => setSkill(i, 'name', e.target.value)}
+                    placeholder="TypeScript"
+                    aria-label={`スキル${i + 1}の名称`}
+                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </td>
+                <td className="border border-border p-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    value={s.years}
+                    onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
+                    aria-label={`スキル${i + 1}の経験年数`}
+                    className="w-full rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </td>
+                <td className="border border-border p-1">
+                  <input
+                    value={s.level}
+                    onChange={(e) => setSkill(i, 'level', e.target.value)}
+                    placeholder="実務経験あり"
+                    aria-label={`スキル${i + 1}の習熟度`}
+                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </td>
+                <td className="border border-border p-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeSkill(i)}
+                    aria-label={`スキル${i + 1}を削除`}
+                    className="rounded p-1 text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <button
         type="button"
         onClick={addSkill}
@@ -656,13 +682,20 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   );
 
   // プレビューは重い（Markdown パース＋ハイライト）ため、入力のたびではなく
-  // 300ms デバウンスして更新し、タイピングのラグを防ぐ。初期値は即時反映。
+  // デバウンスして更新し、タイピングのラグを防ぐ。初期値・初回レンダリングは即時反映。
   const [previewContent, setPreviewContent] = useState(() => assembleMarkdown(items));
+  const isFirstPreviewRender = useRef(true);
 
   useEffect(() => {
+    // useState の初期値で既に assembleMarkdown(items) 評価済みのため、
+    // マウント直後の再計算は不要（重い Markdown パース処理の二重実行を避ける）。
+    if (isFirstPreviewRender.current) {
+      isFirstPreviewRender.current = false;
+      return;
+    }
     const timer = setTimeout(() => {
       setPreviewContent(assembleMarkdown(items));
-    }, 300);
+    }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [items]);
 
@@ -834,7 +867,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     document.body.appendChild(anchor);
     anchor.click();
     document.body.removeChild(anchor);
-    URL.revokeObjectURL(url);
+    // モバイル/Firefox はダウンロード処理が非同期のため、即時 revoke だと失敗しうる。
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, REVOKE_DELAY_MS);
     toast.success('バックアップを書き出しました');
   };
 
@@ -859,7 +895,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       const res = await saveBlocksAction(payload);
       if (res.ok) {
         savedRef.current = true;
-        savedUpdatedAtRef.current = new Date();
+        // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
+        // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。返却が無い
+        // 古い経路のみ new Date() にフォールバックする。
+        savedUpdatedAtRef.current = res.savedUpdatedAt ?? new Date();
         // 保存成功した内容をスナップショットとして記録し、dirty を解除する。
         lastSavedSnapshotRef.current = savedSnapshot;
         setIsDirty(false);
@@ -959,7 +998,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2">
         {/* エディタ */}
-        <div className="space-y-3">
+        {/* min-w-0: CSS Grid アイテムは既定で min-width:auto のため、子の truncate/
+            overflow-x-auto が効かず内容量でトラック自体が押し広げられる（grid blowout）。
+            375px でページ全体が横スクロールする不具合の根本原因だった（実機確認）。 */}
+        <div className="min-w-0 space-y-3">
           {/* シートセレクター */}
           <div className="rounded-lg border border-border bg-card p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -1103,7 +1145,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
           )}
 
           {activeTab === 'blocks' && (
-            <div className="flex gap-2">
+            // flex-wrap: 4ボタンが flex-1 均等割りだと 375px 幅でラベルの最小幅を
+            // 確保しきれず横スクロールの原因になっていた（実機確認）。折り返し可能にする。
+            <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
                 <Plus className="mr-1.5 size-4" />
                 テキスト
@@ -1126,7 +1170,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
         {/* ライブプレビュー */}
         {showPreview && (
-          <div className="rounded-lg border border-border bg-card">
+          <div className="min-w-0 rounded-lg border border-border bg-card">
             <div className="border-b border-border px-4 py-2 text-sm font-medium text-muted-foreground">プレビュー</div>
             <SkillSheetViewer
               skillSheet={{ title: title.trim() || 'プレビュー', content: previewContent }}

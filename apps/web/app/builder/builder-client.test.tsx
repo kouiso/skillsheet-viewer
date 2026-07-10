@@ -8,7 +8,9 @@ import BuilderClient from './builder-client';
 // 重いビューア（lightbox/IntersectionObserver 依存）はプレビュー描画を素朴にモック
 vi.mock('@/component/skill-sheet-viewer', () => ({
   default: ({ skillSheet }: { skillSheet: { content: string } }) => (
-    <div data-testid="preview">{skillSheet.content}</div>
+    <div data-testid="preview" data-raw={skillSheet.content}>
+      {skillSheet.content}
+    </div>
   ),
 }));
 
@@ -76,6 +78,49 @@ describe('BuilderClient', () => {
     expect(screen.getByTestId('preview')).toHaveTextContent('## A ## B');
   });
 
+  it('隣接 markdown ブロック同士は単一改行(\\n)で結合される', () => {
+    // サーバ側 blocksToMarkdown と同じく markdown 分割のラウンドトリップ無損失性を保つ。
+    render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
+    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    expect(raw).toBe('## A\n## B');
+  });
+
+  it('markdown と非 markdown の隣接は空行(\\n\\n)で結合される（GFM テーブル認識の回帰テスト）', () => {
+    // 単一改行(\n)だと GFM テーブルが直前の段落に lazy continuation として飲み込まれ、
+    // テーブル区切り行 (:---:) がそのまま生テキストとして表示される不具合があった
+    // （builder-client.tsx の assembleMarkdown 参照）。
+    const blocks: Block[] = [
+      { id: 'markdown-1', type: 'markdown', order: 0, data: { markdown: '## A' } },
+      {
+        id: 'table-1',
+        type: 'table',
+        order: 1,
+        data: { columns: [{ label: '項目', align: 'left' }], rows: [['内容']] },
+      },
+    ];
+    render(<BuilderClient initialBlocks={blocks} initialTitle="t" {...defaultProps} />);
+    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    expect(raw).toBe('## A\n\n| 項目 |\n| :--- |\n| 内容 |');
+  });
+
+  it('markdown ブロック同士でも 2 本目が GFM テーブルで始まる場合は空行(\\n\\n)で結合される', () => {
+    // 生 markdown ブロックとして貼られたテーブル（type=markdown だが先頭がテーブル行）は、
+    // 単一改行だと直前段落へ lazy continuation として飲み込まれる。共有 blockJoinSeparator
+    // で先頭テーブル行を検出し \n\n 区切りにする（サーバ blocksToMarkdown と対称）。
+    const blocks: Block[] = [
+      { id: 'markdown-0', type: 'markdown', order: 0, data: { markdown: '経歴の概要テキスト。' } },
+      {
+        id: 'markdown-1',
+        type: 'markdown',
+        order: 1,
+        data: { markdown: '| 言語 | 経験 |\n| :--- | :--- |\n| TS | 3年 |' },
+      },
+    ];
+    render(<BuilderClient initialBlocks={blocks} initialTitle="t" {...defaultProps} />);
+    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    expect(raw).toBe('経歴の概要テキスト。\n\n| 言語 | 経験 |\n| :--- | :--- |\n| TS | 3年 |');
+  });
+
   it('「テーブル」追加→セル入力が table ブロックとして保存 payload に入る', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={[]} initialTitle="t" {...defaultProps} />);
@@ -103,6 +148,54 @@ describe('BuilderClient', () => {
         ],
       }),
     );
+  });
+
+  it('シート切替（key={activeSheetId} での再マウント）で内容とタイトルが新シートの値にリセットされる', () => {
+    // page.tsx は router.push('/builder?sheet=X') による同一ルート遷移で
+    // <BuilderClient key={activeSheetId} .../> を再レンダーする。key が
+    // activeSheetId 込みでないと state が前シートの値のまま残り、保存時に
+    // 別シートを誤った内容で上書きするバグが再発する（page.tsx 参照）。
+    const sheetA = { id: 'sheet-a', title: 'シートA', updatedAt: new Date() };
+    const sheetB = { id: 'sheet-b', title: 'シートB', updatedAt: new Date() };
+    const { rerender } = render(
+      <BuilderClient
+        key="sheet-a"
+        initialBlocks={mdBlocks(['## Aの内容'])}
+        initialTitle="シートA"
+        sheets={[sheetA, sheetB]}
+        activeSheetId="sheet-a"
+      />,
+    );
+    expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Aの内容');
+    expect(screen.getByLabelText('タイトル')).toHaveValue('シートA');
+
+    rerender(
+      <BuilderClient
+        key="sheet-b"
+        initialBlocks={mdBlocks(['## Bの内容'])}
+        initialTitle="シートB"
+        sheets={[sheetA, sheetB]}
+        activeSheetId="sheet-b"
+      />,
+    );
+    expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Bの内容');
+    expect(screen.getByLabelText('タイトル')).toHaveValue('シートB');
+  });
+
+  it('スキルブロックのテーブルは overflow-x-auto でラップされる（375px モバイル横スクロール回帰テスト）', () => {
+    // ラッパー無しだとテーブルがページ全体を横に押し広げ、/builder が 375px 幅で
+    // 横スクロールしてしまう不具合があった（本番実機で scrollWidth 548px > 375px を確認）。
+    const skillsBlock: Block[] = [
+      {
+        id: 'skills-1',
+        type: 'skills',
+        order: 0,
+        data: { category: '言語', skills: [{ name: 'TypeScript', years: 5, level: '実務経験あり' }] },
+      },
+    ];
+    render(<BuilderClient initialBlocks={skillsBlock} initialTitle="t" {...defaultProps} />);
+    const table = screen.getByRole('table');
+    expect(table.parentElement).toHaveClass('overflow-x-auto');
   });
 
   it('タイトル入力が保存 payload に反映される', async () => {

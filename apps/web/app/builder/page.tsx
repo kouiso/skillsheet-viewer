@@ -51,7 +51,11 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
   }
 
   return (
+    // key={activeSheetId}: シート切替は searchParams のみが変わる同一ルート遷移のため、
+    // key が無いと BuilderClient は再マウントされず items/title/savedUpdatedAtRef が
+    // 前のシートの値のまま残り、保存時に別シートを誤った内容で上書きしてしまう。
     <BuilderClient
+      key={activeSheetId}
       initialBlocks={initialBlocks}
       initialTitle={initialTitle}
       sheets={sheets}
