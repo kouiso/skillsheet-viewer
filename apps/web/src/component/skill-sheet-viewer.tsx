@@ -320,7 +320,14 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
                 const block = group.block;
                 const mdContent = blockToMarkdownContent(block);
                 if (mdContent !== null) {
-                  return <MarkdownContent key={block.id} blockId={block.id} content={mdContent} onImageClick={handleImageClick} />;
+                  return (
+                    <MarkdownContent
+                      key={block.id}
+                      blockId={block.id}
+                      content={mdContent}
+                      onImageClick={handleImageClick}
+                    />
+                  );
                 }
                 if (block.type === 'profile') {
                   return <ProfileIntro key={block.id} data={block.data} />;
