@@ -169,17 +169,16 @@ const itemToMarkdown = (item: EditorItem): string => {
 // GFM テーブルが直前段落へ lazy continuation として飲み込まれない区切りを両立する。
 const assembleMarkdown = (items: EditorItem[]): string => {
   let result = '';
+  let prev: EditorItem | undefined;
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (!item) continue;
     const markdown = itemToMarkdown(item);
-    if (i === 0) {
-      result = markdown;
-      continue;
-    }
-    const prev = items[i - 1];
-    // prev は i>=1 なので通常存在するが、sparse 配列など不正入力でも落ちないよう防御する。
-    result += (prev ? blockJoinSeparator(prev.type, item.type, markdown) : '\n\n') + markdown;
+    // items[i - 1] を位置で参照すると sparse 配列（途中の undefined 要素）で
+    // 実際に直前にレンダリングされたブロックを見失う。実際にレンダリングした
+    // 直前アイテムを prev で追跡し、先頭要素の判定も prev の有無で行う。
+    result += prev === undefined ? markdown : blockJoinSeparator(prev.type, item.type, markdown) + markdown;
+    prev = item;
   }
   return result;
 };
