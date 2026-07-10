@@ -26,6 +26,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   type Block,
   type BlockInput,
+  blockJoinSeparator,
   type ExperienceBlockData,
   experienceBlockToMarkdown,
   isBlockInputEmpty,
@@ -163,20 +164,22 @@ const itemToMarkdown = (item: EditorItem): string => {
   }
 };
 
-// markdown 同士は単一改行、それ以外の隣接は空行区切り（\n\n）にする。
-// サーバ側 blocksToMarkdown と同じ連結規則に揃え、markdown 分割の無損失性と
+// 連結規則はサーバ側 blocksToMarkdown と共有の blockJoinSeparator に一元化する。
+// 手コピーで 2 箇所に規則が重複していたのを解消し、markdown 分割の無損失性と
 // GFM テーブルが直前段落へ lazy continuation として飲み込まれない区切りを両立する。
 const assembleMarkdown = (items: EditorItem[]): string => {
   let result = '';
   for (let i = 0; i < items.length; i++) {
-    const markdown = itemToMarkdown(items[i]);
+    const item = items[i];
+    if (!item) continue;
+    const markdown = itemToMarkdown(item);
     if (i === 0) {
       result = markdown;
       continue;
     }
-    const prevType = items[i - 1].type;
-    const separator = prevType === 'markdown' && items[i].type === 'markdown' ? '\n' : '\n\n';
-    result += separator + markdown;
+    const prev = items[i - 1];
+    // prev は i>=1 なので通常存在するが、sparse 配列など不正入力でも落ちないよう防御する。
+    result += (prev ? blockJoinSeparator(prev.type, item.type, markdown) : '\n\n') + markdown;
   }
   return result;
 };
