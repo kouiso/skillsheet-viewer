@@ -542,15 +542,39 @@ export function splitMarkdownIntoBlocks(markdown: string): MarkdownBlockData[] {
 }
 
 /**
- * ブロック配列を order 昇順で 1 つの Markdown 文書へ連結する（type 別に変換）。
+ * 与えられた markdown の先頭「非空行」が GFM テーブル行（`|` 始まり）かを判定する。
+ * lazy continuation でテーブルが直前段落へ飲み込まれるのは、後続ブロックの先頭が
+ * テーブル行のときだけなので、この 1 点で連結セパレータを切り替える。
+ */
+function startsWithTableRow(markdown: string): boolean {
+  for (const line of markdown.split('\n')) {
+    if (line.trim().length === 0) continue;
+    return /^\s*\|/.test(line);
+  }
+  return false;
+}
+
+/**
+ * 2 ブロックを連結する際のセパレータ（`\n` か `\n\n`）を決める単一の真実。
+ * サーバ（blocksToMarkdown）とクライアント（builder の assembleMarkdown）の両方が
+ * この関数を経由することで、連結規則が 2 箇所に手コピー重複してドリフトするのを防ぐ。
  *
- * markdown 型ブロック同士は従来どおり単一改行(\n)で連結する
- * （splitMarkdownIntoBlocks とのラウンドトリップ無損失を維持するため）。
- * それ以外（table/skills/experience/profile/stats/project 等、GFM テーブルを
- * 内部生成しうる構造化ブロック）が隣接する場合は空行(\n\n)で連結する。単一改行だと
- * GFM テーブルが直前の段落へ lazy continuation として飲み込まれ、テーブルとして
- * 認識されず区切り行(:---:)がそのまま生テキストとして表示される不具合があった
- * （本番 PDF 出力・/view/db で実機確認）。
+ * - markdown 型ブロック同士は原則 `\n`（splitMarkdownIntoBlocks とのラウンドトリップ
+ *   無損失を維持。split が生成するブロックの先頭は必ず見出し/<details> なので `\n` になる）。
+ * - ただし後続 markdown の先頭非空行が GFM テーブル行で始まる場合のみ `\n\n`。単一改行だと
+ *   テーブルが直前段落へ lazy continuation として飲み込まれ、区切り行(:---:)が生テキストで
+ *   表示される不具合があった（本番 PDF 出力・/view/db で実機確認）。
+ * - それ以外（table/skills/experience/profile/stats/project 等、テーブルを内部生成しうる
+ *   構造化ブロック）が隣接する場合は常に `\n\n`。
+ */
+export function blockJoinSeparator(prevType: BlockType, curType: BlockType, curMarkdown: string): '\n' | '\n\n' {
+  if (prevType !== 'markdown' || curType !== 'markdown') return '\n\n';
+  return startsWithTableRow(curMarkdown) ? '\n\n' : '\n';
+}
+
+/**
+ * ブロック配列を order 昇順で 1 つの Markdown 文書へ連結する（type 別に変換）。
+ * 連結規則は blockJoinSeparator に一元化している（クライアントの assembleMarkdown と共有）。
  */
 export function blocksToMarkdown(blocks: Block[]): string {
   const sorted = [...blocks].sort((a, b) => a.order - b.order);
@@ -561,9 +585,7 @@ export function blocksToMarkdown(blocks: Block[]): string {
       result = markdown;
       continue;
     }
-    const prevType = sorted[i - 1].type;
-    const separator = prevType === 'markdown' && sorted[i].type === 'markdown' ? '\n' : '\n\n';
-    result += separator + markdown;
+    result += blockJoinSeparator(sorted[i - 1].type, sorted[i].type, markdown) + markdown;
   }
   return result;
 }

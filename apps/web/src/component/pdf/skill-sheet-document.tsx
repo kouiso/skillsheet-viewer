@@ -177,12 +177,18 @@ const INLINE_LEAF = new Map<string, (node: MdNode) => ReactNode>([
   ['html', () => null],
 ]);
 
-function renderInline(nodes: MdNode[] | undefined): ReactNode {
-  if (!nodes) return null;
-  return nodes.map((node, i) => renderInlineNode(node, i));
+// インライン描画の文脈オプション。inTableCell=true のときはリンクの
+// クリック注釈（<Link>）を抑制する（下記 link 分岐を参照）。
+interface InlineContext {
+  inTableCell?: boolean;
 }
 
-function renderInlineNode(node: MdNode, key: number): ReactNode {
+function renderInline(nodes: MdNode[] | undefined, ctx?: InlineContext): ReactNode {
+  if (!nodes) return null;
+  return nodes.map((node, i) => renderInlineNode(node, i, ctx));
+}
+
+function renderInlineNode(node: MdNode, key: number, ctx?: InlineContext): ReactNode {
   const leaf = INLINE_LEAF.get(node.type);
   if (leaf) return leaf(node);
   if (node.type === 'inlineCode') {
@@ -193,9 +199,20 @@ function renderInlineNode(node: MdNode, key: number): ReactNode {
     );
   }
   if (node.type === 'link') {
+    // 表セル内はセル幅で内容を clip するが、<Link> が生成するクリック注釈は
+    // clip の対象外で、隣のセル上に不可視のクリック領域として漏れる。セル内では
+    // 注釈を出さない styled Text として描画し、注釈自体を発生させない
+    // （見た目は従来どおり色付き下線を維持）。段落等の通常文脈は <Link> のまま。
+    if (ctx?.inTableCell) {
+      return (
+        <Text key={key} style={styles.link}>
+          {renderInline(node.children, ctx)}
+        </Text>
+      );
+    }
     return (
       <Link key={key} src={node.url ?? ''} style={styles.link}>
-        {renderInline(node.children)}
+        {renderInline(node.children, ctx)}
       </Link>
     );
   }
@@ -203,11 +220,11 @@ function renderInlineNode(node: MdNode, key: number): ReactNode {
   if (style) {
     return (
       <Text key={key} style={style}>
-        {renderInline(node.children)}
+        {renderInline(node.children, ctx)}
       </Text>
     );
   }
-  return node.children ? renderInline(node.children) : (node.value ?? null);
+  return node.children ? renderInline(node.children, ctx) : (node.value ?? null);
 }
 
 // --- ブロック描画 ---------------------------------------------------------
@@ -270,7 +287,8 @@ function renderTableCell(
   const textAlign = a === 'center' ? 'center' : a === 'right' ? 'right' : 'left';
   // 空セル（担当工程の未経験欄など）は空文字だとレイアウト計算が破綻するため、
   // 高さを保つノーブレークスペースを入れる。
-  const inline = renderInline(cell.children);
+  // セル内リンクは注釈が隣セルへ漏れるため inTableCell フラグで <Link> を抑制する。
+  const inline = renderInline(cell.children, { inTableCell: true });
   const isEmpty = inline == null || (Array.isArray(inline) && inline.length === 0);
   return (
     <View

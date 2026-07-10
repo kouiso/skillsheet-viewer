@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
 const revalidateTag = vi.fn();
-vi.mock('next/cache', () => ({ revalidateTag: (...args: unknown[]) => revalidateTag(...args) }));
+vi.mock('next/cache', () => ({
+  revalidateTag: (...args: unknown[]) => revalidateTag(...args),
+}));
 
 describe('POST /api/revalidate', () => {
   afterEach(() => {

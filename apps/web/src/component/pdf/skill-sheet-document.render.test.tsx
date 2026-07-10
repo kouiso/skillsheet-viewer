@@ -114,4 +114,32 @@ describe('SkillSheetDocument（実バイト描画）', () => {
     expect(buffer.length).toBeGreaterThan(0);
     expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
   });
+
+  it('表セル内のリンクはクリック注釈(/URI)を生成しない（隣セルへの不可視クリック領域漏れ防止）', async () => {
+    // 表セル内の <Link> はセル幅で clip されず、クリック注釈が隣セル上に不可視のまま漏れる。
+    // セル内リンクは注釈なしの Text として描画するため、PDF バイト列にセル内 URL の
+    // /URI 注釈が現れないことを固定する。対照として段落内リンクは注釈が現れる。
+    // 注釈オブジェクトは非圧縮でバイト列に平文で出るため URL 部分文字列で判定できる。
+    const CELL_URL = 'https://example.com/annot-in-cell-marker';
+    const PARA_URL = 'https://example.com/annot-in-para-marker';
+    const content = [
+      '## リンク注釈テスト',
+      '',
+      `段落内のリンク: [サイト](${PARA_URL})`,
+      '',
+      '| 参照 | 備考 |',
+      '| :--- | :--- |',
+      `| [ドキュメント](${CELL_URL}) | 補足 |`,
+      '',
+    ].join('\n');
+
+    const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+    const bytes = buffer.toString('latin1');
+
+    expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+    // 段落内リンクは <Link> のまま → /URI 注釈に URL が平文で出る。
+    expect(bytes).toContain('annot-in-para-marker');
+    // セル内リンクは Text 描画 → 注釈が出ないため URL はバイト列に現れない。
+    expect(bytes).not.toContain('annot-in-cell-marker');
+  });
 });
