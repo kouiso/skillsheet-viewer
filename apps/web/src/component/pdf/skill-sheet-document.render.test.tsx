@@ -99,6 +99,19 @@ describe('SkillSheetDocument（実バイト描画）', () => {
     }
   });
 
+  it('2行の小さい表に1ページ超の長文セルを含む内容でも正常な PDF バッファを生成できる（行アトミック化の回帰防止）', async () => {
+    // shouldTableWrap 廃止前は 4 行以下の表が wrap={false} になり、
+    // 1 ページに収まらない長文セルがクリップされていた。
+    // 修正後は表全体 wrap={true} + 各行 wrap={false} で行単位のページングになる。
+    const longCell = Array.from({ length: 50 }, (_, i) => `行${i + 1}：長い業務内容の説明テキストです。`).join('\n');
+    const content = `## 業務詳細\n\n| 項目 | 内容 |\n| :--- | :--- |\n| 主な業務 | ${longCell} |\n| 補足 | 追加情報 |\n`;
+
+    const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+    expect(buffer.length).toBeGreaterThan(0);
+    expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+    expect(buffer.subarray(-1024).toString('latin1')).toContain('%%EOF');
+  });
+
   it('多列テーブル＋長い未分割トークン(URL)を含む内容でもスローせず描画できる（セルの overflow:hidden 回帰防止）', async () => {
     // 8列テーブル＋URLのような区切り文字のない長いトークンは、修正前は
     // 折返し後の最終行がセル境界を超えて隣列へ視覚的にはみ出していた

@@ -1,8 +1,14 @@
 'use client';
 
 import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@skillsheet/db/blocks';
+import { formatPeriodDisplay } from '@skillsheet/db/process';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { DateRangePicker } from '@/components/date-range-picker';
+import { SelectOrCustom } from '@/components/select-or-custom';
+import { TagInput } from '@/components/tag-input';
+
+const COMPANY_KIND_OPTIONS = ['正社員', '契約社員', '派遣', 'SES', 'フリーランス'];
 
 const PROCESS_OPTIONS = [
   '要件定義',
@@ -57,8 +63,7 @@ const emptyCompany = (): CompanyInfo => ({
   note: '',
 });
 
-// タグをカンマ区切りテキストと配列で相互変換するヘルパー
-const tagsToText = (tags: string[]) => tags.join(', ');
+// カンマ区切りテキストを配列に変換するヘルパー
 const textToTags = (text: string): string[] =>
   text
     .split(',')
@@ -91,23 +96,22 @@ const CompanyForm = ({ company, onChange, onDelete }: CompanyFormProps) => (
       className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
     />
     <div className="grid grid-cols-2 gap-2">
-      <input
+      <SelectOrCustom
         value={company.kind ?? ''}
-        onChange={(e) => onChange({ kind: e.target.value })}
+        options={COMPANY_KIND_OPTIONS}
+        onChange={(v) => onChange({ kind: v })}
         placeholder="形態（正社員/SES等）"
-        className="rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       />
-      <input
+      <DateRangePicker
         value={company.period ?? ''}
-        onChange={(e) => onChange({ period: e.target.value })}
-        placeholder="在籍期間（例: 2020.04〜2023.03）"
-        className="rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        onChange={(v) => onChange({ period: v })}
       />
     </div>
-    <input
+    <textarea
       value={company.note ?? ''}
       onChange={(e) => onChange({ note: e.target.value })}
       placeholder="備考"
+      rows={2}
       className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
     />
   </div>
@@ -120,8 +124,8 @@ interface ProjectItemFormProps {
 }
 
 const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) => {
-  const updateTech = (key: keyof ProjectTech, text: string) => {
-    onChange({ tech: { ...project.tech, [key]: textToTags(text) } });
+  const updateTech = (key: keyof ProjectTech, tags: string[]) => {
+    onChange({ tech: { ...project.tech, [key]: tags } });
   };
   const toggleProcess = (p: string) => {
     const next = project.process.includes(p) ? project.process.filter((x) => x !== p) : [...project.process, p];
@@ -151,11 +155,9 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
           className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <div className="grid grid-cols-2 gap-2">
-          <input
+          <DateRangePicker
             value={project.period ?? ''}
-            onChange={(e) => onChange({ period: e.target.value })}
-            placeholder="期間（例: 2022.01〜2023.06）"
-            className="rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+            onChange={(v) => onChange({ period: v })}
           />
           <input
             value={project.scope ?? ''}
@@ -219,17 +221,18 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
 
       {/* 技術スタック */}
       <div>
-        <p className="mb-1 text-xs font-medium text-muted-foreground">技術スタック（カンマ区切り）</p>
+        <p className="mb-1 text-xs font-medium text-muted-foreground">技術スタック</p>
         <div className="space-y-1">
           {TECH_KEYS.map((key) => (
             <div key={key} className="flex items-center gap-2">
               <span className="w-24 shrink-0 text-xs text-muted-foreground">{TECH_LABELS[key]}</span>
-              <input
-                value={tagsToText(project.tech[key])}
-                onChange={(e) => updateTech(key, e.target.value)}
-                placeholder={`例: ${key === 'lang' ? 'TypeScript, Python' : key === 'fw' ? 'React, Next.js' : '...'}`}
-                className="flex-1 rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-              />
+              <div className="flex-1">
+                <TagInput
+                  tags={project.tech[key]}
+                  onChange={(next) => updateTech(key, next)}
+                  placeholder={key === 'lang' ? 'TypeScript, Python…' : key === 'fw' ? 'React, Next.js…' : '追加…'}
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -271,10 +274,11 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-muted-foreground">コメント</p>
-          <input
+          <textarea
             value={project.comment ?? ''}
             onChange={(e) => onChange({ comment: e.target.value })}
             placeholder="補足コメント"
+            rows={2}
             className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
           />
         </div>
@@ -410,7 +414,7 @@ export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
                         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                       )}
                       <span className="flex-1 truncate font-medium">{proj.title || '(タイトル未入力)'}</span>
-                      {proj.period && <span className="shrink-0 text-xs text-muted-foreground">{proj.period}</span>}
+                      {proj.period && <span className="shrink-0 text-xs text-muted-foreground">{formatPeriodDisplay(proj.period)}</span>}
                     </button>
 
                     {expandedProjectId === proj.id && (

@@ -7,7 +7,6 @@ import { unified } from 'unified';
 
 import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
 import PDF_FONT_FAMILY from './constants';
-import { shouldTableWrap } from './table-layout';
 
 // Console テーマ（globals.css の light トークン）に合わせたデザイントークン。
 // 値は design-tokens.ts を単一の真実として import し、globals.css との乖離を
@@ -312,10 +311,11 @@ function renderTable(node: MdNode, key: number): ReactNode {
   if (columnCount === 0) return null;
   const align = node.align ?? [];
   return (
-    <View key={key} style={styles.table} wrap={shouldTableWrap(rows.length)}>
+    <View key={key} style={styles.table} wrap={true}>
       {rows.map((row, ri) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: mdast テーブル行は安定 id を持たない
-        <View key={ri} style={styles.tableRow}>
+        // wrap={false}: 表全体は複数ページにまたがってよいが、1行の途中でページを割らない
+        <View key={ri} style={styles.tableRow} wrap={false}>
           {(row.children ?? []).map((cell, ci) => renderTableCell(cell, ci, columnCount, align, ri === 0))}
         </View>
       ))}
