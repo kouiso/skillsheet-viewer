@@ -115,6 +115,33 @@ describe('SkillSheetViewer', () => {
     expect(screen.queryByText('空')).toBeNull();
   });
 
+  it('複数の markdown ブロックに同じ見出しテキストがあっても id を一意化し、React の重複key警告を出さない', async () => {
+    // 各 markdown ブロックは独立した <ReactMarkdown>（rehype-slug も独立実行）で描画されるため、
+    // 同じ見出しテキストを持つブロックが複数あると rehype-slug が同一 id を付与してしまう
+    // （TableOfContents の key 重複・アンカー衝突の原因になっていた実際のバグの再現）。
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const blocks: Block[] = [
+      { id: 'b1', type: 'markdown', order: 0, data: { markdown: '## プロジェクト概要\n\n案件A' } },
+      { id: 'b2', type: 'markdown', order: 1, data: { markdown: '## プロジェクト概要\n\n案件B' } },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('案件A')).toBeInTheDocument();
+      expect(screen.getByText('案件B')).toBeInTheDocument();
+    });
+
+    const ids = Array.from(document.querySelectorAll('.markdown-content h2[id]')).map((el) => el.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+
+    const duplicateKeyWarning = consoleErrorSpy.mock.calls.some((args) =>
+      String(args[0]).includes('Encountered two children with the same key'),
+    );
+    expect(duplicateKeyWarning).toBe(false);
+    consoleErrorSpy.mockRestore();
+  });
+
   it('SkillMatrix グリッドの列最小幅が min(240px,100%) でコンテナ幅を超えない（320px 幅での横スクロール回帰防止）', async () => {
     const blocks: Block[] = [
       {

@@ -71,26 +71,59 @@ const SANITIZE_SCHEMA = {
   },
 };
 
-// remark/rehype プラグイン配列はモジュールスコープで固定し、毎レンダーの新規生成を防ぐ。
+// remark プラグイン配列はモジュールスコープで固定し、毎レンダーの新規生成を防ぐ。
 const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
-const REHYPE_PLUGINS = [
-  rehypeRaw,
-  [rehypeSanitize, SANITIZE_SCHEMA] as [typeof rehypeSanitize, typeof SANITIZE_SCHEMA],
-  rehypeSlug,
-];
+
+// hast のノードを最小限の形で扱う（rehype プラグインの型は unified 側で any 相当のため）。
+interface HastLikeNode {
+  type?: string;
+  tagName?: string;
+  properties?: { id?: string; [key: string]: unknown };
+  children?: HastLikeNode[];
+}
+
+const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+
+// 各 markdown ブロックは独立した <ReactMarkdown> インスタンス（＝独立した rehype-slug の
+// GithubSlugger）で処理されるため、同じ見出しテキストが複数ブロックに現れると同一 id が
+// 重複してしまう（TableOfContents の key 重複・アンカー衝突の原因）。rehype-slug の直後に
+// 差し込み、id をブロック単位で常に一意にする。
+function rehypePrefixHeadingIds(prefix: string) {
+  return (tree: HastLikeNode) => {
+    const walk = (node: HastLikeNode) => {
+      if (node.type === 'element' && node.tagName && HEADING_TAGS.has(node.tagName) && node.properties?.id) {
+        node.properties.id = `${prefix}-${node.properties.id}`;
+      }
+      node.children?.forEach(walk);
+    };
+    walk(tree);
+  };
+}
 
 interface MarkdownContentProps {
   content: string;
+  /** 見出し id をブロック単位で一意化するためのプレフィックス（block.id 等）。 */
+  blockId: string;
   onImageClick: (src: string) => void;
 }
 
 // Markdown本文はactiveIdに依存しないためメモ化してスクロール再描画を防ぐ。
-const MarkdownContent = memo(function MarkdownContent({ content, onImageClick }: MarkdownContentProps) {
+const MarkdownContent = memo(function MarkdownContent({ content, blockId, onImageClick }: MarkdownContentProps) {
+  const rehypePlugins = useMemo(
+    () => [
+      rehypeRaw,
+      [rehypeSanitize, SANITIZE_SCHEMA] as [typeof rehypeSanitize, typeof SANITIZE_SCHEMA],
+      rehypeSlug,
+      [rehypePrefixHeadingIds, blockId] as [typeof rehypePrefixHeadingIds, string],
+    ],
+    [blockId],
+  );
+
   return (
     <div className="markdown-content">
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={REHYPE_PLUGINS}
+        rehypePlugins={rehypePlugins}
         components={{
           code(props) {
             const { className, children, ...rest } = props;
@@ -290,7 +323,14 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
                 const block = group.block;
                 const mdContent = blockToMarkdownContent(block);
                 if (mdContent !== null) {
-                  return <MarkdownContent key={block.id} content={mdContent} onImageClick={handleImageClick} />;
+                  return (
+                    <MarkdownContent
+                      key={block.id}
+                      blockId={block.id}
+                      content={mdContent}
+                      onImageClick={handleImageClick}
+                    />
+                  );
                 }
                 if (block.type === 'profile') {
                   return <ProfileIntro key={block.id} data={block.data} />;
@@ -307,7 +347,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
           ) : (
             <>
               <h1 className="mb-4 text-3xl font-bold sm:text-4xl">{skillSheet.title}</h1>
-              <MarkdownContent content={skillSheet.content} onImageClick={handleImageClick} />
+              <MarkdownContent blockId="legacy" content={skillSheet.content} onImageClick={handleImageClick} />
             </>
           )}
         </div>
