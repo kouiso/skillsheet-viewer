@@ -2,9 +2,9 @@ import { NextRequest } from 'next/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { POST } from './route';
 
-const revalidateTag = vi.fn();
+const revalidateTag = vi.hoisted(() => vi.fn());
 vi.mock('next/cache', () => ({
-  revalidateTag: (...args: unknown[]) => revalidateTag(...args),
+  revalidateTag,
 }));
 
 describe('POST /api/revalidate', () => {

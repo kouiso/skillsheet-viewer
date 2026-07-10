@@ -281,6 +281,14 @@ describe('blockJoinSeparator — 連結セパレータの単一の真実', () =>
     expect(blockJoinSeparator('table', 'markdown', '本文')).toBe('\n\n');
     expect(blockJoinSeparator('skills', 'stats', '')).toBe('\n\n');
   });
+
+  it('先頭が `|` 始まりでも区切り行を伴わない非テーブルなら \\n のまま（誤検出防止）', () => {
+    // GFM テーブルは見出し行の直後に `| --- |` 形式の区切り行が必須。区切り行を伴わない
+    // `|` 始まりの地の文（レビュー指摘: ASCII 表現やエスケープされたテーブルサンプル等）を
+    // テーブルと誤認して \n\n に切り替えると、無損失ラウンドトリップの前提が崩れる。
+    expect(blockJoinSeparator('markdown', 'markdown', '| これはテーブルではない普通の文章です')).toBe('\n');
+    expect(blockJoinSeparator('markdown', 'markdown', '|not a table|\n次の行も普通の文章')).toBe('\n');
+  });
 });
 
 describe('blocksToMarkdown — markdown ブロック同士でも 2 本目がテーブル始まりなら空行区切り', () => {

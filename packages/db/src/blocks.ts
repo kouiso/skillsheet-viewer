@@ -542,16 +542,36 @@ export function splitMarkdownIntoBlocks(markdown: string): MarkdownBlockData[] {
 }
 
 /**
- * 与えられた markdown の先頭「非空行」が GFM テーブル行（`|` 始まり）かを判定する。
+ * `|` で始まる行が GFM テーブルの区切り行（例 `| --- | :---: |`）かを判定する。
+ */
+function isTableDelimiterRow(line: string): boolean {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells = trimmed.split('|');
+  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell.trim()));
+}
+
+/**
+ * 与えられた markdown が GFM テーブルで始まるかを判定する（先頭「非空行」が `|` 始まり、
+ * かつヘッダ行の直後の行がテーブル区切り行であることまで確認する）。
  * lazy continuation でテーブルが直前段落へ飲み込まれるのは、後続ブロックの先頭が
  * テーブル行のときだけなので、この 1 点で連結セパレータを切り替える。
+ * `|` 始まりだけを見ると、区切り行を伴わない通常の markdown（先頭が `|` の地の文や
+ * コードサンプル等）まで誤って GFM テーブル扱いしてしまうため、区切り行の有無まで見る。
+ * GFM 仕様上、区切り行はヘッダ行の直後でなければならず、間に空行を挟むと表として
+ * 成立しない（Markdown レンダラもテーブルとして解釈しない）ため、空行はスキップしない。
  */
 function startsWithTableRow(markdown: string): boolean {
-  for (const line of markdown.split('\n')) {
-    if (line.trim().length === 0) continue;
-    return /^\s*\|/.test(line);
+  const lines = markdown.split('\n');
+  let firstContentIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().length === 0) continue;
+    firstContentIndex = i;
+    break;
   }
-  return false;
+  if (firstContentIndex === -1 || !/^\s*\|/.test(lines[firstContentIndex])) return false;
+
+  const nextLine = lines[firstContentIndex + 1];
+  return nextLine !== undefined && isTableDelimiterRow(nextLine);
 }
 
 /**
