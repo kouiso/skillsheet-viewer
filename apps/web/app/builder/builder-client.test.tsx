@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import BuilderClient from './builder-client';
+import BuilderClient, { assembleMarkdown, type EditorItem } from './builder-client';
 
 // 重いビューア（lightbox/IntersectionObserver 依存）はプレビュー描画を素朴にモック
 vi.mock('@/component/skill-sheet-viewer', () => ({
@@ -83,6 +83,17 @@ describe('BuilderClient', () => {
     render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
     const raw = screen.getByTestId('preview').getAttribute('data-raw');
     expect(raw).toBe('## A\n## B');
+  });
+
+  it('sparse 配列（途中に undefined 要素）でも実際の直前ブロック基準で結合される', () => {
+    // items[i - 1] の位置参照だと sparse 配列で直前の undefined 穴を挟んだ際に
+    // 実際にレンダリングされた直前ブロックを見失う不具合があった（レビュー指摘）。
+    const items = [
+      { id: 'markdown-0', type: 'markdown', markdown: '前のブロック。' },
+      undefined,
+      { id: 'markdown-1', type: 'markdown', markdown: '次のブロック。' },
+    ] as unknown as EditorItem[];
+    expect(assembleMarkdown(items)).toBe('前のブロック。\n次のブロック。');
   });
 
   it('markdown と非 markdown の隣接は空行(\\n\\n)で結合される（GFM テーブル認識の回帰テスト）', () => {
