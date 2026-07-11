@@ -100,9 +100,9 @@ describe('SkillSheetDocument（実バイト描画）', () => {
   });
 
   it('2行の小さい表に1ページ超の長文セルを含む内容でも正常な PDF バッファを生成できる（行アトミック化の回帰防止）', async () => {
-    // shouldTableWrap 廃止前は 4 行以下の表が wrap={false} になり、
-    // 1 ページに収まらない長文セルがクリップされていた。
-    // 修正後は表全体 wrap={true} + 各行 wrap={false} で行単位のページングになる。
+    // 表全体は wrap={true}、行は原則 wrap={false}（1行の途中でページを割らない）。
+    // ただし1ページに収まらない見込みの行（文字数が閾値超）だけは wrap={true} にして
+    // 複数ページにまたがることを許容する（さもないと内容がクリップされる — chatgpt-codex-connector指摘の回帰防止）。
     const longCell = Array.from({ length: 50 }, (_, i) => `行${i + 1}：長い業務内容の説明テキストです。`).join('\n');
     const content = `## 業務詳細\n\n| 項目 | 内容 |\n| :--- | :--- |\n| 主な業務 | ${longCell} |\n| 補足 | 追加情報 |\n`;
 
