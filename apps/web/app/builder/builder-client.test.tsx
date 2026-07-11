@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import BuilderClient, { assembleMarkdown, blockToItem } from './builder-client';
+import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
 
 const mockSave = vi.fn().mockResolvedValue({ ok: true });
 vi.mock('./actions', () => ({
@@ -70,6 +70,17 @@ describe('BuilderClient', () => {
     // サーバ側 blocksToMarkdown と同じく markdown 分割のラウンドトリップ無損失性を保つ。
     const raw = assembleMarkdown(mdBlocks(['## A', '## B']).map(blockToItem));
     expect(raw).toBe('## A\n## B');
+  });
+
+  it('sparse 配列（途中に undefined 要素）でも実際の直前ブロック基準で結合される', () => {
+    // items[i - 1] の位置参照だと sparse 配列で直前の undefined 穴を挟んだ際に
+    // 実際にレンダリングされた直前ブロックを見失う不具合があった（レビュー指摘）。
+    const items = [
+      { id: 'markdown-0', type: 'markdown', markdown: '前のブロック。' },
+      undefined,
+      { id: 'markdown-1', type: 'markdown', markdown: '次のブロック。' },
+    ] as unknown as EditorItem[];
+    expect(assembleMarkdown(items)).toBe('前のブロック。\n次のブロック。');
   });
 
   it('markdown と非 markdown の隣接は空行(\\n\\n)で結合される（GFM テーブル認識の回帰テスト）', () => {
