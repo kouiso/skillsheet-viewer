@@ -26,4 +26,16 @@ describe('SelectOrCustom', () => {
     render(<SelectOrCustom value="カスタム値" options={['A', 'B']} onChange={vi.fn()} />);
     expect(screen.getByPlaceholderText('自由入力')).toBeInTheDocument();
   });
+
+  it('keyなしで再利用された場合でも、カスタム値→既知値への切替でisCustomModeが残留しない（coderabbitai指摘の回帰防止）', () => {
+    const { rerender } = render(
+      <SelectOrCustom value="会社Aのカスタム値" options={['正社員', '契約社員']} onChange={vi.fn()} />,
+    );
+    expect(screen.getByPlaceholderText('自由入力')).toBeInTheDocument();
+
+    // keyを変えずに別インスタンス相当のpropsへ差し替え（会社A→会社Bの切替を模す）
+    rerender(<SelectOrCustom value="正社員" options={['正社員', '契約社員']} onChange={vi.fn()} />);
+    expect(screen.queryByPlaceholderText('自由入力')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveValue('正社員');
+  });
 });

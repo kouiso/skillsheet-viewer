@@ -14,7 +14,7 @@ export function SelectOrCustom({ value, options, onChange, placeholder }: Select
   // 「その他」選択直後はonChange('')でvalueが空になるため、value由来の判定だけでは
   // 自由入力欄が即座に消えてしまう。選択操作そのものを別状態として保持する。
   const [isCustomMode, setIsCustomMode] = useState(!isKnownValue && value !== '');
-  const showCustomInput = isCustomMode || (value !== '' && !options.includes(value));
+  const showCustomInput = !isKnownValue && (isCustomMode || value !== '');
   const selectValue = showCustomInput ? '__custom__' : value;
 
   function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
