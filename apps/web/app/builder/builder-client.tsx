@@ -716,16 +716,26 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     previewChannelRef.current?.postMessage({ title, content: previewContent });
   }, [title, previewContent]);
 
+  // 開いたプレビュー窓の参照。既に開いている場合はページ再読み込みを避け focus() するだけにする。
+  const previewWindowRef = useRef<Window | null>(null);
+
   // ヘッダー「プレビュー」ボタン: 別ウィンドウを開く。開いた瞬間に最新内容が見えるよう
   // localStorage にシード保存してから開く（以後の更新は BroadcastChannel で追従）。
   const handleOpenPreview = () => {
+    if (previewWindowRef.current && !previewWindowRef.current.closed) {
+      previewWindowRef.current.focus();
+      return;
+    }
     try {
       localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({ title, content: previewContent }));
     } catch {
       // プライベートブラウジング等で localStorage が使えなくても window.open は試みる。
     }
     const win = window.open('/builder/preview', 'builder-preview', 'width=800,height=1000');
-    if (!win) {
+    if (win) {
+      previewWindowRef.current = win;
+      win.focus();
+    } else {
       toast.error('ポップアップがブロックされました。ブラウザの設定で許可してください。');
     }
   };

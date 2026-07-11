@@ -42,7 +42,10 @@ export default function PreviewClient() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-      <SkillSheetViewer skillSheet={{ title: payload?.title.trim() || 'プレビュー', content: payload?.content ?? '' }} compareMode />
+      <SkillSheetViewer
+        skillSheet={{ title: payload?.title?.trim() || 'プレビュー', content: payload?.content ?? '' }}
+        compareMode
+      />
     </div>
   );
 }
