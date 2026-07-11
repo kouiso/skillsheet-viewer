@@ -6,9 +6,7 @@ import { SelectOrCustom } from './select-or-custom';
 describe('SelectOrCustom', () => {
   it('「その他」選択直後にonChangeで値が空になっても自由入力欄を表示し続ける（gemini-code-assist指摘の回帰防止）', () => {
     const onChange = vi.fn();
-    const { rerender } = render(
-      <SelectOrCustom value="" options={['A', 'B']} onChange={onChange} />,
-    );
+    const { rerender } = render(<SelectOrCustom value="" options={['A', 'B']} onChange={onChange} />);
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '__custom__' } });
     expect(onChange).toHaveBeenCalledWith('');

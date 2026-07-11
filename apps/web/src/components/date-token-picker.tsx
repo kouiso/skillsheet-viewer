@@ -1,8 +1,7 @@
 'use client';
 
-import { CalendarIcon } from 'lucide-react';
-
 import { formatMonthToken, parseTokenToDate, serializeDateToken } from '@skillsheet/db/process';
+import { CalendarIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -19,11 +18,7 @@ interface DateTokenPickerProps {
 
 export function DateTokenPicker({ value, onChange, placeholder, allowPresent }: DateTokenPickerProps) {
   const isPresent = allowPresent && !value;
-  const displayLabel = value
-    ? formatMonthToken(value)
-    : allowPresent
-      ? '現在'
-      : placeholder;
+  const displayLabel = value ? formatMonthToken(value) : allowPresent ? '現在' : placeholder;
 
   const selected = parseTokenToDate(value);
 
@@ -49,12 +44,7 @@ export function DateTokenPicker({ value, onChange, placeholder, allowPresent }: 
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-auto p-0">
-          <Calendar
-            mode="single"
-            selected={selected}
-            onSelect={handleSelect}
-            defaultMonth={selected ?? new Date()}
-          />
+          <Calendar mode="single" selected={selected} onSelect={handleSelect} defaultMonth={selected ?? new Date()} />
         </PopoverContent>
       </Popover>
       {allowPresent && !isPresent && (

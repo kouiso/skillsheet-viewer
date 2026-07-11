@@ -313,8 +313,7 @@ function renderTable(node: MdNode, key: number): ReactNode {
   return (
     <View key={key} style={styles.table} wrap={true}>
       {rows.map((row, ri) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: mdast テーブル行は安定 id を持たない
-        // wrap={false}: 表全体は複数ページにまたがってよいが、1行の途中でページを割らない
+        // biome-ignore lint/suspicious/noArrayIndexKey: mdast テーブル行は安定idを持たない。wrap={false}は表全体が複数ページにまたがってよいが1行の途中でページを割らないための指定
         <View key={ri} style={styles.tableRow} wrap={false}>
           {(row.children ?? []).map((cell, ci) => renderTableCell(cell, ci, columnCount, align, ri === 0))}
         </View>

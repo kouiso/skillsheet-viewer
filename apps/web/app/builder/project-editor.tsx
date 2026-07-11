@@ -102,10 +102,7 @@ const CompanyForm = ({ company, onChange, onDelete }: CompanyFormProps) => (
         onChange={(v) => onChange({ kind: v })}
         placeholder="形態（正社員/SES等）"
       />
-      <DateRangePicker
-        value={company.period ?? ''}
-        onChange={(v) => onChange({ period: v })}
-      />
+      <DateRangePicker value={company.period ?? ''} onChange={(v) => onChange({ period: v })} />
     </div>
     <textarea
       value={company.note ?? ''}
@@ -155,10 +152,7 @@ const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) 
           className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <div className="grid grid-cols-2 gap-2">
-          <DateRangePicker
-            value={project.period ?? ''}
-            onChange={(v) => onChange({ period: v })}
-          />
+          <DateRangePicker value={project.period ?? ''} onChange={(v) => onChange({ period: v })} />
           <input
             value={project.scope ?? ''}
             onChange={(e) => onChange({ scope: e.target.value })}
@@ -414,7 +408,11 @@ export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
                         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
                       )}
                       <span className="flex-1 truncate font-medium">{proj.title || '(タイトル未入力)'}</span>
-                      {proj.period && <span className="shrink-0 text-xs text-muted-foreground">{formatPeriodDisplay(proj.period)}</span>}
+                      {proj.period && (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {formatPeriodDisplay(proj.period)}
+                        </span>
+                      )}
                     </button>
 
                     {expandedProjectId === proj.id && (

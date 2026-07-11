@@ -28,7 +28,9 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
             <span className="rounded-[var(--radius)] bg-primary px-1.5 py-px font-mono text-[11px] text-on-accent">
               {String(no).padStart(2, '0')}
             </span>
-            <span className="font-mono text-[11.5px] text-faint">{formatPeriodDisplay(item.period) || '(期間未入力)'}</span>
+            <span className="font-mono text-[11.5px] text-faint">
+              {formatPeriodDisplay(item.period) || '(期間未入力)'}
+            </span>
           </div>
           <h3 className="text-[17px] leading-snug text-foreground">{item.title || '(タイトル未入力)'}</h3>
           {item.scope && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{item.scope}</p>}

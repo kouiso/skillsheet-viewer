@@ -5,13 +5,7 @@ import { TagInput } from './tag-input';
 
 describe('TagInput', () => {
   it('tagsがundefinedでもクラッシュせずプレースホルダーを表示する（gemini-code-assist指摘の回帰防止）', () => {
-    render(
-      <TagInput
-        tags={undefined as unknown as string[]}
-        onChange={vi.fn()}
-        placeholder="タグを入力"
-      />,
-    );
+    render(<TagInput tags={undefined as unknown as string[]} onChange={vi.fn()} placeholder="タグを入力" />);
     expect(screen.getByPlaceholderText('タグを入力')).toBeInTheDocument();
   });
 

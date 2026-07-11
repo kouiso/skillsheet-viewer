@@ -24,18 +24,9 @@ export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
 
   return (
     <div className="flex items-center gap-1.5">
-      <DateTokenPicker
-        value={startToken}
-        onChange={handleStartChange}
-        placeholder="開始年月日"
-      />
+      <DateTokenPicker value={startToken} onChange={handleStartChange} placeholder="開始年月日" />
       <span className="text-muted-foreground text-xs">〜</span>
-      <DateTokenPicker
-        value={endToken}
-        onChange={handleEndChange}
-        placeholder="終了年月日"
-        allowPresent
-      />
+      <DateTokenPicker value={endToken} onChange={handleEndChange} placeholder="終了年月日" allowPresent />
     </div>
   );
 }

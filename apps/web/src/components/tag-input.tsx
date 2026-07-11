@@ -41,11 +41,10 @@ export function TagInput({ tags = [], onChange, placeholder }: TagInputProps) {
   }
 
   return (
-    <div
-      className="flex min-h-8 flex-wrap items-center gap-1 rounded-md border border-input bg-background px-2 py-1 focus-within:ring-1 focus-within:ring-ring"
+    <fieldset
+      className="m-0 flex min-h-8 flex-wrap items-center gap-1 rounded-md border border-input bg-background px-2 py-1 focus-within:ring-1 focus-within:ring-ring"
       onClick={() => inputRef.current?.focus()}
       onKeyDown={() => {}}
-      role="group"
     >
       {tags.map((tag, i) => (
         <span
@@ -76,6 +75,6 @@ export function TagInput({ tags = [], onChange, placeholder }: TagInputProps) {
         placeholder={tags.length === 0 ? placeholder : undefined}
         className="min-w-[80px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
       />
-    </div>
+    </fieldset>
   );
 }

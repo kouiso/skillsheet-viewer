@@ -60,9 +60,10 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
-import { Button } from '@/components/ui/button';
+import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { DateTokenPicker } from '@/components/date-token-picker';
 import { SelectOrCustom } from '@/components/select-or-custom';
+import { Button } from '@/components/ui/button';
 
 import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
 import { ProjectEditor } from './project-editor';
@@ -462,11 +463,7 @@ const ExperienceBlockEditor = ({
         className="w-full rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <div className="flex items-center gap-1.5">
-        <DateTokenPicker
-          value={data.startDate}
-          onChange={(v) => set('startDate', v)}
-          placeholder="開始年月日"
-        />
+        <DateTokenPicker value={data.startDate} onChange={(v) => set('startDate', v)} placeholder="開始年月日" />
         <span className="text-muted-foreground text-xs">〜</span>
         <DateTokenPicker
           value={data.endDate}
