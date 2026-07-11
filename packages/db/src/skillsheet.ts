@@ -74,6 +74,18 @@ export interface SheetSummary {
 }
 
 /**
+ * GitHub からの seed（初期データ流し込み）が使えるだけの env が揃っているか。
+ * GITHUB_TOKEN / OWNER / REPO が必須。seed はあくまで任意の副系統（正本は DB）なので、
+ * 未設定は「異常」ではなく「seed をスキップして空から始める」正常系として扱う。
+ */
+export function isGitHubSeedConfigured(): boolean {
+  const token = process.env.GITHUB_TOKEN ?? process.env.VITE_GITHUB_TOKEN;
+  const owner = process.env.GITHUB_OWNER ?? process.env.VITE_GITHUB_OWNER;
+  const repo = process.env.GITHUB_REPO ?? process.env.VITE_GITHUB_REPO;
+  return Boolean(token && owner && repo);
+}
+
+/**
  * Fetch the seed markdown from the existing private GitHub repository (server-side).
  * Uses GITHUB_* env vars so the token is never exposed to the browser.
  */
@@ -83,7 +95,7 @@ export async function fetchMarkdownFromGitHub(): Promise<string> {
   const repo = process.env.GITHUB_REPO ?? process.env.VITE_GITHUB_REPO;
   const filePath = process.env.GITHUB_FILE_PATH ?? process.env.VITE_GITHUB_FILE_PATH ?? 'skillsheet.md';
   const branch = process.env.GITHUB_BRANCH ?? process.env.VITE_GITHUB_BRANCH ?? 'main';
-  if (!token || !owner || !repo) {
+  if (!isGitHubSeedConfigured()) {
     throw new Error('GitHub seed source is not configured (GITHUB_TOKEN/OWNER/REPO)');
   }
   const url = `https://api.github.com/repos/${owner}/${repo}/contents/${filePath}?ref=${branch}`;
@@ -138,7 +150,10 @@ async function ensureSeeded(db: Database): Promise<string> {
   const sheetId = await getOrCreateDefaultSheetId(db);
 
   const existingBlocks = await db.select({ id: blocks.id }).from(blocks).where(eq(blocks.sheetId, sheetId)).limit(1);
-  if (existingBlocks.length === 0) {
+  // ブロックが 0 個なのは新規オーナー / 全削除後の正常状態。GitHub seed は任意の副系統で
+  // 正本は DB のため、未設定なら seed をスキップして空のまま返す（throw して「エラー」に
+  // しない）。設定済みで取得に失敗した場合だけ本物の異常として throw が伝播する。
+  if (existingBlocks.length === 0 && isGitHubSeedConfigured()) {
     const markdown = await fetchMarkdownFromGitHub();
     const segments = splitMarkdownIntoBlocks(markdown);
     if (segments.length > 0) {

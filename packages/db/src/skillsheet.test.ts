@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks';
+import { isGitHubSeedConfigured } from './skillsheet';
 
 // 注意: skillsheet.ts の getOwnerId は export されておらず（module-private）、
 // getSkillSheet/saveSkillSheetBlocks 経由でしか到達できない。これらは getDb() で
@@ -10,6 +11,47 @@ import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks'
 beforeEach(() => {
   process.env.SESSION_SECRET = 'test-session-secret-deadbeef';
   process.env.SKILLSHEET_OWNER_ID = 'test-owner-id';
+});
+
+describe('isGitHubSeedConfigured', () => {
+  const GH_KEYS = ['GITHUB_TOKEN', 'GITHUB_OWNER', 'GITHUB_REPO', 'VITE_GITHUB_TOKEN', 'VITE_GITHUB_OWNER', 'VITE_GITHUB_REPO'];
+  const saved: Record<string, string | undefined> = {};
+  beforeEach(() => {
+    for (const k of GH_KEYS) {
+      saved[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+  afterEach(() => {
+    for (const k of GH_KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('GITHUB_* が未設定なら false（未設定は正常系・seed をスキップする合図）', () => {
+    expect(isGitHubSeedConfigured()).toBe(false);
+  });
+
+  it('TOKEN/OWNER/REPO が全て揃うと true', () => {
+    process.env.GITHUB_TOKEN = 't';
+    process.env.GITHUB_OWNER = 'o';
+    process.env.GITHUB_REPO = 'r';
+    expect(isGitHubSeedConfigured()).toBe(true);
+  });
+
+  it('一つでも欠けると false（REPO 欠落）', () => {
+    process.env.GITHUB_TOKEN = 't';
+    process.env.GITHUB_OWNER = 'o';
+    expect(isGitHubSeedConfigured()).toBe(false);
+  });
+
+  it('VITE_ プレフィックスの env でも認識する', () => {
+    process.env.VITE_GITHUB_TOKEN = 't';
+    process.env.VITE_GITHUB_OWNER = 'o';
+    process.env.VITE_GITHUB_REPO = 'r';
+    expect(isGitHubSeedConfigured()).toBe(true);
+  });
 });
 
 // MarkdownBlockData[] を order 付きの Block[] へ変換するヘルパ（blocksToMarkdown 用）。
