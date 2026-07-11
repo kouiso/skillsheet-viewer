@@ -159,9 +159,7 @@ export function parseTokenToDate(token: string): Date | undefined {
   let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   m =
-    token.match(/^(\d{4})\.(\d{1,2})$/) ??
-    token.match(/^(\d{4})-(\d{1,2})$/) ??
-    token.match(/^(\d{4})年(\d{1,2})月$/);
+    token.match(/^(\d{4})\.(\d{1,2})$/) ?? token.match(/^(\d{4})-(\d{1,2})$/) ?? token.match(/^(\d{4})年(\d{1,2})月$/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
   m = token.match(/^(\d{4})$/);
   if (m) return new Date(Number(m[1]), 0, 1);

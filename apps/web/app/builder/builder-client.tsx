@@ -59,8 +59,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-
-import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { DateTokenPicker } from '@/components/date-token-picker';
 import { SelectOrCustom } from '@/components/select-or-custom';
 import { Button } from '@/components/ui/button';
