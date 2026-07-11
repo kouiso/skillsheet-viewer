@@ -89,6 +89,12 @@ export function splitPeriodRange(period: string): [string, string] {
   return [period.trim(), ''];
 }
 
+/** period が範囲区切り文字（〜 等）を含むか。単一トークン期間との判別に使う。 */
+export function hasPeriodRangeSeparator(period: string): boolean {
+  if (typeof period !== 'string' || period.length === 0) return false;
+  return RANGE_SEPARATORS.some((sep) => period.includes(sep));
+}
+
 // YYYY-MM-DD / YYYY.MM / YYYY年M月 / YYYY-MM / YYYY の順で試す。すべて失敗したら null。
 function parseYearMonth(token: string): number | null {
   if (!token) return null;
@@ -152,7 +158,10 @@ export function parseTokenToDate(token: string): Date | undefined {
   if (!token || /現在/.test(token)) return undefined;
   let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  m = token.match(/^(\d{4})\.(\d{1,2})$/) ?? token.match(/^(\d{4})-(\d{1,2})$/);
+  m =
+    token.match(/^(\d{4})\.(\d{1,2})$/) ??
+    token.match(/^(\d{4})-(\d{1,2})$/) ??
+    token.match(/^(\d{4})年(\d{1,2})月$/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
   m = token.match(/^(\d{4})$/);
   if (m) return new Date(Number(m[1]), 0, 1);

@@ -163,6 +163,14 @@ describe('parseTokenToDate', () => {
     expect(d?.getDate()).toBe(1);
   });
 
+  it('レガシー表記（YYYY年M月）も月精度トークンとして解釈する（parseYearMonthとの解釈ゆれ回帰防止）', () => {
+    const d = parseTokenToDate('2020年4月');
+    expect(d).toBeInstanceOf(Date);
+    expect(d?.getFullYear()).toBe(2020);
+    expect(d?.getMonth()).toBe(3); // 0-indexed
+    expect(d?.getDate()).toBe(1);
+  });
+
   it('「現在」トークンは undefined を返す', () => {
     expect(parseTokenToDate('現在')).toBeUndefined();
   });
