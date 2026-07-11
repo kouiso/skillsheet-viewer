@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks';
-import { isGitHubSeedConfigured } from './skillsheet';
+import { getGitHubSeedConfig, isGitHubSeedConfigured } from './skillsheet';
 
 // 注意: skillsheet.ts の getOwnerId は export されておらず（module-private）、
 // getSkillSheet/saveSkillSheetBlocks 経由でしか到達できない。これらは getDb() で
@@ -58,6 +58,17 @@ describe('isGitHubSeedConfigured', () => {
     process.env.VITE_GITHUB_OWNER = 'o';
     process.env.VITE_GITHUB_REPO = 'r';
     expect(isGitHubSeedConfigured()).toBe(true);
+  });
+
+  it('getGitHubSeedConfig は未設定なら null を返す', () => {
+    expect(getGitHubSeedConfig()).toBeNull();
+  });
+
+  it('getGitHubSeedConfig は全て揃うと型を絞った設定を返す', () => {
+    process.env.GITHUB_TOKEN = 't';
+    process.env.GITHUB_OWNER = 'o';
+    process.env.GITHUB_REPO = 'r';
+    expect(getGitHubSeedConfig()).toEqual({ token: 't', owner: 'o', repo: 'r' });
   });
 });
 
