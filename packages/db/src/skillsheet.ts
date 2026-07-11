@@ -98,9 +98,12 @@ export function isGitHubSeedConfigured(): boolean {
 /**
  * Fetch the seed markdown from the existing private GitHub repository (server-side).
  * Uses GITHUB_* env vars so the token is never exposed to the browser.
+ * 呼び出し側が既に getGitHubSeedConfig() を解決済みなら config 引数で渡すことで
+ * env の再読み取りを避けられる（省略時は自前で解決する＝後方互換）。
  */
-export async function fetchMarkdownFromGitHub(): Promise<string> {
-  const config = getGitHubSeedConfig();
+export async function fetchMarkdownFromGitHub(
+  config: { token: string; owner: string; repo: string } | null = getGitHubSeedConfig(),
+): Promise<string> {
   if (!config) {
     throw new Error('GitHub seed source is not configured (GITHUB_TOKEN/OWNER/REPO)');
   }
@@ -162,14 +165,22 @@ async function ensureSeeded(db: Database): Promise<string> {
   // ブロックが 0 個なのは新規オーナー / 全削除後の正常状態。GitHub seed は任意の副系統で
   // 正本は DB のため、未設定なら seed をスキップして空のまま返す（throw して「エラー」に
   // しない）。設定済みで取得に失敗した場合だけ本物の異常として throw が伝播する。
-  if (existingBlocks.length === 0 && isGitHubSeedConfigured()) {
-    const markdown = await fetchMarkdownFromGitHub();
-    const segments = splitMarkdownIntoBlocks(markdown);
-    if (segments.length > 0) {
-      await db
-        .insert(blocks)
-        .values(segments.map((data, order) => ({ sheetId, type: 'markdown', order, data })))
-        .onConflictDoNothing();
+  if (existingBlocks.length === 0) {
+    const config = getGitHubSeedConfig();
+    if (config) {
+      const markdown = await fetchMarkdownFromGitHub(config);
+      const segments = splitMarkdownIntoBlocks(markdown);
+      if (segments.length > 0) {
+        await db
+          .insert(blocks)
+          .values(segments.map((data, order) => ({ sheetId, type: 'markdown', order, data })))
+          .onConflictDoNothing();
+      }
+    } else {
+      // 未設定は正常系だが、意図せぬ設定漏れの調査ができるよう記録だけは残す。
+      console.warn(
+        '[skillsheet] GitHub seed is not configured (GITHUB_TOKEN/OWNER/REPO); starting with an empty sheet.',
+      );
     }
   }
   return sheetId;
