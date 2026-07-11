@@ -48,7 +48,6 @@ import {
   AlignRight,
   Download,
   Eye,
-  EyeOff,
   FileText,
   GripVertical,
   Plus,
@@ -61,7 +60,6 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
-import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { Button } from '@/components/ui/button';
 
 import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
@@ -72,6 +70,9 @@ type SheetSummary = { id: string; title: string; updatedAt: Date };
 
 const REVOKE_DELAY_MS = 100;
 const PREVIEW_DEBOUNCE_MS = 300;
+// 別ウィンドウプレビューとの連携キー。apps/web/app/builder/preview/preview-client.tsx と共有。
+const PREVIEW_CHANNEL_NAME = 'builder-preview';
+const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
 export type EditorItem =
@@ -97,7 +98,7 @@ const newId = () =>
 
 // 初期ブロックの ID は SSR/CSR で一致させるためインデックス基準の安定値にする
 // （newId() は乱数/時刻依存でハイドレーション不整合を起こす）。追加ブロックのみ newId()。
-const blockToItem = (block: Block, index: number): EditorItem => {
+export const blockToItem = (block: Block, index: number): EditorItem => {
   const id = `block-${index}`;
   switch (block.type) {
     case 'markdown':
@@ -656,7 +657,6 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const router = useRouter();
   const [items, setItems] = useState<EditorItem[]>(() => initialBlocks.map(blockToItem));
   const [title, setTitle] = useState(initialTitle);
-  const [showPreview, setShowPreview] = useState(true);
   const [isSaving, startSaving] = useTransition();
   const [isSheetOp, startSheetOp] = useTransition();
   const [sheets, setSheets] = useState<SheetSummary[]>(initialSheets);
@@ -697,6 +697,47 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [items]);
+
+  // 別ウィンドウプレビューへ変更をリアルタイム反映する BroadcastChannel。
+  // 別窓が開いていなくても postMessage は無害なので購読側の有無は気にしない。
+  const previewChannelRef = useRef<BroadcastChannel | null>(null);
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = new BroadcastChannel(PREVIEW_CHANNEL_NAME);
+    previewChannelRef.current = channel;
+    return () => {
+      channel.close();
+      previewChannelRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    previewChannelRef.current?.postMessage({ title, content: previewContent });
+  }, [title, previewContent]);
+
+  // 開いたプレビュー窓の参照。既に開いている場合はページ再読み込みを避け focus() するだけにする。
+  const previewWindowRef = useRef<Window | null>(null);
+
+  // ヘッダー「プレビュー」ボタン: 別ウィンドウを開く。開いた瞬間に最新内容が見えるよう
+  // localStorage にシード保存してから開く（以後の更新は BroadcastChannel で追従）。
+  const handleOpenPreview = () => {
+    if (previewWindowRef.current && !previewWindowRef.current.closed) {
+      previewWindowRef.current.focus();
+      return;
+    }
+    try {
+      localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify({ title, content: previewContent }));
+    } catch {
+      // プライベートブラウジング等で localStorage が使えなくても window.open は試みる。
+    }
+    const win = window.open('/builder/preview', 'builder-preview', 'width=800,height=1000');
+    if (win) {
+      previewWindowRef.current = win;
+      win.focus();
+    } else {
+      toast.error('ポップアップがブロックされました。ブラウザの設定で許可してください。');
+    }
+  };
 
   // 現在の内容（タイトル含む）が最後の保存スナップショットと異なれば dirty にする。
   useEffect(() => {
@@ -971,13 +1012,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
           <h1 className="min-w-0 truncate text-lg font-bold">スキルシートビルダー</h1>
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowPreview((v) => !v)}
-              aria-label={showPreview ? 'プレビューを非表示' : 'プレビューを表示'}
-            >
-              {showPreview ? <EyeOff className="size-4 sm:mr-1.5" /> : <Eye className="size-4 sm:mr-1.5" />}
+            <Button variant="ghost" size="sm" onClick={handleOpenPreview} aria-label="プレビューを別ウィンドウで開く">
+              <Eye className="size-4 sm:mr-1.5" />
               <span className="hidden sm:inline">プレビュー</span>
             </Button>
             <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={handleExport}>
@@ -995,8 +1031,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-6xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2">
-        {/* エディタ */}
+      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        {/* エディタ（プレビューは別ウィンドウに分離。ヘッダーの「プレビュー」ボタンで開く） */}
         {/* min-w-0: CSS Grid アイテムは既定で min-width:auto のため、子の truncate/
             overflow-x-auto が効かず内容量でトラック自体が押し広げられる（grid blowout）。
             375px でページ全体が横スクロールする不具合の根本原因だった（実機確認）。 */}
@@ -1166,17 +1202,6 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             </div>
           )}
         </div>
-
-        {/* ライブプレビュー */}
-        {showPreview && (
-          <div className="min-w-0 rounded-lg border border-border bg-card">
-            <div className="border-b border-border px-4 py-2 text-sm font-medium text-muted-foreground">プレビュー</div>
-            <SkillSheetViewer
-              skillSheet={{ title: title.trim() || 'プレビュー', content: previewContent }}
-              compareMode
-            />
-          </div>
-        )}
       </div>
     </div>
   );
