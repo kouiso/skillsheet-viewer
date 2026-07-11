@@ -190,8 +190,8 @@ const EXP: ExperienceBlockData = {
 describe('experienceBlockToMarkdown', () => {
   it('会社名・期間・職種・業務内容を含む markdown を出力する', () => {
     const md = experienceBlockToMarkdown(EXP);
-    expect(md).toContain('### 株式会社サンプル（2020-04〜2023-03）');
-    expect(md).toContain('| 期間 | 2020-04〜2023-03 |');
+    expect(md).toContain('### 株式会社サンプル（2020.04〜2023.03）');
+    expect(md).toContain('| 期間 | 2020.04〜2023.03 |');
     expect(md).toContain('| 職種 | フロントエンドエンジニア |');
     expect(md).toContain('React/TypeScript による SPA 開発');
   });
@@ -199,7 +199,7 @@ describe('experienceBlockToMarkdown', () => {
   it('endDate が空のとき「現在」と表示する', () => {
     const md = experienceBlockToMarkdown({ ...EXP, endDate: '' });
     expect(md).toContain('〜現在');
-    expect(md).toContain('| 期間 | 2020-04〜現在 |');
+    expect(md).toContain('| 期間 | 2020.04〜現在 |');
   });
 
   it('role が空のとき職種行を省略する', () => {
