@@ -14,7 +14,14 @@ beforeEach(() => {
 });
 
 describe('isGitHubSeedConfigured', () => {
-  const GH_KEYS = ['GITHUB_TOKEN', 'GITHUB_OWNER', 'GITHUB_REPO', 'VITE_GITHUB_TOKEN', 'VITE_GITHUB_OWNER', 'VITE_GITHUB_REPO'];
+  const GH_KEYS = [
+    'GITHUB_TOKEN',
+    'GITHUB_OWNER',
+    'GITHUB_REPO',
+    'VITE_GITHUB_TOKEN',
+    'VITE_GITHUB_OWNER',
+    'VITE_GITHUB_REPO',
+  ];
   const saved: Record<string, string | undefined> = {};
   beforeEach(() => {
     for (const k of GH_KEYS) {
