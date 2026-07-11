@@ -1,6 +1,6 @@
 'use client';
 
-import { splitPeriodRange } from '@skillsheet/db/process';
+import { hasPeriodRangeSeparator, splitPeriodRange } from '@skillsheet/db/process';
 import { DateTokenPicker } from './date-token-picker';
 
 interface DateRangePickerProps {
@@ -11,14 +11,22 @@ interface DateRangePickerProps {
 
 export function DateRangePicker({ value, onChange }: DateRangePickerProps) {
   const [startToken, endToken] = splitPeriodRange(value);
+  // 元の period が区切り文字を持たない単一トークン（例: "2020"）かどうか。
+  // 単一トークンを開始日側だけ編集しても、勝手に開放範囲へ変換しないための判定に使う。
+  const hasSeparator = hasPeriodRangeSeparator(value);
 
   function handleStartChange(next: string) {
+    if (!hasSeparator && !endToken) {
+      // 元々単一トークンで終了側も未入力なら、単一トークンのまま維持する
+      onChange(next);
+      return;
+    }
     // 区切り文字を 〜 で統一して結合
     onChange(`${next}〜${endToken}`);
   }
 
   function handleEndChange(next: string) {
-    // endToken が空（現在）でも区切りは残す
+    // 終了側を明示的に編集した時点で範囲として扱う（endToken が空＝現在でも区切りは残す）
     onChange(`${startToken}〜${next}`);
   }
 
