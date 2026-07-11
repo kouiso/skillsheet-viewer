@@ -3,16 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import BuilderClient, { assembleMarkdown, type EditorItem } from './builder-client';
-
-// 重いビューア（lightbox/IntersectionObserver 依存）はプレビュー描画を素朴にモック
-vi.mock('@/component/skill-sheet-viewer', () => ({
-  default: ({ skillSheet }: { skillSheet: { content: string } }) => (
-    <div data-testid="preview" data-raw={skillSheet.content}>
-      {skillSheet.content}
-    </div>
-  ),
-}));
+import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
 
 const mockSave = vi.fn().mockResolvedValue({ ok: true });
 vi.mock('./actions', () => ({
@@ -73,15 +64,11 @@ describe('BuilderClient', () => {
     );
   });
 
-  it('プレビューに連結 Markdown が反映される', () => {
-    render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
-    expect(screen.getByTestId('preview')).toHaveTextContent('## A ## B');
-  });
-
+  // プレビューは別ウィンドウに分離済み（builder-client 内には描画しない）ため、
+  // 連結ロジック（assembleMarkdown）は blockToItem 経由で直接ユニットテストする。
   it('隣接 markdown ブロック同士は単一改行(\\n)で結合される', () => {
     // サーバ側 blocksToMarkdown と同じく markdown 分割のラウンドトリップ無損失性を保つ。
-    render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
-    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    const raw = assembleMarkdown(mdBlocks(['## A', '## B']).map(blockToItem));
     expect(raw).toBe('## A\n## B');
   });
 
@@ -109,8 +96,7 @@ describe('BuilderClient', () => {
         data: { columns: [{ label: '項目', align: 'left' }], rows: [['内容']] },
       },
     ];
-    render(<BuilderClient initialBlocks={blocks} initialTitle="t" {...defaultProps} />);
-    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    const raw = assembleMarkdown(blocks.map(blockToItem));
     expect(raw).toBe('## A\n\n| 項目 |\n| :--- |\n| 内容 |');
   });
 
@@ -127,8 +113,7 @@ describe('BuilderClient', () => {
         data: { markdown: '| 言語 | 経験 |\n| :--- | :--- |\n| TS | 3年 |' },
       },
     ];
-    render(<BuilderClient initialBlocks={blocks} initialTitle="t" {...defaultProps} />);
-    const raw = screen.getByTestId('preview').getAttribute('data-raw');
+    const raw = assembleMarkdown(blocks.map(blockToItem));
     expect(raw).toBe('経歴の概要テキスト。\n\n| 言語 | 経験 |\n| :--- | :--- |\n| TS | 3年 |');
   });
 
