@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 interface SelectOrCustomProps {
   value: string;
   options: string[];
@@ -8,14 +10,20 @@ interface SelectOrCustomProps {
 }
 
 export function SelectOrCustom({ value, options, onChange, placeholder }: SelectOrCustomProps) {
-  const isCustom = value !== '' && !options.includes(value);
-  const selectValue = isCustom ? '__custom__' : value;
+  const isKnownValue = value !== '' && options.includes(value);
+  // 「その他」選択直後はonChange('')でvalueが空になるため、value由来の判定だけでは
+  // 自由入力欄が即座に消えてしまう。選択操作そのものを別状態として保持する。
+  const [isCustomMode, setIsCustomMode] = useState(!isKnownValue && value !== '');
+  const showCustomInput = isCustomMode || (value !== '' && !options.includes(value));
+  const selectValue = showCustomInput ? '__custom__' : value;
 
   function handleSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const v = e.target.value;
     if (v === '__custom__') {
+      setIsCustomMode(true);
       onChange('');
     } else {
+      setIsCustomMode(false);
       onChange(v);
     }
   }
@@ -23,7 +31,7 @@ export function SelectOrCustom({ value, options, onChange, placeholder }: Select
   return (
     <div className="flex flex-col gap-1">
       <select
-        value={isCustom ? '__custom__' : selectValue}
+        value={selectValue}
         onChange={handleSelectChange}
         className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       >
@@ -35,7 +43,7 @@ export function SelectOrCustom({ value, options, onChange, placeholder }: Select
         ))}
         <option value="__custom__">その他</option>
       </select>
-      {(selectValue === '__custom__' || isCustom) && (
+      {showCustomInput && (
         <input
           type="text"
           value={value}
