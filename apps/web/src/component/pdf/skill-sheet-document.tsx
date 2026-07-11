@@ -7,7 +7,6 @@ import { unified } from 'unified';
 
 import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
 import PDF_FONT_FAMILY from './constants';
-import { shouldTableWrap } from './table-layout';
 
 // Console テーマ（globals.css の light トークン）に合わせたデザイントークン。
 // 値は design-tokens.ts を単一の真実として import し、globals.css との乖離を
@@ -33,6 +32,9 @@ const NUM = {
   COL_LABEL_FLEX: 3,
   COL_VALUE_FLEX: 7,
   MIN_PRESENCE_PROJECT: 48,
+  // A4 1ページに収まる目安の行内文字数。これを超える行は複数ページにまたがってよい
+  // (wrap=true) とし、収まる行だけを1ページ内で分割不可 (wrap=false) にする。
+  ROW_UNBREAKABLE_CHAR_LIMIT: 600,
 } as const;
 
 const styles = StyleSheet.create({
@@ -306,19 +308,31 @@ function renderTableCell(
   );
 }
 
+// 行内の全セルのテキスト長を合計し、1ページに収まりそうかの目安にする。
+function rowTextLength(row: MdNode): number {
+  return (row.children ?? []).reduce((sum, cell) => sum + nodeText(cell).length, 0);
+}
+
 function renderTable(node: MdNode, key: number): ReactNode {
   const rows = node.children ?? [];
   const columnCount = rows[0]?.children?.length ?? 0;
   if (columnCount === 0) return null;
   const align = node.align ?? [];
   return (
-    <View key={key} style={styles.table} wrap={shouldTableWrap(rows.length)}>
-      {rows.map((row, ri) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: mdast テーブル行は安定 id を持たない
-        <View key={ri} style={styles.tableRow}>
-          {(row.children ?? []).map((cell, ci) => renderTableCell(cell, ci, columnCount, align, ri === 0))}
-        </View>
-      ))}
+    <View key={key} style={styles.table} wrap={true}>
+      {rows.map((row, ri) => {
+        // 1ページに収まる見込みの行だけ1行の途中でのページ分割を禁止する(wrap=false)。
+        // 1ページに収まらない見込みの行(文字数が閾値超)はwrap=trueにして複数ページに
+        // またがることを許容する。これがfalse固定だと、そうした行はどのページにも
+        // 収まらず内容がクリップされてしまう(このPRが直すべきPDF欠落バグの再発)。
+        const oversized = rowTextLength(row) > NUM.ROW_UNBREAKABLE_CHAR_LIMIT;
+        return (
+          // biome-ignore lint/suspicious/noArrayIndexKey: mdast テーブル行は安定idを持たない
+          <View key={ri} style={styles.tableRow} wrap={oversized}>
+            {(row.children ?? []).map((cell, ci) => renderTableCell(cell, ci, columnCount, align, ri === 0))}
+          </View>
+        );
+      })}
     </View>
   );
 }

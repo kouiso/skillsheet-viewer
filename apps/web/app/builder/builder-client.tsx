@@ -59,7 +59,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-
+import { DateTokenPicker } from '@/components/date-token-picker';
+import { SelectOrCustom } from '@/components/select-or-custom';
 import { Button } from '@/components/ui/button';
 
 import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
@@ -67,6 +68,8 @@ import { ProjectEditor } from './project-editor';
 import { TEMPLATES } from './templates';
 
 type SheetSummary = { id: string; title: string; updatedAt: Date };
+
+const LEVEL_OPTIONS = ['実務経験あり', '設計可能', '指導可能', '基礎知識のみ'];
 
 const REVOKE_DELAY_MS = 100;
 const PREVIEW_DEBOUNCE_MS = 300;
@@ -406,12 +409,11 @@ const SkillsBlockEditor = ({
                   />
                 </td>
                 <td className="border border-border p-1">
-                  <input
+                  <SelectOrCustom
                     value={s.level}
-                    onChange={(e) => setSkill(i, 'level', e.target.value)}
-                    placeholder="実務経験あり"
-                    aria-label={`スキル${i + 1}の習熟度`}
-                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                    options={LEVEL_OPTIONS}
+                    onChange={(v) => setSkill(i, 'level', v)}
+                    placeholder="習熟度"
                   />
                 </td>
                 <td className="border border-border p-1 text-center">
@@ -458,21 +460,14 @@ const ExperienceBlockEditor = ({
         aria-label="会社名"
         className="w-full rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
-      <div className="flex gap-2">
-        <input
-          value={data.startDate}
-          onChange={(e) => set('startDate', e.target.value)}
-          placeholder="開始（例: 2020-04）"
-          aria-label="開始年月"
-          className="flex-1 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <span className="self-center text-muted-foreground">〜</span>
-        <input
+      <div className="flex items-center gap-1.5">
+        <DateTokenPicker value={data.startDate} onChange={(v) => set('startDate', v)} placeholder="開始年月日" />
+        <span className="text-muted-foreground text-xs">〜</span>
+        <DateTokenPicker
           value={data.endDate}
-          onChange={(e) => set('endDate', e.target.value)}
-          placeholder="終了（空欄=現在）"
-          aria-label="終了年月"
-          className="flex-1 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+          onChange={(v) => set('endDate', v)}
+          placeholder="終了年月日"
+          allowPresent
         />
       </div>
       <input

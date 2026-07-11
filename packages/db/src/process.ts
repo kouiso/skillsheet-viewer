@@ -80,7 +80,7 @@ export function normalizeProcess(labels: string[] = []): NormalizedProcess {
 // 素の "-" は YYYY-MM 表記と衝突するため含めない（範囲表記は通常 em dash/〜/~ を使う）。
 const RANGE_SEPARATORS = ['—', '〜', '~', '－'];
 
-function splitPeriodRange(period: string): [string, string] {
+export function splitPeriodRange(period: string): [string, string] {
   if (typeof period !== 'string' || period.length === 0) return ['', ''];
   for (const sep of RANGE_SEPARATORS) {
     const idx = period.indexOf(sep);
@@ -89,10 +89,18 @@ function splitPeriodRange(period: string): [string, string] {
   return [period.trim(), ''];
 }
 
-// YYYY.MM / YYYY年M月 / YYYY-MM / YYYY の順で試す。すべて失敗したら null。
+/** period が範囲区切り文字（〜 等）を含むか。単一トークン期間との判別に使う。 */
+export function hasPeriodRangeSeparator(period: string): boolean {
+  if (typeof period !== 'string' || period.length === 0) return false;
+  return RANGE_SEPARATORS.some((sep) => period.includes(sep));
+}
+
+// YYYY-MM-DD / YYYY.MM / YYYY年M月 / YYYY-MM / YYYY の順で試す。すべて失敗したら null。
 function parseYearMonth(token: string): number | null {
   if (!token) return null;
-  let m = token.match(/^(\d{4})\.(\d{1,2})$/);
+  let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
+  m = token.match(/^(\d{4})\.(\d{1,2})$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
   m = token.match(/^(\d{4})年(\d{1,2})月$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
@@ -101,6 +109,61 @@ function parseYearMonth(token: string): number | null {
   m = token.match(/^(\d{4})$/);
   if (m) return Number(m[1]);
   return null;
+}
+
+/**
+ * 1トークン（開始 or 終了の片側）を月精度の表示形式（例: "2020.04"）へ整形する。
+ * 解釈できないトークン（"現在"含む）はそのまま返す（データを壊さない）。
+ */
+export function formatMonthToken(rawToken: string): string {
+  const token = typeof rawToken === 'string' ? rawToken.trim() : rawToken;
+  if (!token) return token;
+  if (/現在/.test(token)) return token;
+  let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return `${m[1]}.${m[2].padStart(2, '0')}`;
+  m = token.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) return `${m[1]}.${m[2].padStart(2, '0')}`;
+  m = token.match(/^(\d{4})\.(\d{1,2})$/);
+  if (m) return `${m[1]}.${m[2].padStart(2, '0')}`;
+  return token;
+}
+
+/**
+ * period 文字列（"開始〜終了" or 単独トークン）を月精度表示へ整形する。
+ * 区切り文字が存在するのに終了トークンが空 = 進行中（現在）を意味する。
+ */
+export function formatPeriodDisplay(period: string): string {
+  if (typeof period !== 'string' || period.length === 0) return period;
+  const hasSeparator = RANGE_SEPARATORS.some((sep) => period.includes(sep));
+  const [startToken, endToken] = splitPeriodRange(period);
+  if (!startToken) return period;
+  const start = formatMonthToken(startToken);
+  if (!hasSeparator) return start;
+  return `${start}〜${endToken ? formatMonthToken(endToken) : '現在'}`;
+}
+
+/** ISO日付文字列（YYYY-MM-DD）へシリアライズする（ピッカーの書き込み用）。 */
+export function serializeDateToken(date: Date): string {
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${mo}-${d}`;
+}
+
+/**
+ * 1トークンを Date へ変換する（ピッカーの初期選択日の復元用）。
+ * 月精度トークンは 1 日を補う。解釈不能なら undefined。
+ */
+export function parseTokenToDate(token: string): Date | undefined {
+  if (!token || /現在/.test(token)) return undefined;
+  let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  m =
+    token.match(/^(\d{4})\.(\d{1,2})$/) ?? token.match(/^(\d{4})-(\d{1,2})$/) ?? token.match(/^(\d{4})年(\d{1,2})月$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
+  m = token.match(/^(\d{4})$/);
+  if (m) return new Date(Number(m[1]), 0, 1);
+  return undefined;
 }
 
 /**

@@ -8,6 +8,8 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
+import { formatMonthToken, formatPeriodDisplay } from './process';
+
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
 export interface MarkdownBlockData {
@@ -415,7 +417,7 @@ export function skillsBlockToMarkdown(data: SkillsBlockData): string {
 /** 職務経歴ブロックを markdown へ変換する。 */
 export function experienceBlockToMarkdown(data: ExperienceBlockData): string {
   const { company, startDate, endDate, role, description } = data;
-  const period = [startDate, endDate || '現在'].filter(Boolean).join('〜');
+  const period = [formatMonthToken(startDate), formatMonthToken(endDate) || '現在'].filter(Boolean).join('〜');
   const heading = company.trim().length > 0 ? `### ${company}（${period}）` : `### （${period}）`;
   const lines: string[] = [heading, ''];
   lines.push('| 項目 | 内容 |');
@@ -473,7 +475,7 @@ export function projectBlockToMarkdown(data: ProjectBlockData): string {
     lines.push('');
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
-    if (item.period) lines.push(`| 期間 | ${escapeCell(item.period)} |`);
+    if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
     if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
