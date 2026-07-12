@@ -21,7 +21,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
   const summary = item.summary?.trim() || item.duties;
 
   return (
-    <article className="flex flex-col gap-3.5 rounded-[var(--radius-lg)] border border-border bg-card px-5 py-5">
+    <article className="flex min-w-0 flex-col gap-3.5 rounded-[var(--radius-lg)] border border-border bg-card px-5 py-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
@@ -43,7 +43,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
         </div>
       </div>
 
-      {summary && <p className="text-[13.5px] leading-[1.85] text-muted-foreground">{summary}</p>}
+      {summary && <p className="break-words text-[13.5px] leading-[1.85] text-muted-foreground">{summary}</p>}
 
       {tech.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -73,12 +73,12 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       {item.acquired && (
         <div className="text-sm">
           <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">習得スキル・実績</p>
-          <p className="whitespace-pre-wrap leading-relaxed text-foreground/80">{item.acquired}</p>
+          <p className="whitespace-pre-wrap break-words leading-relaxed text-foreground/80">{item.acquired}</p>
         </div>
       )}
 
       {item.comment && (
-        <p className="border-l-2 border-primary pl-3 text-sm italic text-muted-foreground">{item.comment}</p>
+        <p className="break-words border-l-2 border-primary pl-3 text-sm italic text-muted-foreground">{item.comment}</p>
       )}
     </article>
   );
