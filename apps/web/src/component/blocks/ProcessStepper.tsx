@@ -27,9 +27,18 @@ export function ProcessStepper({ done, uncertain, compact = false }: ProcessStep
           <div key={label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
             {!compact && (
               <span
-                className={`text-center font-mono text-[10px] leading-tight ${isDone || isUncertain ? 'text-accent-text' : 'text-faint'}`}
+                className={`break-keep text-center font-mono text-[10px] leading-tight [overflow-wrap:anywhere] ${isDone || isUncertain ? 'text-accent-text' : 'text-faint'}`}
               >
-                {label}
+                {/* 狭幅では「・」の直後だけで折り返す（語中の「実装・単/体」折れを防ぐ）。 */}
+                {label.split('・').map((part, j, parts) =>
+                  j < parts.length - 1 ? (
+                    <span key={part}>
+                      {part}・<wbr />
+                    </span>
+                  ) : (
+                    <span key={part}>{part}</span>
+                  ),
+                )}
               </span>
             )}
             <span
