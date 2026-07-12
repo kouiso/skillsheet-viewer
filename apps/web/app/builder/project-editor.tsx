@@ -1,37 +1,13 @@
 'use client';
 
-import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@skillsheet/db/blocks';
-import { formatPeriodDisplay } from '@skillsheet/db/process';
-import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { DateRangePicker } from '@/components/date-range-picker';
-import { SelectOrCustom } from '@/components/select-or-custom';
-import { TagInput } from '@/components/tag-input';
+import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@skillsheet/db/blocks';
+import { deriveCompanyPeriod } from '@skillsheet/db/process';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
-const COMPANY_KIND_OPTIONS = ['正社員', '契約社員', '派遣', 'SES', 'フリーランス'];
-
-const PROCESS_OPTIONS = [
-  '要件定義',
-  '基本設計',
-  '詳細設計',
-  '実装',
-  'テスト',
-  '運用・保守',
-  'インフラ構築',
-  'PM',
-  'スクラム',
-  'コードレビュー',
-];
-
-const TECH_KEYS: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
-const TECH_LABELS: Record<keyof ProjectTech, string> = {
-  lang: '言語',
-  fw: 'FW/ライブラリ',
-  db: 'DB',
-  infra: 'インフラ',
-  tools: 'ツール',
-  collab: 'コラボ',
-};
+import { ProjectForm } from './project-form';
+import { ProjectNav } from './project-nav';
+import { ProjectPreview } from './project-preview';
 
 const newId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -63,384 +39,282 @@ const emptyCompany = (): CompanyInfo => ({
   note: '',
 });
 
-// カンマ区切りテキストを配列に変換するヘルパー
-const textToTags = (text: string): string[] =>
-  text
-    .split(',')
-    .map((t) => t.trim())
-    .filter(Boolean);
+/** 会社にひもづく案件の period 集合（並び順の影響を除くためソート済み文字列にする）。 */
+const companyPeriodsKey = (data: ProjectBlockData, companyId: string): string =>
+  data.items
+    .filter((p) => p.companyId === companyId)
+    .map((p) => p.period)
+    .sort()
+    .join('\n');
 
-interface CompanyFormProps {
-  company: CompanyInfo;
-  onChange: (patch: Partial<CompanyInfo>) => void;
-  onDelete: () => void;
+/**
+ * 会社の期間をひもづく案件の period 群から自動導出して上書きする。
+ * - その会社の案件 period 集合が今回の変更で変わっていない場合、既存の非空 period は温存する
+ *   （旧エディタで手書きされた会社期間を、無関係な編集のたびに自動導出値で潰さない —
+ *   会社期間入力は読み取り専用のため、潰すと復元手段がない）。
+ * - 既存 period が空の会社は常に自動導出で補完する。
+ * - 1件もパースできない（derive が ''）場合は既存値を温存する（データを消さない）。
+ */
+const withDerivedCompanyPeriods = (prev: ProjectBlockData, next: ProjectBlockData): ProjectBlockData => ({
+  ...next,
+  companies: next.companies.map((company) => {
+    if (company.period && companyPeriodsKey(prev, company.id) === companyPeriodsKey(next, company.id)) {
+      return company;
+    }
+    const derived = deriveCompanyPeriod(next.items.filter((p) => p.companyId === company.id).map((p) => p.period));
+    return derived && derived !== company.period ? { ...company, period: derived } : company;
+  }),
+});
+
+/** builder-client のトップバー breadcrumb 用の選択情報。 */
+export interface ProjectEditorSelection {
+  companyName: string;
+  /** 閲覧側の通し番号。0 = 非表示（欠番）。 */
+  visibleNo: number;
 }
-
-const CompanyForm = ({ company, onChange, onDelete }: CompanyFormProps) => (
-  <div className="space-y-2">
-    <div className="flex items-center justify-between">
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">会社情報</span>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="rounded p-1 text-muted-foreground hover:text-destructive"
-        aria-label="会社を削除"
-      >
-        <Trash2 className="size-3.5" />
-      </button>
-    </div>
-    <input
-      value={company.name}
-      onChange={(e) => onChange({ name: e.target.value })}
-      placeholder="会社名 *"
-      className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-    />
-    <div className="grid grid-cols-2 gap-2">
-      <SelectOrCustom
-        value={company.kind ?? ''}
-        options={COMPANY_KIND_OPTIONS}
-        onChange={(v) => onChange({ kind: v })}
-        placeholder="形態（正社員/SES等）"
-      />
-      <DateRangePicker value={company.period ?? ''} onChange={(v) => onChange({ period: v })} />
-    </div>
-    <textarea
-      value={company.note ?? ''}
-      onChange={(e) => onChange({ note: e.target.value })}
-      placeholder="備考"
-      rows={2}
-      className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-    />
-  </div>
-);
-
-interface ProjectItemFormProps {
-  project: ProjectItem;
-  onChange: (patch: Partial<ProjectItem>) => void;
-  onDelete: () => void;
-}
-
-const ProjectItemForm = ({ project, onChange, onDelete }: ProjectItemFormProps) => {
-  const updateTech = (key: keyof ProjectTech, tags: string[]) => {
-    onChange({ tech: { ...project.tech, [key]: tags } });
-  };
-  const toggleProcess = (p: string) => {
-    const next = project.process.includes(p) ? project.process.filter((x) => x !== p) : [...project.process, p];
-    onChange({ process: next });
-  };
-
-  return (
-    <div className="mt-2 space-y-3 border-t border-border pt-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">案件詳細</span>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded p-1 text-muted-foreground hover:text-destructive"
-          aria-label="案件を削除"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
-      </div>
-
-      {/* 基本情報 */}
-      <div className="space-y-2">
-        <input
-          value={project.title}
-          onChange={(e) => onChange({ title: e.target.value })}
-          placeholder="案件名"
-          className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <DateRangePicker value={project.period ?? ''} onChange={(v) => onChange({ period: v })} />
-          <input
-            value={project.scope ?? ''}
-            onChange={(e) => onChange({ scope: e.target.value })}
-            placeholder="規模（例: 10名）"
-            className="rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-        <input
-          value={project.duration ?? ''}
-          onChange={(e) => onChange({ duration: e.target.value })}
-          placeholder="期間の長さ（例: 3ヶ月）。空欄なら期間から自動算出"
-          className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            value={project.role ?? ''}
-            onChange={(e) => onChange({ role: e.target.value })}
-            placeholder="役割（例: バックエンドエンジニア）"
-            className="rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-          <input
-            value={project.team ?? ''}
-            onChange={(e) => onChange({ team: e.target.value })}
-            placeholder="チーム構成（例: PG3, QA2）"
-            className="rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-      </div>
-
-      {/* 担当工程 */}
-      <div>
-        <p className="mb-1 text-xs font-medium text-muted-foreground">担当工程</p>
-        <div className="flex flex-wrap gap-1">
-          {PROCESS_OPTIONS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => toggleProcess(p)}
-              className={`rounded px-2 py-0.5 text-xs transition-colors ${
-                project.process.includes(p)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-border bg-background text-foreground hover:border-primary'
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-        <input
-          value={project.process.filter((p) => !PROCESS_OPTIONS.includes(p)).join(', ')}
-          onChange={(e) => {
-            const custom = textToTags(e.target.value);
-            const predefined = project.process.filter((p) => PROCESS_OPTIONS.includes(p));
-            onChange({ process: [...predefined, ...custom] });
-          }}
-          placeholder="その他（カンマ区切りで追加）"
-          className="mt-1 w-full rounded border border-input bg-background px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-      </div>
-
-      {/* 技術スタック */}
-      <div>
-        <p className="mb-1 text-xs font-medium text-muted-foreground">技術スタック</p>
-        <div className="space-y-1">
-          {TECH_KEYS.map((key) => (
-            <div key={key} className="flex items-center gap-2">
-              <span className="w-24 shrink-0 text-xs text-muted-foreground">{TECH_LABELS[key]}</span>
-              <div className="flex-1">
-                <TagInput
-                  tags={project.tech[key]}
-                  onChange={(next) => updateTech(key, next)}
-                  placeholder={key === 'lang' ? 'TypeScript, Python…' : key === 'fw' ? 'React, Next.js…' : '追加…'}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* 業務内容・習得スキル・コメント */}
-      <div className="space-y-2">
-        <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">
-            要約（工程の俯瞰カードに表示。空欄なら業務内容を使用）
-          </p>
-          <textarea
-            value={project.summary ?? ''}
-            onChange={(e) => onChange({ summary: e.target.value })}
-            placeholder="案件の要約を1〜3文で記載"
-            rows={2}
-            className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-        <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">業務内容</p>
-          <textarea
-            value={project.duties ?? ''}
-            onChange={(e) => onChange({ duties: e.target.value })}
-            placeholder="担当した業務内容を記載"
-            rows={3}
-            className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-        <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">習得スキル・実績</p>
-          <textarea
-            value={project.acquired ?? ''}
-            onChange={(e) => onChange({ acquired: e.target.value })}
-            placeholder="この案件で習得したスキルや実績"
-            rows={2}
-            className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-        <div>
-          <p className="mb-1 text-xs font-medium text-muted-foreground">コメント</p>
-          <textarea
-            value={project.comment ?? ''}
-            onChange={(e) => onChange({ comment: e.target.value })}
-            placeholder="補足コメント"
-            rows={2}
-            className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-        </div>
-      </div>
-    </div>
-  );
-};
 
 interface ProjectEditorProps {
   data: ProjectBlockData;
   onChange: (data: ProjectBlockData) => void;
+  /** 選択中の会社/案件が変わったとき breadcrumb 表示用に通知する（任意）。 */
+  onSelectionChange?: (selection: ProjectEditorSelection | null) => void;
 }
 
-export const ProjectEditor = ({ data, onChange }: ProjectEditorProps) => {
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(data.companies[0]?.id ?? null);
-  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(null);
+/**
+ * 案件エディタ本体：3 ペイン構成（会社別ナビ / 編集フォーム / ライブプレビュー）。
+ * 外部契約は {data, onChange} のまま（builder-client の差分を最小化）。
+ * 会社の period は items 変更のたびに deriveCompanyPeriod で自動再計算する。
+ */
+export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEditorProps) => {
+  const [selectedId, setSelectedId] = useState<string | null>(data.items[0]?.id ?? null);
+  const [showPreview, setShowPreview] = useState(true);
+
+  // 選択中の案件が（削除等で）存在しなくなったら先頭へフォールバック
+  const current = data.items.find((p) => p.id === selectedId) ?? data.items[0] ?? null;
+  const currentId = current?.id ?? null;
+  const currentCompany = current ? data.companies.find((c) => c.id === current.companyId) : undefined;
+
+  // items 変更を伴う更新は必ず会社期間の再導出を通す（変更前 data と比較し、
+  // 案件 period が実際に変わった会社だけ再導出する）
+  const commit = useCallback(
+    (next: ProjectBlockData) => onChange(withDerivedCompanyPeriods(data, next)),
+    [onChange, data],
+  );
+
+  // 閲覧側で見える通し番号（hidden の案件・hidden の会社配下は欠番にせず詰める）
+  const visibleNoOf = useMemo(() => {
+    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
+    const map = new Map<string, number>();
+    let n = 0;
+    for (const p of data.items) {
+      if (!p.hidden && !hiddenCompany.has(p.companyId)) map.set(p.id, ++n);
+    }
+    return map;
+  }, [data]);
+
+  // プレビュー用：非表示でも「表示されたと仮定した番号」を出す（バッジで非表示を明示）
+  const previewNo = useMemo(() => {
+    if (!currentId) return 0;
+    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
+    let n = 0;
+    for (const p of data.items) {
+      const visible = !p.hidden && !hiddenCompany.has(p.companyId);
+      if (p.id === currentId) return n + 1;
+      if (visible) n++;
+    }
+    return 0;
+  }, [data, currentId]);
+
+  // breadcrumb（会社名 / 案件NN）を builder-client のトップバーへ通知
+  const selectionCompanyName = currentCompany?.name ?? '';
+  const selectionNo = currentId ? (visibleNoOf.get(currentId) ?? 0) : 0;
+  useEffect(() => {
+    onSelectionChange?.(currentId ? { companyName: selectionCompanyName, visibleNo: selectionNo } : null);
+  }, [currentId, selectionCompanyName, selectionNo, onSelectionChange]);
+
+  // ── 案件の更新 ──
+  const patchProject = (patch: Partial<ProjectItem>) => {
+    if (!currentId) return;
+    commit({ ...data, items: data.items.map((p) => (p.id === currentId ? { ...p, ...patch } : p)) });
+  };
+
+  const moveCompany = (companyId: string) => patchProject({ companyId });
+
+  const patchCompany = (patch: Partial<CompanyInfo>) => {
+    if (!currentCompany) return;
+    commit({
+      ...data,
+      companies: data.companies.map((c) => (c.id === currentCompany.id ? { ...c, ...patch } : c)),
+    });
+  };
+
+  // ── 追加・削除 ──
+  const addProject = (companyId: string) => {
+    const project = emptyProject(companyId);
+    // 同じ会社の最後の案件の直後に挿入する
+    let lastIndex = -1;
+    data.items.forEach((p, i) => {
+      if (p.companyId === companyId) lastIndex = i;
+    });
+    const items = [...data.items];
+    items.splice(lastIndex + 1, 0, project);
+    commit({ ...data, items });
+    setSelectedId(project.id);
+  };
 
   const addCompany = () => {
     const company = emptyCompany();
-    onChange({ ...data, companies: [...data.companies, company] });
-    setSelectedCompanyId(company.id);
-    setExpandedProjectId(null);
+    commit({ ...data, companies: [...data.companies, company] });
   };
 
-  const updateCompany = (id: string, patch: Partial<CompanyInfo>) => {
-    onChange({ ...data, companies: data.companies.map((c) => (c.id === id ? { ...c, ...patch } : c)) });
-  };
-
-  const deleteCompany = (id: string) => {
-    const remaining = data.companies.filter((c) => c.id !== id);
-    onChange({
-      ...data,
-      companies: remaining,
-      items: data.items.filter((p) => p.companyId !== id),
-    });
-    setSelectedCompanyId(remaining[0]?.id ?? null);
-    setExpandedProjectId(null);
-  };
-
-  const addProject = (companyId: string) => {
-    const project = emptyProject(companyId);
-    onChange({ ...data, items: [...data.items, project] });
-    setExpandedProjectId(project.id);
-  };
-
-  const updateProject = (id: string, patch: Partial<ProjectItem>) => {
-    onChange({ ...data, items: data.items.map((p) => (p.id === id ? { ...p, ...patch } : p)) });
-  };
-
+  /** ナビ側は行内で confirm 済みのため、ここでは削除のみ行う。 */
   const deleteProject = (id: string) => {
-    onChange({ ...data, items: data.items.filter((p) => p.id !== id) });
-    if (expandedProjectId === id) setExpandedProjectId(null);
+    commit({ ...data, items: data.items.filter((p) => p.id !== id) });
+    if (selectedId === id) {
+      const rest = data.items.filter((p) => p.id !== id);
+      setSelectedId(rest[0]?.id ?? null);
+    }
   };
 
-  const selectedCompany = data.companies.find((c) => c.id === selectedCompanyId);
-  const companyProjects = selectedCompanyId ? data.items.filter((p) => p.companyId === selectedCompanyId) : [];
+  /** フォーム下部の削除ボタン用（confirm 付き）。 */
+  const confirmDeleteCurrentProject = () => {
+    if (!current) return;
+    if (!window.confirm(`「${current.title || '無題の案件'}」を削除しますか？`)) return;
+    deleteProject(current.id);
+  };
+
+  const deleteCompany = (companyId: string) => {
+    const company = data.companies.find((c) => c.id === companyId);
+    if (!company) return;
+    const children = data.items.filter((p) => p.companyId === companyId);
+    const message =
+      children.length > 0
+        ? `「${company.name || '(会社名未入力)'}」と、ひもづく案件 ${children.length} 件をすべて削除しますか？\nこの操作は取り消せません。`
+        : `「${company.name || '(会社名未入力)'}」を削除しますか？`;
+    if (!window.confirm(message)) return;
+    const items = data.items.filter((p) => p.companyId !== companyId);
+    commit({ ...data, companies: data.companies.filter((c) => c.id !== companyId), items });
+    if (current && current.companyId === companyId) {
+      setSelectedId(items[0]?.id ?? null);
+    }
+  };
+
+  // ── D&D 並び替え・所属替え・表示トグル ──
+  const reorderProject = (activeId: string, overId: string) => {
+    if (activeId === overId) return;
+    const items = [...data.items];
+    const oldIndex = items.findIndex((p) => p.id === activeId);
+    // 挿入位置は「取り除く前」の配列で決める（arrayMove と同じ規約）。取り除いた後に
+    // findIndex すると下方向のドラッグが 1 つ手前にずれ、隣への移動が no-op になる。
+    const newIndex = items.findIndex((p) => p.id === overId);
+    const over = items[newIndex];
+    if (oldIndex === -1 || newIndex === -1 || !over) return;
+    const [moved] = items.splice(oldIndex, 1);
+    // 移動先案件の位置へ挿入し、その会社へ所属替え（会社をまたぐ D&D に対応）
+    items.splice(newIndex, 0, { ...moved, companyId: over.companyId });
+    commit({ ...data, items });
+  };
+
+  const dropProjectToCompany = (projectId: string, companyId: string) => {
+    const source = data.items.find((p) => p.id === projectId);
+    if (!source) return;
+    const items = data.items.filter((p) => p.id !== projectId);
+    let lastIndex = -1;
+    items.forEach((p, i) => {
+      if (p.companyId === companyId) lastIndex = i;
+    });
+    items.splice(lastIndex + 1, 0, { ...source, companyId });
+    commit({ ...data, items });
+  };
+
+  const reorderCompany = (activeId: string, overId: string) => {
+    if (activeId === overId) return;
+    const companies = [...data.companies];
+    const oldIndex = companies.findIndex((c) => c.id === activeId);
+    // 挿入位置は「取り除く前」の配列で決める（reorderProject と同じ理由）
+    const newIndex = companies.findIndex((c) => c.id === overId);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const [moved] = companies.splice(oldIndex, 1);
+    companies.splice(newIndex, 0, moved);
+    commit({ ...data, companies });
+  };
+
+  const toggleHideProject = (id: string) =>
+    commit({ ...data, items: data.items.map((p) => (p.id === id ? { ...p, hidden: !p.hidden } : p)) });
+
+  const toggleHideCompany = (id: string) =>
+    commit({ ...data, companies: data.companies.map((c) => (c.id === id ? { ...c, hidden: !c.hidden } : c)) });
 
   return (
-    <div className="flex gap-4 min-h-0">
-      {/* 会社一覧（左ペイン） */}
-      <div className="w-44 shrink-0 space-y-1">
-        <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">会社</span>
+    <div
+      className={`grid grid-cols-1 gap-4 ${
+        showPreview ? 'lg:grid-cols-[260px_1fr_420px]' : 'lg:grid-cols-[260px_1fr]'
+      }`}
+    >
+      {/* 左：会社別ナビ */}
+      <ProjectNav
+        data={data}
+        selectedId={currentId}
+        onSelect={setSelectedId}
+        onAddProject={addProject}
+        onAddCompany={addCompany}
+        onDeleteProject={deleteProject}
+        onToggleHideProject={toggleHideProject}
+        onToggleHideCompany={toggleHideCompany}
+        onReorderProject={reorderProject}
+        onDropProjectToCompany={dropProjectToCompany}
+        onReorderCompany={reorderCompany}
+      />
+
+      {/* 中央：編集フォーム */}
+      <div className="min-w-0 space-y-3">
+        <div className="flex items-center justify-end">
           <button
             type="button"
-            onClick={addCompany}
-            className="rounded p-1 text-muted-foreground hover:text-foreground"
-            aria-label="会社を追加"
+            onClick={() => setShowPreview((v) => !v)}
+            className="flex items-center gap-1.5 rounded border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary"
           >
-            <Plus className="size-3.5" />
+            {showPreview ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+            {showPreview ? 'プレビューを隠す' : 'プレビュー表示'}
           </button>
         </div>
-        {data.companies.map((company) => (
-          <button
-            key={company.id}
-            type="button"
-            onClick={() => {
-              setSelectedCompanyId(company.id);
-              setExpandedProjectId(null);
-            }}
-            className={`w-full truncate rounded px-2 py-1.5 text-left text-sm transition-colors ${
-              company.id === selectedCompanyId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground'
-            }`}
-          >
-            {company.name || '(会社名未入力)'}
-          </button>
-        ))}
-        {data.companies.length === 0 && (
-          <p className="py-4 text-center text-xs text-muted-foreground">+ で会社を追加</p>
-        )}
-      </div>
-
-      {/* メイン編集エリア（右ペイン） */}
-      <div className="min-w-0 flex-1 space-y-4">
-        {selectedCompany ? (
-          <>
-            {/* 会社フォーム */}
-            <div className="rounded border border-border p-3">
-              <CompanyForm
-                company={selectedCompany}
-                onChange={(patch) => updateCompany(selectedCompany.id, patch)}
-                onDelete={() => deleteCompany(selectedCompany.id)}
-              />
-            </div>
-
-            {/* 案件リスト */}
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  案件一覧（{companyProjects.length}件）
-                </span>
-                <button
-                  type="button"
-                  onClick={() => addProject(selectedCompany.id)}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  <Plus className="size-3" />
-                  案件追加
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {companyProjects.map((proj) => (
-                  <div key={proj.id} className="rounded border border-border">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedProjectId(expandedProjectId === proj.id ? null : proj.id)}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
-                    >
-                      {expandedProjectId === proj.id ? (
-                        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-                      )}
-                      <span className="flex-1 truncate font-medium">{proj.title || '(タイトル未入力)'}</span>
-                      {proj.period && (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {formatPeriodDisplay(proj.period)}
-                        </span>
-                      )}
-                    </button>
-
-                    {expandedProjectId === proj.id && (
-                      <div className="px-3 pb-3">
-                        <ProjectItemForm
-                          project={proj}
-                          onChange={(patch) => updateProject(proj.id, patch)}
-                          onDelete={() => deleteProject(proj.id)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {companyProjects.length === 0 && (
-                  <p className="rounded border border-dashed border-border py-6 text-center text-xs text-muted-foreground">
-                    「案件追加」で案件を追加してください
-                  </p>
-                )}
-              </div>
-            </div>
-          </>
+        {current ? (
+          <ProjectForm
+            project={current}
+            company={currentCompany}
+            data={data}
+            onPatch={patchProject}
+            onMoveCompany={moveCompany}
+            onPatchCompany={patchCompany}
+            onDeleteCompany={() => currentCompany && deleteCompany(currentCompany.id)}
+            onDelete={confirmDeleteCurrentProject}
+          />
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {data.companies.length === 0 ? '左の「+」から会社を追加してください' : '左から会社を選択してください'}
-          </p>
+          <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <p className="text-sm font-medium text-foreground">案件が選択されていません</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              左の一覧から案件を選ぶか、会社に新しい案件を追加してください。
+            </p>
+            {data.companies[0] && (
+              <button
+                type="button"
+                onClick={() => addProject(data.companies[0].id)}
+                className="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground"
+              >
+                ＋ 案件を追加
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {/* 右：ライブプレビュー（トグル可） */}
+      {showPreview && current && <ProjectPreview project={current} company={currentCompany} no={previewNo} />}
+      {showPreview && !current && (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center text-xs text-muted-foreground">
+          プレビューする案件がありません。
+        </div>
+      )}
     </div>
   );
 };

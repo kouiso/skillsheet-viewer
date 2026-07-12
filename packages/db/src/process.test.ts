@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  deriveCompanyPeriod,
   deriveDuration,
+  durationFromRange,
   flattenTech,
   formatMonthToken,
   formatPeriodDisplay,
+  formatPeriodRange,
+  labelsForProcessIndex,
   normalizeProcess,
+  parsePeriodToRange,
   parseStart,
   parseTokenToDate,
   serializeDateToken,
@@ -24,6 +29,59 @@ describe('normalizeProcess', () => {
     expect(result.done).toEqual(new Array(7).fill(false));
     expect(result.other).toEqual([]);
   });
+
+  it('7段モデルの正準ラベル「実装・単体」「保守・運用」は certain として done になる', () => {
+    const result = normalizeProcess(['実装・単体', '保守・運用']);
+    expect(result.done[3]).toBe(true);
+    expect(result.done[6]).toBe(true);
+    expect(result.uncertain.every((u) => u === false)).toBe(true);
+    expect(result.other).toEqual([]);
+  });
+
+  it('レガシー語彙「実装」「運用・保守」も従来どおり certain として動作する', () => {
+    const result = normalizeProcess(['実装', '運用・保守']);
+    expect(result.done[3]).toBe(true);
+    expect(result.done[6]).toBe(true);
+    expect(result.other).toEqual([]);
+  });
+
+  it('「テスト」は結合/総合の uncertain のまま（done にしない）', () => {
+    const result = normalizeProcess(['テスト']);
+    expect(result.done[4]).toBe(false);
+    expect(result.done[5]).toBe(false);
+    expect(result.uncertain[4]).toBe(true);
+    expect(result.uncertain[5]).toBe(true);
+  });
+
+  it('「テスト」＋「結合テスト」の共存でも done と uncertain は同じ index で同時に true にならない', () => {
+    // レガシー「テスト」を温存したままエディタで「結合テスト」を ON にした状態。
+    // done[4] が確定した段は uncertain から外す（同一案件を donut と「確認中」に二重計上しない）。
+    const result = normalizeProcess(['テスト', '結合テスト']);
+    expect(result.done[4]).toBe(true);
+    expect(result.uncertain[4]).toBe(false);
+    // 総合テスト側は依然として不確実のまま
+    expect(result.done[5]).toBe(false);
+    expect(result.uncertain[5]).toBe(true);
+  });
+});
+
+describe('labelsForProcessIndex', () => {
+  it('index=3 には「実装」と「実装・単体」の両方が含まれる', () => {
+    const labels = labelsForProcessIndex(3);
+    expect(labels).toContain('実装');
+    expect(labels).toContain('実装・単体');
+  });
+
+  it('index=6 には「運用・保守」と「保守・運用」の両方が含まれる', () => {
+    const labels = labelsForProcessIndex(6);
+    expect(labels).toContain('運用・保守');
+    expect(labels).toContain('保守・運用');
+  });
+
+  it('uncertain マッチ（「テスト」）は含まれない', () => {
+    expect(labelsForProcessIndex(4)).not.toContain('テスト');
+    expect(labelsForProcessIndex(5)).not.toContain('テスト');
+  });
 });
 
 describe('deriveDuration', () => {
@@ -42,6 +100,13 @@ describe('deriveDuration', () => {
   it('period が undefined/非文字列でも例外にならず空文字を返す', () => {
     // @ts-expect-error 型上は string だが、レガシーデータ由来の非文字列混入を想定する。
     expect(deriveDuration(undefined)).toBe('');
+  });
+
+  it('終了が単に未記載（開始のみ）の period は継続中とみなさず空文字を返す', () => {
+    // 継続中チェック OFF のまま終了月未入力の案件（"2020.06"）や単年レガシー（"2020"）を
+    // 「継続中」と誤表示しない。「継続中」は "現在" 終端の明示があるときだけ。
+    expect(deriveDuration('2020.06')).toBe('');
+    expect(deriveDuration('2020')).toBe('');
   });
 });
 
@@ -184,5 +249,88 @@ describe('parseStart/deriveDuration（ISO日付トークン対応の回帰防止
   it('ISO日付トークンを含む期間を既存の月精度トークンと同じ精度で解釈する', () => {
     expect(parseStart('2020-04-15 — 2023-03-20')).toBeCloseTo(2020 + 3 / 12);
     expect(deriveDuration('2020-04-15 — 2023-03-20')).toBe('3年');
+  });
+});
+
+describe('formatPeriodRange', () => {
+  it('開始・終了とも指定されていれば "YYYY.MM — YYYY.MM" を組み立てる', () => {
+    expect(formatPeriodRange('2020-06', '2021-08', false)).toBe('2020.06 — 2021.08');
+  });
+
+  it('ongoing=true のとき終端は「現在」', () => {
+    expect(formatPeriodRange('2024-01', '', true)).toBe('2024.01 — 現在');
+  });
+
+  it('start が不正/空なら空文字（レガシー period 温存のフォールバック）', () => {
+    expect(formatPeriodRange('', '2021-08', false)).toBe('');
+    expect(formatPeriodRange('不明', '2021-08', false)).toBe('');
+  });
+
+  it('end が不正/空なら開始のみ表示する', () => {
+    expect(formatPeriodRange('2020-06', '', false)).toBe('2020.06');
+  });
+});
+
+describe('durationFromRange', () => {
+  it('開始・終了から両端含む月数を導出する', () => {
+    expect(durationFromRange('2020-06', '2021-08', false)).toBe('1年3ヶ月');
+    expect(durationFromRange('2025-01', '2025-04', false)).toBe('4ヶ月');
+  });
+
+  it('ongoing=true のときは「継続中」', () => {
+    expect(durationFromRange('2024-01', '', true)).toBe('継続中');
+  });
+
+  it('start が不正なら空文字', () => {
+    expect(durationFromRange('', '2021-08', false)).toBe('');
+  });
+
+  it('ongoing=false で終了月が未入力なら「継続中」ではなく空文字（継続中はチェック時のみ）', () => {
+    expect(durationFromRange('2020-06', '', false)).toBe('');
+  });
+});
+
+describe('parsePeriodToRange', () => {
+  it('"YYYY.MM — YYYY.MM" を月入力初期値へ変換する', () => {
+    expect(parsePeriodToRange('2020.06 — 2021.08')).toEqual({ start: '2020-06', end: '2021-08', ongoing: false });
+  });
+
+  it('終端「現在」は ongoing=true になる', () => {
+    expect(parsePeriodToRange('2024.01 — 現在')).toEqual({ start: '2024-01', end: '', ongoing: true });
+  });
+
+  it('"YYYY年M月〜YYYY年M月" 表記も解釈できる', () => {
+    expect(parsePeriodToRange('2020年6月〜2021年8月')).toEqual({ start: '2020-06', end: '2021-08', ongoing: false });
+  });
+
+  it('パース不能なレガシー文字列は null（呼び出し側は温存表示）', () => {
+    expect(parsePeriodToRange('不明')).toBeNull();
+    expect(parsePeriodToRange('2020.06 — 終了時期未定')).toBeNull();
+  });
+
+  it('単年（"2020"）は月が特定できないため null', () => {
+    expect(parsePeriodToRange('2020')).toBeNull();
+  });
+});
+
+describe('deriveCompanyPeriod', () => {
+  it('複数案件から最古開始 — 最新終了を導出する', () => {
+    expect(deriveCompanyPeriod(['2020.06 — 2021.08', '2019.01 — 2019.12'])).toBe('2019.01 — 2021.08');
+  });
+
+  it('継続中の案件が 1 件でもあれば終端は「現在」', () => {
+    expect(deriveCompanyPeriod(['2018.04 — 2019.03', '2020.01 — 現在'])).toBe('2018.04 — 現在');
+  });
+
+  it('空配列・全件パース不能なら空文字', () => {
+    expect(deriveCompanyPeriod([])).toBe('');
+    expect(deriveCompanyPeriod(['不明', ''])).toBe('');
+  });
+
+  it('終了が単に未記載の period（"2020" / 開始のみ）は継続中とみなさない', () => {
+    // 単年レガシー "2020" や終了月未入力の "2020.06" で会社期間を「— 現在」へ倒さない。
+    expect(deriveCompanyPeriod(['2020'])).toBe('2020');
+    expect(deriveCompanyPeriod(['2020.06'])).toBe('2020.06');
+    expect(deriveCompanyPeriod(['2019.01 — 2019.06', '2020'])).toBe('2019.01 — 2019.06');
   });
 });

@@ -18,6 +18,10 @@ const BOLD_OTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.otf');
 // PDF の先頭マジックバイト（%PDF-）。これが無ければ PDF として成立していない。
 const PDF_HEADER = '%PDF-';
 
+// 実バイト描画はフォント登録＋レイアウト計算を伴い、単体では 2〜3 秒だが
+// スイート全体の並列実行下では既定の 5 秒を超えることがあるため、余裕を持たせる。
+const RENDER_TIMEOUT_MS = 30_000;
+
 function registerNodeFonts(): void {
   Font.register({
     family: PDF_FONT_FAMILY,
@@ -86,7 +90,7 @@ describe('SkillSheetDocument（実バイト描画）', () => {
     expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
     // 末尾に PDF の終端マーカー（%%EOF）があり、途中で壊れていないこと。
     expect(buffer.subarray(-1024).toString('latin1')).toContain('%%EOF');
-  });
+  }, RENDER_TIMEOUT_MS);
 
   it('同一入力に対して決定的に %PDF バッファを描画する（2回とも成立）', async () => {
     const content = buildContent();
@@ -97,7 +101,7 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       expect(buffer.length).toBeGreaterThan(0);
       expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
     }
-  });
+  }, RENDER_TIMEOUT_MS);
 
   it('2行の小さい表に1ページ超の長文セルを含む内容でも正常な PDF バッファを生成できる（行アトミック化の回帰防止）', async () => {
     // 表全体は wrap={true}、行は原則 wrap={false}（1行の途中でページを割らない）。
@@ -126,7 +130,7 @@ describe('SkillSheetDocument（実バイト描画）', () => {
     const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
     expect(buffer.length).toBeGreaterThan(0);
     expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
-  });
+  }, RENDER_TIMEOUT_MS);
 
   it('表セル内のリンクはクリック注釈(/URI)を生成しない（隣セルへの不可視クリック領域漏れ防止）', async () => {
     // 表セル内の <Link> はセル幅で clip されず、クリック注釈が隣セル上に不可視のまま漏れる。
@@ -154,5 +158,5 @@ describe('SkillSheetDocument（実バイト描画）', () => {
     expect(bytes).toContain('annot-in-para-marker');
     // セル内リンクは Text 描画 → 注釈が出ないため URL はバイト列に現れない。
     expect(bytes).not.toContain('annot-in-cell-marker');
-  });
+  }, RENDER_TIMEOUT_MS);
 });

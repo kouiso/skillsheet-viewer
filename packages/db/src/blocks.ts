@@ -70,6 +70,8 @@ export interface ProfileBlockData {
   pr: string;
   strengths: string[];
   meta: ProfileMeta;
+  /** 所属会社名（ビューアのトップバー/kicker に表示）。 */
+  company?: string;
 }
 
 /** 統計ブロックの 1 アイテム（数値・単位・ラベル）。 */
@@ -91,6 +93,8 @@ export interface CompanyInfo {
   kind: string;
   period: string;
   note: string;
+  /** true のとき閲覧側（ビューア/PDF）で配下案件ごと非表示にする。 */
+  hidden?: boolean;
 }
 
 /** 案件ブロックの技術スタック。 */
@@ -121,6 +125,14 @@ export interface ProjectItem {
   summary?: string;
   /** 表示用の期間の長さ（例: "3ヶ月"）。未入力時は period から deriveDuration で導出。 */
   duration?: string;
+  /** true のとき閲覧側（ビューア/PDF）で非表示にする。 */
+  hidden?: boolean;
+  /** 期間の開始（`YYYY-MM`、`<input type="month">` 形式）。エディタUI内でのみ信頼される。 */
+  periodStart?: string;
+  /** 期間の終了（`YYYY-MM`）。ongoing が true のときは無視される。 */
+  periodEnd?: string;
+  /** true のとき「継続中」（終了未定）。 */
+  ongoing?: boolean;
 }
 
 /** 案件ブロックの構造化データ（会社情報 + 案件一覧）。 */
@@ -267,6 +279,8 @@ export function isProfileBlockData(data: unknown): data is ProfileBlockData {
   if (typeof d.pr !== 'string') return false;
   if (!Array.isArray(d.strengths) || !d.strengths.every((s) => typeof s === 'string')) return false;
   if (typeof d.meta !== 'object' || d.meta === null) return false;
+  // 後方互換: company は存在するなら string（欠如は許容）。
+  if (d.company !== undefined && typeof d.company !== 'string') return false;
   return true;
 }
 
@@ -291,6 +305,11 @@ function isProjectTech(t: unknown): t is ProjectTech {
   return keys.every((k) => Array.isArray(tech[k]) && (tech[k] as unknown[]).every((v) => typeof v === 'string'));
 }
 
+// optional フィールドの「存在するなら型が正しい」チェック（欠如は許容 = 後方互換）。
+function optionalTypeOk(value: unknown, type: 'string' | 'boolean'): boolean {
+  return value === undefined || typeof value === type;
+}
+
 export function isProjectBlockData(data: unknown): data is ProjectBlockData {
   if (typeof data !== 'object' || data === null) return false;
   const d = data as Record<string, unknown>;
@@ -301,7 +320,8 @@ export function isProjectBlockData(data: unknown): data is ProjectBlockData {
       typeof c === 'object' &&
       c !== null &&
       typeof (c as CompanyInfo).id === 'string' &&
-      typeof (c as CompanyInfo).name === 'string',
+      typeof (c as CompanyInfo).name === 'string' &&
+      optionalTypeOk((c as CompanyInfo).hidden, 'boolean'),
   );
   if (!companiesOk) return false;
   return d.items.every(
@@ -311,7 +331,11 @@ export function isProjectBlockData(data: unknown): data is ProjectBlockData {
       typeof (item as ProjectItem).id === 'string' &&
       typeof (item as ProjectItem).companyId === 'string' &&
       isProjectTech((item as ProjectItem).tech) &&
-      Array.isArray((item as ProjectItem).process),
+      Array.isArray((item as ProjectItem).process) &&
+      optionalTypeOk((item as ProjectItem).hidden, 'boolean') &&
+      optionalTypeOk((item as ProjectItem).periodStart, 'string') &&
+      optionalTypeOk((item as ProjectItem).periodEnd, 'string') &&
+      optionalTypeOk((item as ProjectItem).ongoing, 'boolean'),
   );
 }
 
@@ -443,6 +467,8 @@ export function profileBlockToMarkdown(data: ProfileBlockData): string {
   }
   const meta = data.meta;
   const metaItems: string[] = [];
+  // 所属会社はビューア（トップバー/kicker）で表示するため、markdown/PDF でも欠落させない（表示パリティ）。
+  if (data.company?.trim()) metaItems.push(`| 所属会社 | ${escapeCell(data.company.trim())} |`);
   if (meta.age) metaItems.push(`| 年齢 | ${escapeCell(meta.age)} |`);
   if (meta.work) metaItems.push(`| 勤務形態 | ${escapeCell(meta.work)} |`);
   if (meta.station) metaItems.push(`| 最寄り駅 | ${escapeCell(meta.station)} |`);
@@ -464,11 +490,29 @@ export function statsBlockToMarkdown(data: StatsBlockData): string {
   return [headerLine, alignLine, valueLine].join('\n');
 }
 
-/** 案件ブロックを markdown へ変換する。 */
-export function projectBlockToMarkdown(data: ProjectBlockData): string {
-  const companyMap = new Map(data.companies.map((c) => [c.id, c]));
+/**
+ * hidden な会社（配下案件ごと）と案件を除外した表示用データを返す。
+ * ビューア（ProjectSection）と PDF（projectBlockToMarkdown）が共有する唯一のフィルタ。
+ */
+export function filterVisibleProjectData(data: ProjectBlockData): ProjectBlockData {
+  // 明示的に hidden な会社の id 集合。会社未登録（不明な会社）の案件は従来通り表示する。
+  const hiddenCompanyIds = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
+  return {
+    companies: data.companies.filter((c) => !c.hidden),
+    items: data.items.filter((item) => !item.hidden && !hiddenCompanyIds.has(item.companyId)),
+  };
+}
+
+/**
+ * 案件ブロックを markdown へ変換する（既定では hidden な会社・案件をビューアと同様に除外）。
+ * `includeHidden: true` は閲覧面ではないバックアップ書き出し用 — hidden も含めた全件を出力する
+ * （バックアップが黙って hidden データを欠落させると、そこからの復元でデータが失われるため）。
+ */
+export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeHidden?: boolean }): string {
+  const visible = opts?.includeHidden ? data : filterVisibleProjectData(data);
+  const companyMap = new Map(visible.companies.map((c) => [c.id, c]));
   const lines: string[] = [];
-  for (const item of data.items) {
+  for (const item of visible.items) {
     const company = companyMap.get(item.companyId);
     const companyName = company?.name ?? '(不明な会社)';
     lines.push(`### ${companyName} — ${item.title}`);

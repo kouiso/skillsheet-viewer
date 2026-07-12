@@ -1,10 +1,11 @@
 'use client';
 
 import type { Block } from '@skillsheet/db/blocks';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
+import { ALL_VIEW_KEYS, type ViewKey, ViewerTopbar } from '@/component/viewer-topbar';
 
 interface SheetViewClientProps {
   title: string;
@@ -16,6 +17,19 @@ const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
 const SheetViewClient = ({ title, content, blocks }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
+  // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
+  const isDashboard = useMemo(() => (blocks ?? []).some((b) => b.type === 'project'), [blocks]);
+  // ビュー表示のON/OFF状態。初期値は全ビューON（トグルはダッシュボードのみ）。
+  const [views, setViews] = useState<ViewKey[]>(() => [...ALL_VIEW_KEYS]);
+  // トップバーに出す氏名・会社名はプロフィールブロックから引く。
+  const profile = useMemo(
+    () => (blocks ?? []).find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile'),
+    [blocks],
+  );
+
+  const toggleView = (view: ViewKey) => {
+    setViews((prev) => (prev.includes(view) ? prev.filter((v) => v !== view) : [...prev, view]));
+  };
 
   const handleDownloadPdf = async () => {
     try {
@@ -50,8 +64,19 @@ const SheetViewClient = ({ title, content, blocks }: SheetViewClientProps) => {
 
   return (
     <div>
-      <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
-      <SkillSheetViewer skillSheet={{ title, content }} blocks={blocks} />
+      {isDashboard ? (
+        <ViewerTopbar
+          name={profile?.data.name}
+          company={profile?.data.company}
+          views={views}
+          onToggleView={toggleView}
+          onDownloadPdf={handleDownloadPdf}
+          pdfLoading={pdfLoading}
+        />
+      ) : (
+        <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
+      )}
+      <SkillSheetViewer skillSheet={{ title, content }} blocks={blocks} views={isDashboard ? views : undefined} />
     </div>
   );
 };

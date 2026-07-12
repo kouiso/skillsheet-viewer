@@ -1,7 +1,7 @@
 'use client';
 
-import { motion } from 'framer-motion';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
@@ -21,6 +21,7 @@ import { SkillMatrix } from './blocks/SkillMatrix';
 import { StatRow } from './blocks/StatRow';
 import CodeBlock from './code-block';
 import TableOfContents from './table-of-contents';
+import type { ViewKey } from './viewer-topbar';
 
 interface Heading {
   id: string;
@@ -35,6 +36,11 @@ interface SkillSheetViewerProps {
   };
   blocks?: Block[];
   compareMode?: boolean;
+  /**
+   * 表示するビューの集合。省略時は全ビューON
+   * （ビルダープレビュー・比較ページは従来どおり全セクション表示）。
+   */
+  views?: ViewKey[];
 }
 
 // img src として許可するURLスキーム。http/https/相対パスのみ通し、
@@ -182,6 +188,21 @@ function blockToMarkdownContent(block: Block): string | null {
 
 type RenderGroup = { kind: 'skills'; blocks: Extract<Block, { type: 'skills' }>[] } | { kind: 'single'; block: Block };
 
+// ビュートグルでセクションが再マウントされた際のフェードアップ表示
+// （デザインプロトタイプの .fadeup 相当）。prefers-reduced-motion 時は即時表示する。
+function FadeUpSection({ children }: { children: ReactNode }) {
+  const reduceMotion = useReducedMotion();
+  return (
+    <motion.section
+      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+    >
+      {children}
+    </motion.section>
+  );
+}
+
 // 連続する skills ブロックを1つの描画グループにまとめる。
 // A4: 6個の独立したマトリクスではなく、1つの SkillMatrix コンテナ内にカテゴリを並べて表示する。
 function groupBlocks(blocks: Block[]): RenderGroup[] {
@@ -204,7 +225,9 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
   return groups;
 }
 
-const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillSheetViewerProps) => {
+const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: SkillSheetViewerProps) => {
+  // views 未指定（ビルダープレビュー・比較・レガシー）は全ビューON扱い。
+  const showView = useCallback((view: ViewKey) => !views || views.includes(view), [views]);
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
   const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
   // project ブロックを含むシートは「外枠カード無し・セクションが縦に並ぶダッシュボード」レイアウトにする。
@@ -308,16 +331,17 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
             <div className={isDashboard ? 'space-y-10' : 'space-y-0'}>
               {groupedBlocks.map((group) => {
                 if (group.kind === 'skills') {
+                  if (!showView('skills')) return null;
                   const key = group.blocks.map((b) => b.id).join('-');
                   return (
-                    <section key={key}>
+                    <FadeUpSection key={key}>
                       <SectionHead kicker="Skill Matrix" title="スキルマトリクス" />
                       <div className="grid gap-4 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
                         {group.blocks.map((block) => (
                           <SkillMatrix key={block.id} data={block.data} className="mb-0" />
                         ))}
                       </div>
-                    </section>
+                    </FadeUpSection>
                   );
                 }
                 const block = group.block;
@@ -339,7 +363,15 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false }: SkillShee
                   return <StatRow key={block.id} data={block.data} />;
                 }
                 if (block.type === 'project') {
-                  return <ProjectSection key={block.id} data={block.data} />;
+                  return (
+                    <ProjectSection
+                      key={block.id}
+                      data={block.data}
+                      showProcess={showView('process')}
+                      showProjects={showView('projects')}
+                      showTimeline={showView('timeline')}
+                    />
+                  );
                 }
                 return null;
               })}
