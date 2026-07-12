@@ -7,6 +7,7 @@ import {
   blocksToMarkdown,
   type ExperienceBlockData,
   experienceBlockToMarkdown,
+  filterVisibleProjectData,
   isBlockInput,
   isBlockInputEmpty,
   isExperienceBlockData,
@@ -516,6 +517,16 @@ describe('profileBlockToMarkdown', () => {
     expect(md).toContain('| 年齢 | 30歳 |');
     expect(md).toContain('| 勤務形態 | フルリモート |');
   });
+
+  it('company が存在すれば所属会社として表に出力する（ビューア表示との PDF/markdown パリティ）', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, company: '株式会社 RITMO' });
+    expect(md).toContain('| 所属会社 | 株式会社 RITMO |');
+  });
+
+  it('company が未設定/空白のみなら所属会社行を出力しない', () => {
+    expect(profileBlockToMarkdown(PROFILE)).not.toContain('所属会社');
+    expect(profileBlockToMarkdown({ ...PROFILE, company: '  ' })).not.toContain('所属会社');
+  });
 });
 
 describe('statsBlockToMarkdown', () => {
@@ -564,6 +575,97 @@ describe('blocksToMarkdown — 新型ブロック dispatch', () => {
   it('空配列は空文字を返してエラーを throw しない', () => {
     expect(() => blocksToMarkdown([])).not.toThrow();
     expect(blocksToMarkdown([])).toBe('');
+  });
+});
+
+// ---- Phase 0: hidden / 期間フィールドのバリデーションと表示フィルタ ----------
+
+describe('バリデータ — optional フィールドの後方互換', () => {
+  it('isProfileBlockData: company 欠如は許容、存在するなら string 必須', () => {
+    expect(isProfileBlockData(PROFILE)).toBe(true);
+    expect(isProfileBlockData({ ...PROFILE, company: '株式会社テスト' })).toBe(true);
+    expect(isProfileBlockData({ ...PROFILE, company: 123 })).toBe(false);
+  });
+
+  it('isProjectBlockData: hidden / periodStart / periodEnd / ongoing 欠如を許容する（既存データ）', () => {
+    expect(isProjectBlockData(PROJECT)).toBe(true);
+  });
+
+  it('isProjectBlockData: optional フィールドが正しい型なら受け入れる', () => {
+    const data: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], hidden: true }],
+      items: [{ ...PROJECT.items[0], hidden: false, periodStart: '2020-06', periodEnd: '2021-08', ongoing: true }],
+    };
+    expect(isProjectBlockData(data)).toBe(true);
+  });
+
+  it('isProjectBlockData: 会社の hidden が boolean でなければ拒否', () => {
+    expect(isProjectBlockData({ companies: [{ ...PROJECT.companies[0], hidden: 'yes' }], items: [] })).toBe(false);
+  });
+
+  it('isProjectBlockData: 案件の hidden / periodStart / ongoing の型違いは拒否', () => {
+    expect(isProjectBlockData({ companies: [], items: [{ ...PROJECT.items[0], hidden: 1 }] })).toBe(false);
+    expect(isProjectBlockData({ companies: [], items: [{ ...PROJECT.items[0], periodStart: 202006 }] })).toBe(false);
+    expect(isProjectBlockData({ companies: [], items: [{ ...PROJECT.items[0], periodEnd: null }] })).toBe(false);
+    expect(isProjectBlockData({ companies: [], items: [{ ...PROJECT.items[0], ongoing: 'true' }] })).toBe(false);
+  });
+});
+
+describe('filterVisibleProjectData', () => {
+  const HIDDEN_PROJECT: ProjectBlockData = {
+    companies: [
+      { id: 'c1', name: '表示会社', kind: '', period: '', note: '' },
+      { id: 'c2', name: '非表示会社', kind: '', period: '', note: '', hidden: true },
+    ],
+    items: [
+      { ...PROJECT.items[0], id: 'p1', companyId: 'c1', title: '表示案件' },
+      { ...PROJECT.items[0], id: 'p2', companyId: 'c1', title: '非表示案件', hidden: true },
+      { ...PROJECT.items[0], id: 'p3', companyId: 'c2', title: '非表示会社配下の案件' },
+      { ...PROJECT.items[0], id: 'p4', companyId: 'unknown', title: '会社不明の案件' },
+    ],
+  };
+
+  it('hidden な案件を除外する', () => {
+    const visible = filterVisibleProjectData(HIDDEN_PROJECT);
+    expect(visible.items.map((i) => i.id)).not.toContain('p2');
+  });
+
+  it('hidden な会社は配下の案件ごと除外する', () => {
+    const visible = filterVisibleProjectData(HIDDEN_PROJECT);
+    expect(visible.companies.map((c) => c.id)).toEqual(['c1']);
+    expect(visible.items.map((i) => i.id)).not.toContain('p3');
+  });
+
+  it('companyId が未知（会社未登録）の案件は従来どおり表示する', () => {
+    const visible = filterVisibleProjectData(HIDDEN_PROJECT);
+    expect(visible.items.map((i) => i.id)).toEqual(['p1', 'p4']);
+  });
+
+  it('入力データを破壊しない（非破壊フィルタ）', () => {
+    const companiesBefore = [...HIDDEN_PROJECT.companies];
+    const itemsBefore = [...HIDDEN_PROJECT.items];
+    filterVisibleProjectData(HIDDEN_PROJECT);
+    expect(HIDDEN_PROJECT.companies).toEqual(companiesBefore);
+    expect(HIDDEN_PROJECT.items).toEqual(itemsBefore);
+    expect(HIDDEN_PROJECT.companies).toHaveLength(2);
+    expect(HIDDEN_PROJECT.items).toHaveLength(4);
+  });
+
+  it('projectBlockToMarkdown も hidden な会社・案件を除外する（PDF パリティ）', () => {
+    const md = projectBlockToMarkdown(HIDDEN_PROJECT);
+    expect(md).toContain('表示案件');
+    expect(md).toContain('会社不明の案件');
+    expect(md).not.toContain('非表示案件');
+    expect(md).not.toContain('非表示会社配下の案件');
+    expect(md).not.toContain('非表示会社 —');
+  });
+
+  it('projectBlockToMarkdown は includeHidden:true で hidden な会社・案件も出力する（バックアップ用）', () => {
+    const md = projectBlockToMarkdown(HIDDEN_PROJECT, { includeHidden: true });
+    expect(md).toContain('表示案件');
+    expect(md).toContain('非表示案件');
+    expect(md).toContain('非表示会社配下の案件');
+    expect(md).toContain('非表示会社 —');
   });
 });
 

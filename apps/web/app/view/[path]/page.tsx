@@ -41,5 +41,7 @@ export default async function SheetViewPage({ params }: PageProps) {
     throw err;
   }
 
-  return <SheetViewClient title={sheet.title} content={sheet.content} />;
+  // key={path}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー
+  // ON/OFF トグルの state（初回マウント時に決まる）を新しいシートへ持ち越さない。
+  return <SheetViewClient key={path} title={sheet.title} content={sheet.content} />;
 }
