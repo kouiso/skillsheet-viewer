@@ -161,7 +161,31 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     commit({ ...data, items: data.items.map((p) => (p.id === currentId ? { ...p, ...patch } : p)) });
   };
 
-  const moveCompany = (companyId: string) => patchProject({ companyId });
+  /**
+   * 案件を別会社へ所属替えする（selectでの変更・D&Dドロップの両方が使う共通処理）。
+   * companyId を書き換えるだけでなく、data.items 内の位置も
+   * 「移動先会社の最後の案件の直後」（無ければ末尾）へ動かす。
+   * companyId だけ書き換えて位置を放置すると、閲覧側は data.items の並びで
+   * 描画するため、会社ナビの表示と矛盾した並び・連番になる。
+   */
+  const moveProjectToCompany = (projectId: string, companyId: string) => {
+    const source = data.items.find((p) => p.id === projectId);
+    if (!source || source.companyId === companyId) return;
+    const rest = data.items.filter((p) => p.id !== projectId);
+    let lastIndex = -1;
+    rest.forEach((p, i) => {
+      if (p.companyId === companyId) lastIndex = i;
+    });
+    const items = [...rest];
+    const insertAt = lastIndex === -1 ? items.length : lastIndex + 1;
+    items.splice(insertAt, 0, { ...source, companyId });
+    commit({ ...data, items });
+  };
+
+  const moveCompany = (companyId: string) => {
+    if (!currentId) return;
+    moveProjectToCompany(currentId, companyId);
+  };
 
   const patchCompany = (patch: Partial<CompanyInfo>) => {
     if (!currentCompany) return;
@@ -252,17 +276,7 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     commit({ ...data, items });
   };
 
-  const dropProjectToCompany = (projectId: string, companyId: string) => {
-    const source = data.items.find((p) => p.id === projectId);
-    if (!source) return;
-    const items = data.items.filter((p) => p.id !== projectId);
-    let lastIndex = -1;
-    items.forEach((p, i) => {
-      if (p.companyId === companyId) lastIndex = i;
-    });
-    items.splice(lastIndex + 1, 0, { ...source, companyId });
-    commit({ ...data, items });
-  };
+  const dropProjectToCompany = (projectId: string, companyId: string) => moveProjectToCompany(projectId, companyId);
 
   const reorderCompany = (activeId: string, overId: string) => {
     if (activeId === overId) return;
