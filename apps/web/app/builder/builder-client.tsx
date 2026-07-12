@@ -530,7 +530,8 @@ const ProfileBlockEditor = ({
 }) => {
   const set = <K extends keyof ProfileBlockData>(field: K, value: ProfileBlockData[K]) =>
     onChange({ ...data, [field]: value });
-  const setMeta = (key: keyof ProfileMeta, value: string) => onChange({ ...data, meta: { ...data.meta, [key]: value } });
+  const setMeta = (key: keyof ProfileMeta, value: string) =>
+    onChange({ ...data, meta: { ...data.meta, [key]: value } });
 
   return (
     <div className="min-w-0 flex-1 space-y-2 text-sm">

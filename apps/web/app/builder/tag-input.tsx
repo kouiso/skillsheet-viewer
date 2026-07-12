@@ -28,7 +28,9 @@ export const TagInput = ({ value, onChange, placeholder, suggestions, label }: T
 
   const q = draft.trim().toLowerCase();
   // 候補：未追加 × 部分一致（入力空なら先頭から）
-  const matches = (suggestions ?? []).filter((s) => !value.includes(s) && (!q || s.toLowerCase().includes(q))).slice(0, 8);
+  const matches = (suggestions ?? [])
+    .filter((s) => !value.includes(s) && (!q || s.toLowerCase().includes(q)))
+    .slice(0, 8);
 
   const add = (raw: string) => {
     const parts = raw
@@ -49,12 +51,14 @@ export const TagInput = ({ value, onChange, placeholder, suggestions, label }: T
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: クリックは内部 input へのフォーカス移譲のみ（キーボード操作は input 自身が受ける）
+    // biome-ignore lint/a11y/noStaticElementInteractions: 同上。実際の操作対象は内部の input（適切な aria-label 済み）
     <div
       className="relative flex min-h-9 w-full cursor-text flex-wrap items-center gap-1.5 rounded border border-input bg-background px-2 py-1.5 focus-within:ring-1 focus-within:ring-ring"
       onClick={() => inputRef.current?.focus()}
     >
       {value.map((tag, i) => (
-        <span key={`${tag}-${i}`} className="chip">
+        // タグは add() で重複追加を防いでいるため値そのものが一意なキーになる。
+        <span key={tag} className="chip">
           {tag}
           <button
             type="button"

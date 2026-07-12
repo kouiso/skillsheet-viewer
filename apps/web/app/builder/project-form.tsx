@@ -6,8 +6,8 @@ import {
   formatPeriodRange,
   labelsForProcessIndex,
   normalizeProcess,
-  parsePeriodToRange,
   PROCESS_LABELS,
+  parsePeriodToRange,
 } from '@skillsheet/db/process';
 import { Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
@@ -269,7 +269,12 @@ export const ProjectForm = ({
               </select>
             </Field>
             <Field label="役割">
-              <select value={p.role} onChange={(e) => set('role', e.target.value)} aria-label="役割" className={selectCls}>
+              <select
+                value={p.role}
+                onChange={(e) => set('role', e.target.value)}
+                aria-label="役割"
+                className={selectCls}
+              >
                 {/* 既存データの未知の役割は温存表示する */}
                 {!(ROLE_OPTIONS as readonly string[]).includes(p.role) && (
                   <option value={p.role}>{p.role || '（役割未設定）'}</option>

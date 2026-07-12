@@ -9,7 +9,12 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@skillsheet/db/blocks';
 import { ChevronRight, Eye, EyeOff, GripVertical, Plus, X } from 'lucide-react';
@@ -128,7 +133,9 @@ const ProjectRow = ({
       ref={setNodeRef}
       style={style}
       className={`flex w-full items-center gap-1.5 rounded-[var(--radius)] border px-1.5 py-1.5 text-[12.5px] ${
-        active ? 'border-primary/50 bg-muted text-foreground' : 'border-transparent text-muted-foreground hover:bg-muted'
+        active
+          ? 'border-primary/50 bg-muted text-foreground'
+          : 'border-transparent text-muted-foreground hover:bg-muted'
       } ${project.hidden ? 'opacity-50' : ''}`}
     >
       <button

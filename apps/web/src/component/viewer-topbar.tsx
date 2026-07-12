@@ -64,7 +64,8 @@ export function ViewerTopbar({
 
         <div className="min-w-4 flex-1" />
 
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="表示するビュー">
+        <fieldset className="m-0 flex flex-wrap items-center gap-1.5 border-0 p-0">
+          <legend className="sr-only">表示するビュー</legend>
           {ALL_VIEWS.map((view) => {
             const on = views.includes(view.id);
             return (
@@ -85,7 +86,7 @@ export function ViewerTopbar({
               </button>
             );
           })}
-        </div>
+        </fieldset>
 
         <div className="flex items-center gap-1">
           <Tooltip>
