@@ -174,13 +174,19 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
   // ── 追加・削除 ──
   const addProject = (companyId: string) => {
     const project = emptyProject(companyId);
-    // 同じ会社の最後の案件の直後に挿入する
+    // 挿入位置＝「同じ会社の最後の案件の直後」。その会社にまだ案件が無い場合は
+    // 配列の先頭(index 0)ではなく末尾に追加する。data.items は会社の並び順で
+    // グルーピングされている保証が無い（reorderCompany 未実行の既存データ等）ため、
+    // 会社の並び順から挿入位置を逆算する方式は既存データで誤動作する。
+    // 「無ければ末尾」という最小差分の修正に留め、同会社に案件が既にある場合の
+    // 挙動（今まで通り安全に動いている）は一切変えない。
     let lastIndex = -1;
     data.items.forEach((p, i) => {
       if (p.companyId === companyId) lastIndex = i;
     });
     const items = [...data.items];
-    items.splice(lastIndex + 1, 0, project);
+    const insertAt = lastIndex === -1 ? items.length : lastIndex + 1;
+    items.splice(insertAt, 0, project);
     commit({ ...data, items });
     setSelectedId(project.id);
     setSelectedCompanyId(companyId);
