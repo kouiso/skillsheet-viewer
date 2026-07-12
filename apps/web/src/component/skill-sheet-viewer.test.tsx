@@ -23,6 +23,7 @@ vi.mock('framer-motion', () => ({
     },
   ),
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
+  useReducedMotion: () => false,
 }));
 
 const DETAILS_CONTENT = `## テストセクション

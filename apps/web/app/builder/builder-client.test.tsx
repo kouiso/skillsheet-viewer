@@ -1,7 +1,7 @@
 import type { Block } from '@skillsheet/db/blocks';
-import { render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
 
@@ -14,6 +14,8 @@ vi.mock('./actions', () => ({
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+// テーマ Provider なしで BuilderClient 単体を描画できるようにモック（ダークトグルが useThemeMode を使う）
+vi.mock('@/context/theme-context', () => ({ useThemeMode: () => ({ mode: 'light', toggleTheme: vi.fn() }) }));
 
 // markdown ブロック配列から初期 Block[] を作るヘルパ。
 const mdBlocks = (markdowns: string[]): Block[] =>
@@ -208,5 +210,187 @@ describe('BuilderClient', () => {
         sheetId: 'sheet-1',
       }),
     );
+  });
+});
+
+describe('BuilderClient 自動保存', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // 既定の useFakeTimers() は queueMicrotask/performance まで偽装し React の
+    // スケジューラが停止する（テストがタイムアウトする）ため、デバウンスに必要な
+    // setTimeout/clearTimeout だけを偽装する。userEvent は fake timers 下で
+    // ハングする（本ファイルで実測）ため、入力は fireEvent.change で行う。
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const typeMarkdown = (value: string) =>
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value } });
+
+  it('編集停止から 1.5 秒後に自動保存が 1 回だけ走る（デバウンス）', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    // 連続編集ではタイマーが引き直され、停止前は保存されない
+    typeMarkdown('## A 追');
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    typeMarkdown('## A 追記');
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(mockSave).not.toHaveBeenCalled();
+    // 最後の編集から 1.5 秒経過でちょうど 1 回保存される
+    await act(async () => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 't',
+        sheetId: 'sheet-1',
+        blocks: [{ type: 'markdown', data: { markdown: '## A 追記' } }],
+        expectedUpdatedAt: defaultSheet.updatedAt,
+      }),
+    );
+    expect(screen.getByText('保存済み（自動）')).toBeInTheDocument();
+    // dirty が解消済みなので、さらに時間が経過しても再保存されない
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('保存の実行中に編集が入ると、完了後にちょうど 1 回だけ追撃保存する', async () => {
+    let resolveFirst!: (value: { ok: boolean }) => void;
+    mockSave.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    typeMarkdown('## Aa');
+    // 1 回目の自動保存が開始される（未完了のまま保持）
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('保存中…')).toBeInTheDocument();
+    // 保存中に編集 → デバウンス満了しても実行中なので追撃の予約のみ
+    typeMarkdown('## Aab');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    // 1 回目が完了すると追撃保存がちょうど 1 回走り、保存中の編集分が含まれる
+    await act(async () => {
+      resolveFirst({ ok: true });
+    });
+    expect(mockSave).toHaveBeenCalledTimes(2);
+    expect(mockSave).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        blocks: [{ type: 'markdown', data: { markdown: '## Aab' } }],
+      }),
+    );
+    // 追撃は 1 回きり（それ以上の再保存は走らない）
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(2);
+  });
+
+  it('競合の初回で自動保存を恒久停止し、ダイアログではなく競合バナーを表示する', async () => {
+    mockSave.mockResolvedValueOnce({ ok: false, error: 'conflict' });
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    typeMarkdown('## Aa');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    // 自動保存の競合はダイアログを出さない（インジケータ＋再読み込みボタンで通知）
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.getByText('競合 — 再読み込みが必要')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '再読み込み' })).toBeInTheDocument();
+    // 以降どれだけ編集してデバウンスが満了しても自動保存は走らない（競合スパム防止）
+    typeMarkdown('## Aabc');
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    // バナーは 1 個だけ表示される
+    expect(screen.getAllByText('競合 — 再読み込みが必要')).toHaveLength(1);
+  });
+
+  it('自動保存の失敗（非競合）は同一内容で無限リトライせず、新しい編集で再試行する', async () => {
+    mockSave.mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    typeMarkdown('## Aa');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    // 失敗はインジケータでユーザーへ通知する
+    expect(screen.getByText('自動保存に失敗 — 保存ボタンで再試行')).toBeInTheDocument();
+    // 同一内容のままでは status 遷移だけでタイマーが再armされず、時間経過だけでは再試行しない
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    // 新しい編集が入ると再デバウンスして再試行する（2 回目は成功して保存済みになる）
+    typeMarkdown('## Aab');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('保存済み（自動）')).toBeInTheDocument();
+  });
+
+  it('markdown へ落ちないフィールド（プロフィールの所属会社）の編集でも dirty になり自動保存される', async () => {
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByLabelText('所属会社'), { target: { value: '株式会社 RITMO' } });
+    // markdown 比較の旧スナップショットでは検知できなかった編集が dirty になる
+    expect(screen.getByText('未保存の変更')).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [{ type: 'profile', data: expect.objectContaining({ company: '株式会社 RITMO' }) }],
+      }),
+    );
+  });
+
+  it('案件エディタタブを開いただけ（空 project ブロックの自動追加）では dirty にならず自動保存されない', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.click(screen.getByRole('button', { name: '案件エディタ' }));
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    // 空 project ブロックはサーバ保存時に drop される＝保存結果が変わらないため dirty にしない
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(screen.queryByText('未保存の変更')).not.toBeInTheDocument();
+  });
+
+  it('全ブロックが空のときは自動保存をスキップする（全消し保存ガード）', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    // 全内容を消す → dirty だが全ブロック空なので自動保存しない
+    typeMarkdown('');
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(screen.getByText('未保存の変更')).toBeInTheDocument();
   });
 });
