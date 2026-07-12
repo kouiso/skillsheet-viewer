@@ -264,10 +264,12 @@ export function parsePeriodToRange(period: string): PeriodRange | null {
   return { start, end, ongoing: false };
 }
 
-// YYYY.MM / YYYY年M月 / YYYY-MM を `<input type="month">` の value（YYYY-MM）へ。単年（YYYY）は月不明なので null。
+// YYYY.MM / YYYY年M月 / YYYY-MM / YYYY-MM-DD を `<input type="month">` の value（YYYY-MM）へ。
+// 旧日付ピッカー時代の ISO 日単位（YYYY-MM-DD）は日を切り捨てて月精度に変換する。
+// 単年（YYYY）は月不明なので null。
 function yearMonthToInputValue(token: string): string | null {
   if (!token) return null;
-  const m = token.match(/^(\d{4})[.\-年](\d{1,2})月?$/);
+  const m = token.match(/^(\d{4})[.\-年](\d{1,2})月?(?:-\d{1,2})?$/);
   if (!m) return null;
   const month = Number(m[2]);
   if (month < 1 || month > 12) return null;

@@ -311,6 +311,14 @@ describe('parsePeriodToRange', () => {
   it('単年（"2020"）は月が特定できないため null', () => {
     expect(parsePeriodToRange('2020')).toBeNull();
   });
+
+  it('旧日付ピッカー時代の ISO 日単位（"YYYY-MM-DD〜YYYY-MM-DD"）は日を切り捨てて月精度に変換する', () => {
+    expect(parsePeriodToRange('2020-06-15〜2021-08-01')).toEqual({
+      start: '2020-06',
+      end: '2021-08',
+      ongoing: false,
+    });
+  });
 });
 
 describe('deriveCompanyPeriod', () => {
