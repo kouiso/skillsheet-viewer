@@ -27,6 +27,8 @@ interface ProjectNavProps {
   data: ProjectBlockData;
   selectedId: string | null;
   onSelect: (projectId: string) => void;
+  /** 会社ヘッダをクリックしたとき（案件未選択でも会社編集バーを出すため）。 */
+  onSelectCompany: (companyId: string) => void;
   onAddProject: (companyId: string) => void;
   onAddCompany: () => void;
   onDeleteProject: (projectId: string) => void;
@@ -46,12 +48,14 @@ const CompanyHeaderRow = ({
   open,
   onToggleOpen,
   onToggleHide,
+  onSelectCompany,
 }: {
   company: CompanyInfo;
   count: number;
   open: boolean;
   onToggleOpen: () => void;
   onToggleHide: () => void;
+  onSelectCompany: () => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: company.id,
@@ -78,7 +82,10 @@ const CompanyHeaderRow = ({
       </button>
       <button
         type="button"
-        onClick={onToggleOpen}
+        onClick={() => {
+          onSelectCompany();
+          onToggleOpen();
+        }}
         className="flex min-w-0 flex-1 items-center gap-1.5 py-2 text-left"
         aria-expanded={open}
       >
@@ -194,6 +201,7 @@ export const ProjectNav = ({
   data,
   selectedId,
   onSelect,
+  onSelectCompany,
   onAddProject,
   onAddCompany,
   onDeleteProject,
@@ -290,6 +298,7 @@ export const ProjectNav = ({
                     open={isOpen}
                     onToggleOpen={() => setOpen((prev) => ({ ...prev, [company.id]: !isOpen }))}
                     onToggleHide={() => onToggleHideCompany(company.id)}
+                    onSelectCompany={() => onSelectCompany(company.id)}
                   />
                   {isOpen && (
                     <div className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2 pt-1">

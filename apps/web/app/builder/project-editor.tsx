@@ -5,7 +5,7 @@ import { deriveCompanyPeriod } from '@skillsheet/db/process';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { ProjectForm } from './project-form';
+import { CompanyBar, ProjectForm } from './project-form';
 import { ProjectNav } from './project-nav';
 import { ProjectPreview } from './project-preview';
 
@@ -87,12 +87,35 @@ interface ProjectEditorProps {
  */
 export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEditorProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(data.items[0]?.id ?? null);
+  // 案件未選択でも会社編集バー（名称変更・削除）を出せるよう、会社選択を案件選択と独立に持つ。
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
+    data.items[0]?.companyId ?? data.companies[0]?.id ?? null,
+  );
   const [showPreview, setShowPreview] = useState(true);
 
-  // 選択中の案件が（削除等で）存在しなくなったら先頭へフォールバック
-  const current = data.items.find((p) => p.id === selectedId) ?? data.items[0] ?? null;
+  // selectedId===null は「会社のみ選択（案件は未選択）」を明示する状態として扱い、
+  // フォールバックしない。selectedId が非null なのに該当案件が無い（削除等で stale）
+  // 場合だけ、防御的に先頭案件へフォールバックする。
+  const current = selectedId === null ? null : (data.items.find((p) => p.id === selectedId) ?? data.items[0] ?? null);
   const currentId = current?.id ?? null;
-  const currentCompany = current ? data.companies.find((c) => c.id === current.companyId) : undefined;
+  // 案件が選択されていれば常にその会社を優先し、無ければ selectedCompanyId（会社のみ選択中）を使う。
+  const currentCompany = current
+    ? data.companies.find((c) => c.id === current.companyId)
+    : (data.companies.find((c) => c.id === selectedCompanyId) ?? undefined);
+
+  const selectProject = (projectId: string) => {
+    setSelectedId(projectId);
+    const project = data.items.find((p) => p.id === projectId);
+    if (project) setSelectedCompanyId(project.companyId);
+  };
+
+  const selectCompany = (companyId: string) => {
+    setSelectedCompanyId(companyId);
+    // 会社ヘッダのクリックは「会社そのものを編集したい」操作として案件選択を解除する。
+    // current を残したままだと currentCompany の解決が current 側を優先してしまい、
+    // 別会社のヘッダをクリックしても会社編集バーが切り替わらない。
+    setSelectedId(null);
+  };
 
   // items 変更を伴う更新は必ず会社期間の再導出を通す（変更前 data と比較し、
   // 案件 period が実際に変わった会社だけ再導出する）
@@ -160,11 +183,15 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     items.splice(lastIndex + 1, 0, project);
     commit({ ...data, items });
     setSelectedId(project.id);
+    setSelectedCompanyId(companyId);
   };
 
   const addCompany = () => {
     const company = emptyCompany();
     commit({ ...data, companies: [...data.companies, company] });
+    // 追加直後に会社編集バーを出す（＋会社→即リネームできる導線）。
+    setSelectedId(null);
+    setSelectedCompanyId(company.id);
   };
 
   /** ナビ側は行内で confirm 済みのため、ここでは削除のみ行う。 */
@@ -193,9 +220,13 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
         : `「${company.name || '(会社名未入力)'}」を削除しますか？`;
     if (!window.confirm(message)) return;
     const items = data.items.filter((p) => p.companyId !== companyId);
-    commit({ ...data, companies: data.companies.filter((c) => c.id !== companyId), items });
+    const companies = data.companies.filter((c) => c.id !== companyId);
+    commit({ ...data, companies, items });
     if (current && current.companyId === companyId) {
       setSelectedId(items[0]?.id ?? null);
+    }
+    if (selectedCompanyId === companyId) {
+      setSelectedCompanyId(companies[0]?.id ?? null);
     }
   };
 
@@ -236,7 +267,14 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     if (oldIndex === -1 || newIndex === -1) return;
     const [moved] = companies.splice(oldIndex, 1);
     companies.splice(newIndex, 0, moved);
-    commit({ ...data, companies });
+    // 会社の並び替えに合わせて items も並べ替える（各会社内の相対順序は保つ = 安定ソート）。
+    // これをしないと、閲覧側の連番・並びが会社ナビの並びと食い違う。
+    const companyOrder = new Map(companies.map((c, i) => [c.id, i]));
+    const items = [...data.items].sort(
+      (a, b) => (companyOrder.get(a.companyId) ?? Number.MAX_SAFE_INTEGER) -
+        (companyOrder.get(b.companyId) ?? Number.MAX_SAFE_INTEGER),
+    );
+    commit({ ...data, companies, items });
   };
 
   const toggleHideProject = (id: string) =>
@@ -255,7 +293,8 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
       <ProjectNav
         data={data}
         selectedId={currentId}
-        onSelect={setSelectedId}
+        onSelect={selectProject}
+        onSelectCompany={selectCompany}
         onAddProject={addProject}
         onAddCompany={addCompany}
         onDeleteProject={deleteProject}
@@ -289,6 +328,28 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
             onDeleteCompany={() => currentCompany && deleteCompany(currentCompany.id)}
             onDelete={confirmDeleteCurrentProject}
           />
+        ) : currentCompany ? (
+          <>
+            {/* 案件が0件の会社でも名称変更・削除ができるよう、会社編集バーは単独でも表示する。 */}
+            <CompanyBar
+              company={currentCompany}
+              onPatchCompany={patchCompany}
+              onDeleteCompany={() => deleteCompany(currentCompany.id)}
+            />
+            <div className="rounded-lg border border-dashed border-border p-8 text-center">
+              <p className="text-sm font-medium text-foreground">案件が選択されていません</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                左の一覧から案件を選ぶか、この会社に新しい案件を追加してください。
+              </p>
+              <button
+                type="button"
+                onClick={() => addProject(currentCompany.id)}
+                className="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground"
+              >
+                ＋ 案件を追加
+              </button>
+            </div>
+          </>
         ) : (
           <div className="rounded-lg border border-dashed border-border p-8 text-center">
             <p className="text-sm font-medium text-foreground">案件が選択されていません</p>

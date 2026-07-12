@@ -91,20 +91,26 @@ export function ProjectSection({
     setQuery('');
   };
 
-  if (visible.items.length === 0 && visible.companies.length === 0) return null;
+  // 可視案件が0件なら（会社だけ残っていても）表示するものが無いため何も描画しない。
+  if (visible.items.length === 0) return null;
   if (!showProcess && !showProjects && !showTimeline) return null;
+
+  // 案件詳細セクション（フィルタUI）が非表示のときは、そのフィルタ状態を
+  // タイムラインへ持ち込まない（消したい方法が無いまま案件が消えて見えるのを防ぐ）。
+  const timelineItems = showProjects ? filtered.map((x) => x.item) : visible.items;
+  const timelineActiveTech = showProjects ? activeTech : [];
 
   return (
     <div className="space-y-10">
       {showProcess && (
-        <FadeUpSection>
+        <FadeUpSection key="process">
           <SectionHead kicker="Process Coverage" title="担当工程の俯瞰" />
           <ProcessOverview items={visible.items} />
         </FadeUpSection>
       )}
 
       {showProjects && (
-        <FadeUpSection>
+        <FadeUpSection key="projects">
           <SectionHead kicker="Projects" title="案件詳細" />
           <div className="mb-5">
             <TechFilter
@@ -139,9 +145,9 @@ export function ProjectSection({
       )}
 
       {showTimeline && (
-        <FadeUpSection>
+        <FadeUpSection key="timeline">
           <SectionHead kicker="Career Timeline" title="案件タイムライン" />
-          <Timeline items={filtered.map((x) => x.item)} companyMap={companyMap} activeTech={activeTech} />
+          <Timeline items={timelineItems} companyMap={companyMap} activeTech={timelineActiveTech} />
         </FadeUpSection>
       )}
     </div>

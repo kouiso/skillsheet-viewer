@@ -380,7 +380,16 @@ export function isBlockInputEmpty(block: BlockInput): boolean {
     return company.trim().length === 0 && role.trim().length === 0 && description.trim().length === 0;
   }
   if (block.type === 'profile') {
-    return block.data.name.trim().length === 0 && block.data.title.trim().length === 0;
+    const { name, title, pr, strengths, meta, company } = block.data;
+    const metaEmpty = Object.values(meta ?? {}).every((v) => !v || String(v).trim().length === 0);
+    return (
+      name.trim().length === 0 &&
+      title.trim().length === 0 &&
+      pr.trim().length === 0 &&
+      strengths.every((s) => s.trim().length === 0) &&
+      metaEmpty &&
+      (!company || company.trim().length === 0)
+    );
   }
   if (block.type === 'stats') return block.data.items.length === 0;
   if (block.type === 'project') {

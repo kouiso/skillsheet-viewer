@@ -74,7 +74,7 @@ interface CompanyBarProps {
  * 会社編集バー：名前 / 種別 / 期間（案件から自動導出・読み取り専用）/ 説明 / 削除。
  * 期間は project-editor 側で deriveCompanyPeriod により常に再計算されるため編集不可。
  */
-const CompanyBar = ({ company, onPatchCompany, onDeleteCompany }: CompanyBarProps) => (
+export const CompanyBar = ({ company, onPatchCompany, onDeleteCompany }: CompanyBarProps) => (
   <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2.5">
     <span className="kicker shrink-0">会社</span>
     <input

@@ -32,11 +32,11 @@ export function ProcessStepper({ done, uncertain, compact = false }: ProcessStep
                 {/* 狭幅では「・」の直後だけで折り返す（語中の「実装・単/体」折れを防ぐ）。 */}
                 {label.split('・').map((part, j, parts) =>
                   j < parts.length - 1 ? (
-                    <span key={part}>
+                    <span key={`${part}-${j}`}>
                       {part}・<wbr />
                     </span>
                   ) : (
-                    <span key={part}>{part}</span>
+                    <span key={`${part}-${j}`}>{part}</span>
                   ),
                 )}
               </span>

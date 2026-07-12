@@ -531,7 +531,7 @@ const ProfileBlockEditor = ({
   const set = <K extends keyof ProfileBlockData>(field: K, value: ProfileBlockData[K]) =>
     onChange({ ...data, [field]: value });
   const setMeta = (key: keyof ProfileMeta, value: string) =>
-    onChange({ ...data, meta: { ...data.meta, [key]: value } });
+    onChange({ ...data, meta: { ...(data.meta ?? {}), [key]: value } });
 
   return (
     <div className="min-w-0 flex-1 space-y-2 text-sm">
@@ -583,7 +583,7 @@ const ProfileBlockEditor = ({
           <div key={key}>
             <p className="mb-1 text-xs text-muted-foreground">{label}</p>
             <input
-              value={data.meta[key] ?? ''}
+              value={data.meta?.[key] ?? ''}
               onChange={(e) => setMeta(key, e.target.value)}
               placeholder={placeholder}
               aria-label={label}
@@ -928,7 +928,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       });
       if (res.ok) {
         savedRef.current = true;
-        savedUpdatedAtRef.current = res.savedUpdatedAt ?? new Date();
+        // Server Actions のシリアライズ境界を越えると Date が文字列化されうるため、
+        // new Date() で必ず Date オブジェクトへ正規化する（.getTime() 比較の破綻防止）。
+        savedUpdatedAtRef.current = res.savedUpdatedAt ? new Date(res.savedUpdatedAt) : new Date();
         lastSavedSnapshotRef.current = savedSnapshot;
         failedSnapshotRef.current = null;
         // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
@@ -946,6 +948,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         failedSnapshotRef.current = savedSnapshot;
         setAutosaveStatus('error');
       }
+    } catch {
+      // ネットワークエラー等の未捕捉例外。'saving' のまま固まらないよう error へ遷移する。
+      failedSnapshotRef.current = savedSnapshot;
+      setAutosaveStatus('error');
     } finally {
       saveInFlightRef.current = false;
     }
@@ -1166,7 +1172,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
           // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
           // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。返却が無い
           // 古い経路のみ new Date() にフォールバックする。
-          savedUpdatedAtRef.current = res.savedUpdatedAt ?? new Date();
+          // Server Actions のシリアライズ境界を越えると Date が文字列化されうるため、
+          // new Date() で必ず Date オブジェクトへ正規化する（.getTime() 比較の破綻防止）。
+          savedUpdatedAtRef.current = res.savedUpdatedAt ? new Date(res.savedUpdatedAt) : new Date();
           // 保存成功した内容をスナップショットとして記録し、dirty を解除する
           // （保存中に編集が入っていた場合は dirty のままにする）。
           lastSavedSnapshotRef.current = savedSnapshot;
@@ -1191,6 +1199,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         } else {
           toast.error('保存に失敗しました');
         }
+      } catch {
+        toast.error('保存に失敗しました');
       } finally {
         saveInFlightRef.current = false;
       }

@@ -106,7 +106,7 @@ export const TagInput = ({ value, onChange, placeholder, suggestions, label }: T
           } else if (e.key === 'Escape') {
             setOpen(false);
             setHi(-1);
-          } else if (e.key === 'Enter' || e.key === ',') {
+          } else if (e.key === 'Enter' || e.key === ',' || e.key === '、') {
             e.preventDefault();
             if (open && hi >= 0 && matches[hi]) add(matches[hi]);
             else add(draft);
