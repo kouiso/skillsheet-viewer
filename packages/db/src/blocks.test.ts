@@ -600,9 +600,7 @@ describe('バリデータ — optional フィールドの後方互換', () => {
   });
 
   it('isProjectBlockData: 会社の hidden が boolean でなければ拒否', () => {
-    expect(
-      isProjectBlockData({ companies: [{ ...PROJECT.companies[0], hidden: 'yes' }], items: [] }),
-    ).toBe(false);
+    expect(isProjectBlockData({ companies: [{ ...PROJECT.companies[0], hidden: 'yes' }], items: [] })).toBe(false);
   });
 
   it('isProjectBlockData: 案件の hidden / periodStart / ongoing の型違いは拒否', () => {
