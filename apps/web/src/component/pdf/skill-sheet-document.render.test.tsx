@@ -113,18 +113,22 @@ describe('SkillSheetDocument（実バイト描画）', () => {
     RENDER_TIMEOUT_MS,
   );
 
-  it('2行の小さい表に1ページ超の長文セルを含む内容でも正常な PDF バッファを生成できる（行アトミック化の回帰防止）', async () => {
-    // 表全体は wrap={true}、行は原則 wrap={false}（1行の途中でページを割らない）。
-    // ただし1ページに収まらない見込みの行（文字数が閾値超）だけは wrap={true} にして
-    // 複数ページにまたがることを許容する（さもないと内容がクリップされる — chatgpt-codex-connector指摘の回帰防止）。
-    const longCell = Array.from({ length: 50 }, (_, i) => `行${i + 1}：長い業務内容の説明テキストです。`).join('\n');
-    const content = `## 業務詳細\n\n| 項目 | 内容 |\n| :--- | :--- |\n| 主な業務 | ${longCell} |\n| 補足 | 追加情報 |\n`;
+  it(
+    '2行の小さい表に1ページ超の長文セルを含む内容でも正常な PDF バッファを生成できる（行アトミック化の回帰防止）',
+    async () => {
+      // 表全体は wrap={true}、行は原則 wrap={false}（1行の途中でページを割らない）。
+      // ただし1ページに収まらない見込みの行（文字数が閾値超）だけは wrap={true} にして
+      // 複数ページにまたがることを許容する（さもないと内容がクリップされる — chatgpt-codex-connector指摘の回帰防止）。
+      const longCell = Array.from({ length: 50 }, (_, i) => `行${i + 1}：長い業務内容の説明テキストです。`).join('\n');
+      const content = `## 業務詳細\n\n| 項目 | 内容 |\n| :--- | :--- |\n| 主な業務 | ${longCell} |\n| 補足 | 追加情報 |\n`;
 
-    const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
-    expect(buffer.length).toBeGreaterThan(0);
-    expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
-    expect(buffer.subarray(-1024).toString('latin1')).toContain('%%EOF');
-  });
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      expect(buffer.length).toBeGreaterThan(0);
+      expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+      expect(buffer.subarray(-1024).toString('latin1')).toContain('%%EOF');
+    },
+    RENDER_TIMEOUT_MS,
+  );
 
   it(
     '多列テーブル＋長い未分割トークン(URL)を含む内容でもスローせず描画できる（セルの overflow:hidden 回帰防止）',

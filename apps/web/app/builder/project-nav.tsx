@@ -230,6 +230,13 @@ export const ProjectNav = ({
     return map;
   }, [data]);
 
+  // data.companies に存在しない companyId を持つ案件（閲覧側/PDFは「不明な会社」として表示する）。
+  // ナビでも同じものを見せないと、閲覧面には出るのにエディタでは触れない案件が生まれる。
+  const orphanProjects = useMemo(() => {
+    const knownIds = new Set(data.companies.map((c) => c.id));
+    return data.items.filter((p) => !knownIds.has(p.companyId));
+  }, [data]);
+
   // 閲覧側で見える案件だけの通し番号（非表示は欠番にせず詰める）。
   const visibleNoOf = useMemo(() => {
     const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
@@ -332,6 +339,26 @@ export const ProjectNav = ({
         </DndContext>
         {data.companies.length === 0 && (
           <p className="px-2 py-6 text-center text-xs text-muted-foreground">「＋ 会社」から会社を追加してください</p>
+        )}
+        {orphanProjects.length > 0 && (
+          <div className="mb-1.5 mt-2 border-t border-dashed border-border pt-2">
+            <div className="flex items-center gap-1 px-1 py-1 text-xs font-semibold text-muted-foreground">
+              不明な会社（{orphanProjects.length}）
+            </div>
+            <div className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2 pt-1">
+              {orphanProjects.map((project) => (
+                <ProjectRow
+                  key={project.id}
+                  project={project}
+                  visibleNo={visibleNoOf.get(project.id) ?? 0}
+                  active={project.id === selectedId}
+                  onSelect={() => onSelect(project.id)}
+                  onToggleHide={() => onToggleHideProject(project.id)}
+                  onDelete={() => confirmDeleteProject(project)}
+                />
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
