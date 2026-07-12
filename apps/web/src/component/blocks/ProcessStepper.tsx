@@ -30,15 +30,17 @@ export function ProcessStepper({ done, uncertain, compact = false }: ProcessStep
                 className={`break-keep text-center font-mono text-[10px] leading-tight [overflow-wrap:anywhere] ${isDone || isUncertain ? 'text-accent-text' : 'text-faint'}`}
               >
                 {/* 狭幅では「・」の直後だけで折り返す（語中の「実装・単/体」折れを防ぐ）。 */}
-                {label.split('・').map((part, j, parts) =>
-                  j < parts.length - 1 ? (
-                    <span key={`${part}-${j}`}>
+                {label.split('・').map((part, j, parts) => {
+                  // 配列indexをkeyへ使わず、先頭からの累積文字列（各要素で自然に一意）を使う。
+                  const cumulativeKey = parts.slice(0, j + 1).join('・');
+                  return j < parts.length - 1 ? (
+                    <span key={cumulativeKey}>
                       {part}・<wbr />
                     </span>
                   ) : (
-                    <span key={`${part}-${j}`}>{part}</span>
-                  ),
-                )}
+                    <span key={cumulativeKey}>{part}</span>
+                  );
+                })}
               </span>
             )}
             <span

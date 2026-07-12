@@ -291,7 +291,8 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     // これをしないと、閲覧側の連番・並びが会社ナビの並びと食い違う。
     const companyOrder = new Map(companies.map((c, i) => [c.id, i]));
     const items = [...data.items].sort(
-      (a, b) => (companyOrder.get(a.companyId) ?? Number.MAX_SAFE_INTEGER) -
+      (a, b) =>
+        (companyOrder.get(a.companyId) ?? Number.MAX_SAFE_INTEGER) -
         (companyOrder.get(b.companyId) ?? Number.MAX_SAFE_INTEGER),
     );
     commit({ ...data, companies, items });
