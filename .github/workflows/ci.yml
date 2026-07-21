@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check-type: [lint, typecheck, test, build]
+        check-type: [lint, typecheck, test, build, e2e]
     steps:
       - uses: actions/checkout@v4
 
@@ -58,3 +58,16 @@ jobs:
       - name: Build
         if: matrix.check-type == 'build'
         run: pnpm run build
+
+      - name: Headless browser E2E
+        if: matrix.check-type == 'e2e'
+        run: pnpm run test:e2e
+
+      - name: Upload E2E evidence
+        if: matrix.check-type == 'e2e' && always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: headless-e2e-evidence
+          path: test-results/e2e/
+          if-no-files-found: error
+          retention-days: 14
