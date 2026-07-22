@@ -153,7 +153,7 @@ await writeFile(
   evidencePath,
   `${JSON.stringify({ recordedAt: new Date().toISOString(), status: 'running', results: [] }, null, 2)}\n`,
 );
-const server = start('pnpm', ['start', '--', '-p', String(appPort)], {
+const server = start('pnpm', ['start', '-p', String(appPort)], {
   env: {
     ...process.env,
     DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://e2e.invalid/e2e',
