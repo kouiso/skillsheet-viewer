@@ -21,6 +21,7 @@
     "format": "biome format --write .",
     "type-check": "pnpm -r type-check",
     "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm build && node scripts/headless-e2e.mjs",
     "db:generate": "pnpm --filter @skillsheet/db db:generate",
     "db:migrate": "pnpm --filter @skillsheet/db db:migrate"
   },
@@ -29,6 +30,9 @@
     "typescript": "^5.7.3"
   },
   "pnpm": {
+    "overrides": {
+      "next>sharp": ">=0.35.0"
+    },
     "onlyBuiltDependencies": [
       "esbuild",
       "sharp",
