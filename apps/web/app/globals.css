@@ -181,6 +181,9 @@
   --font-mono: var(--font-ibm-mono), 'IBM Plex Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
 }
 
+/* 枠線の既定色。レイヤ外の `*` セレクタなので、Tailwind の `border-*` ユーティリティより
+   後段に置かれて勝ってしまう。枠線の色をユーティリティで変えたい箇所は、
+   インラインの style={{ borderColor }} で指定すること（目次の行で実際に踏んだ）。 */
 * {
   border-color: var(--border);
 }

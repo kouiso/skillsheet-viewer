@@ -1,5 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion';
-import { BookOpen, ChevronDown, ChevronUp, Menu as MenuIcon } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Menu as MenuIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -20,61 +19,56 @@ interface TableOfContentsProps {
 }
 
 export const SIDEBAR_WIDTH = 280;
-
-// 見出し出現アニメーションのスタッガー間隔（秒）と階層インデント（rem/レベル）
-const STAGGER_DELAY_SEC = 0.02;
-const INDENT_REM_PER_LEVEL = 0.75;
+/** 折りたたみ時の幅。ドットだけが縦に並ぶ（現在位置は分かるが本文の邪魔をしない）。 */
+export const SIDEBAR_COLLAPSED_WIDTH = 52;
 
 interface TocListProps {
   headings: Heading[];
   activeId: string;
   onHeadingClick: (id: string) => void;
+  collapsed?: boolean;
 }
 
-const TocList = ({ headings, activeId, onHeadingClick }: TocListProps) => (
-  <nav className="flex-1 overflow-y-auto p-2">
-    <ul className="space-y-0.5">
-      <AnimatePresence>
-        {headings.map((heading, index) => {
-          const isActive = heading.id === activeId;
-          return (
-            <motion.li
-              key={heading.id}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2, delay: index * STAGGER_DELAY_SEC }}
-              style={{ paddingLeft: `${(heading.level - 1) * INDENT_REM_PER_LEVEL}rem` }}
-            >
-              <button
-                type="button"
-                onClick={() => onHeadingClick(heading.id)}
-                className={cn(
-                  'w-full rounded-md px-3 py-1.5 text-left transition-colors',
-                  heading.level === 1 ? 'text-[0.95rem]' : 'text-sm',
-                  isActive
-                    ? 'bg-primary font-semibold text-primary-foreground hover:bg-primary-dark'
-                    : cn('text-foreground hover:bg-accent', heading.level === 1 && 'font-semibold'),
-                )}
-              >
-                {heading.text}
-              </button>
-            </motion.li>
-          );
-        })}
-      </AnimatePresence>
-    </ul>
-  </nav>
-);
-
-const TocHeader = ({ children }: { children?: React.ReactNode }) => (
-  <div className="flex items-center justify-between border-b border-border p-4">
-    <div className="flex items-center gap-2">
-      <BookOpen className="size-5 text-primary" />
-      <span className="text-base font-bold">目次</span>
-    </div>
-    {children}
-  </div>
+const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps) => (
+  <ul className="flex flex-1 list-none flex-col gap-px overflow-y-auto p-0">
+    {headings.map((heading) => {
+      const isActive = heading.id === activeId;
+      return (
+        <li key={heading.id}>
+          <button
+            type="button"
+            onClick={() => onHeadingClick(heading.id)}
+            aria-current={isActive ? 'true' : undefined}
+            title={collapsed ? heading.text : undefined}
+            // globals.css の `* { border-color: var(--border) }` はレイヤ外なので
+            // Tailwind の border-* ユーティリティより後段になる。枠線の色だけインラインで指定する。
+            style={{
+              borderColor: isActive ? 'color-mix(in srgb, var(--primary) 35%, transparent)' : 'transparent',
+            }}
+            className={cn(
+              'flex w-full items-center gap-[9px] rounded-[var(--radius)] border text-left leading-[1.5] transition-all duration-150',
+              'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary',
+              collapsed ? 'justify-center px-0 py-[9px]' : 'px-2.5 py-[7px]',
+              // 3階層目は 1 段下げて、見出しの入れ子が分かるようにする
+              !collapsed && heading.level >= 3 ? 'pl-[26px] text-xs' : 'text-[12.5px]',
+              isActive
+                ? 'bg-accent-soft font-semibold text-accent-text'
+                : 'text-muted-foreground hover:bg-surface3 hover:text-foreground',
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                'shrink-0 rounded-full transition-all duration-150',
+                isActive ? 'size-1.5 bg-primary' : 'size-[5px] bg-faint',
+              )}
+            />
+            {!collapsed && <span className="truncate">{heading.text}</span>}
+          </button>
+        </li>
+      );
+    })}
+  </ul>
 );
 
 const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContentsProps) => {
@@ -94,19 +88,20 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
         <SheetTrigger asChild>
           <Button
             size="icon"
-            className="no-print fixed bottom-4 right-4 z-50 size-12 rounded-full shadow-elevation-4"
+            variant="outline"
+            className="no-print fixed bottom-4 right-4 z-50 size-11 rounded-full bg-card text-accent-text shadow-[0_6px_20px_-10px_rgba(0,0,0,0.4)] hover:border-primary"
             aria-label="目次を開く"
           >
             <MenuIcon />
           </Button>
         </SheetTrigger>
-        <SheetContent side="left" className="flex w-72 flex-col p-0">
+        <SheetContent side="left" className="flex w-72 flex-col gap-4 px-[22px] py-7">
           {/* スクリーンリーダー向けに Dialog の Title/Description を提供（Radix のa11y要件・警告回避） */}
           <div className="sr-only">
             <SheetTitle>目次</SheetTitle>
             <SheetDescription>ドキュメントの見出し一覧</SheetDescription>
           </div>
-          <TocHeader />
+          <span className="kicker">Contents</span>
           <TocList headings={headings} activeId={activeId} onHeadingClick={handleHeadingClick} />
         </SheetContent>
       </Sheet>
@@ -118,21 +113,25 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
   // メインコンテンツが自動的に幅を詰める（余白バグの根本対処）。
   return (
     <aside
-      className="no-print sticky top-16 z-30 flex h-[calc(100vh-4rem)] shrink-0 flex-col self-start border-r border-border bg-card transition-[width] duration-300"
-      style={{ width: isCollapsed ? 'auto' : SIDEBAR_WIDTH }}
+      className={cn(
+        'no-print sticky top-16 z-30 flex h-[calc(100vh-4rem)] shrink-0 flex-col gap-4 self-start border-r border-border transition-[width] duration-300',
+        isCollapsed ? 'items-center px-2 pb-10 pt-7' : 'px-[22px] pb-10 pt-7',
+      )}
+      style={{ width: isCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH }}
     >
-      <TocHeader>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
+      <div className={cn('flex w-full items-center gap-2.5', isCollapsed ? 'justify-center' : 'justify-between')}>
+        {!isCollapsed && <span className="kicker">Contents</span>}
+        <button
+          type="button"
           onClick={() => setIsCollapsed((v) => !v)}
-          aria-label={isCollapsed ? '展開' : '折りたたむ'}
+          aria-label={isCollapsed ? '目次を開く' : '目次を折りたたむ'}
+          aria-expanded={!isCollapsed}
+          className="grid size-6 shrink-0 place-items-center rounded-[var(--radius)] border border-border bg-card font-mono text-[11px] text-faint transition-all duration-150 hover:border-primary hover:text-accent-text"
         >
-          {isCollapsed ? <ChevronDown /> : <ChevronUp />}
-        </Button>
-      </TocHeader>
-      {!isCollapsed && <TocList headings={headings} activeId={activeId} onHeadingClick={handleHeadingClick} />}
+          {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+        </button>
+      </div>
+      <TocList headings={headings} activeId={activeId} onHeadingClick={handleHeadingClick} collapsed={isCollapsed} />
     </aside>
   );
 };
