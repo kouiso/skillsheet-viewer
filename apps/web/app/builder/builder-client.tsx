@@ -82,7 +82,9 @@ const PREVIEW_CHANNEL_NAME = 'builder-preview';
 const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
 
 // 編集が止んでから自動保存を発火するまでの待ち時間。
-const AUTOSAVE_DEBOUNCE_MS = 1500;
+// design（editor/app.jsx）は 600ms。手を止めた瞬間に「保存済み」へ変わる体感を狙った値で、
+// 案件エディタは 1 フィールドずつ触る操作が多いため長い待ちだと保存状態が読み取れない。
+const AUTOSAVE_DEBOUNCE_MS = 600;
 
 // 自動保存の状態機械。idle（初期）→ saving → saved を巡回し、
 // conflict は終端（同一セッション中は自動保存を再開しない）。
@@ -773,6 +775,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const handleProjectSelectionChange = useCallback((selection: ProjectEditorSelection | null) => {
     setProjectCrumb(selection);
   }, []);
+  // 案件エディタの右ペイン（ライブプレビュー）の表示。トップバーから切り替える。
+  const [showProjectPreview, setShowProjectPreview] = useState(true);
   const [title, setTitle] = useState(initialTitle);
   const [isSaving, startSaving] = useTransition();
   const [isSheetOp, startSheetOp] = useTransition();
@@ -1279,9 +1283,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
           </div>
         </div>
       )}
-      <header className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md">
+      {/* data-slot: 案件エディタが左右ペインを固定する基準にこの高さを実測で使う。 */}
+      <header
+        data-slot="builder-topbar"
+        className="no-print sticky top-0 z-20 border-b border-border bg-[color-mix(in_srgb,var(--card)_90%,transparent)] backdrop-blur-md"
+      >
         <div
-          className={`mx-auto flex h-16 items-center justify-between gap-2 px-4 sm:px-6 ${
+          className={`mx-auto flex items-center justify-between gap-2 px-4 py-3.5 sm:px-7 ${
             activeTab === 'project' ? 'max-w-none' : 'max-w-6xl'
           }`}
         >
@@ -1296,6 +1304,16 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             )}
           </div>
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            {activeTab === 'project' && (
+              <button
+                type="button"
+                onClick={() => setShowProjectPreview((v) => !v)}
+                aria-pressed={showProjectPreview}
+                className="pv-toggle btn sm"
+              >
+                ◧ {showProjectPreview ? 'プレビューを隠す' : 'プレビュー'}
+              </button>
+            )}
             <Button variant="ghost" size="sm" onClick={handleOpenPreview} aria-label="プレビューを別ウィンドウで開く">
               <Eye className="size-4 sm:mr-1.5" />
               <span className="hidden sm:inline">プレビュー</span>
@@ -1353,98 +1371,101 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
       {/* プレビューは別ウィンドウに分離（ヘッダーの「プレビュー」ボタンで開く）。
           案件エディタタブは 3 ペイン（ナビ/フォーム/プレビュー）を持つため全幅にする。 */}
-      <div className={`mx-auto px-4 py-6 sm:px-6 ${activeTab === 'project' ? 'max-w-none' : 'max-w-5xl'}`}>
+      {/* 案件エディタは 3 ペインを画面幅いっぱいに敷くため、余白付きの中央寄せコンテナを使わない。 */}
+      <div className={activeTab === 'project' ? 'max-w-none' : 'mx-auto max-w-5xl px-4 py-6 sm:px-6'}>
         {/* エディタ */}
         {/* min-w-0: CSS Grid アイテムは既定で min-width:auto のため、子の truncate/
             overflow-x-auto が効かず内容量でトラック自体が押し広げられる（grid blowout）。
             375px でページ全体が横スクロールする不具合の根本原因だった（実機確認）。 */}
-        <div className="min-w-0 space-y-3">
-          {/* シートセレクター */}
-          <div className="rounded-lg border border-border bg-card p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">シート一覧</span>
+        <div className={`min-w-0 ${activeTab === 'project' ? '' : 'space-y-3'}`}>
+          <div className={`space-y-3 ${activeTab === 'project' ? 'px-4 py-4 sm:px-7' : ''}`}>
+            {/* シートセレクター */}
+            <div className="rounded-lg border border-border bg-card p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">シート一覧</span>
+                <button
+                  type="button"
+                  onClick={handleCreateSheet}
+                  disabled={isSheetOp}
+                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                >
+                  <Plus className="size-3.5" />
+                  新規シート
+                </button>
+              </div>
+              <ul className="space-y-1">
+                {sheets.map((sheet) => (
+                  <li key={sheet.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (sheet.id === activeSheetId) return;
+                        // シート切替は key={activeSheetId} の再マウントで編集中 state を破棄する
+                        if (!confirmDiscardChanges()) return;
+                        router.push(`/builder?sheet=${sheet.id}`);
+                      }}
+                      className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
+                        sheet.id === activeSheetId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                      }`}
+                    >
+                      <FileText className="size-3.5 shrink-0" />
+                      <span className="truncate">{sheet.title}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteSheet(sheet.id, sheet.title)}
+                      disabled={isSheetOp || sheets.length <= 1}
+                      aria-label={`「${sheet.title}」を削除`}
+                      className="rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div>
+              <label htmlFor="sheet-title" className="mb-1 block text-sm font-medium text-muted-foreground">
+                タイトル
+              </label>
+              <input
+                id="sheet-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="スキルシートのタイトル"
+                className="w-full rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+
+            {/* タブ切り替え */}
+            <div className="flex border-b border-border">
               <button
                 type="button"
-                onClick={handleCreateSheet}
-                disabled={isSheetOp}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                onClick={() => setActiveTab('blocks')}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'blocks'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <Plus className="size-3.5" />
-                新規シート
+                ブロック編集
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('project');
+                  ensureProjectBlock();
+                }}
+                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === 'project'
+                    ? 'border-b-2 border-primary text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                案件エディタ
               </button>
             </div>
-            <ul className="space-y-1">
-              {sheets.map((sheet) => (
-                <li key={sheet.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (sheet.id === activeSheetId) return;
-                      // シート切替は key={activeSheetId} の再マウントで編集中 state を破棄する
-                      if (!confirmDiscardChanges()) return;
-                      router.push(`/builder?sheet=${sheet.id}`);
-                    }}
-                    className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
-                      sheet.id === activeSheetId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                    }`}
-                  >
-                    <FileText className="size-3.5 shrink-0" />
-                    <span className="truncate">{sheet.title}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteSheet(sheet.id, sheet.title)}
-                    disabled={isSheetOp || sheets.length <= 1}
-                    aria-label={`「${sheet.title}」を削除`}
-                    className="rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <label htmlFor="sheet-title" className="mb-1 block text-sm font-medium text-muted-foreground">
-              タイトル
-            </label>
-            <input
-              id="sheet-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="スキルシートのタイトル"
-              className="w-full rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-          </div>
-
-          {/* タブ切り替え */}
-          <div className="flex border-b border-border">
-            <button
-              type="button"
-              onClick={() => setActiveTab('blocks')}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'blocks'
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              ブロック編集
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('project');
-                ensureProjectBlock();
-              }}
-              className={`px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'project'
-                  ? 'border-b-2 border-primary text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              案件エディタ
-            </button>
           </div>
 
           {activeTab === 'project' &&
@@ -1457,6 +1478,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   data={projectItem?.data ?? { companies: [], items: [] }}
                   onChange={updateProjectData}
                   onSelectionChange={handleProjectSelectionChange}
+                  showPreview={showProjectPreview}
                 />
               );
             })()}

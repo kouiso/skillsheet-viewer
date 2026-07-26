@@ -1,14 +1,14 @@
 /**
  * 案件エディタのマスタ定数。
  *
- * claude.ai/design プロトタイプ（editor-store.js）のマスタを TypeScript へ移植したもの。
+ * claude.ai/design プロトタイプ（editor/store.js）のマスタを TypeScript へ移植したもの。
  * 選択肢はあくまで「サジェスト」であり、既存データに未知の値があっても壊さない
  * （select は現在値を先頭 option として温存、タグ入力は自由入力可）。
  */
 
 import type { ProjectTech } from '@skillsheet/db/blocks';
 
-/** 役割の選択肢（editor-store.js ROLE_OPTIONS 移植）。 */
+/** 役割の選択肢（editor/store.js ROLE_OPTIONS 移植）。 */
 export const ROLE_OPTIONS = [
   'フルスタック / EM',
   'バックエンドリード',
@@ -19,11 +19,37 @@ export const ROLE_OPTIONS = [
   'PM',
   'PM & PL',
   'PMO',
+  'PMO→PL',
   'SEサポート',
+  'メンバー',
 ] as const;
 
-/** 会社の種別タグの選択肢（editor-store.js COMPANY_KINDS 移植）。 */
+/** 会社の種別タグの選択肢（editor/store.js COMPANY_KINDS 移植）。 */
 export const KIND_OPTIONS = ['事業会社', 'SIベンダー', '業務委託', '受託', 'ベンチャー', '個人開発'] as const;
+
+/**
+ * スコープ / 担当領域の選択肢（editor/store.js SCOPE_OPTIONS 移植）。
+ * 複数選択で、ここに無い値は「その他」から自由入力で足せる。
+ */
+export const SCOPE_OPTIONS = [
+  'iOS',
+  'Android',
+  'Web',
+  'フロントエンド',
+  'バックエンド',
+  'インフラ',
+  'UI',
+  'CMS',
+  '管理画面',
+  'AI基盤',
+  '決済',
+  'スマホアプリ',
+  'クロスプラットフォーム',
+  '個人開発',
+] as const;
+
+/** スコープ文字列の区切り（保存形式は既存データと同じ " / " 連結）。 */
+export const SCOPE_SEPARATOR = ' / ';
 
 /** 技術スタックのカテゴリ（md の技術スタック表と同じ区分）。 */
 export const TECH_CATEGORIES: { key: keyof ProjectTech; label: string }[] = [
@@ -45,6 +71,7 @@ export const TECH_SUGGESTIONS: Record<keyof ProjectTech, string[]> = {
     'Java',
     'Kotlin',
     'Swift',
+    'Dart',
     'C#',
     'PHP',
     'Ruby',
@@ -53,15 +80,21 @@ export const TECH_SUGGESTIONS: Record<keyof ProjectTech, string[]> = {
     'HTML',
     'CSS',
     'SCSS',
+    'Sass Module',
+    'GAS',
     'HCL (Terraform)',
   ],
   fw: [
     'React',
+    'React (Hooks)',
     'Next.js',
     'React Native',
     'Expo',
     'Vue.js',
     'Nuxt',
+    'Ionic',
+    'Capacitor',
+    'Flutter',
     'NestJS',
     'Express',
     'FastAPI',
@@ -69,29 +102,51 @@ export const TECH_SUGGESTIONS: Record<keyof ProjectTech, string[]> = {
     'Ruby on Rails',
     'Spring Boot',
     'Laravel',
+    'Livewire',
+    'CakePHP',
+    'jQuery',
+    'WordPress',
+    '.NET Framework',
     'Tailwind CSS',
     'MUI',
     'Chakra UI',
+    'Radix UI',
     'shadcn/ui',
     'GraphQL',
     'Prisma',
     'TypeORM',
     'SQLAlchemy',
+    'Alembic',
+    'Pydantic',
+    'Redux',
     'Redux Toolkit',
+    'Recoil',
+    'React Query',
     'React Hook Form',
     'Zod',
     'SWR',
     'TanStack Query',
+    'Aspida',
+    'Orval',
+    'Swagger',
+    'Vite',
+    'Sanity v4',
+    'Celery',
+    'Pandas',
+    'Node.js',
   ],
   db: [
     'PostgreSQL',
     'MySQL',
+    'MariaDB',
     'Aurora',
+    'Cloud SQL',
     'SQLite',
     'MongoDB',
     'Redis',
     'DynamoDB',
     'Firestore',
+    'RealTimeDatabase',
     'BigQuery',
     'OpenSearch',
     'Supabase',
@@ -106,18 +161,34 @@ export const TECH_SUGGESTIONS: Record<keyof ProjectTech, string[]> = {
     'Kubernetes',
     'Terraform',
     'Vercel',
+    'Heroku',
+    'Xserver',
+    'さくらサーバー',
+    'EC2',
     'ECS Fargate',
     'AWS Lambda',
     'Cloud Run',
+    'Cloud Functions',
+    'Firebase Auth',
     'Stripe',
+    'UnivaPay',
+    'Azure OpenAI',
+    'OpenAI API',
+    'Gemini API',
+    'Vertex AI',
   ],
   tools: [
     'GitHub Actions',
+    'GitHub',
+    'GitLab',
+    'Bitbucket',
     'Jest',
     'Vitest',
     'Playwright',
     'Cypress',
     'Pytest',
+    'MyPy',
+    'Ruff',
     'ESLint',
     'Biome',
     'Prettier',
@@ -128,6 +199,34 @@ export const TECH_SUGGESTIONS: Record<keyof ProjectTech, string[]> = {
     'Renovate',
     'Sentry',
     'Claude Code',
+    'CodeRabbit',
+    'Yarn',
+    'npm',
+    'pnpm',
+    'Poetry',
+    'Taskfile',
+    'Visual Studio',
+    'VSCode',
+    'Android Studio',
+    'Xcode',
+    'TypeDoc',
+    'FileZilla',
   ],
-  collab: ['Slack', 'Notion', 'Figma', 'GitHub', 'Jira', 'Backlog', 'Redmine', 'Teams', 'Trello', 'Miro'],
+  collab: [
+    'Slack',
+    'Notion',
+    'Figma',
+    'GitHub',
+    'Jira',
+    'Backlog',
+    'Redmine',
+    'Teams',
+    'Trello',
+    'Miro',
+    'XD',
+    'DrawIO',
+    'SpreadSheet',
+    'Google Meet',
+    'Zoom',
+  ],
 };
