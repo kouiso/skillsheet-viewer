@@ -2,7 +2,7 @@
 
 このドキュメントでは、見出しから自動生成する目次（TableOfContents）と、Vercel + Neon による本番デプロイを解説する。
 
-関連ドキュメント: [01 セットアップとルーティング](01_setup_and_routing.md) / [04 Markdown 表示](04_markdown_display.md)
+関連ドキュメント: [01 セットアップとルーティング](01-setup-and-routing.md) / [04 Markdown 表示](04-markdown-display.md)
 
 ---
 
@@ -10,7 +10,7 @@
 
 ### 見出しの抽出
 
-目次は正規表現ではなく **描画済み DOM から見出しを抽出**する。`rehype-slug`（[04](04_markdown_display.md)）が付与した id をそのまま利用できるため、目次のリンク先と本文アンカーが確実に一致する。
+目次は正規表現ではなく **描画済み DOM から見出しを抽出**する。`rehype-slug`（[04](04-markdown-display.md)）が付与した id をそのまま利用できるため、目次のリンク先と本文アンカーが確実に一致する。
 
 `apps/web/src/component/skill-sheet-viewer.tsx` の `useEffect` が本文コンテナ（`contentRef`）配下を走査する。
 
@@ -76,7 +76,7 @@ Vercel のプロジェクト設定に、`SETUP.md` に列挙した変数を登�
 
 ### ランタイム DB 依存の動的化
 
-`DATABASE_URL` はランタイム専用で、ビルド時には注入されない。DB を読むページは先頭で `connection()`（`next/server`）を呼び、`next build` の静的評価を避けてそのコンポーネント単位で動的レンダリングする（[01](01_setup_and_routing.md) 参照）。`env.ts` の `assertServerEnv()` もビルドフェーズ（`NEXT_PHASE === 'phase-production-build'`）では検証を no-op にして、secrets 未注入のビルドを壊さない。
+`DATABASE_URL` はランタイム専用で、ビルド時には注入されない。DB を読むページは先頭で `connection()`（`next/server`）を呼び、`next build` の静的評価を避けてそのコンポーネント単位で動的レンダリングする（[01](01-setup-and-routing.md) 参照）。`env.ts` の `assertServerEnv()` もビルドフェーズ（`NEXT_PHASE === 'phase-production-build'`）では検証を no-op にして、secrets 未注入のビルドを壊さない。
 
 ---
 

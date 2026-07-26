@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TechFilter } from './TechFilter';
+import { TechFilter } from './tech-filter';
 
 const noop = {
   query: '',

@@ -4,11 +4,11 @@ import { filterVisibleProjectData, type ProjectBlockData } from '@skillsheet/db/
 import { flattenTech } from '@skillsheet/db/process';
 import { motion, useReducedMotion } from 'framer-motion';
 import { type ReactNode, useMemo, useState } from 'react';
-import { ProcessOverview } from './ProcessOverview';
-import { ProjectCard } from './ProjectCard';
-import { SectionHead } from './SectionHead';
-import { TechFilter } from './TechFilter';
-import { Timeline } from './Timeline';
+import { ProcessOverview } from './process-overview';
+import { ProjectCard } from './project-card';
+import { SectionHead } from './section-head';
+import { TechFilter } from './tech-filter';
+import { Timeline } from './timeline';
 
 interface ProjectSectionProps {
   data: ProjectBlockData;

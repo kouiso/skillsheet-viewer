@@ -2,7 +2,7 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { deriveDuration, formatPeriodDisplay, normalizeProcess } from '@skillsheet/db/process';
-import { ProcessStepper } from './ProcessStepper';
+import { ProcessStepper } from './process-stepper';
 
 interface ProjectCardProps {
   item: ProjectItem;

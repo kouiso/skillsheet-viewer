@@ -2,7 +2,7 @@
 
 このドキュメントでは、現行の skillsheet-viewer を動かすための開発環境セットアップと、Next.js App Router によるルーティング構成を解説する。
 
-関連ドキュメント: [02 認証](02_authentication.md) / [03 データ層](03_github_api.md) / [04 Markdown 表示](04_markdown_display.md) / [05 目次とデプロイ](05_toc_and_deploy.md)
+関連ドキュメント: [02 認証](02-authentication.md) / [03 データ層](03-github-api.md) / [04 Markdown 表示](04-markdown-display.md) / [05 目次とデプロイ](05-toc-and-deploy.md)
 
 ---
 
@@ -139,7 +139,7 @@ export default async function ViewLayout({ children }: { children: React.ReactNo
 }
 ```
 
-`/viewer-auth` と `/login` はこのセグメントの外にあるため、ゲート対象外である。`/compare` は `view` セグメント外だが、ページ本体で明示的に `requireViewer()` を呼んで同じ保護をかけている。認証の詳細は [02 認証](02_authentication.md) を参照。
+`/viewer-auth` と `/login` はこのセグメントの外にあるため、ゲート対象外である。`/compare` は `view` セグメント外だが、ページ本体で明示的に `requireViewer()` を呼んで同じ保護をかけている。認証の詳細は [02 認証](02-authentication.md) を参照。
 
 ---
 
@@ -150,4 +150,4 @@ export default async function ViewLayout({ children }: { children: React.ReactNo
 - `/view` 配下は `view/layout.tsx` の `requireViewer()` が一括で閲覧ゲートをかける。
 - DB を読むページは `connection()` で動的化してからサーバー側でデータ取得し、クライアントコンポーネントへ props で渡す。
 
-次は [02 認証](02_authentication.md) で 2 系統の認証を解説する。
+次は [02 認証](02-authentication.md) で 2 系統の認証を解説する。

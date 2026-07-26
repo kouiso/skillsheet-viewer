@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import { ProcessStepper } from './ProcessStepper';
+import { ProcessStepper } from './process-stepper';
 
 describe('ProcessStepper', () => {
   it('ラベルに whitespace-nowrap を使わない（320px 幅での隣接ラベル重なり回帰防止）', () => {

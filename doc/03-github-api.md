@@ -2,7 +2,7 @@
 
 skillsheet-viewer のデータ源は **Neon Postgres（Drizzle ORM）を正本**とする。スキルシートは「順序付きブロックの配列」として DB に保存され、表示時に 1 つの Markdown 文書へ連結される。GitHub からの Markdown 取得は、DB が空のときの初回シードとレガシー閲覧経路にのみ残る副系統である。
 
-関連ドキュメント: [02 認証](02_authentication.md) / [04 Markdown 表示](04_markdown_display.md) / [05 目次とデプロイ](05_toc_and_deploy.md)
+関連ドキュメント: [02 認証](02-authentication.md) / [04 Markdown 表示](04-markdown-display.md) / [05 目次とデプロイ](05-toc-and-deploy.md)
 
 ---
 
@@ -37,7 +37,7 @@ export const blocks = pgTable('blocks', {
 
 ### Better Auth テーブル
 
-同ファイルに `user` / `session` / `account` / `verification` を Better Auth v1.6 の既定 Drizzle スキーマ（単数形テーブル名）に合わせて定義している。編集者認証（[02](02_authentication.md)）が使用する。
+同ファイルに `user` / `session` / `account` / `verification` を Better Auth v1.6 の既定 Drizzle スキーマ（単数形テーブル名）に合わせて定義している。編集者認証（[02](02-authentication.md)）が使用する。
 
 ---
 
@@ -69,7 +69,7 @@ export function blocksToMarkdown(blocks: Block[]): string {
 - 表への変換では `escapeCell()` がセル内改行を空白へ、`|` をエスケープし、空セルを半角スペース 1 つに整えて GFM 表の崩れを防ぐ。列揃えは `:---` / `:---:` / `---:` で表現する。
 - 型システム上到達不能な未知 type は `''` を返し、他ブロックを壊さない。
 
-table / experience は Markdown 経由で描画するが、skills / profile / stats / project は Web 側で専用の React コンポーネントとして描画される（[04](04_markdown_display.md) 参照）。PDF は mdast → `@react-pdf` パイプラインを共有する。
+table / experience は Markdown 経由で描画するが、skills / profile / stats / project は Web 側で専用の React コンポーネントとして描画される（[04](04-markdown-display.md) 参照）。PDF は mdast → `@react-pdf` パイプラインを共有する。
 
 ### バリデータと splitMarkdownIntoBlocks
 

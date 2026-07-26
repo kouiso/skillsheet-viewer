@@ -3,7 +3,7 @@
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech } from '@skillsheet/db/process';
 
-import { ProjectCard } from '@/component/blocks/ProjectCard';
+import { ProjectCard } from '@/component/blocks/project-card';
 
 interface ProjectPreviewProps {
   project: ProjectItem;
