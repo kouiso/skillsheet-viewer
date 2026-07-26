@@ -1,7 +1,15 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+
+export interface TechCount {
+  name: string;
+  /** その技術を使った案件数。 */
+  count: number;
+}
+
 interface TechFilterProps {
-  all: string[];
+  all: TechCount[];
   active: string[];
   query: string;
   onQueryChange: (query: string) => void;
@@ -11,8 +19,24 @@ interface TechFilterProps {
   total: number;
 }
 
+// 1案件でしか使っていない技術は既定で畳む閾値。実データでは 258 種中 149 種がこれに該当し、
+// 全部並べると案件カードが画面外へ押し出される（design 本体は 91 種でしか検証されていない）。
+const COMMON_MIN_COUNT = 2;
+
 // 技術チップの検索フィルタ。チップはトグルでOR条件、検索欄は案件・技術・役割を横断検索する。
 export function TechFilter({ all, active, query, onQueryChange, onToggle, onClear, count, total }: TechFilterProps) {
+  const [showAll, setShowAll] = useState(false);
+
+  const common = useMemo(() => all.filter((t) => t.count >= COMMON_MIN_COUNT), [all]);
+  // 選択中のチップは、たとえ1案件のみの技術でも隠さない（選択が視界から消えると解除できない）。
+  const shown = useMemo(() => {
+    if (showAll) return all;
+    const activeSet = new Set(active);
+    return all.filter((t) => t.count >= COMMON_MIN_COUNT || activeSet.has(t.name));
+  }, [all, active, showAll]);
+
+  const hiddenCount = all.length - common.length;
+
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -35,18 +59,44 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
           </button>
         )}
       </div>
-      <div className="flex flex-wrap gap-[7px]">
-        {all.map((tech) => (
-          <button
-            key={tech}
-            type="button"
-            onClick={() => onToggle(tech)}
-            aria-pressed={active.includes(tech)}
-            className={`chip ${active.includes(tech) ? 'on' : ''}`}
-          >
-            {tech}
-          </button>
-        ))}
+
+      {/* 既定は約3行で頭打ちにし、下端のグラデーションで「まだ続く」ことを示す。 */}
+      <div className={showAll ? 'relative' : 'relative max-h-[88px] overflow-hidden'}>
+        {!showAll && (
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[34px] bg-gradient-to-b from-transparent to-background"
+          />
+        )}
+        <div className="flex flex-wrap gap-[7px]">
+          {shown.map((tech) => (
+            <button
+              key={tech.name}
+              type="button"
+              onClick={() => onToggle(tech.name)}
+              aria-pressed={active.includes(tech.name)}
+              title={`${tech.name}（${tech.count}件）`}
+              className={`chip max-w-[220px] gap-1.5 ${active.includes(tech.name) ? 'on' : ''}`}
+            >
+              <span className="overflow-hidden text-ellipsis">{tech.name}</span>
+              <span className={`text-[10px] ${active.includes(tech.name) ? 'opacity-70' : 'text-faint'}`}>
+                {tech.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2.5">
+        <button type="button" onClick={() => setShowAll((v) => !v)} className="softbtn compact">
+          {showAll ? '折りたたむ' : 'すべての技術を表示'}
+          {!showAll && hiddenCount > 0 && <span className="font-mono text-[11px] text-faint">+{hiddenCount}</span>}
+        </button>
+        {!showAll && hiddenCount > 0 && (
+          <span className="font-mono text-[10.5px] text-faint">
+            1案件のみで使った技術は隠しています（検索欄では全件ヒットします）
+          </span>
+        )}
       </div>
     </div>
   );

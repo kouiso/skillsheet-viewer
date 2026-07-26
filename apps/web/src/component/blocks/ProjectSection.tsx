@@ -60,13 +60,15 @@ export function ProjectSection({
     [visible.items],
   );
 
-  // 出現頻度の降順（プロトタイプの allTech 並びに合わせる）。
+  // 出現頻度の降順。同数はプロトタイプでは順序不定だったので名前順で確定させる。
   const allTech = useMemo(() => {
     const counts = new Map<string, number>();
     for (const { tech } of itemsWithNo) {
       for (const t of tech) counts.set(t, (counts.get(t) ?? 0) + 1);
     }
-    return [...counts.keys()].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0));
+    return [...counts.entries()]
+      .sort(([aName, aCount], [bName, bCount]) => bCount - aCount || aName.localeCompare(bName))
+      .map(([name, count]) => ({ name, count }));
   }, [itemsWithNo]);
 
   const filtered = useMemo(() => {
