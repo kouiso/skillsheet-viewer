@@ -31,26 +31,40 @@ export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
 
   return (
     <div className={className}>
-      {data.category && <h3 className="kicker mb-3">{data.category}</h3>}
-      <div className="grid gap-2.5">
+      {data.category && (
+        // design の見出しは「名前 — 罫線 — 件数」。kicker（ティールの英字）はページ見出し専用。
+        <div className="mb-3 flex items-center gap-3">
+          <h3 className="text-[15px] font-semibold text-foreground">{data.category}</h3>
+          <span className="h-px flex-1 bg-border" />
+          <span className="font-mono text-[11px] text-faint">{data.skills.length}</span>
+        </div>
+      )}
+      <div className="grid gap-y-[11px]">
         {data.skills.map((skill, i) => (
+          // 名前 / バー / 年数 の3列。バーを右へ寄せて縦のリズムを揃える。
           // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
-          <div key={i} className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-sm text-foreground">{skill.name}</span>
-              <span className="shrink-0 font-mono text-xs text-muted-foreground">
-                {skill.years > 0 ? `${skill.years}年` : '-'} {skill.level}
-              </span>
-            </div>
-            {skill.years > 0 ? (
-              <div className="barTrack">
-                <div className="barFill" style={{ width: `${getYearsBarPercent(skill.years)}%` }} />
-              </div>
-            ) : (
-              <div className="h-1.5 w-full rounded-full bg-muted">
-                <div className={`h-1.5 rounded-full bg-primary ${getLevelWidth(skill.level)}`} />
-              </div>
-            )}
+          <div key={i} className="grid grid-cols-[1fr_84px_28px] items-center gap-3">
+            <span className="truncate text-sm text-foreground">{skill.name}</span>
+            <span className="barTrack" title={skill.level}>
+              {skill.years > 0 ? (
+                <span className="barFill block" style={{ width: `${getYearsBarPercent(skill.years)}%` }} />
+              ) : (
+                // 年数が無いスキルは ★ の段階でバー幅を決める。
+                <span className={`barFill block ${getLevelWidth(skill.level)}`} />
+              )}
+            </span>
+            <span className="text-right font-mono text-xs text-foreground">
+              {skill.years > 0 ? (
+                <>
+                  {skill.years}
+                  <span className="text-[10px] text-faint">y</span>
+                </>
+              ) : (
+                <span className="text-faint" title={skill.level}>
+                  —
+                </span>
+              )}
+            </span>
           </div>
         ))}
       </div>

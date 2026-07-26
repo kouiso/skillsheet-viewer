@@ -22,19 +22,20 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="案件・技術・役割を検索…"
-            className="w-full rounded-[var(--radius)] border border-border bg-surface2 py-2 pl-8 pr-3 text-sm text-foreground outline-none focus:border-primary"
+            className="w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground outline-none focus:border-primary focus:bg-card"
           />
         </div>
         <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
           <b className="text-accent-text">{count}</b> / {total} 件
         </span>
+        {/* クリアは値の選択ではなく操作なので .chip ではなく .softbtn。 */}
         {(active.length > 0 || query.length > 0) && (
-          <button type="button" onClick={onClear} className="chip">
+          <button type="button" onClick={onClear} className="softbtn compact">
             クリア
           </button>
         )}
       </div>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-[7px]">
         {all.map((tech) => (
           <button
             key={tech}

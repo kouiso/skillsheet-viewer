@@ -21,7 +21,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
   const summary = item.summary?.trim() || item.duties;
 
   return (
-    <article className="flex min-w-0 flex-col gap-3.5 rounded-[var(--radius-lg)] border border-border bg-card px-5 py-5">
+    <article className="flex min-w-0 flex-col gap-3.5 rounded-[var(--radius-lg)] border border-border bg-card px-[22px] py-5 transition-colors duration-150 hover:border-primary">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
@@ -48,7 +48,8 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       {tech.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {tech.map((t) => (
-            <span key={t} className={`chip ${activeTech.includes(t) ? 'on' : ''}`}>
+            // 押せないラベルなので .chip ではなく .techtag。検索一致時だけ強調する。
+            <span key={t} className={`techtag ${activeTech.includes(t) ? 'hit' : ''}`}>
               {t}
             </span>
           ))}
@@ -59,7 +60,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
         <div className="flex flex-wrap gap-1.5">
           <span className="kicker self-center">その他の役割</span>
           {normalized.other.map((role) => (
-            <span key={role} className="chip">
+            <span key={role} className="techtag">
               {role}
             </span>
           ))}
@@ -67,12 +68,12 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       )}
 
       <div className="mt-0.5 border-t border-border pt-3.5">
-        <ProcessStepper done={normalized.done} uncertain={normalized.uncertain} />
+        <ProcessStepper done={normalized.done} />
       </div>
 
       {item.acquired && (
         <div className="text-sm">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">習得スキル・実績</p>
+          <p className="mb-1 font-mono text-[10px] tracking-[0.1em] text-accent-text">≪習得スキル・実績≫</p>
           <p className="whitespace-pre-wrap break-words leading-relaxed text-foreground/80">{item.acquired}</p>
         </div>
       )}

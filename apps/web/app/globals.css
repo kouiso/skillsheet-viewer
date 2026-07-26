@@ -51,14 +51,28 @@
 
   /* ハンドオフ redesign2（console.light）のトークン語彙。既存トークンとは別名で追加し非破壊。 */
   --surface2: #f0f3f3;
-  --faint: #647079; /* 元 #8a969c は白背景 3.0:1 で WCAG AA(4.5:1) 未達だったため修正（2026-07-08 自己レビュー） */
+  --surface3: #e9eeee;
+  /* design 値は #8a969c だが背景 #f6f8f8 に対し 2.85:1 で小さい文字が読めない。
+     「主役でない情報を引っ込ませる」意図を保ちつつ AA(4.5:1) を満たす最も薄い値に寄せた。
+     bg 4.55:1 / card 4.85:1。 */
+  --faint: #69737a;
   --track: #e6ecec;
   --chip-bg: #eef3f3;
   --chip-text: #34424a;
   --accent-text: #0b7d72;
+  --accent-soft: #ecfaf8;
   --on-accent: #ffffff;
+  --border-strong: #c8d2d4;
   --bar-round: 1px;
   --head-weight: 600;
+
+  /* editor/editor.css 由来。--destructive とは色相が違うのでエディタ側は danger を使う。 */
+  --danger: #c2483b;
+  --danger-soft: #fbf0ef;
+  --warn: #d4a017;
+  --warn-soft: #fdf6e6;
+  /* Console は影なしだが、浮くもの（サジェスト・プレビューカード）だけ例外的に持つ。 */
+  --shadow-editor: 0 10px 30px -16px rgba(16, 23, 26, 0.18);
 }
 
 .dark {
@@ -88,12 +102,22 @@
 
   /* ハンドオフ redesign2（console.dark）のトークン語彙。 */
   --surface2: #141a1e;
-  --faint: #818c94; /* 元 #5a656c は card 背景 3.1:1 で WCAG AA(4.5:1) 未達だったため修正（2026-07-08 自己レビュー） */
+  --surface3: #182025;
+  /* design 値は #5a656c だが card #0f1316 に対し 3.12:1。bg 4.77:1 / card 4.57:1 へ寄せた。 */
+  --faint: #757f87;
   --track: #192227;
   --chip-bg: #141b1f;
   --chip-text: #aeb9bf;
   --accent-text: #5eead4;
+  --accent-soft: #0c2320;
   --on-accent: #03110f;
+  --border-strong: #2b363c;
+
+  --danger: #e9695c;
+  --danger-soft: #2a1715;
+  --warn: #e0b53a; /* #d4a017 は暗背景でくすむため明度を上げる */
+  --warn-soft: #241d0d;
+  --shadow-editor: 0 10px 30px -16px rgba(0, 0, 0, 0.6);
 }
 
 /* CSS 変数を Tailwind のテーマトークンへ公開（bg-primary, text-foreground 等が使える） */
@@ -123,12 +147,19 @@
   --color-ring: var(--ring);
 
   --color-surface2: var(--surface2);
+  --color-surface3: var(--surface3);
   --color-faint: var(--faint);
   --color-track: var(--track);
   --color-chip-bg: var(--chip-bg);
   --color-chip-text: var(--chip-text);
   --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
   --color-on-accent: var(--on-accent);
+  --color-border-strong: var(--border-strong);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
 
   --radius-sm: 2px;
   --radius-md: 4px;
@@ -141,10 +172,13 @@
   --shadow-elevation-4: var(--elevation-4);
   --shadow-elevation-8: var(--elevation-8);
 
+  /* next/font はスコープ付きのファミリ名を生成するので、まず変数を引く。
+     リテラル名は変数が無い場合（Storybook 等）のフォールバックとして後ろに残す。 */
   --font-sans:
-    'IBM Plex Sans JP', 'IBM Plex Sans', 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN',
-    'Hiragino Sans', Meiryo, -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'IBM Plex Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
+    var(--font-ibm-sans-jp), 'IBM Plex Sans JP', 'IBM Plex Sans', 'Helvetica Neue', Arial,
+    'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, -apple-system, BlinkMacSystemFont,
+    sans-serif;
+  --font-mono: var(--font-ibm-mono), 'IBM Plex Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
 }
 
 * {
@@ -297,32 +331,115 @@ body {
 /* --- Console ダッシュボード用コンポーネントクラス（トークン参照・ライト/ダーク共通） --- */
 .kicker {
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--faint);
+  color: var(--accent-text);
 }
 
+/* 値を選ぶタグ。クリックできるものだけがこれ。 */
 .chip {
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: 0.6875rem;
+  font-size: 12px;
   line-height: 1.4;
-  padding: 2px 8px;
+  padding: 4px 9px;
+  white-space: nowrap;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   background-color: var(--chip-bg);
   color: var(--chip-text);
   cursor: pointer;
   user-select: none;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
+  transition: all 0.15s ease;
+}
+.chip:hover {
+  border-color: var(--primary);
+  color: var(--accent-text);
 }
 .chip.on {
   background-color: var(--primary);
+  border-color: var(--primary);
   color: var(--on-accent);
+}
+
+/* 案件カードの技術タグ。クリック不可なので .chip より一回り小さい別部品。 */
+.techtag {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 2px 8px;
+  border-radius: var(--radius-md);
+  background-color: var(--chip-bg);
+  color: var(--chip-text);
+}
+.techtag.hit {
+  background-color: var(--primary);
+  color: var(--on-accent);
+}
+
+/* 操作ボタン（ビュー切替 / PDF / テーマ）。タグとは別語彙。 */
+.softbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background-color: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.softbtn:hover {
+  border-color: var(--primary);
+  color: var(--accent-text);
+}
+.softbtn.on {
+  background-color: var(--accent-soft);
+  border-color: var(--primary);
+  color: var(--accent-text);
+}
+.softbtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.softbtn.compact {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.softbtn .sdot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: var(--faint);
+  transition: background-color 0.15s ease;
+}
+.softbtn.on .sdot {
+  background-color: var(--primary);
+}
+
+.scroll::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 99px;
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::selection {
+  background: var(--accent-soft);
 }
 
 .barTrack {
@@ -336,4 +453,10 @@ body {
   height: 100%;
   border-radius: var(--bar-round);
   background-color: var(--primary);
+  transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .barFill {
+    transition: none;
+  }
 }

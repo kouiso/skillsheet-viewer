@@ -198,14 +198,14 @@ export const ProjectForm = ({
 
   // ── 担当工程：7 工程固定トグル + 温存チップ ──
   const normalized = normalizeProcess(p.process);
-  // 7 段いずれかへ「確実に」対応するラベル集合。ここに無い文字列（other + uncertain な「テスト」）は
+  // 7 段いずれかへ対応するラベル集合。ここに無い文字列（素の「テスト」等の other）は
   // トグルでは操作できないため、読み取り専用チップとして表示し、明示的な × でのみ削除する。
-  const certainLabels = useMemo(() => new Set(PROCESS_LABELS.flatMap((_, i) => labelsForProcessIndex(i))), []);
-  const preservedChips = p.process.filter((label) => !certainLabels.has(label));
+  const knownLabels = useMemo(() => new Set(PROCESS_LABELS.flatMap((_, i) => labelsForProcessIndex(i))), []);
+  const preservedChips = p.process.filter((label) => !knownLabels.has(label));
 
   const toggleProcess = (index: number) => {
     if (normalized.done[index]) {
-      // OFF：この index に確実対応する既知ラベルのみ除去（uncertain「テスト」や other は消さない）
+      // OFF：この index に対応する既知ラベルのみ除去（other は消さない）
       const removable = new Set(labelsForProcessIndex(index));
       set(
         'process',
@@ -389,9 +389,7 @@ export const ProjectForm = ({
               >
                 <span>{label}</span>
                 <span
-                  className={`h-1 w-full rounded-full ${
-                    normalized.done[i] ? 'bg-primary' : normalized.uncertain[i] ? 'bg-primary/30' : 'bg-muted'
-                  }`}
+                  className={`h-1 w-full rounded-full ${normalized.done[i] ? 'bg-primary' : 'bg-muted'}`}
                 />
               </button>
             ))}

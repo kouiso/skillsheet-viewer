@@ -321,14 +321,17 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className={`mx-auto w-full flex-1 px-4 py-8 sm:px-6 ${isDashboard ? 'max-w-6xl' : 'max-w-4xl'}`}
+        // design: max-width 1180px / padding 44px 32px 96px / セクション間 48px
+        className={`mx-auto w-full flex-1 px-4 pt-8 pb-16 sm:px-8 sm:pt-11 sm:pb-24 ${
+          isDashboard ? 'max-w-[1180px]' : 'max-w-4xl'
+        }`}
       >
         <div
           ref={contentRef}
-          className={isDashboard ? 'space-y-10' : 'rounded border border-border bg-card p-4 sm:p-6 md:p-8'}
+          className={isDashboard ? 'space-y-12' : 'rounded border border-border bg-card p-4 sm:p-6 md:p-8'}
         >
           {blocks ? (
-            <div className={isDashboard ? 'space-y-10' : 'space-y-0'}>
+            <div className={isDashboard ? 'space-y-12' : 'space-y-0'}>
               {groupedBlocks.map((group) => {
                 if (group.kind === 'skills') {
                   if (!showView('skills')) return null;
@@ -336,7 +339,8 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
                   return (
                     <FadeUpSection key={key}>
                       <SectionHead kicker="Skill Matrix" title="スキルマトリクス" />
-                      <div className="grid gap-4 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
+                      {/* design: gap 28px(縦) 40px(横) の auto-fit グリッド */}
+                      <div className="grid gap-x-10 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
                         {group.blocks.map((block) => (
                           <SkillMatrix key={block.id} data={block.data} className="mb-0" />
                         ))}

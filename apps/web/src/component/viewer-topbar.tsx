@@ -53,9 +53,10 @@ export function ViewerTopbar({
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md"
+      // design: 背景は下地を 88% 残した色 + blur 8px（カード色ではなくページ地の色を敷く）
+      className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
     >
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
         <div className="flex items-center gap-2.5">
           <span aria-hidden className="size-[9px] rounded-[2px] bg-primary" />
           <span className="text-[15px] font-semibold text-foreground">{name || 'エンジニアスキルシート'}</span>
@@ -74,14 +75,10 @@ export function ViewerTopbar({
                 type="button"
                 onClick={() => onToggleView(view.id)}
                 aria-pressed={on}
-                className={`chip gap-1.5 ${on ? 'on' : ''}`}
+                // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
+                className={`softbtn compact ${on ? 'on' : ''}`}
               >
-                {/* ON時はチップ前景色（on-accent）、OFF時は faint のドット */}
-                <span
-                  aria-hidden
-                  className="size-[7px] rounded-full"
-                  style={{ background: on ? 'currentColor' : 'var(--faint)' }}
-                />
+                <span aria-hidden className="sdot" />
                 {view.label}
               </button>
             );
