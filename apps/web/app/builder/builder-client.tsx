@@ -68,6 +68,8 @@ import { Button } from '@/components/ui/button';
 import { useThemeMode } from '@/context/theme-context';
 
 import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
+import { type HistoryEntry, loadHistory, pushHistory } from './history';
+import { HistoryDrawer } from './history-drawer';
 import { ProjectEditor, type ProjectEditorSelection } from './project-editor';
 import { TEMPLATES } from './templates';
 
@@ -777,6 +779,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   }, []);
   // 案件エディタの右ペイン（ライブプレビュー）の表示。トップバーから切り替える。
   const [showProjectPreview, setShowProjectPreview] = useState(true);
+  // 案件エディタの変更履歴（localStorage 保存・このブラウザ限定）
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // localStorage はサーバ側に無いため、マウント後に読む（SSR とマークアップを食い違わせない）
+  useEffect(() => {
+    setHistory(loadHistory());
+  }, []);
   const [title, setTitle] = useState(initialTitle);
   const [isSaving, startSaving] = useTransition();
   const [isSheetOp, startSheetOp] = useTransition();
@@ -1063,11 +1072,23 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     ]);
 
   const updateProjectData = (data: ProjectBlockData) => {
+    // 変更履歴は「変更前の状態」と突き合わせてラベルを作るため、更新関数の外で先に取る。
+    // setItems の更新関数の中で副作用を起こすと StrictMode の二重呼び出しで履歴が重複する。
+    const before = items.find((i) => i.type === 'project') as { data: ProjectBlockData } | undefined;
+    if (before && before.data !== data) {
+      setHistory(pushHistory(before.data, data, Date.now()));
+    }
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.type === 'project');
       if (idx === -1) return [...prev, { id: newId(), type: 'project', data }];
       return prev.map((i) => (i.type === 'project' ? { ...i, data } : i));
     });
+  };
+
+  /** 履歴から復元する。復元自体も 1 件の変更として履歴に残す（戻したことを取り消せるように）。 */
+  const restoreProjectData = (snapshot: ProjectBlockData) => {
+    updateProjectData(snapshot);
+    setHistoryOpen(false);
   };
 
   const ensureProjectBlock = () => {
@@ -1305,6 +1326,11 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
           </div>
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             {activeTab === 'project' && (
+              <button type="button" onClick={() => setHistoryOpen(true)} className="btn sm">
+                ↺ 履歴
+              </button>
+            )}
+            {activeTab === 'project' && (
               <button
                 type="button"
                 onClick={() => setShowProjectPreview((v) => !v)}
@@ -1482,6 +1508,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 />
               );
             })()}
+
+          {historyOpen && (
+            <HistoryDrawer entries={history} onClose={() => setHistoryOpen(false)} onRestore={restoreProjectData} />
+          )}
 
           {activeTab === 'blocks' && (
             <DndContext
