@@ -39,6 +39,8 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
   const tech = flattenTech(project.tech);
   const shownTech = tech.slice(0, MAX_TECH_CHIPS);
   const process = normalizeProcess(project.process);
+  /** 要約欄そのものに値がある（担当業務での代替ではない）。 */
+  const hasOwnSummary = Boolean(project.summary?.trim());
   const summary = project.summary?.trim() || project.duties.trim();
 
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -56,16 +58,14 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
   /**
    * 上下キーで巡る順序。DOM の並びと一致させる。
    * 飛び先キー（data-sync-pv）とは別に「スロット」を持たせているのは、
-   * summary 欄が空のとき要約ブロックの飛び先が duties になり、
-   * 下の担当業務ブロックと飛び先キーが重複するため。
-   * 重複したキーで位置を数えると、上下キーが同じ場所を指してしまう。
+   * 飛び先が同じでも移動先としては別物として数える必要があるため。
    */
   const slots = [
     'period',
     'title',
     'scope',
     'meta',
-    ...(summary ? ['summary'] : []),
+    ...(summary && hasOwnSummary ? ['summary'] : []),
     ...(shownTech.length > 0 ? ['tech'] : []),
     'process',
     ...textBlocks.map(([key]) => key as string),
@@ -124,7 +124,8 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
         ref={toolbarRef}
         role="toolbar"
         aria-orientation="vertical"
-        aria-label="プレビューの項目（上下キーで移動、Enter で編集欄へ）"
+        // 矢印キーは読み上げソフトの通常モードでは奪われて届かないので、案内には書かない。
+        aria-label="プレビューの項目（Enter で編集欄へ移動）"
         onKeyDown={handleToolbarKeyDown}
       >
         <div className={`pv-card${hidden ? ' opacity-60' : ''}`}>
@@ -154,13 +155,17 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           </div>
 
           {/* 要約は summary 欄の値を優先し、空のときだけ担当業務で代替する。
-              飛び先も表示元に合わせる（同じキーを2箇所に出すと、同期ジャンプが先に見つけた
-              方へ飛んで誤爆する）。 */}
-          {summary && (
-            <div {...sync(project.summary?.trim() ? 'summary' : 'duties', 'summary')}>
+              代替表示のときはクリックもキーボード移動も付けない。付けると飛び先キーが
+              下の ≪担当業務≫ ブロックと重複し、編集欄からの追従が先に見つけた
+              こちらへ走って、本来の担当業務ブロックへ行かなくなる。 */}
+          {summary &&
+            (hasOwnSummary ? (
+              <div {...sync('summary')}>
+                <p className="pv-summary">{summary}</p>
+              </div>
+            ) : (
               <p className="pv-summary">{summary}</p>
-            </div>
-          )}
+            ))}
 
           {shownTech.length > 0 && (
             <div {...sync('tech')}>

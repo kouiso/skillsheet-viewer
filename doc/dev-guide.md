@@ -126,6 +126,11 @@ CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ�
 | 3.0.2 / 4.0.1 | object（`default` 経由） |
 | 5.0.8 | object（`expand` 経由） |
 
+3.x / 4.x と 5.x も取り出し方が違うので、3.x / 4.x を要求する依存が新しく入ってきた場合は
+この override が原因で読み込みに失敗する。現在のロックファイルに 3.x / 4.x は無く、
+`brace-expansion` は 5.0.8 の1個だけなので実害は無い。落ちる場合も起動時にエラーが出る。
+その時は override を狭めるのではなく、依存側を上げる。狭めると脆弱性検査が赤くなる。
+
 ### Storybook のビルダー
 
 Storybook のフレームワークは `@storybook/nextjs-vite` を使う。webpack 版の
