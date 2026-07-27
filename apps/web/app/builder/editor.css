@@ -1000,6 +1000,11 @@
   background: var(--accent-soft);
   box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--primary) 45%, transparent);
 }
+/* 上下キーで移動している間、いまどのブロックに居るかが分かるようにする。 */
+.pv-sync:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
 
 /* ── 空状態・トースト・会社編集バー ───────────── */
 .empty {
