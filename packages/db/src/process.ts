@@ -19,81 +19,56 @@ export const PROCESS_LABELS = [
   '保守・運用',
 ] as const;
 
-interface ProcessMatch {
-  index: number;
-  /** true: done として扱う。false: uncertain（どちらの工程か本文だけでは判別不能）。 */
-  certain: boolean;
-}
-
 // builder の実際の語彙（PROCESS_OPTIONS）からの完全一致対応表。
 // fuzzy/部分一致/語順推測は一切行わない — 未知の文字列は全て other に落ちる。
-const EXACT_MATCH_MAP: Record<string, ProcessMatch[]> = {
-  要件定義: [{ index: 0, certain: true }],
-  基本設計: [{ index: 1, certain: true }],
-  詳細設計: [{ index: 2, certain: true }],
-  実装: [{ index: 3, certain: true }],
-  テスト: [
-    { index: 4, certain: false },
-    { index: 5, certain: false },
-  ],
-  // 「テスト」より細かい区分が判明している場合の完全一致エントリ（結合/総合を個別に確実扱いにする）。
+// どの段か一意に決まる語彙だけを載せる。曖昧な語（素の「テスト」＝結合/総合のどちらか不明）は
+// 意図的に載せず other へ落とす。担当ありと推測して塗るより、原文をタグで残すほうが正確なため。
+const EXACT_MATCH_MAP: Record<string, number[]> = {
+  要件定義: [0],
+  基本設計: [1],
+  詳細設計: [2],
+  実装: [3],
   // builder の PROCESS_OPTIONS には無いが、実データ移行など上位で明示的にこの文字列を渡した場合のみ有効。
-  結合テスト: [{ index: 4, certain: true }],
-  総合テスト: [{ index: 5, certain: true }],
-  '運用・保守': [{ index: 6, certain: true }],
+  結合テスト: [4],
+  総合テスト: [5],
+  '運用・保守': [6],
   // 7段モデルの正準ラベルそのもの（エディタの7工程固定トグルが保存する語彙）。
-  '実装・単体': [{ index: 3, certain: true }],
-  '保守・運用': [{ index: 6, certain: true }],
+  '実装・単体': [3],
+  '保守・運用': [6],
 };
 
-/**
- * 7段モデルの index に「確実に」対応する既知ラベル一覧（トグルOFF時の除去対象の判定に使う）。
- * uncertain マッチ（「テスト」）や other は含めない — 明示操作なしにデータを消さないため。
- */
+/** 7段モデルの index に対応する既知ラベル一覧（トグルOFF時の除去対象の判定に使う）。 */
 export function labelsForProcessIndex(index: number): string[] {
   return Object.entries(EXACT_MATCH_MAP)
-    .filter(([, matches]) => matches.some((m) => m.certain && m.index === index))
+    .filter(([, indices]) => indices.includes(index))
     .map(([label]) => label);
 }
 
 export interface NormalizedProcess {
-  /** 確実にその工程を担当した（7要素、PROCESS_LABELS と同じ並び）。 */
+  /** その工程を担当した（7要素、PROCESS_LABELS と同じ並び）。 */
   done: boolean[];
-  /** 担当したが具体的にどの段階か本文だけでは判別不能（7要素）。done と同時に true にはならない。 */
-  uncertain: boolean[];
-  /** 7段モデルの対象外（インフラ構築/PM/スクラム/コードレビュー/未知の自由記述）。データは消さない。 */
+  /** 7段モデルの対象外（インフラ構築/PM/スクラム/素の「テスト」/未知の自由記述）。データは消さない。 */
   other: string[];
 }
 
 /**
- * builder の自由文字列 process[] を、表示用の7段 done/uncertain/other へ変換する。
+ * builder の自由文字列 process[] を、表示用の7段 done/other へ変換する。
  * 完全一致のみで判定し、対応表にない文字列は全て other へ（実績を消さない）。
  */
 export function normalizeProcess(labels: string[] = []): NormalizedProcess {
   const done = new Array(PROCESS_LABELS.length).fill(false) as boolean[];
-  const uncertain = new Array(PROCESS_LABELS.length).fill(false) as boolean[];
   const other: string[] = [];
 
   for (const label of labels) {
-    const matches = EXACT_MATCH_MAP[label];
-    if (!matches) {
+    const indices = EXACT_MATCH_MAP[label];
+    if (!indices) {
       other.push(label);
       continue;
     }
-    for (const m of matches) {
-      if (m.certain) done[m.index] = true;
-      else uncertain[m.index] = true;
-    }
+    for (const index of indices) done[index] = true;
   }
 
-  // 不変条件の担保: done と uncertain は同じ index で同時に true にならない。
-  // 例: レガシー「テスト」（uncertain[4]/[5]）＋エディタ追加の「結合テスト」（done[4]）が
-  // 共存すると、確実担当が判明した段を「確認中」にも二重計上してしまうため done を優先する。
-  for (let i = 0; i < PROCESS_LABELS.length; i++) {
-    if (done[i]) uncertain[i] = false;
-  }
-
-  return { done, uncertain, other };
+  return { done, other };
 }
 
 // period 文字列を開始/終了トークンへ分割する区切り文字。

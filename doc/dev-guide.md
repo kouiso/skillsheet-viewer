@@ -50,7 +50,18 @@
 
 ### ファイル・ディレクトリ
 
-- ファイル名・ディレクトリ名は英語小文字のケバブケースで統一
+- ファイル名・ディレクトリ名は **英語・小文字・単数形・ケバブケース** で統一する
+  （例: `project-card.tsx` / `tech-filter.test.tsx` / `01-setup-and-routing.md`）
+- React コンポーネントのファイルも例外ではない。中の関数名は `ProjectCard` でも、
+  ファイル名は `project-card.tsx`
+- TypeScript 以外の言語を足す場合は、その言語で最も標準的な流儀に合わせる
+  （Python なら `snake_case.py` 等）
+- 例外はツール・フレームワークが名前を規定しているものだけ。現時点では
+  Next.js の動的ルート（`[id]`）、drizzle の生成物、`README.md` 等の全大文字慣習、
+  ドットファイル、配布フォント・素材の原名
+- **この規約は `scripts/check-naming.sh` が機械的に検査する。**
+  `task naming` でローカル確認でき、CI（`.github/workflows/ci.yml` の naming ジョブ）でも必ず走る。
+  例外を増やすときは同スクリプトの `is_exempt()` に理由付きで追加する（無言で足さない）
 - サーバー専用モジュール（`apps/web/src/server` や `packages/db`）は Client Component から import しない
 
 ### TypeScript
