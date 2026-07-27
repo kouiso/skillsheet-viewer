@@ -27,7 +27,6 @@ const COMMON_MIN_COUNT = 2;
 export function TechFilter({ all, active, query, onQueryChange, onToggle, onClear, count, total }: TechFilterProps) {
   const [showAll, setShowAll] = useState(false);
 
-  const common = useMemo(() => all.filter((t) => t.count >= COMMON_MIN_COUNT), [all]);
   // 選択中のチップは、たとえ1案件のみの技術でも隠さない（選択が視界から消えると解除できない）。
   const shown = useMemo(() => {
     if (showAll) return all;
@@ -35,7 +34,9 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
     return all.filter((t) => t.count >= COMMON_MIN_COUNT || activeSet.has(t.name));
   }, [all, active, showAll]);
 
-  const hiddenCount = all.length - common.length;
+  // 選択中のチップは 1 案件だけの技術でも隠さないので、共通タグの数から引くとズレる。
+  // 実際に描画している数との差で数える。
+  const hiddenCount = all.length - shown.length;
 
   return (
     <div className="flex flex-col gap-3.5">

@@ -5,7 +5,7 @@ import {
   describeChange,
   formatHistoryTime,
   HISTORY_LIMIT,
-  HISTORY_STORAGE_KEY,
+  historyStorageKey,
   loadHistory,
   pushHistory,
 } from './history';
@@ -78,6 +78,12 @@ describe('describeChange', () => {
     });
     expect(describeChange(before, after)).toBe('「案件A」の期間を編集');
   });
+
+  it('件数が同じでも中身が入れ替わっていれば差し替えとして出す', () => {
+    const before = data();
+    const after = data({ items: [project({ id: 'p9', title: '案件Z' })] });
+    expect(describeChange(before, after)).toBe('案件「案件Z」へ差し替え');
+  });
 });
 
 describe('pushHistory', () => {
@@ -122,8 +128,23 @@ describe('pushHistory', () => {
   });
 
   it('保存済みデータが壊れていても空として扱い、編集を止めない', () => {
-    window.localStorage.setItem(HISTORY_STORAGE_KEY, '{壊れたJSON');
+    window.localStorage.setItem(historyStorageKey(), '{壊れたJSON');
     expect(loadHistory()).toEqual([]);
+  });
+
+  it('シートごとに保存先を分ける（別シートの履歴で上書きしない）', () => {
+    const t0 = 1_700_000_000_000;
+    pushHistory(data(), data({ items: [project({ title: 'A2' })] }), t0, 'sheet-a');
+    pushHistory(data(), data({ items: [project({ title: 'B2' })] }), t0, 'sheet-b');
+    expect(loadHistory('sheet-a')).toHaveLength(1);
+    expect(loadHistory('sheet-a')[0].snapshot.items[0].title).toBe('A2');
+    expect(loadHistory('sheet-b')[0].snapshot.items[0].title).toBe('B2');
+  });
+
+  it('各エントリに安定した id が付く', () => {
+    const t0 = 1_700_000_000_000;
+    const list = pushHistory(data(), data({ items: [project({ title: 'A2' })] }), t0, 's');
+    expect(list[0].id).toBeTruthy();
   });
 });
 

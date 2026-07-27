@@ -81,6 +81,8 @@ const REVOKE_DELAY_MS = 100;
 const PREVIEW_DEBOUNCE_MS = 300;
 // 別ウィンドウプレビューとの連携キー。apps/web/app/builder/preview/preview-client.tsx と共有。
 const PREVIEW_CHANNEL_NAME = 'builder-preview';
+/** 別窓プレビューへ送る生存確認の間隔。受信側の「途切れた」判定より十分短くする。 */
+const PREVIEW_HEARTBEAT_MS = 4000;
 const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
 
 // 編集が止んでから自動保存を発火するまでの待ち時間。
@@ -784,8 +786,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [historyOpen, setHistoryOpen] = useState(false);
   // localStorage はサーバ側に無いため、マウント後に読む（SSR とマークアップを食い違わせない）
   useEffect(() => {
-    setHistory(loadHistory());
-  }, []);
+    setHistory(loadHistory(activeSheetId));
+  }, [activeSheetId]);
   const [title, setTitle] = useState(initialTitle);
   const [isSaving, startSaving] = useTransition();
   const [isSheetOp, startSheetOp] = useTransition();
@@ -869,6 +871,15 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
   useEffect(() => {
     previewChannelRef.current?.postMessage({ title, content: previewContent });
+  }, [title, previewContent]);
+
+  // 生存確認の定期送信。編集の手が止まっている間も別窓が「同期が途切れた」と誤判定しないよう、
+  // 内容が変わらなくても一定間隔で同じ内容を送り直す。受信側は最終受信時刻だけを見る。
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      previewChannelRef.current?.postMessage({ title, content: previewContent });
+    }, PREVIEW_HEARTBEAT_MS);
+    return () => window.clearInterval(timer);
   }, [title, previewContent]);
 
   // 開いたプレビュー窓の参照。既に開いている場合はページ再読み込みを避け focus() するだけにする。
@@ -1075,8 +1086,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     // 変更履歴は「変更前の状態」と突き合わせてラベルを作るため、更新関数の外で先に取る。
     // setItems の更新関数の中で副作用を起こすと StrictMode の二重呼び出しで履歴が重複する。
     const before = items.find((i) => i.type === 'project') as { data: ProjectBlockData } | undefined;
-    if (before && before.data !== data) {
-      setHistory(pushHistory(before.data, data, Date.now()));
+    // 参照比較だと ProjectEditor が毎回新しいオブジェクトを渡すため常に真になる。
+    // 中身が同じ更新で履歴を増やさないよう、内容で比べる。
+    if (before && JSON.stringify(before.data) !== JSON.stringify(data)) {
+      setHistory(pushHistory(before.data, data, Date.now(), activeSheetId));
     }
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.type === 'project');

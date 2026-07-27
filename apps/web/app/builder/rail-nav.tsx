@@ -3,6 +3,8 @@
 import type { ProjectBlockData } from '@skillsheet/db/blocks';
 import { useMemo } from 'react';
 
+import { buildVisibleNoMap } from './visible-no';
+
 interface RailNavProps {
   data: ProjectBlockData;
   selectedId: string | null;
@@ -19,16 +21,7 @@ const abbreviate = (name: string): string => (name.trim() ? name.trim().slice(0,
  * 会社の略称と案件の通し番号だけを縦に並べ、名前は hover ツールチップ（CSS `[data-tip]`）で出す。
  */
 export const RailNav = ({ data, selectedId, onSelect, onExpand }: RailNavProps) => {
-  // 閲覧側で見える通し番号（非表示は欠番にせず詰める）。ProjectNav と同じ規則。
-  const visibleNoOf = useMemo(() => {
-    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
-    const map = new Map<string, number>();
-    let n = 0;
-    for (const p of data.items) {
-      if (!p.hidden && !hiddenCompany.has(p.companyId)) map.set(p.id, ++n);
-    }
-    return map;
-  }, [data]);
+  const visibleNoOf = useMemo(() => buildVisibleNoMap(data), [data]);
 
   return (
     <aside className="col-list">

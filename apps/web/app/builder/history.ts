@@ -8,7 +8,15 @@ import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@skillsheet/db/
  * 直前の状態へ戻すための手段。
  */
 
-export const HISTORY_STORAGE_KEY = 'ss_editor_history_v1';
+const HISTORY_STORAGE_PREFIX = 'ss_editor_history_v1';
+
+/**
+ * 保存キーはシートごとに分ける。固定キーだと、シートAを編集したあとシートBを編集した時点で
+ * Aの履歴がBのスナップショットで上書きされ、Aで「この時点に戻す」とBの内容が入る。
+ * sheetId が無い（取得前）場合だけ従来の固定キーへ落とす。
+ */
+export const historyStorageKey = (sheetId?: string): string =>
+  sheetId ? `${HISTORY_STORAGE_PREFIX}:${sheetId}` : HISTORY_STORAGE_PREFIX;
 
 /** 保持する件数。これを超えたら古いものから捨てる。 */
 export const HISTORY_LIMIT = 30;
@@ -99,6 +107,13 @@ export const describeChange = (prev: ProjectBlockData, next: ProjectBlockData): 
     const removed = prev.items.find((p) => !next.items.some((q) => q.id === p.id));
     return `案件「${projectLabel(removed)}」を削除`;
   }
+  // 件数が同じでも中身が入れ替わっている場合（1件消して1件足した等）は、並び替えではなく差し替え。
+  // ここを見ないと「案件を並び替え」と誤ラベルされ、後から履歴を辿るときに何が起きたか分からない。
+  const swappedItem = next.items.find((p) => !prev.items.some((q) => q.id === p.id));
+  if (swappedItem) return `案件「${projectLabel(swappedItem)}」へ差し替え`;
+  const swappedCompany = next.companies.find((c) => !prev.companies.some((q) => q.id === c.id));
+  if (swappedCompany) return `会社「${companyLabel(swappedCompany)}」へ差し替え`;
+
   // 並び替え（構成メンバーは同じで順番だけ違う）
   if (prev.companies.map((c) => c.id).join() !== next.companies.map((c) => c.id).join()) {
     return '会社を並び替え';
@@ -137,10 +152,10 @@ export const describeChange = (prev: ProjectBlockData, next: ProjectBlockData): 
 };
 
 /** localStorage から履歴を読む。壊れていた場合は空として扱う（履歴のために編集を止めない）。 */
-export const loadHistory = (): HistoryEntry[] => {
+export const loadHistory = (sheetId?: string): HistoryEntry[] => {
   if (typeof window === 'undefined') return [];
   try {
-    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    const raw = window.localStorage.getItem(historyStorageKey(sheetId));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? (parsed as HistoryEntry[]) : [];
@@ -157,26 +172,32 @@ export const loadHistory = (): HistoryEntry[] => {
  * - HISTORY_LIMIT を超えたぶんは古いほうから捨てる
  * - 容量超過で保存できない場合は、件数を半分にして 1 度だけ再試行する
  */
-export const pushHistory = (prev: ProjectBlockData, next: ProjectBlockData, now: number): HistoryEntry[] => {
+export const pushHistory = (
+  prev: ProjectBlockData,
+  next: ProjectBlockData,
+  now: number,
+  sheetId?: string,
+): HistoryEntry[] => {
+  const key = historyStorageKey(sheetId);
   const label = describeChange(prev, next);
   const id =
     typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
       : `h-${now}-${Math.random().toString(36).slice(2)}`;
   const entry: HistoryEntry = { id, at: now, label, snapshot: next };
-  const current = loadHistory();
+  const current = loadHistory(sheetId);
   const head = current[0];
   const merged = head && head.label === label && now - head.at < MERGE_WINDOW_MS;
   const list = (merged ? [entry, ...current.slice(1)] : [entry, ...current]).slice(0, HISTORY_LIMIT);
 
   if (typeof window === 'undefined') return list;
   try {
-    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(list));
+    window.localStorage.setItem(key, JSON.stringify(list));
   } catch {
     // 容量超過。古い半分を捨てて 1 度だけやり直す。それでも駄目なら履歴を諦める（編集は続行）。
     try {
       const trimmed = list.slice(0, Math.max(1, Math.floor(HISTORY_LIMIT / 2)));
-      window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(trimmed));
+      window.localStorage.setItem(key, JSON.stringify(trimmed));
       return trimmed;
     } catch {
       return list;

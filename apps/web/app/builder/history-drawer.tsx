@@ -1,7 +1,7 @@
 'use client';
 
 import type { ProjectBlockData } from '@skillsheet/db/blocks';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { formatHistoryTime, HISTORY_LIMIT, type HistoryEntry } from './history';
 
@@ -19,18 +19,27 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
   // 「N分前」を出すための基準時刻。開いた瞬間に固定する（描画のたびにずれないように）。
   const [now, setNow] = useState(() => Date.now());
 
+  // onClose は親でインライン生成されるため、依存に入れると毎レンダーで
+  // イベント登録とタイマーが張り直される。最新の関数だけ ref で参照する。
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', onKey);
     // 開いている間だけ 30 秒ごとに相対時刻を更新する
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    // 開いた直後の操作先をドロワー内へ移す。ここを移さないと、Tab が背後のトップバーから
+    // 始まってしまい、キーボードだけでは中身へ辿り着けない。
+    closeButtonRef.current?.focus();
     return () => {
       window.removeEventListener('keydown', onKey);
       window.clearInterval(timer);
     };
-  }, [onClose]);
+  }, []);
 
   const restore = (entry: HistoryEntry) => {
     if (!window.confirm(`「${entry.label}」の時点に戻しますか？\nいまの編集内容は失われます。`)) return;
@@ -49,7 +58,7 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
             <strong>変更履歴</strong>
             <div className="hist-sub">このブラウザに最新 {HISTORY_LIMIT} 件まで残ります（サーバへは送りません）</div>
           </div>
-          <button type="button" className="btn ghost sm" onClick={onClose} aria-label="閉じる">
+          <button type="button" ref={closeButtonRef} className="btn ghost sm" onClick={onClose} aria-label="閉じる">
             ×
           </button>
         </div>

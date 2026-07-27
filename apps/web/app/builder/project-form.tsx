@@ -431,6 +431,8 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               onChange={(v) => set('summary', v)}
               label="要約"
               placeholder="案件の要約を1〜3文で記載"
+              syncKey="summary"
+              onFocus={focus('summary')}
             />
           </Field>
         </div>

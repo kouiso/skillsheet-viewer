@@ -35,7 +35,8 @@ export const SyncBar = ({ state, lastUpdatedAt, onReconnect }: SyncBarProps) => 
     <span aria-hidden className="dot" />
     <span className="lbl">{LABEL[state]}</span>
     <span className="grow" />
-    {state === 'live' && lastUpdatedAt && <span className="stamp">{formatStamp(lastUpdatedAt)}</span>}
+    {/* lastUpdatedAt は epoch ミリ秒。`&&` だと 0 のとき裸の 0 が描画されるので明示的に比較する。 */}
+    {state === 'live' && lastUpdatedAt !== null && <span className="stamp">{formatStamp(lastUpdatedAt)}</span>}
     {state === 'stale' && (
       <button type="button" className="reconnect" onClick={onReconnect}>
         ↻ 再接続

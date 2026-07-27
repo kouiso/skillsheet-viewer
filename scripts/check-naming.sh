@@ -32,12 +32,37 @@ is_exempt() {
     material/*) return 0 ;;
     .github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE*) return 0 ;;
   esac
-  # Next.js App Router の動的セグメント [id] / [...all] / [[...slug]] は
-  # フレームワークが記法を規定しているので、角括弧の中身だけを検査対象から外す。
+  return 1
+}
+
+# Next.js App Router の動的セグメント（[id] / [...all] / [[...slug]]）だけを検査対象から外す。
+# パス全体を免除すると、動的セグメントを1つ含むだけで配下のファイル名が検査されなくなる。
+is_dynamic_segment() {
   case "$1" in
-    *'['*']'*) return 0 ;;
+    '['*']') return 0 ;;
   esac
   return 1
+}
+
+# TypeScript 以外は、その言語で標準的な流儀を許す（doc/dev-guide.md の規約どおり）。
+# 例: Python は snake_case、Go は小文字1語。ここでは拡張子で判別できるものだけ扱う。
+allows_language_style() {
+  case "$1" in
+    *.py|*.pyi) return 0 ;;
+    *.go) return 0 ;;
+    *.java|*.kt|*.kts|*.swift) return 0 ;;
+  esac
+  return 1
+}
+
+# Python は snake_case、Java/Kotlin/Swift は PascalCase、Go は小文字1語を許す。
+matches_language_style() {
+  case "$1" in
+    *.py|*.pyi) printf '%s' "${1##*/}" | grep -qE '^[a-z_][a-z0-9_]*\.pyi?$' ;;
+    *.go) printf '%s' "${1##*/}" | grep -qE '^[a-z][a-z0-9_]*\.go$' ;;
+    *.java|*.kt|*.kts|*.swift) printf '%s' "${1##*/}" | grep -qE '^[A-Za-z][A-Za-z0-9]*\.[a-z]+$' ;;
+    *) return 1 ;;
+  esac
 }
 
 # core.quotePath=false: 日本語などの非ASCIIパスが "\346\..." にエスケープされるのを防ぐ
@@ -62,12 +87,17 @@ report=$(
     if [ -n "$dirs" ]; then
       while IFS= read -r seg; do
         if [ -z "$seg" ]; then continue; fi
+        if is_dynamic_segment "$seg"; then continue; fi
         if ! printf '%s' "$seg" | grep -qE "$KEBAB"; then bad="$seg"; break; fi
       done < <(printf '%s\n' "$dirs" | tr '/' '\n')
     fi
     if [ -z "$bad" ]; then
-      name="${base%%.*}"
-      if ! printf '%s' "$name" | grep -qE "$KEBAB"; then bad="$base"; fi
+      if allows_language_style "$path"; then
+        if ! matches_language_style "$path"; then bad="$base"; fi
+      else
+        name="${base%%.*}"
+        if ! printf '%s' "$name" | grep -qE "$KEBAB"; then bad="$base"; fi
+      fi
     fi
 
     if [ -n "$bad" ]; then

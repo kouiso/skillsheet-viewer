@@ -40,6 +40,9 @@ const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps
             onClick={() => onHeadingClick(heading.id)}
             aria-current={isActive ? 'true' : undefined}
             title={collapsed ? heading.text : undefined}
+            // 折りたたむと文字を描かないので、title だけでは支援技術に名前が伝わらない。
+            // 見出しの文字を常に名前として与える。
+            aria-label={collapsed ? heading.text : undefined}
             // globals.css の `* { border-color: var(--border) }` はレイヤ外なので
             // Tailwind の border-* ユーティリティより後段になる。枠線の色だけインラインで指定する。
             style={{

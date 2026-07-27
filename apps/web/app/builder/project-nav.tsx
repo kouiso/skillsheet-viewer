@@ -23,6 +23,7 @@ import { useMemo, useState } from 'react';
 // 案件エディタ 3 ペインの共通スタイル。CSS はモジュール単位で一度読み込めば全体へ効くため、
 // 最初に使う側（このナビ）で読み込む。閲覧側のバンドルには入らない。
 import './editor.css';
+import { buildVisibleNoMap } from './visible-no';
 
 /** D&D 対象の識別用データ（company ヘッダへ案件をドロップすると companyId を付け替える）。 */
 type DragData = { type: 'company' | 'project' };
@@ -235,16 +236,7 @@ export const ProjectNav = ({
     return data.items.filter((p) => !knownIds.has(p.companyId));
   }, [data]);
 
-  // 閲覧側で見える案件だけの通し番号（非表示は欠番にせず詰める）。
-  const visibleNoOf = useMemo(() => {
-    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
-    const map = new Map<string, number>();
-    let n = 0;
-    for (const p of data.items) {
-      if (!p.hidden && !hiddenCompany.has(p.companyId)) map.set(p.id, ++n);
-    }
-    return map;
-  }, [data]);
+  const visibleNoOf = useMemo(() => buildVisibleNoMap(data), [data]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),

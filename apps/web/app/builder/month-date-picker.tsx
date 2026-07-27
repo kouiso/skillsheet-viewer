@@ -85,13 +85,16 @@ export const MonthDatePicker = ({
       </button>
       {/* ネイティブ入力はボタンの中に置けない（HTML の入れ子として不正）ので兄弟にし、
           ラッパー基準で全面へ重ねる。見た目には出さず、OS のカレンダーを呼ぶためだけに使う。 */}
+      {/* aria-hidden は付けない。showPicker 未対応のブラウザではこの入力へフォーカスを移すため、
+          支援技術から見えない要素にフォーカスが飛ぶ状態を作らないようにする。
+          タブ順からは外し、名前はボタンと同じものを与える。 */}
       <input
         ref={inputRef}
         type="month"
         value={value}
         disabled={disabled}
         tabIndex={-1}
-        aria-hidden
+        aria-label={label}
         onChange={(e) => onChange(e.target.value)}
       />
     </span>

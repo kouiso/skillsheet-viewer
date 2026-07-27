@@ -84,8 +84,11 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           </div>
         </div>
 
+        {/* 要約は summary 欄の値を優先し、空のときだけ担当業務で代替する。
+            飛び先も表示元に合わせる（同じキーを2箇所に出すと、同期ジャンプが先に見つけた
+            方へ飛んで誤爆する）。 */}
         {summary && (
-          <div {...sync('duties')}>
+          <div {...sync(project.summary?.trim() ? 'summary' : 'duties')}>
             <p className="pv-summary">{summary}</p>
           </div>
         )}

@@ -10,12 +10,25 @@ interface ScopePickerProps {
   onChange: (value: string) => void;
 }
 
-/** 保存形式（" / " 連結）と配列の相互変換。区切り前後の空白と空要素は落とす。 */
-const parseScope = (value: string): string[] =>
-  value
+/**
+ * 保存形式（" / " 連結）と配列の相互変換。
+ *
+ * 区切りは「前後に空白のあるスラッシュ」に限定する。素の `/` で割ると
+ * 「CI/CD」「AI/ML」のように語の中にスラッシュを含む自由入力が分裂してしまう。
+ * 旧データには空白無しの `A/B` 形式も混じりうるので、要素が1つも取れない場合だけ
+ * 素のスラッシュで割り直す（既存データを読めなくしない）。
+ */
+const parseScope = (value: string): string[] => {
+  const strict = value
+    .split(/\s+\/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (strict.length > 1 || !value.includes('/')) return strict;
+  return value
     .split('/')
     .map((s) => s.trim())
     .filter(Boolean);
+};
 
 /**
  * スコープ / 担当領域のピル型複数選択。
@@ -31,25 +44,25 @@ export const ScopePicker = ({ value, onChange }: ScopePickerProps) => {
   // マスタ外の既存値（自由入力で足したもの）もピルとして出す。順序はマスタ → 追加分。
   const extras = selected.filter((s) => !(SCOPE_OPTIONS as readonly string[]).includes(s));
 
-  const commit = (next: string[]) => onChange(next.join(SCOPE_SEPARATOR));
-
-  const toggle = (option: string) => {
-    if (selectedSet.has(option)) {
-      commit(selected.filter((s) => s !== option));
-    } else {
-      commit([...selected, option]);
-    }
-  };
-
-  const addDraft = () => {
+  /**
+   * 「その他」入力とピルのクリックが同じ操作で連続発火しても、片方の更新が消えないようにする。
+   * どちらも同じ `value` を元に次を組み立てるため、素直に書くと後勝ちで先の更新が失われる。
+   * 未確定の入力を先に畳んでから目的の操作を適用し、1回の onChange にまとめる。
+   */
+  const commitWithDraft = (mutate: (current: string[]) => string[]) => {
     const name = draft.trim();
-    if (!name || selectedSet.has(name)) {
-      setDraft('');
-      return;
-    }
-    commit([...selected, name]);
+    const base = name && !selectedSet.has(name) ? [...selected, name] : selected;
     setDraft('');
+    const next = mutate(base).join(SCOPE_SEPARATOR);
+    // 空欄のままフォーカスが外れただけのときに、中身の変わらない更新を投げない
+    // （変更履歴に「スコープを編集」が無駄に積まれる）。
+    if (next !== value) onChange(next);
   };
+
+  const toggle = (option: string) =>
+    commitWithDraft((base) => (base.includes(option) ? base.filter((s) => s !== option) : [...base, option]));
+
+  const addDraft = () => commitWithDraft((base) => base);
 
   return (
     <div className="scope-pick">

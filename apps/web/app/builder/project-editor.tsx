@@ -8,11 +8,20 @@ import { CompanyBar, ProjectForm } from './project-form';
 import { ProjectNav } from './project-nav';
 import { ProjectPreview } from './project-preview';
 import { RailNav } from './rail-nav';
+import { buildVisibleNoMap, previewNoOf } from './visible-no';
 
 const newId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `p-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+/** トーストの表示時間。design の .toast と同じ。 */
+const TOAST_DURATION_MS = 1800;
+/** 同期ジャンプのスクロール位置調整。見出しが上端に貼り付かないよう少し手前で止める。 */
+const PREVIEW_SCROLL_OFFSET = 110;
+const FORM_SCROLL_OFFSET = 90;
+/** smooth スクロールが収まるまでの待ち。動いている最中に focus すると位置がずれる。 */
+const SCROLL_SETTLE_MS = 350;
 
 const emptyProject = (companyId: string): ProjectItem => ({
   id: newId(),
@@ -125,9 +134,13 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
     ? data.companies.find((c) => c.id === current.companyId)
     : (data.companies.find((c) => c.id === selectedCompanyId) ?? undefined);
 
+  // 連続操作でトーストが重なると、先に出した分のタイマーが後の表示を消してしまう。
+  // 常に直前のタイマーを畳んでから張り直す。
+  const toastTimerRef = useRef<number | null>(null);
   const showToast = useCallback((message: string) => {
     setToast(message);
-    window.setTimeout(() => setToast(null), 1800);
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), TOAST_DURATION_MS);
   }, []);
 
   const selectProject = (projectId: string) => {
@@ -153,29 +166,8 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
     [onChange, data],
   );
 
-  // 閲覧側で見える通し番号（hidden の案件・hidden の会社配下は欠番にせず詰める）
-  const visibleNoOf = useMemo(() => {
-    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
-    const map = new Map<string, number>();
-    let n = 0;
-    for (const p of data.items) {
-      if (!p.hidden && !hiddenCompany.has(p.companyId)) map.set(p.id, ++n);
-    }
-    return map;
-  }, [data]);
-
-  // プレビュー用：非表示でも「表示されたと仮定した番号」を出す（バッジで非表示を明示）
-  const previewNo = useMemo(() => {
-    if (!currentId) return 0;
-    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
-    let n = 0;
-    for (const p of data.items) {
-      const visible = !p.hidden && !hiddenCompany.has(p.companyId);
-      if (p.id === currentId) return n + 1;
-      if (visible) n++;
-    }
-    return 0;
-  }, [data, currentId]);
+  const visibleNoOf = useMemo(() => buildVisibleNoMap(data), [data]);
+  const previewNo = useMemo(() => previewNoOf(data, currentId), [data, currentId]);
 
   // breadcrumb（会社名 / 案件NN）を builder-client のトップバーへ通知
   const selectionCompanyName = currentCompany?.name ?? '';
@@ -191,7 +183,9 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
     const col = previewColRef.current;
     const target = col?.querySelector<HTMLElement>(`[data-sync-pv="${key}"]`);
     if (!col || !target) return;
-    col.scrollTo({ top: col.scrollTop + target.getBoundingClientRect().top - col.getBoundingClientRect().top - 110 });
+    col.scrollTo({
+      top: col.scrollTop + target.getBoundingClientRect().top - col.getBoundingClientRect().top - PREVIEW_SCROLL_OFFSET,
+    });
   }, []);
 
   /** プレビューの箇所をクリックしたら、フォームの対応欄へ送って入力を開始できる状態にする。 */
@@ -201,11 +195,14 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
     const target = wrap?.querySelector<HTMLElement>(`[data-sync="${key}"]`);
     if (!wrap || !target) return;
     wrap.scrollTo({
-      top: wrap.scrollTop + target.getBoundingClientRect().top - wrap.getBoundingClientRect().top - 90,
+      top: wrap.scrollTop + target.getBoundingClientRect().top - wrap.getBoundingClientRect().top - FORM_SCROLL_OFFSET,
       behavior: 'smooth',
     });
     // スクロール中に focus すると位置がずれるので、収まってから当てる
-    window.setTimeout(() => target.querySelector<HTMLElement>('input, textarea, select, button')?.focus(), 350);
+    window.setTimeout(
+      () => target.querySelector<HTMLElement>('input, textarea, select, button')?.focus(),
+      SCROLL_SETTLE_MS,
+    );
   }, []);
 
   // ── 案件の更新 ──

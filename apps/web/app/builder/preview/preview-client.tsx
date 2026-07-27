@@ -10,8 +10,12 @@ import { SyncBar, type SyncState } from './sync-bar';
 const PREVIEW_CHANNEL_NAME = 'builder-preview';
 const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
 
-/** この時間だけ更新が来なければ「同期が途切れた」とみなす。 */
-const STALE_AFTER_MS = 10_000;
+/**
+ * この時間だけ何も届かなければ「同期が途切れた」とみなす。
+ * 編集側は内容が変わらなくても 4 秒ごとに生存確認を送る（builder-client の
+ * PREVIEW_HEARTBEAT_MS）ので、手が止まっているだけの状態では途切れ扱いにならない。
+ */
+const STALE_AFTER_MS = 12_000;
 
 type PreviewPayload = { title: string; content: string };
 

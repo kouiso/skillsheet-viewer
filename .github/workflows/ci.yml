@@ -23,7 +23,8 @@ jobs:
     timeout-minutes: 5
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     steps:
-      - uses: actions/checkout@v4
+      # 供給網対策でタグではなく commit へ固定する（タグは上流で付け替えられる）。v4 の実体。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check file and directory naming
         run: ./scripts/check-naming.sh
 
