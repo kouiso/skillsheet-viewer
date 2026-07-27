@@ -24,6 +24,9 @@ export const GrowTextarea = ({ value, onChange, label, placeholder, syncKey, onF
 
   // 値が外から変わる場合（履歴からの復元・案件切替）も高さを合わせ直す必要があるため、
   // onChange ハンドラではなく value を依存にした effect で調整する。
+  // value は本文に現れないが、textarea の scrollHeight は value の描画結果に依存するので、
+  // 依存から外すと値が変わっても伸び縮みしなくなる。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 上の理由で value を意図的に依存へ残す
   useEffect(() => {
     const el = ref.current;
     if (!el) return;

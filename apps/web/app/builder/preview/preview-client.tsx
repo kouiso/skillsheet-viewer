@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 
-import { type SyncState, SyncBar } from './sync-bar';
+import { SyncBar, type SyncState } from './sync-bar';
 
 // builder-client.tsx と共有するキー（別ウィンドウ連携用）。
 const PREVIEW_CHANNEL_NAME = 'builder-preview';

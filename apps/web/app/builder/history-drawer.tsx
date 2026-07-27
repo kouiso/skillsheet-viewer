@@ -3,7 +3,7 @@
 import type { ProjectBlockData } from '@skillsheet/db/blocks';
 import { useEffect, useState } from 'react';
 
-import { formatHistoryTime, type HistoryEntry, HISTORY_LIMIT } from './history';
+import { formatHistoryTime, HISTORY_LIMIT, type HistoryEntry } from './history';
 
 interface HistoryDrawerProps {
   entries: HistoryEntry[];
@@ -39,22 +39,15 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
   };
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: 背景クリックで閉じるだけ。Escape も別途受けている。
-    <div className="hist-overlay" onClick={onClose}>
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: 中身のクリックが背景へ伝わって閉じるのを止めるだけ。 */}
-      <div
-        className="hist-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-label="変更履歴"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="hist-overlay">
+      {/* 背景を閉じるための実ボタン。div に onClick を付けるとキーボードから閉じられないため、
+          全面を覆うボタンにしてある（見た目は透明）。Escape でも閉じる。 */}
+      <button type="button" className="hist-overlay-close" aria-label="変更履歴を閉じる" onClick={onClose} />
+      <dialog className="hist-drawer" aria-label="変更履歴" open>
         <div className="hist-head">
           <div>
             <strong>変更履歴</strong>
-            <div className="hist-sub">
-              このブラウザに最新 {HISTORY_LIMIT} 件まで残ります（サーバへは送りません）
-            </div>
+            <div className="hist-sub">このブラウザに最新 {HISTORY_LIMIT} 件まで残ります（サーバへは送りません）</div>
           </div>
           <button type="button" className="btn ghost sm" onClick={onClose} aria-label="閉じる">
             ×
@@ -62,13 +55,11 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
         </div>
 
         {entries.length === 0 ? (
-          <p className="hist-empty">
-            まだ履歴がありません。案件を編集すると、ここに変更内容が時系列で積まれます。
-          </p>
+          <p className="hist-empty">まだ履歴がありません。案件を編集すると、ここに変更内容が時系列で積まれます。</p>
         ) : (
           <div className="hist-list scroll">
             {entries.map((entry, i) => (
-              <div key={`${entry.at}-${i}`} className={`hist-item${i === 0 ? ' now' : ''}`}>
+              <div key={entry.id ?? `at-${entry.at}`} className={`hist-item${i === 0 ? ' now' : ''}`}>
                 <span className="t">
                   {formatHistoryTime(entry.at, now)}
                   {i === 0 && ' · いまの状態'}
@@ -83,7 +74,7 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
             ))}
           </div>
         )}
-      </div>
+      </dialog>
     </div>
   );
 };

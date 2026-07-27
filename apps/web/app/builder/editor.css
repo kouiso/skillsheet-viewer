@@ -551,8 +551,14 @@
 .period-col .hint.err {
   margin-top: 5px;
 }
-.datepick {
+/* 隠しネイティブ入力を重ねるための基準。ボタンの中に input は置けないので兄弟にしてある。 */
+.datepick-wrap {
   position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+.datepick {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -562,6 +568,7 @@
   padding: 9px 12px;
   font-family: var(--font-mono);
   font-size: 13px;
+  text-align: left;
   color: var(--foreground);
   background: var(--surface2);
   border: 1px solid var(--border);
@@ -587,7 +594,7 @@
   font-size: 12.5px;
 }
 /* design は type=date、こちらは月精度なので type=month。どちらでも隠れるよう属性を絞らない。 */
-.datepick input {
+.datepick-wrap input {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1169,13 +1176,32 @@
 .dark .hist-overlay {
   background: rgba(0, 0, 0, 0.55);
 }
+/* 背景を閉じるための透明ボタン。全面を覆うが、上に載るドロワーより下に置く。 */
+.hist-overlay-close {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+/* dialog 要素は UA 既定の余白・枠・最大幅を持つので、ここで全部打ち消す。 */
 .hist-drawer {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
+  left: auto;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  max-height: none;
   width: min(360px, 92vw);
+  color: inherit;
   background: var(--card);
+  border: 0;
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;

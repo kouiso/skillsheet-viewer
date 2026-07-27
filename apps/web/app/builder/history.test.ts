@@ -1,7 +1,14 @@
 import type { ProjectBlockData, ProjectItem } from '@skillsheet/db/blocks';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { describeChange, formatHistoryTime, HISTORY_LIMIT, HISTORY_STORAGE_KEY, loadHistory, pushHistory } from './history';
+import {
+  describeChange,
+  formatHistoryTime,
+  HISTORY_LIMIT,
+  HISTORY_STORAGE_KEY,
+  loadHistory,
+  pushHistory,
+} from './history';
 
 const project = (over: Partial<ProjectItem> = {}): ProjectItem => ({
   id: 'p1',

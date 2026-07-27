@@ -17,6 +17,12 @@ export const HISTORY_LIMIT = 30;
 const MERGE_WINDOW_MS = 90_000;
 
 export interface HistoryEntry {
+  /**
+   * 一覧の並び替え・再描画に耐える安定キー。
+   * 記録時刻だけだと同じミリ秒に2件積まれたとき衝突するため、別に持つ。
+   * 旧バージョンで保存された履歴には無いので、読み出し側は未定義を許容する。
+   */
+  id?: string;
   /** 記録時刻（epoch ミリ秒）。 */
   at: number;
   /** 日本語の変更内容。 */
@@ -153,7 +159,11 @@ export const loadHistory = (): HistoryEntry[] => {
  */
 export const pushHistory = (prev: ProjectBlockData, next: ProjectBlockData, now: number): HistoryEntry[] => {
   const label = describeChange(prev, next);
-  const entry: HistoryEntry = { at: now, label, snapshot: next };
+  const id =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `h-${now}-${Math.random().toString(36).slice(2)}`;
+  const entry: HistoryEntry = { id, at: now, label, snapshot: next };
   const current = loadHistory();
   const head = current[0];
   const merged = head && head.label === label && now - head.at < MERGE_WINDOW_MS;

@@ -59,33 +59,32 @@ export const MonthDatePicker = ({
   };
 
   return (
-    <div
-      className={`datepick${isNow ? ' now' : ''}${disabled ? ' off' : ''}${error ? ' err' : ''}`}
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      aria-label={label}
-      aria-describedby={id}
-      onClick={openPicker}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          openPicker();
-        }
-      }}
-    >
-      {shown ? (
-        <span className="dval" id={id}>
-          {shown}
-        </span>
-      ) : (
-        <span className="ph" id={id}>
-          {placeholder}
-        </span>
-      )}
-      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
-        <rect x="1.5" y="2.5" width="11" height="10" rx="1.5" stroke="currentColor" />
-        <path d="M1.5 5.5h11M4.5 1v2M9.5 1v2" stroke="currentColor" strokeLinecap="round" />
-      </svg>
+    <span className="datepick-wrap">
+      <button
+        type="button"
+        className={`datepick${isNow ? ' now' : ''}${disabled ? ' off' : ''}${error ? ' err' : ''}`}
+        disabled={disabled}
+        aria-label={label}
+        aria-describedby={id}
+        onClick={openPicker}
+      >
+        {shown ? (
+          <span className="dval" id={id}>
+            {shown}
+          </span>
+        ) : (
+          <span className="ph" id={id}>
+            {placeholder}
+          </span>
+        )}
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden role="img">
+          <title>カレンダー</title>
+          <rect x="1.5" y="2.5" width="11" height="10" rx="1.5" stroke="currentColor" />
+          <path d="M1.5 5.5h11M4.5 1v2M9.5 1v2" stroke="currentColor" strokeLinecap="round" />
+        </svg>
+      </button>
+      {/* ネイティブ入力はボタンの中に置けない（HTML の入れ子として不正）ので兄弟にし、
+          ラッパー基準で全面へ重ねる。見た目には出さず、OS のカレンダーを呼ぶためだけに使う。 */}
       <input
         ref={inputRef}
         type="month"
@@ -95,6 +94,6 @@ export const MonthDatePicker = ({
         aria-hidden
         onChange={(e) => onChange(e.target.value)}
       />
-    </div>
+    </span>
   );
 };

@@ -356,8 +356,8 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
 
       {/* 3. 担当工程 */}
       <Section num="3" title="担当工程">
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: フォーカスの伝播を拾うだけで、
-            自身は操作対象ではない（中の button が操作対象）。 */}
+        {/* onFocusCapture は中の button から上がってくるフォーカスを拾うだけで、この div 自体は
+            操作対象ではない（クリック用のハンドラも持たない）。 */}
         <div data-sync="process" onFocusCapture={focus('process')}>
           <p className="hint" style={{ marginBottom: 10 }}>
             経験のある工程をクリックで ON / OFF
