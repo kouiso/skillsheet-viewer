@@ -111,15 +111,21 @@ CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ�
 | --- | --- |
 | `postcss: ^8.5.23` | `next` が `postcss` を `8.4.31` で完全固定するため、next を上げても GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 が残る |
 | `sharp: ^0.35.3` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
-| `brace-expansion@1: ^1.1.16` | storybook 経由の minimatch 3.x 向け。GHSA-3jxr-9vmj-r5cp の 1.x 系修正版 |
 | `brace-expansion@>=3: ^5.0.8` | GHSA-mh99-v99m-4gvg の修正版。5.x 系のみに適用する |
 | `test-exclude: ^8.0.0` | 7.x は minimatch 9 → brace-expansion 2.x を引き、2.x 系には GHSA-mh99-v99m-4gvg の修正版が無い。8.0.0 は minimatch 10 → brace-expansion 5 になる |
-| `js-yaml@4: ^4.3.0` | GHSA-52cp-r559-cp3m |
 | `fast-uri@3: ^3.1.4` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6 |
 
 `brace-expansion` を全系統まとめて `^5.0.8` に寄せてはいけない。5.x は
 `require('brace-expansion')` の戻り値が関数から object に変わる破壊的変更を含み、
 それを関数として呼ぶ minimatch 3.x / 9.x が壊れる。系統ごとに範囲を切って指定する。
+
+### Storybook のビルダー
+
+Storybook のフレームワークは `@storybook/nextjs-vite` を使う。webpack 版の
+`@storybook/nextjs` は `fork-ts-checker-webpack-plugin` を経由して minimatch 3.x を引き、
+その先の brace-expansion 1.x に修正版が存在しないため CI の2本目を落とす。
+`@storybook/addon-essentials` は Storybook 9 以降で本体に統合され 10 系が存在しないので、
+addons へ書かない。
 
 ## デバッグ
 
