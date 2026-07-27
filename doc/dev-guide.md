@@ -99,6 +99,28 @@
 - 編集者ログイン: Better Auth（`apps/web/src/lib/auth.ts` / `server/auth-gate.ts`）
 - 閲覧コード: HMAC + VIEWER_CODE（`server/session.ts` / `server/viewer-gate.ts`）
 
+## 依存の脆弱性対応
+
+CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ、**high 以上**でビルドを落とす。
+1本目は本番依存のみ、2本目は devDependencies も含む。
+
+直接依存の更新で直せない推移的依存は、ルート `package.json` の `pnpm.overrides` で寄せる。
+現在入っている override とその理由は次の通り。上流が追いついたら削除してよい。
+
+| override | 理由 |
+| --- | --- |
+| `postcss: ^8.5.23` | `next` が `postcss` を `8.4.31` で完全固定するため、next を上げても GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 が残る |
+| `sharp: ^0.35.3` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
+| `brace-expansion@1: ^1.1.16` | storybook 経由の minimatch 3.x 向け。GHSA-3jxr-9vmj-r5cp の 1.x 系修正版 |
+| `brace-expansion@>=3: ^5.0.8` | GHSA-mh99-v99m-4gvg の修正版。5.x 系のみに適用する |
+| `test-exclude: ^8.0.0` | 7.x は minimatch 9 → brace-expansion 2.x を引き、2.x 系には GHSA-mh99-v99m-4gvg の修正版が無い。8.0.0 は minimatch 10 → brace-expansion 5 になる |
+| `js-yaml@4: ^4.3.0` | GHSA-52cp-r559-cp3m |
+| `fast-uri@3: ^3.1.4` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6 |
+
+`brace-expansion` を全系統まとめて `^5.0.8` に寄せてはいけない。5.x は
+`require('brace-expansion')` の戻り値が関数から object に変わる破壊的変更を含み、
+それを関数として呼ぶ minimatch 3.x / 9.x が壊れる。系統ごとに範囲を切って指定する。
+
 ## デバッグ
 
 ### Next.js の Fast Refresh
