@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^16.2.9",
+    "@storybook/addon-docs": "^10.5.4",
     "@storybook/nextjs-vite": "^10.5.4",
     "@tailwindcss/postcss": "^4.3.0",
     "@tailwindcss/typography": "^0.5.19",
