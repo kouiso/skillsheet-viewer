@@ -2,7 +2,7 @@
 
 このドキュメントでは、スキルシートの本文を安全に描画する react-markdown のパイプラインと、`@react-pdf/renderer` によるクライアント PDF 出力を解説する。
 
-関連ドキュメント: [03 データ層](03_github_api.md) / [05 目次とデプロイ](05_toc_and_deploy.md)
+関連ドキュメント: [03 データ層](03-github-api.md) / [05 目次とデプロイ](05-toc-and-deploy.md)
 
 ---
 
@@ -34,7 +34,7 @@ Markdown 文字列
 安全な HTML 要素
 ```
 
-順序が重要で、`rehype-raw` で生 HTML を取り込んだ **後に** `rehype-sanitize` を通すことで、生 HTML も必ずサニタイズされる。`rehype-slug` は最後に走り、サニタイズ後の見出しへ id を付ける。付与された id は目次（[05](05_toc_and_deploy.md)）が利用する。
+順序が重要で、`rehype-raw` で生 HTML を取り込んだ **後に** `rehype-sanitize` を通すことで、生 HTML も必ずサニタイズされる。`rehype-slug` は最後に走り、サニタイズ後の見出しへ id を付ける。付与された id は目次（[05](05-toc-and-deploy.md)）が利用する。
 
 ---
 
@@ -98,7 +98,7 @@ const cellTextAlign = (align: unknown): 'left' | 'center' | 'right' =>
 
 ### ブロック描画の分岐
 
-DB のブロック（[03](03_github_api.md)）を渡す場合、`markdown` / `table` / `experience` は Markdown 文字列に変換して `MarkdownContent` で描画し、`skills` / `profile` / `stats` / `project` は専用の React コンポーネント（`SkillMatrix` / `ProfileIntro` / `StatRow` / `ProjectCard`）で描画する。連続する `skills` ブロックは 1 つのコンテナへグループ化する。本文は `activeId` に依存しないよう `MarkdownContent` を `memo` 化し、スクロールごとの再描画を避けている。
+DB のブロック（[03](03-github-api.md)）を渡す場合、`markdown` / `table` / `experience` は Markdown 文字列に変換して `MarkdownContent` で描画し、`skills` / `profile` / `stats` / `project` は専用の React コンポーネント（`SkillMatrix` / `ProfileIntro` / `StatRow` / `ProjectCard`）で描画する。連続する `skills` ブロックは 1 つのコンテナへグループ化する。本文は `activeId` に依存しないよう `MarkdownContent` を `memo` 化し、スクロールごとの再描画を避けている。
 
 ---
 

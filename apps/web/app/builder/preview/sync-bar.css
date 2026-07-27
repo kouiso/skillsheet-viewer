@@ -1,0 +1,100 @@
+/*
+ * 別窓プレビュー最上部の同期バー。
+ * Claude Design `console-additions/preview-sync-badge.html` の移植で、
+ * トークン名だけこのリポジトリの語彙（--background / --primary 等）へ写している。
+ */
+
+.syncbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--background) 90%, transparent);
+  backdrop-filter: blur(8px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+.syncbar .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.syncbar .grow {
+  flex: 1;
+}
+.syncbar .stamp {
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.syncbar.live .dot {
+  background: var(--primary);
+  animation: syncbar-blip 2s ease-in-out infinite;
+}
+.syncbar.live .lbl {
+  color: var(--accent-text);
+}
+
+.syncbar.stale {
+  background: color-mix(in srgb, var(--warn-soft) 92%, transparent);
+}
+.syncbar.stale .dot {
+  background: var(--warn);
+}
+.syncbar.stale .lbl {
+  color: var(--warn);
+}
+
+.syncbar.closed {
+  background: color-mix(in srgb, var(--danger-soft) 92%, transparent);
+}
+.syncbar.closed .dot {
+  background: var(--danger);
+}
+.syncbar.closed .lbl {
+  color: var(--danger);
+}
+
+@keyframes syncbar-blip {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .syncbar .dot {
+    animation: none !important;
+  }
+}
+
+.syncbar .reconnect {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: var(--radius);
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.syncbar .reconnect:hover {
+  background: var(--surface3);
+}
+
+/* 同期が切れている間は本文を沈める（内容は消さず、最後に受け取ったものを残す）。 */
+.stale-body {
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}

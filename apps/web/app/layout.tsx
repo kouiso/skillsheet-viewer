@@ -20,9 +20,10 @@ const ibmPlexSansJP = IBM_Plex_Sans_JP({
   display: 'swap',
 });
 
+// 600 は StatRow の数値・工程ドーナツの件数など「計器」表現で使う。
 const ibmPlexMono = IBM_Plex_Mono({
   subsets: ['latin'],
-  weight: ['400', '500'],
+  weight: ['400', '500', '600'],
   variable: '--font-ibm-mono',
   preload: false,
   display: 'swap',

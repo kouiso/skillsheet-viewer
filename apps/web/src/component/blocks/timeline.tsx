@@ -16,9 +16,10 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
   const sorted = sortByStartDesc(items, (item) => item.period);
 
   return (
-    <div className="relative pl-6">
-      <div className="absolute bottom-1.5 left-1.5 top-1.5 w-0.5 bg-border" />
-      <div className="flex flex-col gap-4">
+    // design: カードで包み、レールを left:6px / 幅2px、項目間 18px にする。
+    <div className="relative rounded-[var(--radius-lg)] border border-border bg-card p-7 pl-[26px]">
+      <div className="absolute bottom-7 left-[6px] top-7 w-0.5 bg-border" />
+      <div className="flex flex-col gap-[18px]">
         {sorted.map((item) => {
           const tech = flattenTech(item.tech);
           const hit = activeTech.length > 0 && tech.some((t) => activeTech.includes(t));
@@ -26,7 +27,7 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
           return (
             <div key={item.id} className="relative">
               <span
-                className={`absolute -left-6 top-1 size-3.5 -translate-x-px rounded-full border-2 ${
+                className={`absolute -left-[26px] top-[5px] size-3.5 rounded-full border-2 ${
                   hit ? 'border-primary bg-primary' : 'border-border bg-card'
                 }`}
               />

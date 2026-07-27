@@ -229,21 +229,21 @@ describe('BuilderClient 自動保存', () => {
   const typeMarkdown = (value: string) =>
     fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value } });
 
-  it('編集停止から 1.5 秒後に自動保存が 1 回だけ走る（デバウンス）', async () => {
+  it('編集停止から 0.6 秒後に自動保存が 1 回だけ走る（デバウンス）', async () => {
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     // 連続編集ではタイマーが引き直され、停止前は保存されない
     typeMarkdown('## A 追');
     await act(async () => {
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(400);
     });
     typeMarkdown('## A 追記');
     await act(async () => {
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(400);
     });
     expect(mockSave).not.toHaveBeenCalled();
-    // 最後の編集から 1.5 秒経過でちょうど 1 回保存される
+    // 最後の編集から 0.6 秒経過でちょうど 1 回保存される
     await act(async () => {
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(200);
     });
     expect(mockSave).toHaveBeenCalledTimes(1);
     expect(mockSave).toHaveBeenCalledWith(

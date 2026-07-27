@@ -15,6 +15,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # 命名規約（英語・小文字・単数形・ケバブケース）。人が書いても AI が書いても
+  # PR 時点で必ずここを通る。node のセットアップ不要なので独立ジョブにして即座に落とす。
+  naming:
+    name: Naming convention
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    steps:
+      # 供給網対策でタグではなく commit へ固定する（タグは上流で付け替えられる）。v4 の実体。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Check file and directory naming
+        run: ./scripts/check-naming.sh
+
   node:
     name: Node (${{ matrix.check-type }})
     runs-on: ubuntu-latest

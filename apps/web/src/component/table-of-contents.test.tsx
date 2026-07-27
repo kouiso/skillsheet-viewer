@@ -6,25 +6,6 @@ import { renderWithProviders } from '@/test/render-with-providers';
 
 import TableOfContents from './table-of-contents';
 
-vi.mock('framer-motion', () => ({
-  motion: new Proxy(
-    {},
-    {
-      get: () => {
-        const Passthrough = ({ children, ...props }: { children?: React.ReactNode }) => {
-          const rest = { ...props } as Record<string, unknown>;
-          for (const key of ['initial', 'animate', 'transition', 'whileHover', 'whileTap', 'exit', 'variants']) {
-            delete rest[key];
-          }
-          return <div {...rest}>{children}</div>;
-        };
-        return Passthrough;
-      },
-    },
-  ),
-  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 interface Heading {
   id: string;
   text: string;
@@ -55,9 +36,9 @@ describe('TableOfContents（デスクトップ表示）', () => {
     // matchMedia は setup.ts で matches:false → デスクトップ表示
   });
 
-  it('「目次」見出しが表示されること', () => {
+  it('見出しラベル「Contents」が表示されること', () => {
     renderToc();
-    expect(screen.getByText('目次')).toBeInTheDocument();
+    expect(screen.getByText('Contents')).toBeInTheDocument();
   });
 
   it('全ての見出しがボタンとして表示されること', () => {
@@ -74,21 +55,29 @@ describe('TableOfContents（デスクトップ表示）', () => {
     expect(props.onHeadingClick).toHaveBeenCalledWith('heading-4');
   });
 
-  it('折りたたみボタンで一覧の表示/非表示が切り替わること', async () => {
+  it('折りたたむと文字は消えるが、行そのものは残る（現在位置が分かる）', async () => {
     const user = userEvent.setup();
     renderToc();
-    expect(screen.getByRole('button', { name: 'セクション1' })).toBeInTheDocument();
+    expect(screen.getByText('セクション1')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: '折りたたむ' }));
-    expect(screen.queryByRole('button', { name: 'セクション1' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '目次を折りたたむ' }));
+    expect(screen.queryByText('セクション1')).not.toBeInTheDocument();
+    // 見出しの行は残る（折りたたみボタン 1 個 + 見出し 5 行）
+    expect(screen.getAllByRole('button')).toHaveLength(mockHeadings.length + 1);
 
-    await user.click(screen.getByRole('button', { name: '展開' }));
-    expect(screen.getByRole('button', { name: 'セクション1' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '目次を開く' }));
+    expect(screen.getByText('セクション1')).toBeInTheDocument();
   });
 
-  it('アクティブな見出しに primary 背景クラスが付くこと', () => {
+  it('アクティブな見出しに accent-soft 背景が付くこと', () => {
     renderToc({ activeId: 'heading-4' });
     const activeBtn = screen.getByRole('button', { name: 'セクション2' });
-    expect(activeBtn.className).toContain('bg-primary');
+    expect(activeBtn.className).toContain('bg-accent-soft');
+    expect(activeBtn.className).toContain('text-accent-text');
+  });
+
+  it('3階層目の見出しは 1 段下げて表示する', () => {
+    renderToc({ headings: [{ id: 'h3', text: '深い見出し', level: 3 }] });
+    expect(screen.getByRole('button', { name: '深い見出し' }).className).toContain('pl-[26px]');
   });
 });

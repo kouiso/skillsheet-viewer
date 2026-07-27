@@ -22,9 +22,15 @@ tasks:
     cmds:
       - pnpm dev
 
-  healthcheck:
-    desc: "動作確認（型チェック・テスト・ビルド）"
+  naming:
+    desc: "ファイル名・ディレクトリ名の規約チェック（英語・小文字・単数形・ケバブケース）"
     cmds:
+      - ./scripts/check-naming.sh
+
+  healthcheck:
+    desc: "動作確認（命名規約・型チェック・テスト・ビルド）"
+    cmds:
+      - ./scripts/check-naming.sh
       - pnpm -r type-check
       - pnpm -r --if-present test
       - pnpm build
