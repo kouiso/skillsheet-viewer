@@ -111,13 +111,20 @@ CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ�
 | --- | --- |
 | `postcss: ^8.5.23` | `next` が `postcss` を `8.4.31` で完全固定するため、next を上げても GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 が残る |
 | `sharp: ^0.35.3` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
-| `brace-expansion@>=3: ^5.0.8` | GHSA-mh99-v99m-4gvg の修正版。5.x 系のみに適用する |
+| `brace-expansion@>=3: ^5.0.8` | GHSA-mh99-v99m-4gvg の修正版。3.0.0 以上にだけ適用する |
 | `test-exclude: ^8.0.0` | 7.x は minimatch 9 → brace-expansion 2.x を引き、2.x 系には GHSA-mh99-v99m-4gvg の修正版が無い。8.0.0 は minimatch 10 → brace-expansion 5 になる |
 | `fast-uri@3: ^3.1.4` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6 |
 
-`brace-expansion` を全系統まとめて `^5.0.8` に寄せてはいけない。5.x は
-`require('brace-expansion')` の戻り値が関数から object に変わる破壊的変更を含み、
-それを関数として呼ぶ minimatch 3.x / 9.x が壊れる。系統ごとに範囲を切って指定する。
+`brace-expansion` を全系統まとめて `^5.0.8` に寄せてはいけない。`require('brace-expansion')`
+の戻り値は 3.0.0 で関数から object へ変わっており、それを関数として呼ぶ minimatch 3.x / 9.x が
+壊れるため。境界を `>=3` に置いているのはこの変更点に合わせたもので、5.x に絞ると
+3.x / 4.x が来たときに修正版へ寄らなくなる。実測値は次の通り。
+
+| version | `require()` の戻り値 |
+| --- | --- |
+| 1.1.16 / 2.1.2 | function |
+| 3.0.2 / 4.0.1 | object（`default` 経由） |
+| 5.0.8 | object（`expand` 経由） |
 
 ### Storybook のビルダー
 
