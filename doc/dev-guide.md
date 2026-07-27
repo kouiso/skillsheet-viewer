@@ -125,7 +125,10 @@ Storybook のフレームワークは `@storybook/nextjs-vite` を使う。webpa
 `@storybook/nextjs` は `fork-ts-checker-webpack-plugin` を経由して minimatch 3.x を引き、
 その先の brace-expansion 1.x に修正版が存在しないため CI の2本目を落とす。
 `@storybook/addon-essentials` は Storybook 9 以降で本体に統合され 10 系が存在しないので、
-addons へ書かない。
+addons へ書かない。ただし docs だけは統合されず `@storybook/addon-docs` として残っている。
+story の `tags: ['autodocs']` はこれを addons に入れないとドキュメントページを生成しない。
+生成されているかは `storybook build` 後の `storybook-static/index.json` に
+`"type": "docs"` の項目があるかで確認できる。
 
 ## デバッグ
 
