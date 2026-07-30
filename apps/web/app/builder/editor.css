@@ -1322,7 +1322,56 @@
   .shell.no-preview {
     grid-template-columns: 224px minmax(0, 1fr);
   }
+  .shell.rail,
+  .shell.rail.no-preview {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
   .list-head {
     padding: 16px 16px 12px;
+  }
+}
+
+/* ── 狭幅用ドロワー（レール展開）──────────────── */
+.nav-overlay {
+  position: fixed;
+  top: var(--editor-top, 0px);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  animation: none;
+}
+.nav-overlay-backdrop {
+  flex: 1;
+  background: rgba(10, 13, 15, 0.28);
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+.dark .nav-overlay-backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+.nav-drawer {
+  width: min(320px, 85vw);
+  background: var(--card);
+  border-right: 1px solid var(--border);
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: nav-slidein 0.18s ease;
+}
+.nav-drawer .col-list {
+  border-right: none;
+}
+@keyframes nav-slidein {
+  from {
+    transform: translateX(-24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
   }
 }
