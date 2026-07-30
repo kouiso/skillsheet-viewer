@@ -79,6 +79,7 @@ jobs:
       - name: Headless browser E2E
         if: matrix.check-type == 'e2e'
         env:
+          BETTER_AUTH_URL: http://127.0.0.1:3210
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
