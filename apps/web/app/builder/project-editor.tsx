@@ -4,6 +4,8 @@ import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@skillsheet/db/
 import { deriveCompanyPeriod } from '@skillsheet/db/process';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import useMediaQuery from '@/hooks/use-media-query';
+
 import { CompanyBar, ProjectForm } from './project-form';
 import { ProjectNav } from './project-nav';
 import { ProjectPreview } from './project-preview';
@@ -117,12 +119,40 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
     data.items[0]?.companyId ?? data.companies[0]?.id ?? null,
   );
-  const [rail, setRail] = useState(false);
+  const [userRail, setUserRail] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
+  const narrow = useMediaQuery('(max-width: 860px)');
+  const isRail = userRail || narrow;
   const [syncKey, setSyncKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const formWrapRef = useRef<HTMLDivElement>(null);
   const previewColRef = useRef<HTMLDivElement>(null);
   const topOffset = useTopbarOffset();
+
+  // 狭幅から広幅へ戻ったらドロワーは閉じる。
+  useEffect(() => {
+    if (!narrow) setNavOpen(false);
+  }, [narrow]);
+
+  // ドロワー表示中は Esc で閉じられるようにする。
+  useEffect(() => {
+    if (!navOpen) return;
+    const handle = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setNavOpen(false);
+    };
+    window.addEventListener('keydown', handle);
+    return () => window.removeEventListener('keydown', handle);
+  }, [navOpen]);
+
+  const openNav = useCallback(() => {
+    if (narrow) setNavOpen(true);
+    else setUserRail(false);
+  }, [narrow]);
+
+  const closeNav = useCallback(() => {
+    if (narrow) setNavOpen(false);
+    else setUserRail(true);
+  }, [narrow]);
 
   // selectedId===null は「会社のみ選択（案件は未選択）」を明示する状態として扱い、
   // フォールバックしない。selectedId が非null なのに該当案件が無い（削除等で stale）
@@ -358,11 +388,11 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
 
   return (
     <div
-      className={`shell${rail ? ' rail' : ''}${showPreview ? '' : ' no-preview'}`}
+      className={`shell${isRail ? ' rail' : ''}${showPreview ? '' : ' no-preview'}`}
       style={{ '--editor-top': `${topOffset}px` } as React.CSSProperties}
     >
-      {rail ? (
-        <RailNav data={data} selectedId={currentId} onSelect={selectProject} onExpand={() => setRail(false)} />
+      {isRail ? (
+        <RailNav data={data} selectedId={currentId} onSelect={selectProject} onExpand={openNav} />
       ) : (
         <ProjectNav
           data={data}
@@ -373,13 +403,48 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
           onAddCompany={addCompany}
           onDeleteProject={deleteProject}
           onDeleteCompany={deleteCompany}
-          onCollapse={() => setRail(true)}
+          onCollapse={closeNav}
           onToggleHideProject={toggleHideProject}
           onToggleHideCompany={toggleHideCompany}
           onReorderProject={reorderProject}
           onDropProjectToCompany={dropProjectToCompany}
           onReorderCompany={reorderCompany}
         />
+      )}
+
+      {navOpen && narrow && (
+        <div className="nav-overlay" aria-modal="true" role="dialog" aria-label="案件ナビ">
+          <div className="nav-drawer">
+            <ProjectNav
+              data={data}
+              selectedId={currentId}
+              onSelect={(projectId) => {
+                selectProject(projectId);
+                setNavOpen(false);
+              }}
+              onSelectCompany={(companyId) => {
+                selectCompany(companyId);
+                setNavOpen(false);
+              }}
+              onAddProject={addProject}
+              onAddCompany={addCompany}
+              onDeleteProject={deleteProject}
+              onDeleteCompany={deleteCompany}
+              onCollapse={closeNav}
+              onToggleHideProject={toggleHideProject}
+              onToggleHideCompany={toggleHideCompany}
+              onReorderProject={reorderProject}
+              onDropProjectToCompany={dropProjectToCompany}
+              onReorderCompany={reorderCompany}
+            />
+          </div>
+          <button
+            type="button"
+            className="nav-overlay-backdrop"
+            onClick={() => setNavOpen(false)}
+            aria-label="ナビを閉じる"
+          />
+        </div>
       )}
 
       <div className="col-main">
