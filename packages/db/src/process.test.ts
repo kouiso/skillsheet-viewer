@@ -30,38 +30,32 @@ describe('normalizeProcess', () => {
     expect(result.other).toEqual([]);
   });
 
-  it('7段モデルの正準ラベル「実装・単体」「保守・運用」は certain として done になる', () => {
+  it('7段モデルの正準ラベル「実装・単体」「保守・運用」は done になる', () => {
     const result = normalizeProcess(['実装・単体', '保守・運用']);
     expect(result.done[3]).toBe(true);
     expect(result.done[6]).toBe(true);
-    expect(result.uncertain.every((u) => u === false)).toBe(true);
     expect(result.other).toEqual([]);
   });
 
-  it('レガシー語彙「実装」「運用・保守」も従来どおり certain として動作する', () => {
+  it('レガシー語彙「実装」「運用・保守」も従来どおり done になる', () => {
     const result = normalizeProcess(['実装', '運用・保守']);
     expect(result.done[3]).toBe(true);
     expect(result.done[6]).toBe(true);
     expect(result.other).toEqual([]);
   });
 
-  it('「テスト」は結合/総合の uncertain のまま（done にしない）', () => {
+  it('素の「テスト」はどの段か決まらないので done にせず other へ温存する', () => {
     const result = normalizeProcess(['テスト']);
     expect(result.done[4]).toBe(false);
     expect(result.done[5]).toBe(false);
-    expect(result.uncertain[4]).toBe(true);
-    expect(result.uncertain[5]).toBe(true);
+    expect(result.other).toEqual(['テスト']);
   });
 
-  it('「テスト」＋「結合テスト」の共存でも done と uncertain は同じ index で同時に true にならない', () => {
-    // レガシー「テスト」を温存したままエディタで「結合テスト」を ON にした状態。
-    // done[4] が確定した段は uncertain から外す（同一案件を donut と「確認中」に二重計上しない）。
+  it('「テスト」＋「結合テスト」の共存では結合のみ done になり「テスト」は other に残る', () => {
     const result = normalizeProcess(['テスト', '結合テスト']);
     expect(result.done[4]).toBe(true);
-    expect(result.uncertain[4]).toBe(false);
-    // 総合テスト側は依然として不確実のまま
     expect(result.done[5]).toBe(false);
-    expect(result.uncertain[5]).toBe(true);
+    expect(result.other).toEqual(['テスト']);
   });
 });
 
@@ -78,7 +72,7 @@ describe('labelsForProcessIndex', () => {
     expect(labels).toContain('保守・運用');
   });
 
-  it('uncertain マッチ（「テスト」）は含まれない', () => {
+  it('曖昧な「テスト」は含まれない（トグルOFFで消える対象にしない）', () => {
     expect(labelsForProcessIndex(4)).not.toContain('テスト');
     expect(labelsForProcessIndex(5)).not.toContain('テスト');
   });

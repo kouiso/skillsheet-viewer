@@ -2,17 +2,26 @@
 
 import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@skillsheet/db/blocks';
 import { deriveCompanyPeriod } from '@skillsheet/db/process';
-import { PanelRightClose, PanelRightOpen } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { CompanyBar, ProjectForm } from './project-form';
 import { ProjectNav } from './project-nav';
 import { ProjectPreview } from './project-preview';
+import { RailNav } from './rail-nav';
+import { buildVisibleNoMap, previewNoOf } from './visible-no';
 
 const newId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `p-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+/** トーストの表示時間。design の .toast と同じ。 */
+const TOAST_DURATION_MS = 1800;
+/** 同期ジャンプのスクロール位置調整。見出しが上端に貼り付かないよう少し手前で止める。 */
+const PREVIEW_SCROLL_OFFSET = 110;
+const FORM_SCROLL_OFFSET = 90;
+/** smooth スクロールが収まるまでの待ち。動いている最中に focus すると位置がずれる。 */
+const SCROLL_SETTLE_MS = 350;
 
 const emptyProject = (companyId: string): ProjectItem => ({
   id: newId(),
@@ -78,20 +87,42 @@ interface ProjectEditorProps {
   onChange: (data: ProjectBlockData) => void;
   /** 選択中の会社/案件が変わったとき breadcrumb 表示用に通知する（任意）。 */
   onSelectionChange?: (selection: ProjectEditorSelection | null) => void;
+  /** 右のプレビュー列を出すか（トップバーのボタンで制御）。 */
+  showPreview: boolean;
 }
+
+/** 左右ペインを画面に固定するため、上に居座るヘッダの高さを CSS 変数へ実測で渡す。 */
+const useTopbarOffset = (): number => {
+  const [top, setTop] = useState(0);
+  useEffect(() => {
+    const el = document.querySelector<HTMLElement>('[data-slot="builder-topbar"]');
+    if (!el) return;
+    const measure = () => setTop(el.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return top;
+};
 
 /**
  * 案件エディタ本体：3 ペイン構成（会社別ナビ / 編集フォーム / ライブプレビュー）。
  * 外部契約は {data, onChange} のまま（builder-client の差分を最小化）。
  * 会社の period は items 変更のたびに deriveCompanyPeriod で自動再計算する。
  */
-export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEditorProps) => {
+export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }: ProjectEditorProps) => {
   const [selectedId, setSelectedId] = useState<string | null>(data.items[0]?.id ?? null);
   // 案件未選択でも会社編集バー（名称変更・削除）を出せるよう、会社選択を案件選択と独立に持つ。
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
     data.items[0]?.companyId ?? data.companies[0]?.id ?? null,
   );
-  const [showPreview, setShowPreview] = useState(true);
+  const [rail, setRail] = useState(false);
+  const [syncKey, setSyncKey] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const formWrapRef = useRef<HTMLDivElement>(null);
+  const previewColRef = useRef<HTMLDivElement>(null);
+  const topOffset = useTopbarOffset();
 
   // selectedId===null は「会社のみ選択（案件は未選択）」を明示する状態として扱い、
   // フォールバックしない。selectedId が非null なのに該当案件が無い（削除等で stale）
@@ -103,10 +134,21 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     ? data.companies.find((c) => c.id === current.companyId)
     : (data.companies.find((c) => c.id === selectedCompanyId) ?? undefined);
 
+  // 連続操作でトーストが重なると、先に出した分のタイマーが後の表示を消してしまう。
+  // 常に直前のタイマーを畳んでから張り直す。
+  const toastTimerRef = useRef<number | null>(null);
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), TOAST_DURATION_MS);
+  }, []);
+
   const selectProject = (projectId: string) => {
     setSelectedId(projectId);
     const project = data.items.find((p) => p.id === projectId);
     if (project) setSelectedCompanyId(project.companyId);
+    // 案件を切り替えたらフォームは先頭から読む
+    formWrapRef.current?.scrollTo({ top: 0 });
   };
 
   const selectCompany = (companyId: string) => {
@@ -124,29 +166,8 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     [onChange, data],
   );
 
-  // 閲覧側で見える通し番号（hidden の案件・hidden の会社配下は欠番にせず詰める）
-  const visibleNoOf = useMemo(() => {
-    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
-    const map = new Map<string, number>();
-    let n = 0;
-    for (const p of data.items) {
-      if (!p.hidden && !hiddenCompany.has(p.companyId)) map.set(p.id, ++n);
-    }
-    return map;
-  }, [data]);
-
-  // プレビュー用：非表示でも「表示されたと仮定した番号」を出す（バッジで非表示を明示）
-  const previewNo = useMemo(() => {
-    if (!currentId) return 0;
-    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
-    let n = 0;
-    for (const p of data.items) {
-      const visible = !p.hidden && !hiddenCompany.has(p.companyId);
-      if (p.id === currentId) return n + 1;
-      if (visible) n++;
-    }
-    return 0;
-  }, [data, currentId]);
+  const visibleNoOf = useMemo(() => buildVisibleNoMap(data), [data]);
+  const previewNo = useMemo(() => previewNoOf(data, currentId), [data, currentId]);
 
   // breadcrumb（会社名 / 案件NN）を builder-client のトップバーへ通知
   const selectionCompanyName = currentCompany?.name ?? '';
@@ -154,6 +175,35 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
   useEffect(() => {
     onSelectionChange?.(currentId ? { companyName: selectionCompanyName, visibleNo: selectionNo } : null);
   }, [currentId, selectionCompanyName, selectionNo, onSelectionChange]);
+
+  // ── 編集欄 ⇄ プレビューの同期 ──
+  /** フォームの欄にフォーカスが入ったら、プレビューの対応箇所を光らせて見える位置へ送る。 */
+  const handleFieldFocus = useCallback((key: string) => {
+    setSyncKey(key);
+    const col = previewColRef.current;
+    const target = col?.querySelector<HTMLElement>(`[data-sync-pv="${key}"]`);
+    if (!col || !target) return;
+    col.scrollTo({
+      top: col.scrollTop + target.getBoundingClientRect().top - col.getBoundingClientRect().top - PREVIEW_SCROLL_OFFSET,
+    });
+  }, []);
+
+  /** プレビューの箇所をクリックしたら、フォームの対応欄へ送って入力を開始できる状態にする。 */
+  const handlePreviewJump = useCallback((key: string) => {
+    setSyncKey(key);
+    const wrap = formWrapRef.current;
+    const target = wrap?.querySelector<HTMLElement>(`[data-sync="${key}"]`);
+    if (!wrap || !target) return;
+    wrap.scrollTo({
+      top: wrap.scrollTop + target.getBoundingClientRect().top - wrap.getBoundingClientRect().top - FORM_SCROLL_OFFSET,
+      behavior: 'smooth',
+    });
+    // スクロール中に focus すると位置がずれるので、収まってから当てる
+    window.setTimeout(
+      () => target.querySelector<HTMLElement>('input, textarea, select, button')?.focus(),
+      SCROLL_SETTLE_MS,
+    );
+  }, []);
 
   // ── 案件の更新 ──
   const patchProject = (patch: Partial<ProjectItem>) => {
@@ -202,8 +252,6 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     // 配列の先頭(index 0)ではなく末尾に追加する。data.items は会社の並び順で
     // グルーピングされている保証が無い（reorderCompany 未実行の既存データ等）ため、
     // 会社の並び順から挿入位置を逆算する方式は既存データで誤動作する。
-    // 「無ければ末尾」という最小差分の修正に留め、同会社に案件が既にある場合の
-    // 挙動（今まで通り安全に動いている）は一切変えない。
     let lastIndex = -1;
     data.items.forEach((p, i) => {
       if (p.companyId === companyId) lastIndex = i;
@@ -214,6 +262,7 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     commit({ ...data, items });
     setSelectedId(project.id);
     setSelectedCompanyId(companyId);
+    showToast('案件を追加しました');
   };
 
   const addCompany = () => {
@@ -222,6 +271,7 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     // 追加直後に会社編集バーを出す（＋会社→即リネームできる導線）。
     setSelectedId(null);
     setSelectedCompanyId(company.id);
+    showToast('会社を追加しました');
   };
 
   /** ナビ側は行内で confirm 済みのため、ここでは削除のみ行う。 */
@@ -231,6 +281,7 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
       const rest = data.items.filter((p) => p.id !== id);
       setSelectedId(rest[0]?.id ?? null);
     }
+    showToast('案件を削除しました');
   };
 
   /** フォーム下部の削除ボタン用（confirm 付き）。 */
@@ -258,6 +309,7 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
     if (selectedCompanyId === companyId) {
       setSelectedCompanyId(companies[0]?.id ?? null);
     }
+    showToast('会社を削除しました');
   };
 
   // ── D&D 並び替え・所属替え・表示トグル ──
@@ -306,95 +358,91 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange }: ProjectEdit
 
   return (
     <div
-      className={`grid grid-cols-1 gap-4 ${
-        showPreview ? 'lg:grid-cols-[260px_1fr_420px]' : 'lg:grid-cols-[260px_1fr]'
-      }`}
+      className={`shell${rail ? ' rail' : ''}${showPreview ? '' : ' no-preview'}`}
+      style={{ '--editor-top': `${topOffset}px` } as React.CSSProperties}
     >
-      {/* 左：会社別ナビ */}
-      <ProjectNav
-        data={data}
-        selectedId={currentId}
-        onSelect={selectProject}
-        onSelectCompany={selectCompany}
-        onAddProject={addProject}
-        onAddCompany={addCompany}
-        onDeleteProject={deleteProject}
-        onToggleHideProject={toggleHideProject}
-        onToggleHideCompany={toggleHideCompany}
-        onReorderProject={reorderProject}
-        onDropProjectToCompany={dropProjectToCompany}
-        onReorderCompany={reorderCompany}
-      />
+      {rail ? (
+        <RailNav data={data} selectedId={currentId} onSelect={selectProject} onExpand={() => setRail(false)} />
+      ) : (
+        <ProjectNav
+          data={data}
+          selectedId={currentId}
+          onSelect={selectProject}
+          onSelectCompany={selectCompany}
+          onAddProject={addProject}
+          onAddCompany={addCompany}
+          onDeleteProject={deleteProject}
+          onDeleteCompany={deleteCompany}
+          onCollapse={() => setRail(true)}
+          onToggleHideProject={toggleHideProject}
+          onToggleHideCompany={toggleHideCompany}
+          onReorderProject={reorderProject}
+          onDropProjectToCompany={dropProjectToCompany}
+          onReorderCompany={reorderCompany}
+        />
+      )}
 
-      {/* 中央：編集フォーム */}
-      <div className="min-w-0 space-y-3">
-        <div className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => setShowPreview((v) => !v)}
-            className="flex items-center gap-1.5 rounded border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary"
-          >
-            {showPreview ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
-            {showPreview ? 'プレビューを隠す' : 'プレビュー表示'}
-          </button>
-        </div>
-        {current ? (
-          <ProjectForm
-            project={current}
+      <div className="col-main">
+        {/* 案件が0件の会社でも名称変更・削除ができるよう、会社編集バーは単独でも表示する。 */}
+        {currentCompany && (
+          <CompanyBar
             company={currentCompany}
-            data={data}
-            onPatch={patchProject}
-            onMoveCompany={moveCompany}
             onPatchCompany={patchCompany}
-            onDeleteCompany={() => currentCompany && deleteCompany(currentCompany.id)}
-            onDelete={confirmDeleteCurrentProject}
+            onDeleteCompany={() => deleteCompany(currentCompany.id)}
           />
-        ) : currentCompany ? (
-          <>
-            {/* 案件が0件の会社でも名称変更・削除ができるよう、会社編集バーは単独でも表示する。 */}
-            <CompanyBar
-              company={currentCompany}
-              onPatchCompany={patchCompany}
-              onDeleteCompany={() => deleteCompany(currentCompany.id)}
-            />
-            <div className="rounded-lg border border-dashed border-border p-8 text-center">
-              <p className="text-sm font-medium text-foreground">案件が選択されていません</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                左の一覧から案件を選ぶか、この会社に新しい案件を追加してください。
-              </p>
-              <button
-                type="button"
-                onClick={() => addProject(currentCompany.id)}
-                className="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground"
-              >
-                ＋ 案件を追加
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center">
-            <p className="text-sm font-medium text-foreground">案件が選択されていません</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              左の一覧から案件を選ぶか、会社に新しい案件を追加してください。
-            </p>
-            {data.companies[0] && (
-              <button
-                type="button"
-                onClick={() => addProject(data.companies[0].id)}
-                className="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground"
-              >
-                ＋ 案件を追加
-              </button>
-            )}
-          </div>
         )}
+        <div className="form-wrap scroll" ref={formWrapRef}>
+          {current ? (
+            <ProjectForm
+              project={current}
+              data={data}
+              onPatch={patchProject}
+              onMoveCompany={moveCompany}
+              onDelete={confirmDeleteCurrentProject}
+              onFieldFocus={handleFieldFocus}
+            />
+          ) : (
+            <div className="empty">
+              <div>
+                <div className="big">案件が選択されていません</div>
+                <p>左の一覧から案件を選ぶか、会社に新しい案件を追加してください。</p>
+                {(currentCompany ?? data.companies[0]) && (
+                  <button
+                    type="button"
+                    onClick={() => addProject((currentCompany ?? data.companies[0]).id)}
+                    className="btn primary"
+                  >
+                    ＋ 案件を追加
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* 右：ライブプレビュー（トグル可） */}
-      {showPreview && current && <ProjectPreview project={current} company={currentCompany} no={previewNo} />}
-      {showPreview && !current && (
-        <div className="rounded-lg border border-dashed border-border p-8 text-center text-xs text-muted-foreground">
-          プレビューする案件がありません。
+      {showPreview && (
+        <div className="preview-col scroll" ref={previewColRef}>
+          {current ? (
+            <ProjectPreview
+              project={current}
+              company={currentCompany}
+              no={previewNo}
+              syncKey={syncKey}
+              onJump={handlePreviewJump}
+            />
+          ) : (
+            <div className="preview-inner">
+              <div className="kicker">Live Preview · 閲覧時の見え方</div>
+              <p className="pv-hint">プレビューする案件がありません。</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {toast && (
+        <div className="toast" role="status">
+          {toast}
         </div>
       )}
     </div>

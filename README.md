@@ -100,11 +100,11 @@ pnpm dev
 
 | ドキュメント | 内容 |
 |------------|------|
-| [doc/01_setup_and_routing.md](./doc/01_setup_and_routing.md) | セットアップとルーティング（App Router / RSC / モノレポ） |
-| [doc/02_authentication.md](./doc/02_authentication.md) | 認証の 2 系統（Better Auth 編集者 & HMAC 閲覧コード） |
-| [doc/03_github_api.md](./doc/03_github_api.md) | データ層（Drizzle / Neon、ブロック保存、GitHub シード副系統） |
-| [doc/04_markdown_display.md](./doc/04_markdown_display.md) | Markdown 表示（rehype パイプライン）と PDF 出力 |
-| [doc/05_toc_and_deploy.md](./doc/05_toc_and_deploy.md) | 目次（TOC / アクティブ見出し）と Vercel デプロイ |
+| [doc/01-setup-and-routing.md](./doc/01-setup-and-routing.md) | セットアップとルーティング（App Router / RSC / モノレポ） |
+| [doc/02-authentication.md](./doc/02-authentication.md) | 認証の 2 系統（Better Auth 編集者 & HMAC 閲覧コード） |
+| [doc/03-github-api.md](./doc/03-github-api.md) | データ層（Drizzle / Neon、ブロック保存、GitHub シード副系統） |
+| [doc/04-markdown-display.md](./doc/04-markdown-display.md) | Markdown 表示（rehype パイプライン）と PDF 出力 |
+| [doc/05-toc-and-deploy.md](./doc/05-toc-and-deploy.md) | 目次（TOC / アクティブ見出し）と Vercel デプロイ |
 
 ## ライセンス
 

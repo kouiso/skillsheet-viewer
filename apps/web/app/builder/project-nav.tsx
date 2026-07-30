@@ -17,8 +17,13 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@skillsheet/db/blocks';
-import { ChevronRight, Eye, EyeOff, GripVertical, Plus, X } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
+// 案件エディタ 3 ペインの共通スタイル。CSS はモジュール単位で一度読み込めば全体へ効くため、
+// 最初に使う側（このナビ）で読み込む。閲覧側のバンドルには入らない。
+import './editor.css';
+import { buildVisibleNoMap } from './visible-no';
 
 /** D&D 対象の識別用データ（company ヘッダへ案件をドロップすると companyId を付け替える）。 */
 type DragData = { type: 'company' | 'project' };
@@ -32,6 +37,10 @@ interface ProjectNavProps {
   onAddProject: (companyId: string) => void;
   onAddCompany: () => void;
   onDeleteProject: (projectId: string) => void;
+  /** 会社ごと削除（confirm はハンドラ側で行う）。 */
+  onDeleteCompany: (companyId: string) => void;
+  /** 集中モード（58px レール）へ畳む。 */
+  onCollapse: () => void;
   onToggleHideProject: (projectId: string) => void;
   onToggleHideCompany: (companyId: string) => void;
   /** 案件を別の案件の位置へ並べ替え（移動先案件の companyId を引き継ぐ）。 */
@@ -49,6 +58,7 @@ const CompanyHeaderRow = ({
   onToggleOpen,
   onToggleHide,
   onSelectCompany,
+  onDelete,
 }: {
   company: CompanyInfo;
   count: number;
@@ -56,29 +66,27 @@ const CompanyHeaderRow = ({
   onToggleOpen: () => void;
   onToggleHide: () => void;
   onSelectCompany: () => void;
+  onDelete: () => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: company.id,
     data: { type: 'company' } satisfies DragData,
   });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
+  const label = company.name || '(会社名未入力)';
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={`flex items-center gap-1 rounded-[var(--radius)] px-1 hover:bg-muted ${
-        isOver ? 'ring-1 ring-primary/40' : ''
-      } ${company.hidden ? 'opacity-50' : ''}`}
-    >
+    <div ref={setNodeRef} style={style} className={`co-head-row${isOver ? ' dragover' : ''}`}>
+      {/* grip 自体を D&D ハンドルにする（行全体をハンドルにすると開閉クリックと競合する）。
+          dnd-kit のキーボード操作を残すため button のままにしている。 */}
       <button
         type="button"
-        className="cursor-grab touch-none text-faint active:cursor-grabbing"
-        aria-label={`${company.name || '(会社名未入力)'} を並べ替え`}
+        className="co-grip touch-none"
+        aria-label={`${label} を並べ替え`}
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="size-3.5" />
+        ⋮⋮
       </button>
       <button
         type="button"
@@ -86,26 +94,28 @@ const CompanyHeaderRow = ({
           onSelectCompany();
           onToggleOpen();
         }}
-        className="flex min-w-0 flex-1 items-center gap-1.5 py-2 text-left"
+        className={`co-head${open ? ' open' : ''}`}
         aria-expanded={open}
       >
-        <ChevronRight className={`size-3 shrink-0 text-faint transition-transform ${open ? 'rotate-90' : ''}`} />
-        <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-foreground">
-          {company.name || '(会社名未入力)'}
+        <span aria-hidden className="caret">
+          ▶
         </span>
-        {company.kind && (
-          <span className="shrink-0 whitespace-nowrap font-mono text-[9.5px] text-primary">{company.kind}</span>
-        )}
-        <span className="shrink-0 rounded-full bg-muted px-1.5 font-mono text-[10.5px] text-faint">{count}</span>
+        <span className="co-name">{label}</span>
+        {company.kind && <span className="kindtag">{company.kind}</span>}
+        <span className="co-count">{count}</span>
       </button>
       <button
         type="button"
         onClick={onToggleHide}
         aria-label={company.hidden ? '閲覧側で表示する' : '閲覧側で非表示にする'}
+        aria-pressed={Boolean(company.hidden)}
         title={company.hidden ? '閲覧側で非表示中 — クリックで表示' : '閲覧側で非表示にする'}
-        className={`rounded p-1 ${company.hidden ? 'text-primary' : 'text-faint hover:text-foreground'}`}
+        className={`row-eye${company.hidden ? ' on' : ''}`}
       >
         {company.hidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+      </button>
+      <button type="button" onClick={onDelete} aria-label={`${label} を削除`} title="会社を削除" className="co-del">
+        ×
       </button>
     </div>
   );
@@ -128,42 +138,34 @@ const ProjectRow = ({
   onToggleHide: () => void;
   onDelete: () => void;
 }) => {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging, isOver } = useSortable({
     id: project.id,
     data: { type: 'project' } satisfies DragData,
   });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   const missingRequired = !project.title.trim() || !project.period;
+  const label = project.title || '（無題の案件）';
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex w-full items-center gap-1.5 rounded-[var(--radius)] border px-1.5 py-1.5 text-[12.5px] ${
-        active
-          ? 'border-primary/50 bg-muted text-foreground'
-          : 'border-transparent text-muted-foreground hover:bg-muted'
-      } ${project.hidden ? 'opacity-50' : ''}`}
+      className={`proj-item${active ? ' active' : ''}${project.hidden ? ' hid' : ''}${isOver ? ' dragover' : ''}`}
     >
       <button
         type="button"
-        className="cursor-grab touch-none text-faint active:cursor-grabbing"
-        aria-label={`${project.title || '(無題の案件)'} を並べ替え`}
+        className="grip touch-none"
+        aria-label={`${label} を並べ替え`}
         {...attributes}
         {...listeners}
       >
-        <GripVertical className="size-3.5" />
+        ⋮⋮
       </button>
-      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-        <span className="shrink-0 font-mono text-[10.5px] text-faint">
-          {visibleNo > 0 ? String(visibleNo).padStart(2, '0') : '––'}
-        </span>
-        <span className="min-w-0 flex-1 truncate">{project.title || '（無題の案件）'}</span>
+      <button type="button" onClick={onSelect} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+        <span className="pno">{visibleNo > 0 ? String(visibleNo).padStart(2, '0') : '––'}</span>
+        <span className="ptitle">{label}</span>
         {missingRequired && (
-          <span
-            className="shrink-0 rounded-full bg-destructive/15 px-1.5 font-mono text-[10px] text-destructive"
-            title="必須項目（タイトル・期間）に未入力があります"
-          >
+          <span className="warn-dot" title="必須項目（タイトル・期間）に未入力があります">
             !
           </span>
         )}
@@ -172,19 +174,14 @@ const ProjectRow = ({
         type="button"
         onClick={onToggleHide}
         aria-label={project.hidden ? '閲覧側で表示する' : '閲覧側で非表示にする'}
+        aria-pressed={Boolean(project.hidden)}
         title={project.hidden ? '閲覧側で非表示中 — クリックで表示' : '閲覧側で非表示にする'}
-        className={`rounded p-1 ${project.hidden ? 'text-primary' : 'text-faint hover:text-foreground'}`}
+        className={`row-eye${project.hidden ? ' on' : ''}`}
       >
         {project.hidden ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
       </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label="案件を削除"
-        title="案件を削除"
-        className="rounded p-1 text-faint hover:text-destructive"
-      >
-        <X className="size-3.5" />
+      <button type="button" onClick={onDelete} aria-label="案件を削除" title="案件を削除" className="row-del">
+        ×
       </button>
     </div>
   );
@@ -205,6 +202,8 @@ export const ProjectNav = ({
   onAddProject,
   onAddCompany,
   onDeleteProject,
+  onDeleteCompany,
+  onCollapse,
   onToggleHideProject,
   onToggleHideCompany,
   onReorderProject,
@@ -237,16 +236,7 @@ export const ProjectNav = ({
     return data.items.filter((p) => !knownIds.has(p.companyId));
   }, [data]);
 
-  // 閲覧側で見える案件だけの通し番号（非表示は欠番にせず詰める）。
-  const visibleNoOf = useMemo(() => {
-    const hiddenCompany = new Set(data.companies.filter((c) => c.hidden).map((c) => c.id));
-    const map = new Map<string, number>();
-    let n = 0;
-    for (const p of data.items) {
-      if (!p.hidden && !hiddenCompany.has(p.companyId)) map.set(p.id, ++n);
-    }
-    return map;
-  }, [data]);
+  const visibleNoOf = useMemo(() => buildVisibleNoMap(data), [data]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -282,23 +272,30 @@ export const ProjectNav = ({
   };
 
   return (
-    <div className="flex min-w-0 flex-col rounded-lg border border-border bg-card">
-      <div className="border-b border-border px-3 py-3">
-        <div className="kicker">skillsheet · editor</div>
-        <div className="mt-1 text-sm font-bold text-foreground">案件エディタ</div>
-        <div className="mt-0.5 text-[11.5px] text-muted-foreground">
-          {data.companies.length}社 / {data.items.length}案件
+    <aside className="col-list">
+      <div className="list-head">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="kicker">skillsheet · editor</div>
+            <div className="ttl">案件エディタ</div>
+            <div className="sub">
+              {data.companies.length}社 / {data.items.length}案件
+            </div>
+          </div>
+          <button type="button" className="rail-btn shrink-0" onClick={onCollapse} title="集中モード（ナビを畳む）">
+            ⇤
+          </button>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="list-body scroll">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={data.companies.map((c) => c.id)} strategy={verticalListSortingStrategy}>
             {data.companies.map((company) => {
               const items = byCompany.get(company.id) ?? [];
               const isOpen = open[company.id] ?? true;
               return (
-                <div key={company.id} className="mb-1.5">
+                <div key={company.id} className={`co-group${company.hidden ? ' hid' : ''}`}>
                   <CompanyHeaderRow
                     company={company}
                     count={items.length}
@@ -306,9 +303,10 @@ export const ProjectNav = ({
                     onToggleOpen={() => setOpen((prev) => ({ ...prev, [company.id]: !isOpen }))}
                     onToggleHide={() => onToggleHideCompany(company.id)}
                     onSelectCompany={() => onSelectCompany(company.id)}
+                    onDelete={() => onDeleteCompany(company.id)}
                   />
                   {isOpen && (
-                    <div className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2 pt-1">
+                    <div className="proj-list">
                       <SortableContext items={items.map((p) => p.id)} strategy={verticalListSortingStrategy}>
                         {items.map((project) => (
                           <ProjectRow
@@ -322,13 +320,8 @@ export const ProjectNav = ({
                           />
                         ))}
                       </SortableContext>
-                      <button
-                        type="button"
-                        onClick={() => onAddProject(company.id)}
-                        className="mt-0.5 flex items-center gap-1 rounded px-1.5 py-1 text-left text-xs text-muted-foreground hover:text-foreground"
-                      >
-                        <Plus className="size-3" />
-                        この会社に案件を追加
+                      <button type="button" onClick={() => onAddProject(company.id)} className="add-proj">
+                        ＋ この会社に案件を追加
                       </button>
                     </div>
                   )}
@@ -341,11 +334,11 @@ export const ProjectNav = ({
           <p className="px-2 py-6 text-center text-xs text-muted-foreground">「＋ 会社」から会社を追加してください</p>
         )}
         {orphanProjects.length > 0 && (
-          <div className="mb-1.5 mt-2 border-t border-dashed border-border pt-2">
-            <div className="flex items-center gap-1 px-1 py-1 text-xs font-semibold text-muted-foreground">
+          <div className="co-group mt-2 border-t border-dashed border-border pt-2">
+            <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
               不明な会社（{orphanProjects.length}）
             </div>
-            <div className="ml-3 flex flex-col gap-0.5 border-l border-border pl-2 pt-1">
+            <div className="proj-list">
               {orphanProjects.map((project) => (
                 <ProjectRow
                   key={project.id}
@@ -362,16 +355,11 @@ export const ProjectNav = ({
         )}
       </div>
 
-      <div className="border-t border-border p-2">
-        <button
-          type="button"
-          onClick={onAddCompany}
-          className="flex items-center gap-1 rounded border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary"
-        >
-          <Plus className="size-3.5" />
-          会社
+      <div className="border-t border-border p-3">
+        <button type="button" onClick={onAddCompany} className="btn sm">
+          ＋ 会社
         </button>
       </div>
-    </div>
+    </aside>
   );
 };

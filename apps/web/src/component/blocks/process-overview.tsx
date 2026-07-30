@@ -11,7 +11,6 @@ const RADIUS = 19;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 // 全案件の工程カバレッジを7つのドーナツで俯瞰する。
-// カウント対象は done のみ（uncertain は集計に含めない＝実績を確実な分だけ数える）。
 export function ProcessOverview({ items }: ProcessOverviewProps) {
   const total = items.length;
   if (total === 0) return null;
@@ -22,7 +21,6 @@ export function ProcessOverview({ items }: ProcessOverviewProps) {
     <div className="grid grid-cols-4 gap-2.5 sm:grid-cols-7">
       {PROCESS_LABELS.map((label, i) => {
         const doneCount = normalized.filter((n) => n.done[i]).length;
-        const uncertainCount = normalized.filter((n) => n.uncertain[i]).length;
         const ratio = doneCount / total;
         return (
           <div
@@ -49,7 +47,6 @@ export function ProcessOverview({ items }: ProcessOverviewProps) {
               </span>
             </div>
             <span className="font-mono text-[10px] text-faint">/{total}</span>
-            {uncertainCount > 0 && <span className="font-mono text-[10px] text-faint">確認中 {uncertainCount}件</span>}
           </div>
         );
       })}
