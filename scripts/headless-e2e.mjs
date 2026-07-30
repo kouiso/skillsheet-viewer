@@ -17,7 +17,25 @@ const browserCandidates = [
 ].filter(Boolean);
 
 function start(command, args, options = {}) {
-  return spawn(command, args, { stdio: 'inherit', ...options });
+  return spawn(command, args, { stdio: 'inherit', detached: true, ...options });
+}
+
+async function terminateProcess(child, timeout = 5_000) {
+  if (!child || child.exitCode !== null) return;
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, timeout);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {
+      // 既に終了している場合は無視
+    }
+  });
 }
 
 async function waitFor(url, timeout = 30_000) {
@@ -226,6 +244,6 @@ try {
   );
   throw error;
 } finally {
-  browser?.kill('SIGTERM');
-  server.kill('SIGTERM');
+  await terminateProcess(browser);
+  await terminateProcess(server);
 }
