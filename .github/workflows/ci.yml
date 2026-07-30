@@ -74,13 +74,17 @@ jobs:
 
       - name: Headless browser E2E
         if: matrix.check-type == 'e2e'
-        run: pnpm run test:e2e
+        run: |
+          pnpm run test:e2e
+          pnpm run test:e2e:playwright
 
       - name: Upload E2E evidence
         if: matrix.check-type == 'e2e' && always()
         uses: actions/upload-artifact@v4
         with:
           name: headless-e2e-evidence
-          path: test-results/e2e/
+          path: |
+            test-results/e2e/
+            apps/web/test-results/playwright/
           if-no-files-found: error
           retention-days: 14
