@@ -1,5 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
 import process from 'node:process';
+import { expect, type Page, test } from '@playwright/test';
 import { createConsoleDemoSheet } from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
@@ -29,7 +29,13 @@ async function authViewer(page: Page, route: string) {
   await page.waitForURL(route);
 }
 
-async function capturePage(page: Page, route: string, viewport: (typeof viewports)[number], theme: Theme, name: string) {
+async function capturePage(
+  page: Page,
+  route: string,
+  viewport: (typeof viewports)[number],
+  theme: Theme,
+  name: string,
+) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   await page.goto(route, { waitUntil: 'networkidle' });
 
