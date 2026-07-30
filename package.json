@@ -21,6 +21,8 @@
     "format": "biome format --write .",
     "type-check": "pnpm -r type-check",
     "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm build && node scripts/headless-e2e.mjs",
+    "test:e2e:playwright": "pnpm build && pnpm --filter @skillsheet/web test:playwright",
     "db:generate": "pnpm --filter @skillsheet/db db:generate",
     "db:migrate": "pnpm --filter @skillsheet/db db:migrate"
   },
@@ -35,6 +37,7 @@
       "unrs-resolver"
     ],
     "overrides": {
+      "next>sharp": ">=0.35.0",
       "postcss": "^8.5.23",
       "sharp": "^0.35.3",
       "brace-expansion@>=3": "^5.0.8",

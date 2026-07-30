@@ -85,6 +85,7 @@ pnpm dev
 | `pnpm format` | Biome でフォーマット（`biome format --write .`） |
 | `pnpm -r type-check` | 全パッケージの型チェック |
 | `pnpm -r --if-present test` | 全テスト（Vitest） |
+| `pnpm test:e2e` | 本番ビルドを Chrome/Chromium で検証し、`test-results/e2e/` に証跡を保存 |
 | `pnpm db:generate` | スキーマからマイグレーション生成（Drizzle） |
 | `pnpm db:migrate` | マイグレーション適用 |
 
