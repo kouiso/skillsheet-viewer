@@ -9,12 +9,16 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+let e2eSheetId = '';
+
 async function resetE2ESheet() {
   const sheets = await listSheets();
   const sheet = sheets.find((s) => s.title === 'E2E Test Sheet');
   if (!sheet) throw new Error('E2E Test Sheet not found');
   const initialBlocks = [{ type: 'markdown' as const, data: { markdown: 'E2E テスト用' as const } }];
   await saveSkillSheetBlocks(sheet.title, initialBlocks, sheet.id);
+  e2eSheetId = sheet.id;
+  return sheet.id;
 }
 
 async function login(page: Page) {
@@ -26,7 +30,8 @@ async function login(page: Page) {
 }
 
 async function openProjectEditor(page: Page) {
-  await page.goto('/builder');
+  if (!e2eSheetId) throw new Error('E2E Test Sheet id not set; did resetE2ESheet() run?');
+  await page.goto(`/builder?sheet=${e2eSheetId}`);
   await page.getByRole('button', { name: '案件エディタ' }).click();
   await page.getByRole('button', { name: '＋ 会社' }).click();
   await expect(page.getByRole('textbox', { name: '会社名' })).toBeVisible();
@@ -88,7 +93,8 @@ test.describe('builder autosave', () => {
         await waitForAutosave(pageA, '保存済み（自動）');
 
         // セッション B は A と同じ cookie を使う（Better Auth の sign-in レートリミットを回避）
-        await pageB.goto('/builder');
+        if (!e2eSheetId) throw new Error('E2E Test Sheet id not set; did resetE2ESheet() run?');
+        await pageB.goto(`/builder?sheet=${e2eSheetId}`);
         await pageB.getByRole('button', { name: '案件エディタ' }).click();
         const rowPattern = new RegExp(`^${escapeRegExp(companyName)}(?!.*を)`);
         await pageB.getByRole('button', { name: rowPattern }).click();
