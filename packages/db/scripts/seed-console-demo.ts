@@ -1,16 +1,47 @@
 /**
- * （履歴書き換えで置換）このファイルの旧版には実在の経歴データが含まれていたため、
- * 架空データの最小版に置き換えた。人物・会社・案件はすべて架空。
+ * Console方向のダッシュボードUI（プロフィール/統計/スキルマトリクス/工程の俯瞰/案件詳細/タイムライン）
+ * を実データで見た目確認するための検証用シートを1件 INSERT するスクリプト。
+ *
+ * 実行: pnpm --filter @skillsheet/db exec tsx packages/db/scripts/seed-console-demo.ts
  */
-export const CONSOLE_DEMO_TITLE = 'Console デザイン検証シート';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-export const FICTIONAL_PROFILE = {
-  name: '見本 花子（架空）',
-  title: 'サンプルエンジニア',
-  pr: 'この文章は表示確認用の架空の自己紹介です。実在の人物・経歴とは関係ありません。',
-};
+import { createConsoleDemoSheet } from '../src/console-demo';
 
-export const FICTIONAL_PROJECTS = [
-  { title: '架空の在庫管理画面', company: '架空商事', summary: '表示確認のための架空の案件説明文です。' },
-  { title: '見本の予約受付システム', company: '見本システム', summary: '表示確認のための架空の案件説明文です。' },
-];
+// apps/web/.env.local から DATABASE_URL / SKILLSHEET_OWNER_ID を読み込む
+// （packages/db には .env が無く、この2値は Web 側の .env.local にのみ存在するため）。
+function loadWebEnvLocal(): void {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const envPath = resolve(here, '../../../apps/web/.env.local');
+  if (!existsSync(envPath)) {
+    throw new Error(`apps/web/.env.local が見つかりません: ${envPath}`);
+  }
+  const content = readFileSync(envPath, 'utf-8');
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIndex = trimmed.indexOf('=');
+    if (eqIndex === -1) continue;
+    const key = trimmed.slice(0, eqIndex).trim();
+    let value = trimmed.slice(eqIndex + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadWebEnvLocal();
+
+async function main() {
+  const sheetId = await createConsoleDemoSheet();
+  console.log('created sheetId:', sheetId);
+  console.log(`URL: /view/db/${sheetId}`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exitCode = 1;
+});
