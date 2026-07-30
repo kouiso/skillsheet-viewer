@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:playwright": "playwright test",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
@@ -50,7 +51,8 @@
     "yet-another-react-lightbox": "^3.25.0"
   },
   "devDependencies": {
-    "@next/bundle-analyzer": "^16.2.9",
+    "@next/bundle-analyzer": "^16.2.11",
+    "@playwright/test": "^1.51.1",
     "@storybook/addon-docs": "^10.5.4",
     "@storybook/nextjs-vite": "^10.5.4",
     "@tailwindcss/postcss": "^4.3.0",

@@ -36,15 +36,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check-type: [lint, typecheck, test, build]
+        check-type: [lint, typecheck, test, build, e2e]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           # actions/setup-node の node-version-file は .nvmrc / .node-version /
           # package.json / .tool-versions(asdf形式) のみ対応で、mise.toml の
@@ -71,3 +71,33 @@ jobs:
       - name: Build
         if: matrix.check-type == 'build'
         run: pnpm run build
+
+      - name: Install Playwright browsers
+        if: matrix.check-type == 'e2e'
+        run: pnpm --filter @skillsheet/web exec playwright install --with-deps chromium
+
+      - name: Headless browser E2E
+        if: matrix.check-type == 'e2e'
+        env:
+          BETTER_AUTH_URL: http://127.0.0.1:3210
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
+          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+        run: |
+          pnpm run test:e2e
+          pnpm run test:e2e:playwright
+
+      - name: Upload E2E evidence
+        if: matrix.check-type == 'e2e' && always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: headless-e2e-evidence
+          path: |
+            test-results/e2e/
+            apps/web/test-results/playwright/
+          if-no-files-found: error
+          retention-days: 14
