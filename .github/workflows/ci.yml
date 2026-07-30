@@ -72,6 +72,10 @@ jobs:
         if: matrix.check-type == 'build'
         run: pnpm run build
 
+      - name: Install Playwright browsers
+        if: matrix.check-type == 'e2e'
+        run: pnpm --filter @skillsheet/web exec playwright install --with-deps chromium
+
       - name: Headless browser E2E
         if: matrix.check-type == 'e2e'
         env:
@@ -82,7 +86,6 @@ jobs:
           SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
           E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
-          CHROME_PATH: google-chrome
         run: |
           pnpm run test:e2e
           pnpm run test:e2e:playwright
