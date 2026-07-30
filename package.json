@@ -22,6 +22,7 @@
     "type-check": "pnpm -r type-check",
     "test": "pnpm -r --if-present test",
     "test:e2e": "pnpm build && node scripts/headless-e2e.mjs",
+    "test:e2e:playwright": "pnpm build && pnpm --filter @skillsheet/web test:playwright",
     "db:generate": "pnpm --filter @skillsheet/db db:generate",
     "db:migrate": "pnpm --filter @skillsheet/db db:migrate"
   },
