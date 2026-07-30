@@ -1,5 +1,5 @@
-import { defineConfig, devices } from '@playwright/test';
 import process from 'node:process';
+import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
 const chromePath = process.env.CHROME_PATH;
