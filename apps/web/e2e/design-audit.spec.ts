@@ -1,6 +1,6 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
-import { createConsoleDemoSheet } from '@skillsheet/db';
+import { blocksToMarkdown, createConsoleDemoSheet, getSkillSheetById } from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
@@ -51,6 +51,8 @@ async function capturePage(
 
   await setTheme(page, theme);
   await page.reload({ waitUntil: 'networkidle' });
+  // 各ページの framer-motion 等アニメーションが完了してからスクリーンショットを取得する
+  await page.waitForTimeout(1200);
 
   const overflow = await page.evaluate(() => {
     const html = document.documentElement;
@@ -128,6 +130,13 @@ test.describe('Claude Design 全画面監査', () => {
 
   test('builder /builder/preview（プレビュー）', async ({ page }) => {
     await login(page);
+    // 直接 /builder/preview を開いたときに表示が空にならないよう、
+    // 編集画面から渡される localStorage ペイロードを再現する。
+    const previewSheet = await getSkillSheetById(viewSheetId);
+    const previewPayload = { title: previewSheet.title, content: blocksToMarkdown(previewSheet.blocks) };
+    await page.evaluate((payload) => {
+      localStorage.setItem('builder-preview-payload', JSON.stringify(payload));
+    }, previewPayload);
     for (const viewport of viewports) {
       for (const theme of ['light', 'dark'] as const) {
         const result = await capturePage(page, '/builder/preview', viewport, theme, `preview-${viewport.name}`);
