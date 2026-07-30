@@ -1,12 +1,18 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
 
 const appPort = 3210;
 const debuggingPort = 9222;
 const evidenceDir = join(process.cwd(), 'test-results/e2e');
+
+const WAIT_TIMEOUT_MS = 30_000;
+const WAIT_INTERVAL_MS = 250;
+const PAGE_LOAD_DELAY_MS = 1_000;
+const PROCESS_KILL_TIMEOUT_MS = 5_000;
 
 const browserCandidates = [
   process.env.CHROME_PATH,
@@ -20,7 +26,7 @@ function start(command, args, options = {}) {
   return spawn(command, args, { stdio: 'inherit', detached: true, ...options });
 }
 
-async function terminateProcess(child, timeout = 5_000) {
+async function terminateProcess(child, timeout = PROCESS_KILL_TIMEOUT_MS) {
   if (!child || child.exitCode !== null) return;
 
   return new Promise((resolve) => {
@@ -38,7 +44,7 @@ async function terminateProcess(child, timeout = 5_000) {
   });
 }
 
-async function waitFor(url, timeout = 30_000) {
+async function waitFor(url, timeout = WAIT_TIMEOUT_MS) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     try {
@@ -47,7 +53,7 @@ async function waitFor(url, timeout = 30_000) {
     } catch {
       // 起動中の接続失敗は想定内。短い間隔で再試行する。
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, WAIT_INTERVAL_MS));
   }
   throw new Error(`${url} が ${timeout}ms 以内に応答しませんでした`);
 }
@@ -140,7 +146,7 @@ async function verifyPage(cdp, scenario) {
   const loaded = cdp.once('Page.loadEventFired');
   await cdp.send('Page.navigate', { url: `http://127.0.0.1:${appPort}${scenario.path}` });
   await loaded;
-  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  await new Promise((resolve) => setTimeout(resolve, PAGE_LOAD_DELAY_MS));
 
   const { result } = await cdp.send('Runtime.evaluate', {
     returnByValue: true,
@@ -191,7 +197,8 @@ try {
     '--no-sandbox',
     '--disable-dev-shm-usage',
     `--remote-debugging-port=${debuggingPort}`,
-    `--user-data-dir=/tmp/skillsheet-e2e-${process.pid}`,
+    `--remote-allow-origins=http://127.0.0.1:${debuggingPort}`,
+    `--user-data-dir=${join(tmpdir(), `skillsheet-e2e-${process.pid}`)}`,
     'about:blank',
   ]);
   const versionResponse = await waitFor(`http://127.0.0.1:${debuggingPort}/json/version`);
