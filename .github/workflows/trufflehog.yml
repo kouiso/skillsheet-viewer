@@ -15,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
       - name: TruffleHog OSS
-        uses: trufflesecurity/trufflehog@v3.92.2
+        uses: trufflesecurity/trufflehog@702bbefa350895c57f0e303eeb2855a1c637908f # v3.92.2
         with:
           extra_args: --only-verified
