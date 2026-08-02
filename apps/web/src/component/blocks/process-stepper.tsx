@@ -1,6 +1,7 @@
 'use client';
 
 import { PROCESS_LABELS } from '@skillsheet/db/process';
+import { Check, Circle } from 'lucide-react';
 
 interface ProcessStepperProps {
   /** normalizeProcess() の done（7要素）。 */
@@ -9,19 +10,22 @@ interface ProcessStepperProps {
   compact?: boolean;
 }
 
-// 7段SDLCモデルの担当工程ステッパー。担当あり/なし の2状態。
+// 7段SDLCモデルの担当工程ステッパー。担当あり/なし はアイコン＋色で区別する。
 export function ProcessStepper({ done, compact = false }: ProcessStepperProps) {
   return (
     <div className="flex items-end gap-1.5">
       {PROCESS_LABELS.map((label, i) => {
         const isDone = done?.[i] ?? false;
-        const title = isDone ? `${label}：経験あり` : label;
+        const title = isDone ? `${label}：経験あり` : `${label}：未経験`;
+        const StatusIcon = isDone ? Check : Circle;
         return (
           <div key={label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
             {!compact && (
               <span
-                className={`break-keep text-center font-mono text-[10px] leading-tight [overflow-wrap:anywhere] ${isDone ? 'text-accent-text' : 'text-faint'}`}
+                title={title}
+                className={`flex items-center justify-center gap-0.5 break-keep text-center font-mono text-[10px] leading-tight [overflow-wrap:anywhere] ${isDone ? 'text-accent-text' : 'text-faint'}`}
               >
+                <StatusIcon className="size-2.5 shrink-0" aria-hidden="true" />
                 {/* 狭幅では「・」の直後だけで折り返す（語中の「実装・単/体」折れを防ぐ）。 */}
                 {label.split('・').map((part, j, parts) => {
                   // 配列indexをkeyへ使わず、先頭からの累積文字列（各要素で自然に一意）を使う。
