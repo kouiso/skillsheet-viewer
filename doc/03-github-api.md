@@ -71,7 +71,7 @@ export function blocksToMarkdown(blocks: Block[]): string {
 ```
 
 - 表への変換では `escapeCell()` がセル内改行を空白へ、`|` をエスケープし、空セルを半角スペース 1 つに整えて GFM 表の崩れを防ぐ。列揃えは `:---` / `:---:` / `---:` で表現する。
-- 型システム上到達不能な未知 type は `''` を返し、他ブロックを壊さない（`isBlockInputEmpty` も未知 type を空として扱う）。
+- `blockToMarkdown` は型システム上到達不能な未知 type を `''` として扱い、他ブロックを壊さない。`isBlockInputEmpty` も未知 type を空として扱うが、こちらは DB 由来の壊れた/未知の行を実際に受け取りうる実行時の防御であり、両者とも単なる型システムの建前ではない。
 - **中身が空のブロックは `blocksToMarkdown` の連結対象から除かれる** — テンプレの空スカフォールドが `### （現在）` のような孤立セクションとして PDF や `/view/db` に出るのを防ぐ（issue #128）。ブロック自体は DB に残るので、Web の viewer（`groupBlocks`）でも同じ基準（`isBlockInputEmpty`）でスキップしている。
 
 table / experience は Markdown 経由で描画するが、skills / profile / stats / project は Web 側で専用の React コンポーネントとして描画される（[04](04-markdown-display.md) 参照）。PDF は mdast → `@react-pdf` パイプラインを共有する。

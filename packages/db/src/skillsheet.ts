@@ -271,12 +271,12 @@ export async function createSheet(title: string, initialBlocks?: BlockInput[]): 
     if (initialBlocks && initialBlocks.length > 0) {
       // 空ブロックはここで落とさない — テンプレの入力用スカフォールドが消えて
       // 見出しだけが残る不具合になる（issue #128）。空判定は描画時に行う。
-      const cleaned = initialBlocks.map(normalizeBlockInput);
-      if (cleaned.length > 0) {
-        await tx
-          .insert(blocks)
-          .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
-      }
+      // ユーザーが「追加」を連打して埋めずに放置した空ブロックも同様に残り続けるが、
+      // これは編集画面上で見えて削除もできる（閲覧側にだけ出ない）ので許容する。
+      const normalized = initialBlocks.map(normalizeBlockInput);
+      await tx
+        .insert(blocks)
+        .values(normalized.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
     }
     return sheetId;
   });
@@ -331,7 +331,7 @@ export async function saveSkillSheetBlocks(
   const ownerId = getOwnerId();
 
   // 空ブロックはここで落とさない（createSheet と同じ理由。issue #128）。
-  const cleaned = blocksInput.map(normalizeBlockInput);
+  const normalized = blocksInput.map(normalizeBlockInput);
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
   return db.transaction(async (tx) => {
@@ -373,12 +373,15 @@ export async function saveSkillSheetBlocks(
     }
 
     await tx.delete(blocks).where(eq(blocks.sheetId, resolvedSheetId));
-    if (cleaned.length > 0) {
-      await tx
-        .insert(blocks)
-        .values(
-          cleaned.map((block, order) => ({ sheetId: resolvedSheetId, type: block.type, order, data: block.data })),
-        );
+    if (normalized.length > 0) {
+      await tx.insert(blocks).values(
+        normalized.map((block, order) => ({
+          sheetId: resolvedSheetId,
+          type: block.type,
+          order,
+          data: block.data,
+        })),
+      );
     }
     const [updated] = await tx
       .update(skillSheets)

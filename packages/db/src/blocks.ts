@@ -413,6 +413,11 @@ export function isBlockInputEmpty(block: BlockInput): boolean {
     const allCellsEmpty = rows.every((row) => row.every((cell) => cell.trim() === ''));
     return allLabelsEmpty && allCellsEmpty;
   }
+  // ここに到達するのは (a) BlockInput に新しい type を足したのに分岐を書き忘れた場合
+  // （このコンパイル時 never 代入が型エラーで検知する）、(b) DB 由来の壊れた/未知の type
+  // （実行時は型を素通りするため、この行が実際に走って false スロー無しで空扱いにする）。
+  const exhaustiveCheck: never = block;
+  void exhaustiveCheck;
   return true;
 }
 
