@@ -116,6 +116,66 @@ describe('SkillSheetViewer', () => {
     expect(screen.queryByText('空')).toBeNull();
   });
 
+  it('中身が空の profile ブロックは描画しない（issue #128: 迷子の "SKILL SHEET" kicker を防ぐ）', async () => {
+    const blocks: Block[] = [
+      {
+        id: 'p1',
+        type: 'profile',
+        order: 0,
+        data: { name: '', title: '', pr: '', strengths: [], meta: {} },
+      },
+      { id: 'm1', type: 'markdown', order: 1, data: { markdown: '## 目印' } },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('SKILL SHEET')).toBeNull();
+  });
+
+  it('中身が空の experience ブロックは描画せず、目次にも出ない（issue #128: 「（現在）」孤立ブロック）', async () => {
+    const blocks: Block[] = [
+      { id: 'm1', type: 'markdown', order: 0, data: { markdown: '## 職務経歴' } },
+      {
+        id: 'e1',
+        type: 'experience',
+        order: 1,
+        data: { company: '', startDate: '', endDate: '', role: '', description: '' },
+      },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('職務経歴')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/現在/)).toBeNull();
+  });
+
+  it('全ラベル・全セルが空の table ブロックは描画しない（issue #128: 空の枠線グリッド）', async () => {
+    const blocks: Block[] = [
+      { id: 'm1', type: 'markdown', order: 0, data: { markdown: '## 目印' } },
+      {
+        id: 't1',
+        type: 'table',
+        order: 1,
+        data: { columns: [{ label: '', align: 'left' }], rows: [['']] },
+      },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    expect(document.querySelector('table')).toBeNull();
+  });
+
   it('複数の markdown ブロックに同じ見出しテキストがあっても id を一意化し、React の重複key警告を出さない', async () => {
     // 各 markdown ブロックは独立した <ReactMarkdown>（rehype-slug も独立実行）で描画されるため、
     // 同じ見出しテキストを持つブロックが複数あると rehype-slug が同一 id を付与してしまう
