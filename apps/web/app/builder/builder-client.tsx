@@ -215,8 +215,8 @@ export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: b
 // markdown 比較だと markdown に落ちないフィールド（profile.company / 会社 kind・note /
 // 案件 comment・summary / hidden トグル等）の編集を取りこぼし、自動保存も
 // beforeunload ガードも発火せず黙ってデータが失われるため、保存される構造化データで差分を見る。
-// サーバ保存時に drop される空ブロックは除外する（案件エディタタブを開いただけの
-// 空 project ブロック追加などで dirty / 幽霊自動保存を発生させない）。
+// サーバ保存時に drop される空ブロックは除外する（空 experience / skills 等の
+// 幽霊ブロックで dirty / 不要な自動保存が発生しないようにする）。
 const snapshot = (items: EditorItem[], title: string): string =>
   JSON.stringify([title, items.map(itemToBlockInput).filter((block) => !isBlockInputEmpty(block))]);
 
@@ -1104,13 +1104,6 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     setHistoryOpen(false);
   };
 
-  const ensureProjectBlock = () => {
-    setItems((prev) => {
-      if (prev.some((i) => i.type === 'project')) return prev;
-      return [...prev, { id: newId(), type: 'project', data: { companies: [], items: [] } }];
-    });
-  };
-
   const handleCreateSheet = () => {
     setNewSheetTitle('新しいスキルシート');
     setNewSheetTemplateId(TEMPLATES[0].id);
@@ -1494,7 +1487,6 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 type="button"
                 onClick={() => {
                   setActiveTab('project');
-                  ensureProjectBlock();
                 }}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'project'

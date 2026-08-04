@@ -47,7 +47,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="案件・技術・役割を検索…"
-            className="w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground outline-none focus:border-primary focus:bg-card"
+            className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground outline-none focus:border-primary focus:bg-card"
           />
         </div>
         <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
@@ -62,7 +62,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
       </div>
 
       {/* 既定は約3行で頭打ちにし、下端のグラデーションで「まだ続く」ことを示す。 */}
-      <div className={showAll ? 'relative' : 'relative max-h-[88px] overflow-hidden'}>
+      <div className={showAll ? 'relative' : 'relative max-h-[146px] overflow-hidden'}>
         {!showAll && (
           <span
             aria-hidden
