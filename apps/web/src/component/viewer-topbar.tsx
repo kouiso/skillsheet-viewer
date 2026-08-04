@@ -88,7 +88,7 @@ export function ViewerTopbar({
         <div className="flex items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー">
+              <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
                 <Link href="/builder">
                   <PencilLine />
                 </Link>
@@ -106,6 +106,7 @@ export function ViewerTopbar({
                   onClick={() => void onDownloadPdf()}
                   disabled={pdfLoading}
                   aria-label="PDFダウンロード"
+                  className="min-h-11 min-w-11"
                 >
                   <FileDown />
                 </Button>
@@ -116,7 +117,13 @@ export function ViewerTopbar({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="テーマ切り替え">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                aria-label="テーマ切り替え"
+                className="min-h-11 min-w-11"
+              >
                 {mode === 'dark' ? <Sun /> : <Moon />}
               </Button>
             </TooltipTrigger>
