@@ -21,10 +21,18 @@
 
 ## `harness/` — 測定に使ったスクリプト
 
-各巡で実際に走らせた Playwright / Node のスクリプト 43 本。「どう測ったか」を後から追えるようにコミットしている。
+各巡で実際に走らせた Playwright / Node のスクリプト 47 本。「どう測ったか」を後から追えるようにコミットしている。
 実行環境に依存する絶対パスは `<REPO>` / `<SCRATCH>` / `<SKILL_SHEET_REPO>` に置き換えてあるので、そのままでは動かない。
 再現するときは自分の環境のパスに直し、`.env.local` 相当（`DATABASE_URL` / `VIEWER_CODE` / `E2E_EMAIL` / `E2E_PASSWORD` /
 `SKILLSHEET_OWNER_ID`）を環境変数で渡す。
+
+## サーバーログが最初のコミットから抜けていた件
+
+ルートの `.gitignore` に `*.log` があり、`git add doc/dogfooding-evidence/` はサーバーログ 8 本を
+**エラーも警告も出さずに黙って除外していた**（Codex 指摘）。結果ドキュメントが判定根拠として参照している
+`round12-server-b1-error.log` / `round16-server-e5b.log` も入っていなかった。`.gitignore` に
+`!doc/dogfooding-evidence/*.log` を足して追跡対象にしてある。ログの中身は localhost のアドレスと
+`ECONNREFUSED` のスタックだけで、接続文字列・パスワードの類は含まれていない（確認済み）。
 
 ## 伏せ字
 
