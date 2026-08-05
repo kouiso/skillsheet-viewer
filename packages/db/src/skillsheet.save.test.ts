@@ -66,13 +66,13 @@ describe('saveSkillSheetBlocks', () => {
     await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x', older)).rejects.toBeInstanceOf(ConflictError);
   });
 
-  it('空ブロックのみのときは insert を呼ばずに drop し、updatedAt を返す', async () => {
+  it('空ブロックのみでも drop せず insert する（issue #128: テンプレの空スカフォールドを残す）', async () => {
     const saved = new Date('2026-03-01T00:00:00.000Z');
     const f = createFakeDb({ selectResults: [[{ id: 'sheet-x' }]], updateReturning: [{ updatedAt: saved }] });
     dbHolder = f.db;
     const res = await saveSkillSheetBlocks('T', [{ type: 'markdown', data: { markdown: '   ' } }], 'sheet-x');
     expect(res.updatedAt).toBe(saved);
-    expect(f.insertValues).not.toHaveBeenCalled();
+    expect(f.insertValues).toHaveBeenCalledTimes(1);
   });
 
   it('非空ブロックは insert され、サーバー時刻の updatedAt を返す', async () => {

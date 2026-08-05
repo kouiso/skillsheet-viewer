@@ -169,7 +169,11 @@ async function ensureSeeded(db: Database): Promise<string> {
     const config = getGitHubSeedConfig();
     if (config) {
       const markdown = await fetchMarkdownFromGitHub(config);
-      const segments = splitMarkdownIntoBlocks(markdown);
+      // 分割で生じる空白のみのセグメントは「著者が置いた構造」ではなく分割ノイズなので、
+      // ここは意図的に isBlockInputEmpty で除く（テンプレの空ブロックとは別物）。
+      const segments = splitMarkdownIntoBlocks(markdown).filter(
+        (data) => !isBlockInputEmpty({ type: 'markdown', data }),
+      );
       if (segments.length > 0) {
         await db
           .insert(blocks)
@@ -265,12 +269,14 @@ export async function createSheet(title: string, initialBlocks?: BlockInput[]): 
       throw new Error('Failed to create sheet: INSERT returned no id');
     }
     if (initialBlocks && initialBlocks.length > 0) {
-      const cleaned = initialBlocks.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
-      if (cleaned.length > 0) {
-        await tx
-          .insert(blocks)
-          .values(cleaned.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
-      }
+      // 空ブロックはここで落とさない — テンプレの入力用スカフォールドが消えて
+      // 見出しだけが残る不具合になる（issue #128）。空判定は描画時に行う。
+      // ユーザーが「追加」を連打して埋めずに放置した空ブロックも同様に残り続けるが、
+      // これは編集画面上で見えて削除もできる（閲覧側にだけ出ない）ので許容する。
+      const normalized = initialBlocks.map(normalizeBlockInput);
+      await tx
+        .insert(blocks)
+        .values(normalized.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
     }
     return sheetId;
   });
@@ -324,7 +330,8 @@ export async function saveSkillSheetBlocks(
   const db = getDb();
   const ownerId = getOwnerId();
 
-  const cleaned = blocksInput.map(normalizeBlockInput).filter((b) => !isBlockInputEmpty(b));
+  // 空ブロックはここで落とさない（createSheet と同じ理由。issue #128）。
+  const normalized = blocksInput.map(normalizeBlockInput);
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
   return db.transaction(async (tx) => {
@@ -366,12 +373,15 @@ export async function saveSkillSheetBlocks(
     }
 
     await tx.delete(blocks).where(eq(blocks.sheetId, resolvedSheetId));
-    if (cleaned.length > 0) {
-      await tx
-        .insert(blocks)
-        .values(
-          cleaned.map((block, order) => ({ sheetId: resolvedSheetId, type: block.type, order, data: block.data })),
-        );
+    if (normalized.length > 0) {
+      await tx.insert(blocks).values(
+        normalized.map((block, order) => ({
+          sheetId: resolvedSheetId,
+          type: block.type,
+          order,
+          data: block.data,
+        })),
+      );
     }
     const [updated] = await tx
       .update(skillSheets)
