@@ -91,6 +91,11 @@ const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
 // 案件エディタは 1 フィールドずつ触る操作が多いため長い待ちだと保存状態が読み取れない。
 const AUTOSAVE_DEBOUNCE_MS = 600;
 
+/** シート一覧の鮮度保持時間。react-query の既定 staleTime: 0 だと RSC が渡した
+ * initialData が即座に stale 扱いになり、マウント直後に取得済みの一覧を HTTP で
+ * 二重取得してしまう。作成・削除後の更新は invalidate() が明示的に担う。 */
+const SHEET_LIST_STALE_TIME_MS = 60_000;
+
 // 自動保存の状態機械。idle（初期）→ saving → saved を巡回し、
 // conflict は終端（同一セッション中は自動保存を再開しない）。
 // error は非競合の失敗（unauthorized / ネットワーク等）。同一内容での自動リトライは行わず、
@@ -805,7 +810,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const utils = trpc.useUtils();
   // RSC が渡す initialSheets を initialData にして、作成/削除後は invalidate() で
   // react-query に再取得させる（手動での配列操作をやめ、正本を一箇所に保つ）。
-  const { data: sheets } = trpc.sheet.list.useQuery(undefined, { initialData: initialSheets });
+  const { data: sheets } = trpc.sheet.list.useQuery(undefined, {
+    initialData: initialSheets,
+    staleTime: SHEET_LIST_STALE_TIME_MS,
+  });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
   // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
@@ -1130,6 +1138,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   };
 
   const handleCreateSheet = () => {
+    // 作成後の router.push は key={activeSheetId} の再マウントで編集中 state を破棄する。
+    // SPA 内遷移では beforeunload が発火しないため、シート切替・閲覧へ導線と同じくここで確認を取る。
+    if (!confirmDiscardChanges()) return;
     setNewSheetTitle('新しいスキルシート');
     setNewSheetTemplateId(TEMPLATES[0].id);
     setShowCreateDialog(true);
