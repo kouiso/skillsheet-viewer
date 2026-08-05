@@ -35,8 +35,9 @@
 > **証跡の所在について。** 検証中の出力先は `test-results/dogfooding/` だが、そこは `.gitignore` 対象で
 > レビュアーが開けない。そこで**テキストの証跡（JSON とサーバーログ 54 本）を
 > [`doc/dogfooding-evidence/`](./dogfooding-evidence/) にコピーしてコミットした**。
-> 本文が `round12/B-2-topbar.json` のように参照しているものは、`doc/dogfooding-evidence/round12__B-2-topbar.json`
-> として読める（`<round>__<name>` へ平坦化）。サーバーログのオーナー ID は `<OWNER_ID>` に伏せてある。
+> 本文が `round12/B-2-topbar.json` のように参照しているものは、`doc/dogfooding-evidence/round12-b-2-topbar.json`
+> として読める。`<round>-<name>` へ平坦化し、リポジトリの命名規約（ケバブケース）に合わせて全部小文字にしてある。
+> サーバーログのオーナー ID は `<OWNER_ID>` に伏せてある。
 >
 > **スクリーンショットと PDF は含めていない。** 1 枚 4〜5MB で全部だと 100MB を超え、リポジトリが重くなる。
 > そのぶん本文の各行には、画像を開かなくても追試できるよう、実測した数値（件数・ページ数・HTTP ステータス・
