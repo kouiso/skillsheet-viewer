@@ -39,8 +39,9 @@
 │           ├── components/  # shadcn/ui ベースの UI 部品
 │           ├── context/     # React Context
 │           ├── hooks/       # カスタムフック
-│           ├── lib/         # 認証クライアントなどの共通設定
-│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション）
+│           ├── lib/         # 認証クライアント・tRPC クライアントなどの共通設定
+│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション・tRPC router）
+│           │   └── trpc/    # tRPC: context / init / router / server caller
 │           └── util/        # ユーティリティ関数
 └── packages/
     └── db/                  # Drizzle ORM + Neon（スキルシートの正本）

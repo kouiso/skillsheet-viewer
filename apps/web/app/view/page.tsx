@@ -1,7 +1,8 @@
 import type { SheetSummary } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
-import { getCachedDbSheets } from '@/server/sheets-cache';
+
+import { createServerCaller } from '@/server/trpc/caller';
 
 import DbSheetsListClient from './db-sheets-list-client';
 
@@ -16,7 +17,8 @@ export default async function SheetsListPage() {
   let sheets: SheetSummary[] = [];
   let hasError = false;
   try {
-    sheets = await getCachedDbSheets();
+    const caller = await createServerCaller();
+    sheets = await caller.sheet.list();
   } catch (err) {
     console.error('Failed to fetch DB sheets:', err);
     hasError = true;

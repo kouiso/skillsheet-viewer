@@ -43,6 +43,7 @@ import {
   type TableColumn,
   tableBlockToMarkdown,
 } from '@skillsheet/db/blocks';
+import { TRPCClientError } from '@trpc/client';
 import {
   AlignCenter,
   AlignLeft,
@@ -66,8 +67,8 @@ import { DateTokenPicker } from '@/components/date-token-picker';
 import { SelectOrCustom } from '@/components/select-or-custom';
 import { Button } from '@/components/ui/button';
 import { useThemeMode } from '@/context/theme-context';
+import { trpc } from '@/lib/trpc-client';
 
-import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
 import { type HistoryEntry, loadHistory, pushHistory } from './history';
 import { HistoryDrawer } from './history-drawer';
 import { ProjectEditor, type ProjectEditorSelection } from './project-editor';
@@ -791,7 +792,15 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [title, setTitle] = useState(initialTitle);
   const [isSaving, startSaving] = useTransition();
   const [isSheetOp, startSheetOp] = useTransition();
-  const [sheets, setSheets] = useState<SheetSummary[]>(initialSheets);
+  // 認可・入力検証・エラーコードを tRPC procedure 側に集約したので、ここでは
+  // mutateAsync を素の非同期関数として呼び、既存の直列化ロジック（saveInFlightRef 等）は変えない。
+  const saveMutation = trpc.sheet.save.useMutation();
+  const createMutation = trpc.sheet.create.useMutation();
+  const deleteMutation = trpc.sheet.delete.useMutation();
+  const utils = trpc.useUtils();
+  // RSC が渡す initialSheets を initialData にして、作成/削除後は invalidate() で
+  // react-query に再取得させる（手動での配列操作をやめ、正本を一箇所に保つ）。
+  const { data: sheets } = trpc.sheet.list.useQuery(undefined, { initialData: initialSheets });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
   // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
@@ -944,38 +953,35 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     saveInFlightRef.current = true;
     setAutosaveStatus('saving');
     try {
-      const res = await saveBlocksAction({
+      const result = await saveMutation.mutateAsync({
         title: currentTitle,
         blocks: currentItems.map(itemToBlockInput),
         sheetId: activeSheetId,
         expectedUpdatedAt: savedUpdatedAtRef.current,
       });
-      if (res.ok) {
-        savedRef.current = true;
-        // Server Actions のシリアライズ境界を越えると Date が文字列化されうるため、
-        // new Date() で必ず Date オブジェクトへ正規化する（.getTime() 比較の破綻防止）。
-        savedUpdatedAtRef.current = res.savedUpdatedAt ? new Date(res.savedUpdatedAt) : new Date();
-        lastSavedSnapshotRef.current = savedSnapshot;
-        failedSnapshotRef.current = null;
-        // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
-        setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
-        setAutosaveStatus('saved');
-      } else if (res.error === 'conflict') {
+      savedRef.current = true;
+      // superjson transformer が Date を server caller / HTTP の両経路で保つため型どおり
+      // Date が返るが、念のため new Date() で正規化する（.getTime() 比較の破綻防止）。
+      savedUpdatedAtRef.current = new Date(result.updatedAt);
+      lastSavedSnapshotRef.current = savedSnapshot;
+      failedSnapshotRef.current = null;
+      // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
+      setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
+      setAutosaveStatus('saved');
+    } catch (err) {
+      if (err instanceof TRPCClientError && err.data?.code === 'CONFLICT') {
         // 競合は最初の 1 回で自動保存を恒久停止する（ダイアログは出さず、
         // トップバーのインジケータ＋再読み込みボタンで通知する）。
         autosaveStoppedRef.current = true;
         followUpRef.current = false;
         setAutosaveStatus('conflict');
       } else {
-        // 失敗（unauthorized 等）は dirty のまま error にする。失敗したスナップショットを
-        // 記録し、同一内容での自動リトライは行わない（新しい編集が入ったときだけ再試行）。
+        // 失敗（unauthorized・ネットワークエラー等）は dirty のまま error にする。失敗した
+        // スナップショットを記録し、同一内容での自動リトライは行わない
+        // （新しい編集が入ったときだけ再試行）。
         failedSnapshotRef.current = savedSnapshot;
         setAutosaveStatus('error');
       }
-    } catch {
-      // ネットワークエラー等の未捕捉例外。'saving' のまま固まらないよう error へ遷移する。
-      failedSnapshotRef.current = savedSnapshot;
-      setAutosaveStatus('error');
     } finally {
       saveInFlightRef.current = false;
     }
@@ -983,7 +989,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       followUpRef.current = false;
       void runAutosave();
     }
-  }, [activeSheetId]);
+    // saveMutation.mutateAsync は @tanstack/react-query が安定参照として返すため、
+    // 依存配列に加えても再レンダーごとの再生成は起きない。
+  }, [activeSheetId, saveMutation.mutateAsync]);
 
   // dirty になってから AUTOSAVE_DEBOUNCE_MS 編集が止んだら自動保存する
   // （items/title が変わるたびにタイマーを引き直す＝デバウンス）。
@@ -1115,10 +1123,11 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     if (!title) return;
     setShowCreateDialog(false);
     startSheetOp(async () => {
-      const res = await createSheetAction(title, newSheetTemplateId);
-      if (res.ok) {
+      try {
+        const res = await createMutation.mutateAsync({ title, templateId: newSheetTemplateId });
+        await utils.sheet.list.invalidate();
         router.push(`/builder?sheet=${res.sheetId}`);
-      } else {
+      } catch {
         toast.error('シートの作成に失敗しました');
       }
     });
@@ -1131,17 +1140,19 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     }
     if (!window.confirm(`「${sheetTitle}」を削除しますか？この操作は元に戻せません。`)) return;
     startSheetOp(async () => {
-      const res = await deleteSheetAction(sheetId);
-      if (res.ok) {
+      try {
+        await deleteMutation.mutateAsync({ sheetId });
+        // 遷移先の決定は削除直前の一覧から即座に算出する（invalidate の再取得完了を待たない）。
+        // 一覧の表示自体は invalidate() が引き起こす再取得で追従する。
         const remaining = sheets.filter((s) => s.id !== sheetId);
-        setSheets(remaining);
+        await utils.sheet.list.invalidate();
         if (sheetId === activeSheetId) {
           router.push(`/builder?sheet=${remaining[0]?.id ?? ''}`);
         } else {
           router.refresh();
         }
         toast.success('シートを削除しました');
-      } else {
+      } catch {
         toast.error('シートの削除に失敗しました');
       }
     });
@@ -1197,24 +1208,21 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       // 取り違えによる誤 Conflict）を防ぐ。実行中の編集分は追撃自動保存が拾う。
       saveInFlightRef.current = true;
       try {
-        const res = await saveBlocksAction(payload);
-        if (res.ok) {
-          savedRef.current = true;
-          // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
-          // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。返却が無い
-          // 古い経路のみ new Date() にフォールバックする。
-          // Server Actions のシリアライズ境界を越えると Date が文字列化されうるため、
-          // new Date() で必ず Date オブジェクトへ正規化する（.getTime() 比較の破綻防止）。
-          savedUpdatedAtRef.current = res.savedUpdatedAt ? new Date(res.savedUpdatedAt) : new Date();
-          // 保存成功した内容をスナップショットとして記録し、dirty を解除する
-          // （保存中に編集が入っていた場合は dirty のままにする）。
-          lastSavedSnapshotRef.current = savedSnapshot;
-          setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
-          setAutosaveStatus('idle');
-          toast.success('保存しました');
-        } else if (res.error === 'unauthorized') {
+        const result = await saveMutation.mutateAsync(payload);
+        savedRef.current = true;
+        // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
+        // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。
+        savedUpdatedAtRef.current = new Date(result.updatedAt);
+        // 保存成功した内容をスナップショットとして記録し、dirty を解除する
+        // （保存中に編集が入っていた場合は dirty のままにする）。
+        lastSavedSnapshotRef.current = savedSnapshot;
+        setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
+        setAutosaveStatus('idle');
+        toast.success('保存しました');
+      } catch (err) {
+        if (err instanceof TRPCClientError && err.data?.code === 'UNAUTHORIZED') {
           toast.error('セッションが切れました。再度認証してください。');
-        } else if (res.error === 'conflict') {
+        } else if (err instanceof TRPCClientError && err.data?.code === 'CONFLICT') {
           // 手動保存で競合を検出した場合も自動保存を恒久停止する
           // （直後の自動保存が同じ競合を繰り返し踏むのを防ぐ）。
           autosaveStoppedRef.current = true;
@@ -1230,8 +1238,6 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         } else {
           toast.error('保存に失敗しました');
         }
-      } catch {
-        toast.error('保存に失敗しました');
       } finally {
         saveInFlightRef.current = false;
       }

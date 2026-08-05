@@ -1,10 +1,11 @@
+import { TRPCError } from '@trpc/server';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';
-import { getCachedSheet } from '@/server/sheets-cache';
+import { isValidSheetPath, type SheetContent } from '@/server/github-sheets';
+import { createServerCaller } from '@/server/trpc/caller';
 import { requireViewer } from '@/server/viewer-gate';
 
 interface PageProps {
@@ -25,12 +26,18 @@ export default async function ComparePage({ searchParams }: PageProps) {
     redirect('/view');
   }
 
-  let sheetA: Awaited<ReturnType<typeof getCachedSheet>>;
-  let sheetB: Awaited<ReturnType<typeof getCachedSheet>>;
+  let sheetA: SheetContent;
+  let sheetB: SheetContent;
   try {
-    [sheetA, sheetB] = await Promise.all([getCachedSheet(a), getCachedSheet(b)]);
+    const caller = await createServerCaller();
+    [sheetA, sheetB] = await Promise.all([
+      caller.githubSheet.byPath({ path: a }),
+      caller.githubSheet.byPath({ path: b }),
+    ]);
   } catch (err) {
-    if (err instanceof SheetNotFoundError) notFound();
+    // tRPC procedure は throw を無条件で TRPCError にラップするため、元の SheetNotFoundError
+    // ではなく code: 'NOT_FOUND' で判定する（githubSheet.byPath 側のコメント参照）。
+    if (err instanceof TRPCError && err.code === 'NOT_FOUND') notFound();
     // GitHub 連携の環境変数が未設定の場合は 500 で落とさず、原因の分かる案内を表示する。
     if (err instanceof Error && err.message.includes('Missing required GitHub env vars')) {
       return (
