@@ -37,5 +37,6 @@ export async function POST(req: NextRequest) {
   // { expire: 0 } で即時失効（次リクエストはブロッキング再検証）を明示する。
   // 空の {} は expire 未指定＝即時失効の保証が無く、本番で無効化されない不具合があった。
   revalidateTag('sheets', { expire: 0 });
-  return NextResponse.json({ ok: true, revalidated: 'sheets' });
+  revalidateTag('db-sheet', { expire: 0 });
+  return NextResponse.json({ ok: true, revalidated: ['sheets', 'db-sheet'] });
 }
