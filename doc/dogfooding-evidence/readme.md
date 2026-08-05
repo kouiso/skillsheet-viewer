@@ -19,6 +19,13 @@
 つまり結果ドキュメントが `round12/B-2-topbar.json` と書いているものは `round12-b-2-topbar.json` にある。
 1 巡目だけ `dogfooding/` 直下だったので接頭辞が無い（`report.json` など）。
 
+## `harness/` — 測定に使ったスクリプト
+
+各巡で実際に走らせた Playwright / Node のスクリプト 43 本。「どう測ったか」を後から追えるようにコミットしている。
+実行環境に依存する絶対パスは `<REPO>` / `<SCRATCH>` / `<SKILL_SHEET_REPO>` に置き換えてあるので、そのままでは動かない。
+再現するときは自分の環境のパスに直し、`.env.local` 相当（`DATABASE_URL` / `VIEWER_CODE` / `E2E_EMAIL` / `E2E_PASSWORD` /
+`SKILLSHEET_OWNER_ID`）を環境変数で渡す。
+
 ## 伏せ字
 
 サーバーログに出ていた Better Auth のオーナー ID は `<OWNER_ID>` に置換した。
