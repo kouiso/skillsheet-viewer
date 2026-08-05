@@ -4,7 +4,7 @@ import { expect, type Page, test } from '@playwright/test';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
-const reportDir = '/home/ubuntu/dogfood-report/playwright-screenshots';
+const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
 
 async function login(page: Page) {
   await page.goto('/login');
