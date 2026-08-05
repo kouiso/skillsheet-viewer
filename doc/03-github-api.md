@@ -60,21 +60,26 @@ export const blocks = pgTable('blocks', {
 各ブロックは `type` に応じて Markdown 文字列へ変換される（`tableBlockToMarkdown` / `skillsBlockToMarkdown` / `experienceBlockToMarkdown` / `profileBlockToMarkdown` / `statsBlockToMarkdown` / `projectBlockToMarkdown`）。`blocksToMarkdown` はブロック配列を `order` 昇順で連結する。
 
 ```ts
-// packages/db/src/blocks.ts（抜粋）
+// packages/db/src/blocks.ts（抜粋・要約。実際は隣接ブロックの区切り規則 blockJoinSeparator も適用する）
 export function blocksToMarkdown(blocks: Block[]): string {
-  return [...blocks].sort((a, b) => a.order - b.order).map(blockToMarkdown).join('\n');
+  return [...blocks]
+    .filter((b) => !isBlockInputEmpty(b)) // 中身が空のブロックは連結対象から除く（描画時のスキップ）
+    .sort((a, b) => a.order - b.order)
+    .map(blockToMarkdown)
+    .join('\n');
 }
 ```
 
 - 表への変換では `escapeCell()` がセル内改行を空白へ、`|` をエスケープし、空セルを半角スペース 1 つに整えて GFM 表の崩れを防ぐ。列揃えは `:---` / `:---:` / `---:` で表現する。
-- 型システム上到達不能な未知 type は `''` を返し、他ブロックを壊さない。
+- `blockToMarkdown` は型システム上到達不能な未知 type を `''` として扱い、他ブロックを壊さない。`isBlockInputEmpty` も未知 type を空として扱うが、こちらは DB 由来の壊れた/未知の行を実際に受け取りうる実行時の防御であり、両者とも単なる型システムの建前ではない。
+- **中身が空のブロックは `blocksToMarkdown` の連結対象から除かれる** — テンプレの空スカフォールドが `### （現在）` のような孤立セクションとして PDF や `/view/db` に出るのを防ぐ（issue #128）。ブロック自体は DB に残るので、Web の viewer（`groupBlocks`）でも同じ基準（`isBlockInputEmpty`）でスキップしている。
 
 table / experience は Markdown 経由で描画するが、skills / profile / stats / project は Web 側で専用の React コンポーネントとして描画される（[04](04-markdown-display.md) 参照）。PDF は mdast → `@react-pdf` パイプラインを共有する。
 
 ### バリデータと splitMarkdownIntoBlocks
 
 - 各ブロックには `isMarkdownBlockData` などの軽量型ガードがあり、`isBlockInput()` がクライアント由来の untyped 入力を検証する（zod を入れず DB パッケージの依存を増やさない方針）。
-- `splitMarkdownIntoBlocks()` は Markdown 文書をレベル 2〜4 見出しや `<details>` の境界で分割し、無損失な `markdown` ブロック配列にする。連結すると元文書に一致する（シード用）。
+- `splitMarkdownIntoBlocks()` は Markdown 文書をレベル 2〜4 見出しや `<details>` の境界で分割し、`markdown` ブロック配列にする（シード用）。連結（`blocksToMarkdown`）すると、空白のみのセグメント（分割ノイズ。シード経路で事前に除いている）を除いて元文書とおおむね一致する。
 
 ---
 
@@ -136,7 +141,7 @@ return db.transaction(async (tx) => {
 - **A2 所有者検証**: `sheetId` 指定時に `id + ownerId` を同一トランザクション内で照合し、他人のシートを破壊しない。
 - **A3 楽観ロック**: `expectedUpdatedAt` を渡すと、`for('update')` で行ロックを取り、現在の `updatedAt` がそれより新しい場合に `ConflictError`（`skillsheet.ts` で定義）を throw する。ロストアップデートを防ぐ。
 - **A4**: 保存後のサーバー時刻 `updatedAt` を返す。クライアントはこれを次回の `expectedUpdatedAt` に使い、時計ズレによる誤 Conflict を防ぐ。
-- 保存前に `normalizeBlockInput()`（markdown 末尾空白除去・table 行の列数正規化）と `isBlockInputEmpty()` による空ブロック除去を行う。
+- 保存前に `normalizeBlockInput()`（markdown 末尾空白除去・table 行の列数正規化）だけを行う。**`isBlockInputEmpty()` は永続化フィルタとして使わない** — テンプレの空ブロック（入力用スカフォールド）やユーザーが「追加」したばかりの空ブロックも、中身が空のまま insert される。空判定は描画時（`blocksToMarkdown` / Web の `groupBlocks`）と「シート全体が空」ガード（自動保存スキップ・全消し保存の confirm）でのみ使う（issue #128 / `.gemini/styleguide.md` [K]）。
 
 `createSheet()` / `deleteSheet()` も同様にオーナーを検証し、`createSheet` はシートとブロックの挿入を単一トランザクションで囲む。
 

@@ -12,7 +12,7 @@ import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 
 import type { Block } from '@skillsheet/db/blocks';
-import { experienceBlockToMarkdown, tableBlockToMarkdown } from '@skillsheet/db/blocks';
+import { experienceBlockToMarkdown, isBlockInputEmpty, tableBlockToMarkdown } from '@skillsheet/db/blocks';
 import { useActiveHeading } from '@/hooks/use-active-heading';
 import { ProfileIntro } from './blocks/profile-intro';
 import { ProjectSection } from './blocks/project-section';
@@ -208,8 +208,13 @@ function FadeUpSection({ children }: { children: ReactNode }) {
 function groupBlocks(blocks: Block[]): RenderGroup[] {
   const groups: RenderGroup[] = [];
   for (const block of blocks) {
-    // SkillMatrix は空の skills ブロックを null 描画するため、グループにも含めない
-    // （含めると中身が空の枠線コンテナだけが描画されてしまう）。
+    // 中身が空のブロックは描画しない（issue #128: テンプレの空 profile/experience/table が
+    // 迷子の見出しや空枠線だけの箱として出るのを防ぐ）。ブロック自体は DB に残る —
+    // 空判定はあくまで描画時のスキップであり、保存を妨げるものではない。
+    if (isBlockInputEmpty(block)) continue;
+    // SkillMatrix は category ありでも skills が 0 件なら null 描画するため、グループにも
+    // 含めない（isBlockInputEmpty は category 空 かつ skills 0 件の場合のみ空とみなすので、
+    // この判定は別途必要）。含めると中身が空の枠線コンテナだけが描画されてしまう。
     if (block.type === 'skills' && block.data.skills.length === 0) continue;
     const lastGroup = groups.at(-1);
     if (block.type === 'skills') {
@@ -232,6 +237,10 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
   const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
   // project ブロックを含むシートは「外枠カード無し・セクションが縦に並ぶダッシュボード」レイアウトにする。
   // markdown/table/skills のみの既存シートは従来の単一カード＋max-w-4xlを維持する。
+  // 意図的に raw blocks（中身が空でも）で判定する — ダッシュボードテンプレはレイアウトの
+  // 意図そのものが project ブロックの有無なので、中身の空判定（isBlockInputEmpty）を
+  // 通さない。sheet-view-client.tsx の同名ロジックと必ず揃えること（片方だけ直すと
+  // ヘッダー/レイアウトがページ間で食い違う）。
   const isDashboard = useMemo(() => (blocks ?? []).some((b) => b.type === 'project'), [blocks]);
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);

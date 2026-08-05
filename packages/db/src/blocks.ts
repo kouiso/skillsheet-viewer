@@ -366,9 +366,20 @@ export function normalizeTableBlockData(data: TableBlockData): TableBlockData {
 }
 
 /**
- * 「空ブロック」判定（保存時の drop と、全消し保存ガードで共有する単一の真実）。
+ * 「中身が空のブロック」判定。**永続化フィルタではない**（ここ重要）。
+ *
+ * ブロックの存在と順序はテンプレやユーザーの「追加」操作が作った構造であり、
+ * 中身が空かどうかは描画の都合でしかない。両者を混同して保存前に drop すると、
+ * テンプレの入力用スカフォールドが消えて見出しだけが残る（issue #128 / PR#60）。
+ * `.gemini/styleguide.md` の [K] 過剰フィルタによるデータ脱落 を参照。
+ *
+ * 用途は 2 つだけ:
+ * 1. 描画時のスキップ（blocksToMarkdown / viewer の groupBlocks / builder プレビュー）
+ * 2. 「シート全体に中身がない」ガード（自動保存スキップ・手動保存の confirm）
+ *
  * markdown: trim して空 / table: 列ゼロ、または（全列 label 空 かつ 全セル空）。
  * skills: カテゴリ空 かつ スキル 0 件。experience: 会社名・職種・業務内容が全て空。
+ * 未知 type は空とみなす（DB 由来の壊れた行で描画を落とさないため）。
  */
 export function isBlockInputEmpty(block: BlockInput): boolean {
   if (block.type === 'markdown') return block.data.markdown.trim().length === 0;
@@ -379,16 +390,35 @@ export function isBlockInputEmpty(block: BlockInput): boolean {
     const { company, role, description } = block.data;
     return company.trim().length === 0 && role.trim().length === 0 && description.trim().length === 0;
   }
-  // profile / stats / project は「存在するブロック」自体がセマンティックな枠組み。
-  // テンプレートから空のまま作成されても、専用エディタで後から入力されることを前提に
-  // 空判定を false にする。削除は builder 上の明示的な削除ボタンで行う。
-  if (block.type === 'profile' || block.type === 'stats' || block.type === 'project') return false;
-
-  const { columns, rows } = block.data;
-  if (columns.length === 0) return true;
-  const allLabelsEmpty = columns.every((c) => c.label.trim() === '');
-  const allCellsEmpty = rows.every((row) => row.every((cell) => cell.trim() === ''));
-  return allLabelsEmpty && allCellsEmpty;
+  if (block.type === 'profile') {
+    const { name, title, pr, strengths, meta, company } = block.data;
+    const metaEmpty = Object.values(meta ?? {}).every((v) => !v || String(v).trim().length === 0);
+    return (
+      name.trim().length === 0 &&
+      title.trim().length === 0 &&
+      pr.trim().length === 0 &&
+      strengths.every((s) => s.trim().length === 0) &&
+      metaEmpty &&
+      (!company || company.trim().length === 0)
+    );
+  }
+  if (block.type === 'stats') return block.data.items.length === 0;
+  if (block.type === 'project') {
+    return block.data.companies.length === 0 && block.data.items.length === 0;
+  }
+  if (block.type === 'table') {
+    const { columns, rows } = block.data;
+    if (columns.length === 0) return true;
+    const allLabelsEmpty = columns.every((c) => c.label.trim() === '');
+    const allCellsEmpty = rows.every((row) => row.every((cell) => cell.trim() === ''));
+    return allLabelsEmpty && allCellsEmpty;
+  }
+  // ここに到達するのは (a) BlockInput に新しい type を足したのに分岐を書き忘れた場合
+  // （このコンパイル時 never 代入が型エラーで検知する）、(b) DB 由来の壊れた/未知の type
+  // （実行時は型を素通りするため、この行が実際に走って false スロー無しで空扱いにする）。
+  const exhaustiveCheck: never = block;
+  void exhaustiveCheck;
+  return true;
 }
 
 // --- markdown 変換 ---------------------------------------------------------
@@ -560,7 +590,8 @@ const BLOCK_BOUNDARY = /^(?:#{2,4}\s|<details[\s>])/;
 
 /**
  * Markdown 文書を構造境界でブロック配列へ分割する（テキストは無損失）。
- * 連結（blocksToMarkdown）すると元の文書と一致する。シードは markdown ブロックのみ生成。
+ * シードは markdown ブロックのみ生成。連結（blocksToMarkdown）は中身が空のセグメントを
+ * 除いて元の文書とおおむね一致する（空白のみの区間は復元されない）。
  */
 export function splitMarkdownIntoBlocks(markdown: string): MarkdownBlockData[] {
   const lines = markdown.split('\n');
@@ -639,9 +670,13 @@ export function blockJoinSeparator(prevType: BlockType, curType: BlockType, curM
 /**
  * ブロック配列を order 昇順で 1 つの Markdown 文書へ連結する（type 別に変換）。
  * 連結規則は blockJoinSeparator に一元化している（クライアントの assembleMarkdown と共有）。
+ *
+ * 中身が空のブロック（isBlockInputEmpty）は連結前に除く。並べ替え前に filter することで、
+ * 直前ブロック判定（blockJoinSeparator / i === 0 の先頭判定）がスキップされた要素を
+ * 指さないようにしている（ループ内 continue だとこれが壊れる）。
  */
 export function blocksToMarkdown(blocks: Block[]): string {
-  const sorted = [...blocks].sort((a, b) => a.order - b.order);
+  const sorted = [...blocks].filter((b) => !isBlockInputEmpty(b)).sort((a, b) => a.order - b.order);
   let result = '';
   for (let i = 0; i < sorted.length; i++) {
     const markdown = blockToMarkdown(sorted[i]);
