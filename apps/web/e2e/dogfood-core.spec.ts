@@ -54,10 +54,24 @@ let richSheetId = '';
 let richSheetTitle = '';
 let newSheetId = '';
 
+async function revalidateCache() {
+  const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
+  const secret = process.env.REVALIDATE_SECRET ?? 'revalidate-local';
+  const res = await fetch(`${baseURL}/api/revalidate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  if (!res.ok) {
+    console.warn('revalidate failed:', res.status, await res.text());
+  }
+}
+
 test.beforeAll(async () => {
   fs.mkdirSync(reportDir, { recursive: true });
   richSheetTitle = `Dogfood Core Sheet ${Date.now()}`;
   richSheetId = await createSheet(richSheetTitle, buildConsoleDemoBlocks());
+  // DB に直接 insert したため、/view の unstable_cache を即無効化する
+  await revalidateCache();
 });
 
 test.afterAll(async () => {

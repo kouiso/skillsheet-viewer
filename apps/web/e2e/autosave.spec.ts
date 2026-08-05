@@ -1,6 +1,6 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
-import { listSheets, saveSkillSheetBlocks } from '@skillsheet/db';
+import { createSheet, listSheets, saveSkillSheetBlocks } from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
@@ -13,12 +13,12 @@ let e2eSheetId = '';
 
 async function resetE2ESheet() {
   const sheets = await listSheets();
-  const sheet = sheets.find((s) => s.title === 'E2E Test Sheet');
-  if (!sheet) throw new Error('E2E Test Sheet not found');
+  const existing = sheets.find((s) => s.title === 'E2E Test Sheet');
+  const sheetId = existing?.id ?? (await createSheet('E2E Test Sheet'));
   const initialBlocks = [{ type: 'markdown' as const, data: { markdown: 'E2E テスト用' as const } }];
-  await saveSkillSheetBlocks(sheet.title, initialBlocks, sheet.id);
-  e2eSheetId = sheet.id;
-  return sheet.id;
+  await saveSkillSheetBlocks('E2E Test Sheet', initialBlocks, sheetId);
+  e2eSheetId = sheetId;
+  return sheetId;
 }
 
 async function login(page: Page) {
