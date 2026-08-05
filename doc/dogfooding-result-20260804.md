@@ -23,6 +23,10 @@
 **B-10 / B-13b / B-15b の 3 ケース**で、これはこの環境の `GITHUB_TOKEN` がプロキシ用
 プレースホルダで実トークンを用意できないことによる。
 
+このほか、`/view/db` の DB 取得失敗フォールバック（E-4 の `console.error` 分岐と
+E-5 のフォールバック UI）が **未実施**。画面自体は E-1 の 8 ルートに含めて全ビューポート・
+両テーマで撮っているが、DB が正常だったため異常系の分岐だけ通っていない。
+
 ## 元データとの件数突合
 
 | 項目 | 元データ `skillsheet.md` | 正本 DB | 画面 |
@@ -46,7 +50,7 @@
 | A-4 ログイン誤り | **FAIL** | 文言は想定どおりだが A-2 と同じエラーバナーのコントラスト（S-4 / #152） |
 | A-5 ログイン正 | PASS | `/builder` へ遷移 |
 | A-6 open redirect | PASS | `next=//evil.example.com` でも `/builder` に留まる |
-| A-7 ログアウト | PASS | `POST /api/logout` が 200、その後 `/view` へ行くと `/viewer-auth` に戻される |
+| A-7 ログアウト | PASS | 閲覧コードだけで認証した独立コンテキストで実行。`POST /api/logout` が 200、その後 `/view` へ行くと `/viewer-auth` に戻される。編集者セッションを持ったまま実行するとゲートは効かない（`requireViewer()` が `isEditor()` でも通すため）ので、この前提を外さないこと |
 | B-1 シート一覧 | PASS | 件数・タイトル・更新日が DB と一致。検索で 0 件にすると「シートが見つかりません」が出る |
 | B-2 ダッシュボード初期表示 | **FAIL** | 320px で横スクロール（L-1 / #143） |
 | B-3 profile 突合 | **FAIL** | 所属・性別・資格・得意分野・得意業務が欠落、自己PR も大幅短縮（D-2 / #140） |
@@ -88,11 +92,11 @@
 | D-3 ページ切れ | **FAIL** | 見出しと本体が改ページで分断（P-2 / #147） |
 | D-4 日本語フォント | **FAIL** | 豆腐は無いが不正なハイフンが入る（P-1 / #146） |
 | D-5 hidden 除外 | PASS | 会社「個人開発」を非表示にすると PDF が 19 → 18 ページになり、HorseManager / HorseFeeders / 個人開発 の出現回数がいずれも 0 になる |
-| E-1 全画面 × 4VP × 2テーマ | **FAIL** | 8 ルート × 4 ビューポート × 2 テーマを撮影。320px の横スクロール（L-1 / #143）を検出 |
+| E-1 全画面 × 4VP × 2テーマ | **FAIL** | 8 ルート × 4 ビューポート × 2 テーマを撮影。320px の横スクロール（L-1 / #143）を検出。ルートの内訳は `/view` / `/view/db` / `/view/db/:id` / `/view/db/<存在しない UUID>` / `/builder` / `/builder/preview` / `/compare` / 404（`/this-route-does-not-exist`）。`/view/db` の証跡は 1 巡目のハーネスが `B-15-*` の名前で保存しており、ファイル名とケース ID が食い違っている |
 | E-2 dark テーマ | PASS | 全画面で文字は読める。面・境界のコントラストは「棄却した主な指摘」のとおり意図的なトークン設計 |
 | E-3 キーボード操作 | **FAIL** | Tab で 12 要素に到達できるが、フォーカスリングが出るのは 3 要素だけ（S-6 / #156） |
-| E-4 console.error | **FAIL** | DB 経路の全画面ではゼロ。ただし `/view/[path]` は `error.tsx` が `console.error('Route error boundary:', err)` を出すため 2 件（U-7 と同根） |
-| E-5 エラー画面 | **FAIL** | U-1 |
+| E-4 console.error | **FAIL** | DB 経路の全画面ではゼロ。ただし `/view/[path]` は `error.tsx` が `console.error('Route error boundary:', err)` を出すため 2 件（U-7 と同根）。なお `/view/db` は DB 取得に失敗したときだけ `console.error('Failed to load DB skill sheet:', err)` を出す分岐を持つが、今回は DB が正常だったため**この分岐は未実行**（下記参照） |
+| E-5 エラー画面 | **FAIL** | U-1。加えて `/view/db` の DB 失敗フォールバック UI（「DB版スキルシートを表示できません」）は **未実施**。`DATABASE_URL` / `SKILLSHEET_OWNER_ID` を外すかテーブルを落とさないと再現しないため、次回はこの条件を作って確認する |
 
 ## 逸脱一覧
 
