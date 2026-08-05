@@ -10,7 +10,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { splitMarkdownIntoBlocks } from '../src/blocks';
+import { isBlockInputEmpty, splitMarkdownIntoBlocks } from '../src/blocks';
 import { createSheet, deleteSheet, fetchMarkdownFromGitHub, getGitHubSeedConfig, listSheets } from '../src/skillsheet';
 
 function loadWebEnvLocal(): void {
@@ -43,7 +43,9 @@ async function main() {
 
   console.log(`Fetching ${config.owner}/${config.repo}/skillsheet.md ...`);
   const markdown = await fetchMarkdownFromGitHub({ ...config, filePath: 'skillsheet.md' });
-  const segments = splitMarkdownIntoBlocks(markdown);
+  // 分割で生じる空白のみのセグメントは分割ノイズなので除く（createSheet はもう
+  // 空ブロックを落とさないため、ここで意図的にフィルタする必要がある。issue #128）。
+  const segments = splitMarkdownIntoBlocks(markdown).filter((data) => !isBlockInputEmpty({ type: 'markdown', data }));
   console.log(`Split into ${segments.length} markdown blocks`);
 
   const blockInputs = segments.map((data) => ({ type: 'markdown' as const, data }));
