@@ -372,13 +372,16 @@ describe('BuilderClient 自動保存', () => {
     );
   });
 
-  it('案件エディタタブを開いただけ（空 project ブロックの自動追加）では dirty にならず自動保存されない', async () => {
+  it('案件エディタタブを開いただけでは空 project ブロックが追加されず、dirty にも自動保存にもならない', async () => {
+    // ensureProjectBlock 廃止の回帰テスト（issue #128）。ProjectEditor は data 未指定時に
+    // {companies:[],items:[]} へフォールバックするため、タブを開くだけではブロックを
+    // 追加する必要がない。追加していれば（サーバがもう空ブロックを drop しないため）
+    // dirty になり、放置後に自動保存されてしまう。
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     fireEvent.click(screen.getByRole('button', { name: '案件エディタ' }));
     await act(async () => {
       vi.advanceTimersByTime(5000);
     });
-    // 空 project ブロックはサーバ保存時に drop される＝保存結果が変わらないため dirty にしない
     expect(mockSave).not.toHaveBeenCalled();
     expect(screen.queryByText('未保存の変更')).not.toBeInTheDocument();
   });

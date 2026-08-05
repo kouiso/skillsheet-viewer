@@ -18,6 +18,8 @@ const REVOKE_OBJECT_URL_DELAY_MS = 100;
 const SheetViewClient = ({ title, content, blocks }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
+  // 意図的に raw blocks（中身が空でも）で判定する — skill-sheet-viewer.tsx の isDashboard と
+  // 必ず揃えること（片方だけ直すとヘッダー/レイアウトがページ間で食い違う）。
   const isDashboard = useMemo(() => (blocks ?? []).some((b) => b.type === 'project'), [blocks]);
   // ビュー表示のON/OFF状態。初期値は全ビューON（トグルはダッシュボードのみ）。
   const [views, setViews] = useState<ViewKey[]>(() => [...ALL_VIEW_KEYS]);

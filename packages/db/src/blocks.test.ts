@@ -256,6 +256,38 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
     expect(md).toContain('### 株式会社サンプル');
     expect(md).toContain('フロントエンドエンジニア');
   });
+
+  it('中身が空のブロックは連結対象から除く（issue #128: 空 experience が「（現在）」を出さない）', () => {
+    const blocks: Block[] = [
+      { id: 'm', type: 'markdown', order: 0, data: { markdown: '## 職務経歴' } },
+      {
+        id: 'e',
+        type: 'experience',
+        order: 1,
+        data: { company: '', startDate: '', endDate: '', role: '', description: '' },
+      },
+    ];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toBe('## 職務経歴');
+    expect(md).not.toContain('現在');
+  });
+
+  it('空ブロックを除いても、直前ブロック判定（先頭 / セパレータ）が壊れない', () => {
+    // 空ブロックが先頭に来ても、残る先頭要素が正しく i===0 として扱われることを確認する
+    // （filter を sort の前・ループの外でやる必要があることの回帰テスト）。
+    const blocks: Block[] = [
+      {
+        id: 'e',
+        type: 'experience',
+        order: 0,
+        data: { company: '', startDate: '', endDate: '', role: '', description: '' },
+      },
+      { id: 'm1', type: 'markdown', order: 1, data: { markdown: '## 見出し' } },
+      { id: 't', type: 'table', order: 2, data: TABLE },
+    ];
+    const md = blocksToMarkdown(blocks);
+    expect(md).toBe(['## 見出し', '', '| 左 | 中 | 右 |', '| :--- | :---: | ---: |', '| a | b | c |'].join('\n'));
+  });
 });
 
 describe('blockJoinSeparator — 連結セパレータの単一の真実', () => {
