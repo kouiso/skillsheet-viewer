@@ -1,0 +1,486 @@
+{
+  "e4": {
+    "view-list": {
+      "path": "/view",
+      "status": 200,
+      "finalPath": "/view",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "view-db-list": {
+      "path": "/view/db",
+      "status": 200,
+      "finalPath": "/view/db",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "view-db-sheet": {
+      "path": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+      "status": 200,
+      "finalPath": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "view-db-missing": {
+      "path": "/view/db/00000000-0000-4000-8000-000000000000",
+      "status": 404,
+      "finalPath": "/view/db/00000000-0000-4000-8000-000000000000",
+      "consoleErrors": 1,
+      "samples": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ]
+    },
+    "builder": {
+      "path": "/builder",
+      "status": 200,
+      "finalPath": "/builder",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "builder-preview": {
+      "path": "/builder/preview",
+      "status": 200,
+      "finalPath": "/builder/preview",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "compare": {
+      "path": "/compare",
+      "status": 200,
+      "finalPath": "/view",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "login": {
+      "path": "/login",
+      "status": 200,
+      "finalPath": "/login",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "viewer-auth": {
+      "path": "/viewer-auth",
+      "status": 200,
+      "finalPath": "/viewer-auth",
+      "consoleErrors": 0,
+      "samples": []
+    },
+    "view-path": {
+      "path": "/view/skillsheet.md",
+      "status": 500,
+      "finalPath": "/view/skillsheet.md",
+      "consoleErrors": 3,
+      "samples": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ]
+    },
+    "not-found": {
+      "path": "/this-route-does-not-exist",
+      "status": 404,
+      "finalPath": "/this-route-does-not-exist",
+      "consoleErrors": 1,
+      "samples": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ]
+    }
+  },
+  "e3": {
+    "login": {
+      "path": "/login",
+      "tabStops": 4,
+      "uniqueStops": 3,
+      "withRing": 3,
+      "stops": [
+        {
+          "tag": "input",
+          "label": "",
+          "ring": true
+        },
+        {
+          "tag": "input",
+          "label": "",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "ログイン",
+          "ring": false
+        },
+        {
+          "tag": "a",
+          "label": "閲覧コード認証",
+          "ring": true
+        }
+      ]
+    },
+    "viewer-auth": {
+      "path": "/viewer-auth",
+      "tabStops": 2,
+      "uniqueStops": 2,
+      "withRing": 1,
+      "stops": [
+        {
+          "tag": "input",
+          "label": "",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "認証",
+          "ring": false
+        }
+      ]
+    },
+    "view-db-sheet": {
+      "path": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+      "tabStops": 30,
+      "uniqueStops": 30,
+      "withRing": 4,
+      "stops": [
+        {
+          "tag": "button",
+          "label": "スキルマトリクス",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "工程の俯瞰",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "案件詳細",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "タイムライン",
+          "ring": false
+        },
+        {
+          "tag": "a",
+          "label": "編集／ビルダー",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "PDFダウンロード",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "テーマ切り替え",
+          "ring": true
+        },
+        {
+          "tag": "input",
+          "label": "",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "HTML20",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "TypeScript18",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "Slack15",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "CSS13",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "GitHub13",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "GitHub Actions13",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "SCSS13",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "XD13",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "GCP11",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "Google Chrome11",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "Trello11",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "Docker10",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "Figma10",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "JavaScript10",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "Notion10",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "SpreadSheet10",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "-9",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "Jest9",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "AWS8",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "MySQL8",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "PHP8",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "VSCode8",
+          "ring": false
+        }
+      ]
+    },
+    "view-list": {
+      "path": "/view",
+      "tabStops": 6,
+      "uniqueStops": 5,
+      "withRing": 6,
+      "stops": [
+        {
+          "tag": "a",
+          "label": "編集／ビルダー",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "テーマ切り替え",
+          "ring": true
+        },
+        {
+          "tag": "input",
+          "label": "",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "エンジニアスキルシート更新: 2026/8/5",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "エンジニアスキルシート更新: 2026/8/5",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "Full 1785899040988更新: 2026/8",
+          "ring": true
+        }
+      ]
+    },
+    "builder": {
+      "path": "/builder",
+      "tabStops": 29,
+      "uniqueStops": 24,
+      "withRing": 28,
+      "stops": [
+        {
+          "tag": "button",
+          "label": "プレビューを別ウィンドウで開く",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "テーマ切り替え",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "バックアップ",
+          "ring": true
+        },
+        {
+          "tag": "a",
+          "label": "閲覧へ",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "保存",
+          "ring": false
+        },
+        {
+          "tag": "button",
+          "label": "新規シート",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "エンジニアスキルシート",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "「エンジニアスキルシート」を削除",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "エンジニアスキルシート",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "「エンジニアスキルシート」を削除",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "Full 1785899040988",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "「Full 1785899040988」を削除",
+          "ring": true
+        },
+        {
+          "tag": "input",
+          "label": "",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "ブロック編集",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "案件エディタ",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "テキスト",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "テーブル",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "ブロックを並べ替え",
+          "ring": true
+        },
+        {
+          "tag": "input",
+          "label": "",
+          "ring": true
+        },
+        {
+          "tag": "input",
+          "label": "スキル1の名称",
+          "ring": true
+        },
+        {
+          "tag": "input",
+          "label": "スキル1の経験年数",
+          "ring": true
+        },
+        {
+          "tag": "select",
+          "label": "習熟度実務経験あり設計可能指導可能基礎知識のみその他",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "スキル1を削除",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "スキルを追加",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "ブロックを削除",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "テキスト",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "テーブル",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "スキル一覧",
+          "ring": true
+        },
+        {
+          "tag": "button",
+          "label": "職務経歴",
+          "ring": true
+        }
+      ]
+    }
+  }
+}

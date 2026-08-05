@@ -46,6 +46,15 @@
     }
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/.next", "!**/dist", "!**/.turbo", "!pnpm-lock.yaml", "!**/*.css"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/dist",
+      "!**/.turbo",
+      "!pnpm-lock.yaml",
+      "!**/*.css",
+      "!doc/dogfooding-evidence"
+    ]
   }
 }

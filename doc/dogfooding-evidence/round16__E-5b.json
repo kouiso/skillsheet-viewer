@@ -1,0 +1,20 @@
+{
+  "view-list": {
+    "path": "/view",
+    "status": 200,
+    "text": "スキルシート一覧 / 一覧の取得に失敗しました。 / 環境変数 DATABASE_URL / SKILLSHEET_OWNER_ID を確認し、pnpm db:migrate を実行してください。",
+    "browserConsoleErrors": 0
+  },
+  "view-db-default": {
+    "path": "/view/db",
+    "status": 200,
+    "text": "DB版スキルシートを表示できません / データベースのセットアップが完了していない可能性があります。以下を確認してください。 / 環境変数 DATABASE_URL と SKILLSHEET_OWNER_ID を設定する / マイグレーションを実行する: pnpm db:migrate",
+    "browserConsoleErrors": 0
+  },
+  "view-db-by-id": {
+    "path": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+    "status": 500,
+    "text": "エラーが発生しました / スキルシートの読み込みに失敗しました。時間をおいて再度お試しください。 / 再試行",
+    "browserConsoleErrors": 3
+  }
+}

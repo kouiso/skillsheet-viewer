@@ -1,0 +1,10 @@
+{
+  "afterDirectOpen": "/viewer-auth",
+  "redirectedToViewerAuth": true,
+  "nextParam": null,
+  "afterAuth": "/view",
+  "backToRequestedSheet": false,
+  "bodyHead": "スキルシート一覧 / エンジニアスキルシート / 更新: 2026/8/5 / エンジニアスキルシート / 更新: 2026/8/5 / Full 1785899040988 / 更新: 2026/8/5 / round14-ブロック2-r14 / 更新: 2026/8/5",
+  "withExplicitNext": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+  "explicitNextWorks": true
+}

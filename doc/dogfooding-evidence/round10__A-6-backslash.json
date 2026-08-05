@@ -1,0 +1,14 @@
+{
+  "finalUrl": "chrome-error://chromewebdata/",
+  "navigations": [
+    "http://127.0.0.1:3210/viewer-auth?next=%2F%5C%2Fevil.example.com",
+    "http://127.0.0.1:3210/viewer-auth?next=%2F%5C%2Fevil.example.com",
+    "chrome-error://chromewebdata/"
+  ],
+  "navigationRequests": [
+    "http://127.0.0.1:3210/viewer-auth?next=%2F%5C%2Fevil.example.com",
+    "http://evil.example.com/",
+    "http://evil.example.com/"
+  ],
+  "reachedExternal": true
+}
