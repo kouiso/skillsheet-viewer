@@ -100,7 +100,7 @@ const cellTextAlign = (align: unknown): 'left' | 'center' | 'right' =>
 
 DB のブロック（[03](03-github-api.md)）を渡す場合、`markdown` / `table` / `experience` は Markdown 文字列に変換して `MarkdownContent` で描画し、`skills` / `profile` / `stats` / `project` は専用の React コンポーネント（`SkillMatrix` / `ProfileIntro` / `StatRow` / `ProjectCard`）で描画する。連続する `skills` ブロックは 1 つのコンテナへグループ化する。本文は `activeId` に依存しないよう `MarkdownContent` を `memo` 化し、スクロールごとの再描画を避けている。
 
-**空ブロックの扱い**: `groupBlocks()`（`skill-sheet-viewer.tsx`）は `isBlockInputEmpty()` で中身が空のブロックを描画対象から除く。DB は空ブロックも保持する（保存時に drop しない、issue #128）ため、この描画時のスキップが「テンプレの空スカフォールドは見出しだけ残らず、何も描画しない」を担保する唯一の場所になる。空 `skills` ブロック（category も空）は `isBlockInputEmpty` に加えて `skills.length === 0` の別チェックもあり、両方必要（`isBlockInputEmpty` は「category 空 **かつ** skills 0 件」でしか空と判定しないため）。
+**空ブロックの扱い**: `groupBlocks()`（`skill-sheet-viewer.tsx`）は `isBlockInputEmpty()` で中身が空のブロックを描画対象から除く。DB は空ブロックも保持する（保存時に drop しない、issue #128）ため、この描画時のスキップが「テンプレの空スカフォールドは見出しだけ残らず、何も描画しない」を担保する唯一の場所になる。`skills` ブロックは `isBlockInputEmpty`（category 空 **かつ** skills 0 件）に加えて `skills.length === 0` 単独の別チェックもある — category が空でなくても skills が 0 件なら `SkillMatrix` が `null` を返すため、空の枠線コンテナだけが描画されるのを防ぐのに必要。
 
 ---
 
