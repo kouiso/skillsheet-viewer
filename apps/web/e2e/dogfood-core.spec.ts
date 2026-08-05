@@ -6,7 +6,7 @@ import { buildConsoleDemoBlocks, createSheet, deleteSheet } from '@skillsheet/db
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
-const reportDir = '/home/ubuntu/dogfood-report/playwright-screenshots';
+const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
 
 const viewports = [
   { name: 'sp-narrow', width: 320, height: 800 },
