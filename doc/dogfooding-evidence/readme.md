@@ -14,7 +14,9 @@
 
 ## ファイル名の付け方
 
-元のパス `test-results/dogfooding/<round>/<name>` を `<round>__<name>` に平坦化している。
+元のパス `test-results/dogfooding/<round>/<name>` を `<round>-<name>` に平坦化し、**全部小文字**に揃えている
+（リポジトリの命名規約が「英語・小文字・単数形・ケバブケース」で、`scripts/check-naming.sh` が CI で検査するため）。
+つまり結果ドキュメントが `round12/B-2-topbar.json` と書いているものは `round12-b-2-topbar.json` にある。
 1 巡目だけ `dogfooding/` 直下だったので接頭辞が無い（`report.json` など）。
 
 ## 伏せ字
