@@ -379,22 +379,11 @@ export function isBlockInputEmpty(block: BlockInput): boolean {
     const { company, role, description } = block.data;
     return company.trim().length === 0 && role.trim().length === 0 && description.trim().length === 0;
   }
-  if (block.type === 'profile') {
-    const { name, title, pr, strengths, meta, company } = block.data;
-    const metaEmpty = Object.values(meta ?? {}).every((v) => !v || String(v).trim().length === 0);
-    return (
-      name.trim().length === 0 &&
-      title.trim().length === 0 &&
-      pr.trim().length === 0 &&
-      strengths.every((s) => s.trim().length === 0) &&
-      metaEmpty &&
-      (!company || company.trim().length === 0)
-    );
-  }
-  if (block.type === 'stats') return block.data.items.length === 0;
-  if (block.type === 'project') {
-    return block.data.companies.length === 0 && block.data.items.length === 0;
-  }
+  // profile / stats / project は「存在するブロック」自体がセマンティックな枠組み。
+  // テンプレートから空のまま作成されても、専用エディタで後から入力されることを前提に
+  // 空判定を false にする。削除は builder 上の明示的な削除ボタンで行う。
+  if (block.type === 'profile' || block.type === 'stats' || block.type === 'project') return false;
+
   const { columns, rows } = block.data;
   if (columns.length === 0) return true;
   const allLabelsEmpty = columns.every((c) => c.label.trim() === '');
