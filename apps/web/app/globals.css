@@ -346,6 +346,10 @@ body {
 .chip {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.4;
@@ -390,7 +394,11 @@ body {
 .softbtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
+  box-sizing: border-box;
+  min-width: 44px;
+  min-height: 44px;
   font-family: var(--font-sans);
   font-size: 13px;
   line-height: 1.4;
