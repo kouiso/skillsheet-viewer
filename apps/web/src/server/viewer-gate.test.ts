@@ -15,13 +15,37 @@ vi.mock('@/server/session', () => ({
 }));
 vi.mock('@/server/auth-gate', () => ({ isEditor: () => isEditorMock() }));
 
-import { requireViewer } from './viewer-gate';
+import { isViewer, requireViewer } from './viewer-gate';
 
 beforeEach(() => {
   cookiesGet.mockReset();
   verifyMock.mockReset();
   isEditorMock.mockReset();
   redirectMock.mockClear();
+});
+
+describe('isViewer', () => {
+  it('有効な閲覧 cookie があれば true を返す（isEditor は評価しない）', async () => {
+    cookiesGet.mockReturnValue({ value: 'tok' });
+    verifyMock.mockReturnValue(true);
+    await expect(isViewer()).resolves.toBe(true);
+    expect(isEditorMock).not.toHaveBeenCalled();
+  });
+
+  it('cookie が無効でも isEditor が true なら true を返す', async () => {
+    cookiesGet.mockReturnValue(undefined);
+    verifyMock.mockReturnValue(false);
+    isEditorMock.mockResolvedValue(true);
+    await expect(isViewer()).resolves.toBe(true);
+  });
+
+  it('cookie 無効かつ非編集者なら false を返す（redirect しない）', async () => {
+    cookiesGet.mockReturnValue(undefined);
+    verifyMock.mockReturnValue(false);
+    isEditorMock.mockResolvedValue(false);
+    await expect(isViewer()).resolves.toBe(false);
+    expect(redirectMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('requireViewer', () => {

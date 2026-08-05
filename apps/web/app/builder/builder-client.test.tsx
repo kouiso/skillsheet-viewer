@@ -1,15 +1,34 @@
 import type { Block } from '@skillsheet/db/blocks';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { TRPCClientError } from '@trpc/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
 
-const mockSave = vi.fn().mockResolvedValue({ ok: true });
-vi.mock('./actions', () => ({
-  saveBlocksAction: (payload: { title: string; blocks: unknown[]; sheetId?: string }) => mockSave(payload),
-  createSheetAction: vi.fn().mockResolvedValue({ ok: true, sheetId: 'new-id' }),
-  deleteSheetAction: vi.fn().mockResolvedValue({ ok: true }),
+// TRPCClientError.data.code を実クラスで組み立てる（instanceof チェックを本物にするため）。
+function trpcClientError(code: string): TRPCClientError<never> {
+  return new TRPCClientError(code, { result: { error: { data: { code } } } } as never);
+}
+
+const mockSave = vi.fn().mockResolvedValue({ updatedAt: new Date() });
+const mockCreate = vi.fn().mockResolvedValue({ sheetId: 'new-id' });
+const mockDelete = vi.fn().mockResolvedValue({ ok: true });
+const mockInvalidate = vi.fn().mockResolvedValue(undefined);
+// builder-client.tsx は trpc.sheet.*.useMutation().mutateAsync(...) と
+// trpc.sheet.list.useQuery(undefined, { initialData }) / trpc.useUtils() を呼ぶため、
+// フックが最小限の形を返すようモックする。useQuery は initialData をそのまま返せば十分
+// （このテストでは一覧の再取得タイミングそのものは検証しない）。
+vi.mock('@/lib/trpc-client', () => ({
+  trpc: {
+    sheet: {
+      save: { useMutation: () => ({ mutateAsync: mockSave }) },
+      create: { useMutation: () => ({ mutateAsync: mockCreate }) },
+      delete: { useMutation: () => ({ mutateAsync: mockDelete }) },
+      list: { useQuery: (_input: unknown, opts: { initialData: unknown }) => ({ data: opts.initialData }) },
+    },
+    useUtils: () => ({ sheet: { list: { invalidate: mockInvalidate } } }),
+  },
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -53,7 +72,7 @@ describe('BuilderClient', () => {
     expect(areas[0].value).toBe('## B');
   });
 
-  it('保存ボタンで {title, blocks, sheetId} が saveBlocksAction に渡る', async () => {
+  it('保存ボタンで {title, blocks, sheetId} が保存 mutation に渡る', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /保存/ }));
@@ -263,7 +282,7 @@ describe('BuilderClient 自動保存', () => {
   });
 
   it('保存の実行中に編集が入ると、完了後にちょうど 1 回だけ追撃保存する', async () => {
-    let resolveFirst!: (value: { ok: boolean }) => void;
+    let resolveFirst!: (value: { updatedAt: Date }) => void;
     mockSave.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -286,7 +305,7 @@ describe('BuilderClient 自動保存', () => {
     expect(mockSave).toHaveBeenCalledTimes(1);
     // 1 回目が完了すると追撃保存がちょうど 1 回走り、保存中の編集分が含まれる
     await act(async () => {
-      resolveFirst({ ok: true });
+      resolveFirst({ updatedAt: new Date() });
     });
     expect(mockSave).toHaveBeenCalledTimes(2);
     expect(mockSave).toHaveBeenLastCalledWith(
@@ -302,7 +321,7 @@ describe('BuilderClient 自動保存', () => {
   });
 
   it('競合の初回で自動保存を恒久停止し、ダイアログではなく競合バナーを表示する', async () => {
-    mockSave.mockResolvedValueOnce({ ok: false, error: 'conflict' });
+    mockSave.mockRejectedValueOnce(trpcClientError('CONFLICT'));
     const confirmSpy = vi.spyOn(window, 'confirm');
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     typeMarkdown('## Aa');
@@ -325,7 +344,7 @@ describe('BuilderClient 自動保存', () => {
   });
 
   it('自動保存の失敗（非競合）は同一内容で無限リトライせず、新しい編集で再試行する', async () => {
-    mockSave.mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+    mockSave.mockRejectedValueOnce(trpcClientError('UNAUTHORIZED'));
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     typeMarkdown('## Aa');
     await act(async () => {
