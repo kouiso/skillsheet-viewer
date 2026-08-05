@@ -73,7 +73,8 @@ PASS は次を全て満たしたときのみ。
 | A-3 | 閲覧コード正 | 正しいコードで認証 | `next` のパスへ戻る |
 | A-4 | ログイン誤り | 誤った email / password | 「メールアドレスまたはパスワードが正しくありません」 |
 | A-5 | ログイン正 | 正しい credential | `/builder` へ遷移 |
-| A-6 | open redirect | `/login?next=//evil.com` | 外部へ飛ばず `/builder` へ |
+| A-6a | open redirect（`/login`） | `next` に `//evil.example.com` / `https://evil.example.com` / **`/\/evil.example.com`** を与える | いずれも外部へ飛ばず `/builder` へ |
+| A-6b | open redirect（`/viewer-auth`） | 同じ 3 パターンを `/viewer-auth?next=` に与える | いずれも外部へ飛ばず `/view` へ。`/login` とは別のパーサ（`viewer-auth/page.tsx`）なので個別に確認する。`\` を含む異表記は 2026-08-04 時点で回避できる（#159）ため、修正の回帰確認に使う |
 | A-7 | ログアウト | **閲覧コードだけで認証した独立コンテキスト**で `POST /api/logout` | 閲覧セッションが破棄され、再度ゲートが効く。`/api/logout` は HMAC 閲覧 cookie しか消さず、`requireViewer()` は `isEditor()` でも通すため、A-5 と同じコンテキストで続けて実行すると `/view` はゲートされない（アプリの逸脱ではなく手順の誤り） |
 
 ### B. 閲覧（Viewer） — データ突合の本体
@@ -93,7 +94,8 @@ PASS は次を全て満たしたときのみ。
 | B-11 | 技術フィルタ | 絞り込みで該当案件のみ残る。0 件時の表示 |
 | B-12 | 工程ステッパー | 表示される工程が案件の `process` と一致 |
 | B-13a | Markdown 描画（構造化ブロック） | 案件の `summary` / `duties` / `comment` の箇条書き・強調が描画される |
-| B-13b | Markdown 描画（markdown シート） | GFM 表が表として描画される（`:---:` の生テキスト露出なし）。`<details>` の開閉。対象は `/view/[path]` |
+| B-13b-1 | Markdown 描画（DB の markdown ブロック） | GFM 表が表として描画される（`:---:` の生テキスト露出なし）。`<details>` の開閉。`/view/db/:id` も `blocks` を `SheetViewClient` に渡し、同じ ReactMarkdown + remark-gfm 経路を通るので**こちらを主対象にする**（GitHub 経路が使えない環境でも実行できる） |
+| B-13b-2 | Markdown 描画（`/view/[path]` 経路） | 同上を旧経路でも確認する。旧経路は `blocks` 未指定で描画されるため別コードパス |
 | B-14 | 存在しない ID | `/view/db/<random-uuid>` で 404 ページ |
 | B-15a | `/view/[path]`（env 未設定時の案内） | GitHub 連携未設定時に 500 でなく、原因と対処が分かる案内が出る。`/compare` の文言と食い違わないこと |
 | B-15b | `/view/[path]`（markdown シートの描画） | GitHub の実トークンを設定し、markdown シートが描画される |
