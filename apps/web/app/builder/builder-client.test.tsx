@@ -85,6 +85,31 @@ describe('BuilderClient', () => {
     );
   });
 
+  // headless E2E で再現した実バグの回帰テスト: unstable_cache のキャッシュ命中時は内部で
+  // JSON.stringify/JSON.parse を通すため、RSC が渡す sheets[].updatedAt が Date ではなく
+  // ISO 文字列になることがある（既存シートを開いて保存するたびに再現）。expectedUpdatedAt は
+  // z.date() を要求するため、文字列のまま送ると保存 mutation が BAD_REQUEST で毎回失敗していた。
+  it('initialSheets の updatedAt が文字列（unstable_cache 由来）でも Date として保存 mutation に渡る', async () => {
+    const user = userEvent.setup();
+    const sheetsWithStringUpdatedAt = [
+      { id: 'sheet-1', title: 'テストシート', updatedAt: '2026-08-05T12:00:00.000Z' as unknown as Date },
+    ];
+    render(
+      <BuilderClient
+        initialBlocks={mdBlocks(['## A'])}
+        initialTitle="マイシート"
+        sheets={sheetsWithStringUpdatedAt}
+        activeSheetId="sheet-1"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedUpdatedAt: new Date('2026-08-05T12:00:00.000Z') }),
+    );
+    const call = mockSave.mock.calls[0][0];
+    expect(call.expectedUpdatedAt).toBeInstanceOf(Date);
+  });
+
   // 「新規シート」経由の router.push は key={activeSheetId} の再マウントで編集中 state を
   // 破棄する（シート切替・閲覧へリンクと同じ SPA 内遷移）。CodeRabbit 指摘: 未保存ガードが
   // 作成導線だけ抜けていた（Major/データ消失）ため、confirmDiscardChanges() 経由になったことを検証する。

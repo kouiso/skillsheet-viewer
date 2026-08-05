@@ -1,4 +1,4 @@
-import type { Block, SheetSummary } from '@skillsheet/db';
+import { type Block, listSheets, type SheetSummary } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
@@ -41,9 +41,12 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
       const sheet = await caller.sheet.getDefault();
       initialBlocks = sheet.blocks;
       initialTitle = sheet.title;
-      // getDefault はシードで作成されることがあるので再取得
+      // getDefault はシードで作成されることがある。sheet.list はキャッシュ経由
+      // （getCachedDbSheets, revalidate: 60s）なので、直前の sheet.list 呼び出しで
+      // 空配列がキャッシュされていた場合はこの再取得でも同じ空配列が返ってしまう
+      // （シード後もキャッシュタグは無効化されない）。ここは正本を直接読む。
       if (sheets.length === 0) {
-        sheets = await caller.sheet.list();
+        sheets = await listSheets();
       }
       activeSheetId = sheets[0]?.id ?? '';
     }

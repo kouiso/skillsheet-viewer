@@ -818,7 +818,18 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
   // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
   // 保存成功時は new Date() で更新し、次回保存時の基準にする。
-  const savedUpdatedAtRef = useRef<Date | undefined>(initialSheets.find((s) => s.id === activeSheetId)?.updatedAt);
+  // RSC からのプロップ（initialSheets）は unstable_cache のキャッシュ命中時に Date が
+  // ISO 文字列へ壊れることがある（unstable_cache は内部で JSON.stringify/JSON.parse を
+  // 通すため。next/dist/server/web/spec-extension/unstable-cache.js の cacheNewResult
+  // 参照）。expectedUpdatedAt は z.date() で厳密に Date のみを受けるため、ここで明示的に
+  // Date へ正規化しておかないと、既存シートを開いて保存するたびに autosave/手動保存が
+  // BAD_REQUEST として恒常的に失敗する（headless E2E の autosave.spec.ts で再現・確認済み。
+  // 新規作成直後のシートは expectedUpdatedAt が undefined のためこの経路を通らず、
+  // 症状が「既存シートを開いた場合のみ」に見えていた）。
+  const initialSavedUpdatedAt = initialSheets.find((s) => s.id === activeSheetId)?.updatedAt;
+  const savedUpdatedAtRef = useRef<Date | undefined>(
+    initialSavedUpdatedAt ? new Date(initialSavedUpdatedAt) : undefined,
+  );
   const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
   const savedRef = useRef(false);
   const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
