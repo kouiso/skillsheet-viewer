@@ -202,6 +202,11 @@ export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: b
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (!item) continue;
+    // 中身が空のブロックはプレビュー/エクスポートにも出さない（viewer の groupBlocks・
+    // サーバ側 blocksToMarkdown と揃える）。markdown 計算前・prev 更新前に skip すること
+    // — 後から continue すると直前ブロック判定（blockJoinSeparator / 先頭判定）が
+    // スキップされた要素を指してしまう。
+    if (isBlockInputEmpty(itemToBlockInput(item))) continue;
     const markdown = itemToMarkdown(item, opts);
     // items[i - 1] を位置で参照すると sparse 配列（途中の undefined 要素）で
     // 実際に直前にレンダリングされたブロックを見失う。実際にレンダリングした
@@ -216,10 +221,10 @@ export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: b
 // markdown 比較だと markdown に落ちないフィールド（profile.company / 会社 kind・note /
 // 案件 comment・summary / hidden トグル等）の編集を取りこぼし、自動保存も
 // beforeunload ガードも発火せず黙ってデータが失われるため、保存される構造化データで差分を見る。
-// サーバ保存時に drop される空ブロックは除外する（空 experience / skills 等の
-// 幽霊ブロックで dirty / 不要な自動保存が発生しないようにする）。
-const snapshot = (items: EditorItem[], title: string): string =>
-  JSON.stringify([title, items.map(itemToBlockInput).filter((block) => !isBlockInputEmpty(block))]);
+// サーバはもう空ブロックを drop しない（issue #128）ので、ここも空ブロックを含めて
+// 保存 payload と完全一致させる。全ブロックが空のときの dirty 抑制は isDirty 計算側の
+// allEmpty ガードで別途行う（全消しの是非は手動保存の confirm に委ねる）。
+const snapshot = (items: EditorItem[], title: string): string => JSON.stringify([title, items.map(itemToBlockInput)]);
 
 const ALIGN_OPTIONS: { value: TableAlign; Icon: typeof AlignLeft; label: string }[] = [
   { value: 'left', Icon: AlignLeft, label: '左揃え' },
@@ -916,6 +921,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   };
 
   // 現在の内容（タイトル含む）が最後の保存スナップショットと異なれば dirty にする。
+  // サーバはもう空ブロックを drop しないので（issue #128）、空ブロックの追加も
+  // 「保存すれば実際に DB へ残る変更」として正しく dirty 扱いになる
+  // （旧コードは drop される前提で空ブロックを比較から除外していたが、その前提が消えた）。
+  // 全ブロックが空の状態で dirty になる場合（例:「テキスト」を押して何も打たず放置）は
+  // 自動保存されず（:942 の全消しガード）dirty のままになるが、これは意図した仕様。
+  // 手動保存＋確認ダイアログ（:1194 付近）でクリアできる — 全消し保存の是非を
+  // ユーザーに問う導線と一致させるため、あえて自動で dirty を解除しない。
   useEffect(() => {
     setIsDirty(snapshot(items, title) !== lastSavedSnapshotRef.current);
   }, [items, title]);
@@ -1093,11 +1105,16 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const updateProjectData = (data: ProjectBlockData) => {
     // 変更履歴は「変更前の状態」と突き合わせてラベルを作るため、更新関数の外で先に取る。
     // setItems の更新関数の中で副作用を起こすと StrictMode の二重呼び出しで履歴が重複する。
-    const before = items.find((i) => i.type === 'project') as { data: ProjectBlockData } | undefined;
+    // project ブロックがまだ無い（初回編集）場合は ProjectEditor と同じ空データへ
+    // フォールバックする — ensureProjectBlock 廃止後もここが history.ts の初回エントリを
+    // 「追加」として記録できる唯一の場所になる。
+    const before =
+      (items.find((i) => i.type === 'project') as { data: ProjectBlockData } | undefined)?.data ??
+      ({ companies: [], items: [] } satisfies ProjectBlockData);
     // 参照比較だと ProjectEditor が毎回新しいオブジェクトを渡すため常に真になる。
     // 中身が同じ更新で履歴を増やさないよう、内容で比べる。
-    if (before && JSON.stringify(before.data) !== JSON.stringify(data)) {
-      setHistory(pushHistory(before.data, data, Date.now(), activeSheetId));
+    if (JSON.stringify(before) !== JSON.stringify(data)) {
+      setHistory(pushHistory(before, data, Date.now(), activeSheetId));
     }
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.type === 'project');
@@ -1161,6 +1178,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const handleExport = () => {
     // バックアップは閲覧面ではないため hidden な会社・案件も含める
     // （黙って欠落させると、このバックアップからの復元で hidden データが失われる）。
+    // 一方で中身が空のブロック（未入力のテンプレスカフォールド等）は assembleMarkdown が
+    // 描画時と同じ基準でスキップする。DB 側は空ブロックも保持するので、データそのものは
+    // 失われない（このバックアップは markdown 文字列であり、空スカフォールドの復元は保証しない）。
     const content = assembleMarkdown(items, { includeHidden: true });
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -1491,9 +1511,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setActiveTab('project');
-                }}
+                onClick={() => setActiveTab('project')}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'project'
                     ? 'border-b-2 border-primary text-primary'

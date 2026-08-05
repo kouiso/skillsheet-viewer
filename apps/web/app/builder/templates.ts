@@ -78,6 +78,14 @@ export const TEMPLATES: SheetTemplate[] = [
           skills: [{ name: '', years: 0, level: '' }],
         },
       },
+      {
+        type: 'markdown',
+        data: { markdown: '## 職務経歴' },
+      },
+      {
+        type: 'experience',
+        data: { company: '', startDate: '', endDate: '', role: '', description: '' },
+      },
     ],
   },
   {
