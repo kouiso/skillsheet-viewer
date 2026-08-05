@@ -1,0 +1,79 @@
+{
+  "C-1": {
+    "uiSheetList": [
+      "エンジニアスキルシート",
+      "Full 1785899040988",
+      "エンジニアスキルシート"
+    ],
+    "uiTitle": "エンジニアスキルシート",
+    "uiBlockCount": 9,
+    "dbSheetTitles": [
+      "エンジニアスキルシート",
+      "Full 1785899040988",
+      "エンジニアスキルシート"
+    ],
+    "dbTitleOfActive": "エンジニアスキルシート",
+    "dbBlockCount": 9,
+    "dbBlockTypes": [
+      "stats",
+      "profile",
+      "skills",
+      "skills",
+      "skills",
+      "skills",
+      "skills",
+      "skills",
+      "project"
+    ],
+    "sheetListMatches": true,
+    "titleMatches": true,
+    "blockCountMatches": true
+  },
+  "C-4": {
+    "sheetId": "88883075-035c-4046-9bd4-050e01d26667",
+    "uiBefore": 16,
+    "dbBefore": 16,
+    "blockDeleteButtons": 16,
+    "uiAfterDelete": 15,
+    "dbAfterSave": 15,
+    "uiAfterReload": 15,
+    "deletedInUi": true,
+    "deletedInDb": true,
+    "stillGoneAfterReload": true
+  },
+  "C-12a": {
+    "hiddenCompanies": [
+      "個人開発"
+    ],
+    "hiddenItems": [
+      "マッチングアプリの開発"
+    ],
+    "itemsUnderHiddenCompany": [
+      "HorseManager ～馬匹の健康管理システム～ 第二弾",
+      "HorseFeeders ～馬匹の飼料管理システム～ 第一弾"
+    ],
+    "backupBytes": 21751,
+    "companyHiddenNamePresent": [
+      {
+        "name": "個人開発",
+        "present": true
+      }
+    ],
+    "itemsUnderHiddenCompanyPresent": [
+      {
+        "title": "HorseManager ～馬匹の健康管理システム～ 第二弾",
+        "present": true
+      },
+      {
+        "title": "HorseFeeders ～馬匹の飼料管理システム～ 第一弾",
+        "present": true
+      }
+    ],
+    "itemHiddenPresent": [
+      {
+        "title": "マッチングアプリの開発",
+        "present": true
+      }
+    ]
+  }
+}

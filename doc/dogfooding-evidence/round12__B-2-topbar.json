@@ -1,0 +1,23 @@
+{
+  "dbProfileName": "I・K",
+  "dbProfileCompany": null,
+  "dbProfileKeys": [
+    "pr",
+    "meta",
+    "name",
+    "title",
+    "strengths"
+  ],
+  "headerText": "I・K / 表示するビュー / スキルマトリクス / 工程の俯瞰 / 案件詳細 / タイムライン",
+  "brandSpans": [
+    "",
+    "I・K",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "showsName": true,
+  "showsCompany": false,
+  "fallbackTitleUsed": false
+}

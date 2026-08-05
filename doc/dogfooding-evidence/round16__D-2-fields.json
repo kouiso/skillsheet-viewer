@@ -1,0 +1,286 @@
+{
+  "summary": {
+    "pdfPages": 19,
+    "companyNotes": {
+      "total": 18,
+      "inPdf": 0,
+      "inScreen": 0
+    },
+    "profile": {
+      "total": 11,
+      "inPdf": 11,
+      "inScreen": 11
+    },
+    "stats": {
+      "total": 12,
+      "inPdf": 12,
+      "inScreen": 12
+    },
+    "profileMissingInPdf": [],
+    "statsMissingInPdf": []
+  },
+  "noteResults": [
+    {
+      "company": "C5 recovered 1785899060542",
+      "probe": "自社サビスを開発する事業会社にてマッチングアプリ",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "A 社（大手 SI ベンダー）",
+      "probe": "大手SIベンダにて複数の先進的なプロジェクトに参",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "C 社",
+      "probe": "業務委託にてECポイント還元サビスのWebシステ",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "D 社",
+      "probe": "業務委託にて配達業務アプリの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "E 社",
+      "probe": "業務委託にて3Dメディア販売向けのポトフォリオサ",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "G 社",
+      "probe": "業務委託にて環境ポイントアプリの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "H 社",
+      "probe": "業務委託にて不動産ポイントサイトの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "I 社",
+      "probe": "業務委託にて高槻市スマホアプリの修正作業を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "probe": "小売のWebサイトにおける決済機能の実装を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "probe": "自動車監査のWEBシステムの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "L 社",
+      "probe": "業務委託にてSESシステムの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "M 社",
+      "probe": "業務委託にて雑誌などの販売システムの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "N 社",
+      "probe": "業務委託にて英語教材のスマホアプリ開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "O 社",
+      "probe": "業務委託にて医療Webシステムの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "B 社（ベンチャー企業）",
+      "probe": "ベンチャ企業にてマッチングアプリの開発を担当",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "probe": "業務委託にて運転手のアルコル検査システムの開発を",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "P 社（ベンチャー企業）",
+      "probe": "ベンチャ企業にてWebアプリケション開発ECサイ",
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "probe": "Webペジ制作を担当",
+      "inPdf": false,
+      "inScreen": false
+    }
+  ],
+  "profileResults": [
+    {
+      "field": "name",
+      "probe": "IK",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "title",
+      "probe": "フルスタックエンジニア/エンジニアリングマネジャ",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "pr",
+      "probe": "C13dirty1785897888134",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "meta.age",
+      "probe": "28歳",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "meta.work",
+      "probe": "フルリモト",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "meta.station",
+      "probe": "成田駅",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "meta.education",
+      "probe": "高卒",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "strengths[0]",
+      "probe": "React/TypeScript/Nextjs",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "strengths[1]",
+      "probe": "クロスプラットフォム開発Ionic/Capaci",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "strengths[2]",
+      "probe": "チムリドPM技術教育",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "strengths[3]",
+      "probe": "AI活用CI/CD開発基盤構築",
+      "inPdf": true,
+      "inScreen": true
+    }
+  ],
+  "statsResults": [
+    {
+      "field": "items[0].label",
+      "raw": "エンジニア歴",
+      "probe": "エンジニア歴",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[0].value",
+      "raw": "8",
+      "probe": "8",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[0].unit",
+      "raw": "年",
+      "probe": "年",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[1].label",
+      "raw": "参画プロジェクト数",
+      "probe": "参画プロジェクト数",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[1].value",
+      "raw": "30+",
+      "probe": "30+",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[1].unit",
+      "raw": "案件",
+      "probe": "案件",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[2].label",
+      "raw": "育成した教え子",
+      "probe": "育成した教え子",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[2].value",
+      "raw": "4",
+      "probe": "4",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[2].unit",
+      "raw": "名",
+      "probe": "名",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[3].label",
+      "raw": "年齢",
+      "probe": "年齢",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[3].value",
+      "raw": "28",
+      "probe": "28",
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "field": "items[3].unit",
+      "raw": "歳",
+      "probe": "歳",
+      "inPdf": true,
+      "inScreen": true
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "stamp": "1785904447",
+  "C-2b": {
+    "sheetId": "88883075-035c-4046-9bd4-050e01d26667",
+    "dbBefore": 14,
+    "uiBefore": 14,
+    "experienceFields": 3,
+    "uiAfterAdd": 16,
+    "dbAfterSave": 16,
+    "uiAfterReload": 16,
+    "markdownTextPresent": false,
+    "experienceValuePresent": false,
+    "dbTypes": [
+      "markdown",
+      "table",
+      "markdown",
+      "skills",
+      "skills",
+      "skills",
+      "table",
+      "skills",
+      "table",
+      "skills",
+      "markdown",
+      "experience",
+      "markdown",
+      "experience",
+      "markdown",
+      "experience"
+    ],
+    "persisted": true
+  },
+  "C-3b": {
+    "uiBefore": 16,
+    "chipFound": 1,
+    "uiAfterDrop": 17,
+    "inserted": true
+  },
+  "C-11b": {
+    "created": "round5-削除検証-1785904447",
+    "openedTitle": "round5-削除検証-1785904447",
+    "listAfterCreate": [
+      "エンジニアスキルシート",
+      "エンジニアスキルシート",
+      "Full 1785899040988",
+      "round5-削除検証-1785904447"
+    ],
+    "inListAfterCreate": true,
+    "dbRowsAfterCreate": 1,
+    "targetId": "299fcd54-7480-4ac7-a848-2a1a43c9639b",
+    "deleteButtonFound": 1,
+    "listAfterDelete": [
+      "エンジニアスキルシート",
+      "エンジニアスキルシート",
+      "Full 1785899040988"
+    ],
+    "goneFromList": true,
+    "listAfterReload": [
+      "エンジニアスキルシート",
+      "エンジニアスキルシート",
+      "Full 1785899040988"
+    ],
+    "goneAfterReload": true,
+    "dbRowsAfterDelete": 0
+  },
+  "D-5b": {
+    "projectEyeCount": 2,
+    "targetLabel": "⋮⋮ / 01 / マッチングアプリの開発",
+    "viewerCount": "29 / 29 件",
+    "pdfBytes": 256273,
+    "pdfPages": 18,
+    "pdfTextLen": 15734,
+    "hiddenTitleInPdf": null
+  }
+}

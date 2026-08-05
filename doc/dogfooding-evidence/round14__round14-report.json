@@ -1,0 +1,81 @@
+{
+  "B-9": {
+    "pressedAtStart": [
+      "true",
+      "true",
+      "true",
+      "true"
+    ],
+    "pressedAfterAllOff": [
+      "false",
+      "false",
+      "false",
+      "false"
+    ],
+    "bodyText": "I・K / 表示するビュー / スキルマトリクス / 工程の俯瞰 / 案件詳細 / タイムライン / 8年 / エンジニア歴 / 30+案件 / 参画プロジェクト数 / 4名 / 育成した教え子 / 28歳 / 年齢 / SKILL SHEET / I・K / フルスタックエンジニア / エンジニアリングマネージャー / C-13 dirty 1785897888134 / React / TypeScript / Next.js / クロスプラットフォーム開発 (Ionic / Capacitor) / チームリード・PM・技術教育 / AI活用・CI/CD・開発基盤構築 / 年齢 / 28",
+    "mainHeight": 950,
+    "docHeight": 1019,
+    "horizontalScroll": false,
+    "togglesStillVisible": true,
+    "consoleErrors": 0,
+    "bodyAfterRestore": "I・K / 表示するビュー / スキルマトリクス / 工程の俯瞰 / 案件詳細 / タイムライン / 8年 / エンジニア歴 / 30+案件 / 参画プロジェクト数 / 4名 / 育成した教え子 / 28歳 / 年齢 / SKILL SHEET / I・K / フルスタックエンジニア / エンジニアリングマネージャー ",
+    "docHeightAfterRestore": 12918
+  },
+  "B-12": {
+    "dbProjects": 32,
+    "dbProcessCounts": {
+      "基本設計": 25,
+      "詳細設計": 26,
+      "実装": 31,
+      "結合テスト": 27,
+      "総合テスト": 23,
+      "運用・保守": 10,
+      "要件定義": 20
+    },
+    "cardsWithDataAttr": 0,
+    "stepperLabels": [],
+    "pageText": 30159
+  },
+  "C-2": {
+    "added": [
+      "テキスト",
+      "テーブル",
+      "スキル一覧",
+      "職務経歴"
+    ],
+    "dbAfterAdd": [
+      "0:skills"
+    ],
+    "uiAfterAdd": {
+      "textareas": 1,
+      "tableEditors": 1,
+      "inputs": 6,
+      "blockHandles": 2
+    },
+    "uiAfterReload": {
+      "textareas": 0,
+      "tableEditors": 1,
+      "inputs": 4,
+      "blockHandles": 1
+    },
+    "dbAfterReload": [
+      "0:skills"
+    ]
+  },
+  "C-3": {
+    "orderBefore": [
+      "0:skills"
+    ],
+    "handleCount": 1,
+    "orderAfterDrag": [
+      "0:skills"
+    ],
+    "orderAfterReload": [
+      "0:skills"
+    ],
+    "uiOrderAfterReload": 1,
+    "changed": false,
+    "persisted": true
+  },
+  "cleanedUp": true
+}

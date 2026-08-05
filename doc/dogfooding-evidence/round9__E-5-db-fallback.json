@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "text": "DB版スキルシートを表示できません\n\nデータベースのセットアップが完了していない可能性があります。以下を確認してください。\n\n環境変数 DATABASE_URL と SKILLSHEET_OWNER_ID を設定する\nマイグレーションを実行する: pnpm db:migrate",
+  "consoleErrors": [],
+  "hasFallbackHeading": true,
+  "mentionsEnv": true,
+  "mentionsMigrate": true
+}

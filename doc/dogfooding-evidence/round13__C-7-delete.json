@@ -1,0 +1,54 @@
+{
+  "sheetId": "2a64f30a-4f83-4ca4-a8a0-8747ae81d37e",
+  "dbBefore": {
+    "companies": [
+      "r13-会社A",
+      "r13-会社B"
+    ],
+    "items": [
+      "r13-案件1",
+      "r13-案件2",
+      "r13-案件3"
+    ]
+  },
+  "navCompaniesBefore": 2,
+  "navProjectsBefore": 2,
+  "dialogAfterProjectDelete": "「r13-案件1」を削除しますか？",
+  "navProjectsAfterProjectDelete": 1,
+  "dbAfterProjectDelete": {
+    "companies": [
+      "r13-会社A",
+      "r13-会社B"
+    ],
+    "items": [
+      "r13-案件2",
+      "r13-案件3"
+    ]
+  },
+  "dialogAfterCompanyDelete": "「r13-会社A」と、ひもづく案件 1 件をすべて削除しますか？\nこの操作は取り消せません。",
+  "navCompaniesAfterCompanyDelete": 1,
+  "navProjectsAfterCompanyDelete": 0,
+  "dbAfterCompanyDelete": {
+    "companies": [
+      "r13-会社B"
+    ],
+    "items": [
+      "r13-案件3"
+    ]
+  },
+  "navCompaniesAfterReload": 1,
+  "navProjectsAfterReload": 1,
+  "dbAfterReload": {
+    "companies": [
+      "r13-会社B"
+    ],
+    "items": [
+      "r13-案件3"
+    ]
+  },
+  "dialogs": [
+    "「r13-案件1」を削除しますか？",
+    "「r13-会社A」と、ひもづく案件 1 件をすべて削除しますか？\nこの操作は取り消せません。"
+  ],
+  "cleanedUp": true
+}
