@@ -1,0 +1,12 @@
+
+> skillsheet-viewer@1.0.0 start <REPO>
+> pnpm --filter @skillsheet/web start -p 3210
+
+
+> @skillsheet/web@0.0.0 start <REPO>/apps/web
+> next start -p 3210
+
+▲ Next.js 16.2.11
+- Local:         http://localhost:3210
+- Network:       http://192.0.2.2:3210
+✓ Ready in 367ms
