@@ -85,6 +85,40 @@ describe('BuilderClient', () => {
     );
   });
 
+  // 「新規シート」経由の router.push は key={activeSheetId} の再マウントで編集中 state を
+  // 破棄する（シート切替・閲覧へリンクと同じ SPA 内遷移）。CodeRabbit 指摘: 未保存ガードが
+  // 作成導線だけ抜けていた（Major/データ消失）ため、confirmDiscardChanges() 経由になったことを検証する。
+  it('未保存の変更がある状態で「新規シート」を押すと確認ダイアログを挟み、拒否時は作成ダイアログを開かない', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.queryByText('新規シートを作成')).not.toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it('未保存の変更があっても確認ダイアログを承諾すれば「新規シート」の作成ダイアログが開く', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it('未保存の変更が無ければ確認ダイアログを挟まず「新規シート」の作成ダイアログが開く', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
   // プレビューは別ウィンドウに分離済み（builder-client 内には描画しない）ため、
   // 連結ロジック（assembleMarkdown）は blockToItem 経由で直接ユニットテストする。
   it('隣接 markdown ブロック同士は単一改行(\\n)で結合される', () => {
