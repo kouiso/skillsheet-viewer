@@ -37,7 +37,8 @@
 > [`doc/dogfooding-evidence/`](./dogfooding-evidence/) にコピーしてコミットした**。
 > 本文が `round12/B-2-topbar.json` のように参照しているものは、`doc/dogfooding-evidence/round12-b-2-topbar.json`
 > として読める。`<round>-<name>` へ平坦化し、リポジトリの命名規約（ケバブケース）に合わせて全部小文字にしてある。
-> サーバーログのオーナー ID は `<OWNER_ID>` に伏せてある。
+> サーバーログのオーナー ID は `<OWNER_ID>` に伏せてある。測定に使った Playwright / Node のスクリプト 43 本も
+> `doc/dogfooding-evidence/harness/` に置いた（「どう測ったか」まで追えるように。絶対パスは伏せてあるのでそのままでは動かない）。
 >
 > **スクリーンショットと PDF は含めていない。** 1 枚 4〜5MB で全部だと 100MB を超え、リポジトリが重くなる。
 > そのぶん本文の各行には、画像を開かなくても追試できるよう、実測した数値（件数・ページ数・HTTP ステータス・
