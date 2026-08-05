@@ -27,11 +27,11 @@ skillsheet-viewer の全画面を実際に操作し、表示データが元デ�
 | ブラウザ | Chromium（Playwright） |
 | ビューポート | 320×800 / 375×812 / 768×1024 / 1280×800 |
 | テーマ | light / dark |
-| 証跡 | `test-results/dogfooding/<case-id>-<viewport>-<theme>.png` |
+| 証跡 | `test-results/dogfooding/<round>/<case-id>-<viewport>-<theme>.png`（1 巡目のみ `dogfooding/` 直下、2 巡目以降は `round2/` `round3/` … と巡回ごとに分ける） |
 
 ### 元データと正本の関係
 
-```
+```text
 kouiso/skill-sheet/skillsheet.md   ← 元データ（人が書いた一次情報）
           ↓ インポート
 Neon Postgres (skill_sheets / blocks) ← 正本（アプリが読む）
@@ -69,7 +69,7 @@ PASS は次を全て満たしたときのみ。
 | A-4 | ログイン誤り | 誤った email / password | 「メールアドレスまたはパスワードが正しくありません」 |
 | A-5 | ログイン正 | 正しい credential | `/builder` へ遷移 |
 | A-6 | open redirect | `/login?next=//evil.com` | 外部へ飛ばず `/builder` へ |
-| A-7 | ログアウト | `/api/logout` | セッション破棄。再度ゲートが効く |
+| A-7 | ログアウト | `POST /api/logout` | セッション破棄。再度ゲートが効く |
 
 ### B. 閲覧（Viewer） — データ突合の本体
 
@@ -122,7 +122,7 @@ PASS は次を全て満たしたときのみ。
 | ID | ケース | 検証内容 |
 |---|---|---|
 | D-1 | ダウンロード | ビューアから PDF 生成 → toast → ファイル取得 |
-| D-2 | 内容突合 | PDF 内の全案件・全スキルが画面表示と一致（欠落なし） |
+| D-2 | 内容突合 | 元データ・正本 DB・画面・PDF の 4 点で全案件・全スキルが一致（欠落なし）。画面と PDF が同じ欠落を共有していても PASS にしない |
 | D-3 | ページ切れ | 表・カードがページ境界で切れていない |
 | D-4 | 日本語フォント | NotoSansJP が適用され豆腐が出ない |
 | D-5 | hidden 除外 | hidden 案件が PDF に出ない |
@@ -141,7 +141,7 @@ PASS は次を全て満たしたときのみ。
 
 各ケースについて次を記録する。
 
-```
+```text
 [ケースID] 結果: PASS / FAIL / BLOCKED
   スクリーンショット: <path>（開いて確認済み）
   観察: 画面上の要素列挙 + レイアウト記述
