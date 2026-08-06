@@ -32,6 +32,10 @@ async function cleanupSheetsByPrefix(prefix: string) {
   );
   if (failures.length > 0) {
     console.warn('sheet cleanup failed:', failures);
+    // 削除失敗を握りつぶすと afterAll が正常終了し、テスト用シートが共有 DB に
+    // 孤児として残り続けてしまう（CodeRabbit 指摘）。全削除を試みた後に throw して
+    // afterAll/beforeAll を失敗させ、CI で可視化する。
+    throw new Error(`sheet cleanup failed for ${failures.length} sheet(s): ${failures.map((f) => f.id).join(', ')}`);
   }
 }
 
