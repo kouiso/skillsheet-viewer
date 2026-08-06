@@ -66,11 +66,16 @@ export default function PreviewClient() {
 
   // 状態の判定は「編集画面が生きているか」→「最近更新が来たか」の順。
   // 編集画面が閉じられた場合は再接続しても内容は来ないので、再接続ボタンを出さない。
+  //
+  // openerGone は「一度も接続していない（このURLへ直接アクセスした）」と
+  // 「接続後に編集画面が閉じられた」の両方で true になる。lastUpdatedAt === null
+  // （一度も内容を受け取っていない）で前者を判別し、実態と食い違う「表示は最後の
+  // 内容です」という文言を出さないようにする（#151 U-5）。
   useEffect(() => {
     const tick = () => {
       const openerGone = typeof window !== 'undefined' && (!window.opener || window.opener.closed);
       if (openerGone) {
-        setSyncState('closed');
+        setSyncState(lastUpdatedAt === null ? 'standalone' : 'closed');
         return;
       }
       setSyncState(lastUpdatedAt && Date.now() - lastUpdatedAt > STALE_AFTER_MS ? 'stale' : 'live');
