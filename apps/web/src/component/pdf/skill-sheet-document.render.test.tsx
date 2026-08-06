@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { Font, renderToBuffer } from '@react-pdf/renderer';
+import { getDocument } from 'pdfjs-dist';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import PDF_FONT_FAMILY from './constants';
@@ -11,9 +12,12 @@ import { SkillSheetDocument } from './skill-sheet-document';
 // 本番（pdf/fonts.ts）はブラウザ向けに URL 参照（/fonts/...）で登録するが、
 // Node 上のバイト描画ではファイルシステムから読めないため、ここでは実ファイルパスで登録する。
 // ファミリ名は本番と同じ PDF_FONT_FAMILY を使うので、コンポーネントの参照と一致する。
+//
+// Noto Sans JP の CFF(OTF) 版を使うと @react-pdf/renderer の CFF サブセット化が
+// 壊れて豆腐表示・コンテンツ消失が起きる（Issue #172）。テストも TrueType 版を使う。
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_OTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.otf');
-const BOLD_OTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.otf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
 
 // PDF の先頭マジックバイト（%PDF-）。これが無ければ PDF として成立していない。
 const PDF_HEADER = '%PDF-';
@@ -22,15 +26,33 @@ const PDF_HEADER = '%PDF-';
 // スイート全体の並列実行下では既定の 5 秒を超えることがあるため、余裕を持たせる。
 const RENDER_TIMEOUT_MS = 30_000;
 
+// PDF バッファからテキストを抽出する。Issue #172 の回帰防止で、生成された PDF に
+// 期待した日本語テキストが実際に含まれているかを検証するため使う。
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  const data = new Uint8Array(buffer);
+  const doc = await getDocument({ data }).promise;
+  let text = '';
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    for (const item of content.items) {
+      if ('str' in item && typeof item.str === 'string') {
+        text += item.str;
+      }
+    }
+  }
+  return text;
+}
+
 function registerNodeFonts(): void {
   Font.register({
     family: PDF_FONT_FAMILY,
     fonts: [
-      { src: REGULAR_OTF, fontWeight: 400 },
-      { src: BOLD_OTF, fontWeight: 700 },
+      { src: REGULAR_TTF, fontWeight: 400 },
+      { src: BOLD_TTF, fontWeight: 700 },
       // 日本語に true italic は無いため、italic にも同じ字形を割り当てる（本番 fonts.ts と同じ方針）。
-      { src: REGULAR_OTF, fontWeight: 400, fontStyle: 'italic' },
-      { src: BOLD_OTF, fontWeight: 700, fontStyle: 'italic' },
+      { src: REGULAR_TTF, fontWeight: 400, fontStyle: 'italic' },
+      { src: BOLD_TTF, fontWeight: 700, fontStyle: 'italic' },
     ],
   });
 }
@@ -76,8 +98,8 @@ function buildContent(): string {
 describe('SkillSheetDocument（実バイト描画）', () => {
   beforeAll(() => {
     // 実ファイルが無いと描画は成立しないため前提を明示する。
-    expect(existsSync(REGULAR_OTF)).toBe(true);
-    expect(existsSync(BOLD_OTF)).toBe(true);
+    expect(existsSync(REGULAR_TTF)).toBe(true);
+    expect(existsSync(BOLD_TTF)).toBe(true);
     registerNodeFonts();
   });
 
@@ -178,6 +200,88 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       expect(bytes).toContain('annot-in-para-marker');
       // セル内リンクは Text 描画 → 注釈が出ないため URL はバイト列に現れない。
       expect(bytes).not.toContain('annot-in-cell-marker');
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    '32件の案件カード（見出し+表）を含む実データ相当のボリュームでも、全件のテキストがPDFに描画される（Issue #172 回帰防止）',
+    async () => {
+      // projectBlockToMarkdown が生成する形（### 会社名 — タイトル 見出し + 直後の
+      // 項目/内容 表）を模した案件カードを32件並べる。Issue #172 の再現条件
+      // （32件中29件がPDFから消失）に近いボリュームで、全てのカードがテキストとして
+      // 抽出できることを検証する。
+      const headings = Array.from({ length: 32 }, (_, i) => `株式会社サンプル${i} — 案件${i}のシステム開発`);
+      const cards = headings
+        .map((heading, i) =>
+          [
+            `### ${heading}`,
+            '',
+            '| 項目 | 内容 |',
+            '| :--- | :--- |',
+            `| 期間 | 202${i % 5}.04〜202${(i % 5) + 1}.03 |`,
+            '| 役割 | エンジニア |',
+            '| 規模・スコープ | 5名 |',
+            '| 技術スタック | TypeScript, React, Next.js |',
+            '| 担当工程 | 要件定義, 設計, 実装, テスト |',
+            '',
+            '**業務内容**',
+            '',
+            '要件定義から運用までを一貫して担当しました。',
+            '',
+          ].join('\n'),
+        )
+        .join('\n');
+      const content = ['## 職務経歴', '', cards].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const bytes = buffer.toString('latin1');
+
+      expect(buffer.length).toBeGreaterThan(0);
+      expect(bytes.slice(0, PDF_HEADER.length)).toBe(PDF_HEADER);
+      expect(bytes.slice(-1024)).toContain('%%EOF');
+      // 32件の案件カードは1ページに収まらない分量のため、複数ページに分かれて
+      // いることを確認する（/Type /Page の出現数で概算。/Type /Pages とは区別する）。
+      const pageObjectCount = (bytes.match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+      expect(pageObjectCount).toBeGreaterThan(1);
+
+      // 全 32 件の見出しテキストが PDF から抽出できること（Issue #172 回帰防止）。
+      const text = await extractPdfText(buffer);
+      for (const heading of headings) {
+        expect(text).toContain(heading);
+      }
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    '6カテゴリ中2つが行数超過（15行以上）のスキル一覧でもクラッシュせず正常なPDFを生成できる（スキル表のページ境界分断防止の回帰確認）',
+    async () => {
+      // skillsBlockToMarkdown が生成する形（### カテゴリ名 見出し + 直後のスキル表）を
+      // 6カテゴリ分並べ、うち2カテゴリだけ CARD_MAX_ROWS を超える行数にして
+      // Issue #147 (c) の再現条件（6カテゴリ中2つでページ境界分断）に近いボリュームにする。
+      const buildCategory = (name: string, rowCount: number) => {
+        const rows = Array.from({ length: rowCount }, (_, i) => `| ${name}${i} | ${i}年 | 業務利用 |`).join('\n');
+        return [`### ${name}`, '', '| スキル | 経験年数 | 習熟度 |', '| :--- | :--- | :--- |', rows, ''].join('\n');
+      };
+      const categories = [
+        buildCategory('プログラミング言語', 25),
+        buildCategory('フレームワーク', 6),
+        buildCategory('データベース', 5),
+        buildCategory('インフラ', 20),
+        buildCategory('ツール', 4),
+        buildCategory('その他', 3),
+      ].join('\n');
+      const content = ['## スキル一覧', '', categories].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const bytes = buffer.toString('latin1');
+
+      expect(buffer.length).toBeGreaterThan(0);
+      expect(bytes.slice(0, PDF_HEADER.length)).toBe(PDF_HEADER);
+      expect(bytes.slice(-1024)).toContain('%%EOF');
+      const pageObjectCount = (bytes.match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+      expect(pageObjectCount).toBeGreaterThan(1);
     },
     RENDER_TIMEOUT_MS,
   );

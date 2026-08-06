@@ -361,7 +361,7 @@ function toBuilderProcess(flags: number[]): string[] {
   return out;
 }
 
-function deriveLevel(years: number): string {
+export function deriveLevel(years: number): string {
   if (years >= 5) return '上級';
   if (years >= 2) return '中級';
   return '初級';
