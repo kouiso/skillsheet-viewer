@@ -406,8 +406,11 @@ const SkillsBlockEditor = ({
         placeholder="カテゴリ（例: プログラミング言語）"
         className="w-full rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
+      {/* w-full だけだと table-layout:auto がコンテナ幅に収めようと各列を圧縮し、320px では
+          「経験年数」ヘッダーが1文字ずつ縦積みになっていた（#150）。min-w を与えてテーブル自体を
+          コンテナよりワイドにし、overflow-x-auto の横スクロールを実際に発火させる。 */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr>
               <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
