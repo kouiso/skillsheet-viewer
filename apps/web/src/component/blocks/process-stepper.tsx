@@ -11,19 +11,24 @@ interface ProcessStepperProps {
 }
 
 // 7段SDLCモデルの担当工程ステッパー。担当あり/なし はアイコン＋色で区別する。
+//
+// 320px 幅では 7 列だと1カラムあたり数十px しか残らず、break-keep があっても
+// [overflow-wrap:anywhere] が優先されて「要件定義」が1文字ずつ縦積みになっていた
+// （#144）。process-overview.tsx の7ドーナツ俯瞰と同じ grid-cols-4 → sm:grid-cols-7
+// のブレークポイントに揃え、狭幅では2段に折り返してカラム幅を確保する。
 export function ProcessStepper({ done, compact = false }: ProcessStepperProps) {
   return (
-    <div className="flex items-end gap-1.5">
+    <div className="grid grid-cols-4 items-end gap-x-1.5 gap-y-3 sm:grid-cols-7">
       {PROCESS_LABELS.map((label, i) => {
         const isDone = done?.[i] ?? false;
         const title = isDone ? `${label}：経験あり` : `${label}：未経験`;
         const StatusIcon = isDone ? Check : Circle;
         return (
-          <div key={label} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+          <div key={label} className="flex min-w-0 flex-col items-center gap-1">
             {!compact && (
               <span
                 title={title}
-                className={`flex items-center justify-center gap-0.5 break-keep text-center font-mono text-[10px] leading-tight [overflow-wrap:anywhere] ${isDone ? 'text-accent-text' : 'text-faint'}`}
+                className={`flex items-center justify-center gap-0.5 break-keep text-center font-mono text-[10px] leading-tight ${isDone ? 'text-accent-text' : 'text-faint'}`}
               >
                 <StatusIcon className="size-2.5 shrink-0" aria-hidden="true" />
                 {/* 狭幅では「・」の直後だけで折り返す（語中の「実装・単/体」折れを防ぐ）。 */}
