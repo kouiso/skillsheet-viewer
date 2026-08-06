@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { Font, renderToBuffer, View } from '@react-pdf/renderer';
+import { getDocument } from 'pdfjs-dist';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -16,9 +17,12 @@ import { renderBlocks, SkillSheetDocument } from './skill-sheet-document';
 // 本番（pdf/fonts.ts）はブラウザ向けに URL 参照（/fonts/...）で登録するが、
 // Node 上のバイト描画ではファイルシステムから読めないため、ここでは実ファイルパスで登録する。
 // ファミリ名は本番と同じ PDF_FONT_FAMILY を使うので、コンポーネントの参照と一致する。
+//
+// Noto Sans JP の CFF(OTF) 版を使うと @react-pdf/renderer の CFF サブセット化が
+// 壊れて豆腐表示・コンテンツ消失が起きる（Issue #172）。テストも TrueType 版を使う。
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_OTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.otf');
-const BOLD_OTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.otf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
 
 // PDF の先頭マジックバイト（%PDF-）。これが無ければ PDF として成立していない。
 const PDF_HEADER = '%PDF-';
@@ -27,15 +31,33 @@ const PDF_HEADER = '%PDF-';
 // スイート全体の並列実行下では既定の 5 秒を超えることがあるため、余裕を持たせる。
 const RENDER_TIMEOUT_MS = 30_000;
 
+// PDF バッファからテキストを抽出する。Issue #172 の回帰防止で、生成された PDF に
+// 期待した日本語テキストが実際に含まれているかを検証するため使う。
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  const data = new Uint8Array(buffer);
+  const doc = await getDocument({ data }).promise;
+  let text = '';
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i);
+    const content = await page.getTextContent();
+    for (const item of content.items) {
+      if ('str' in item && typeof item.str === 'string') {
+        text += item.str;
+      }
+    }
+  }
+  return text;
+}
+
 function registerNodeFonts(): void {
   Font.register({
     family: PDF_FONT_FAMILY,
     fonts: [
-      { src: REGULAR_OTF, fontWeight: 400 },
-      { src: BOLD_OTF, fontWeight: 700 },
+      { src: REGULAR_TTF, fontWeight: 400 },
+      { src: BOLD_TTF, fontWeight: 700 },
       // 日本語に true italic は無いため、italic にも同じ字形を割り当てる（本番 fonts.ts と同じ方針）。
-      { src: REGULAR_OTF, fontWeight: 400, fontStyle: 'italic' },
-      { src: BOLD_OTF, fontWeight: 700, fontStyle: 'italic' },
+      { src: REGULAR_TTF, fontWeight: 400, fontStyle: 'italic' },
+      { src: BOLD_TTF, fontWeight: 700, fontStyle: 'italic' },
     ],
   });
 }
@@ -171,8 +193,8 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
 describe('SkillSheetDocument（実バイト描画）', () => {
   beforeAll(() => {
     // 実ファイルが無いと描画は成立しないため前提を明示する。
-    expect(existsSync(REGULAR_OTF)).toBe(true);
-    expect(existsSync(BOLD_OTF)).toBe(true);
+    expect(existsSync(REGULAR_TTF)).toBe(true);
+    expect(existsSync(BOLD_TTF)).toBe(true);
     registerNodeFonts();
   });
 
@@ -278,36 +300,33 @@ describe('SkillSheetDocument（実バイト描画）', () => {
   );
 
   it(
-    '32件の案件カード（見出し+表）を含む実データ相当のボリュームでもクラッシュせず複数ページPDFを生成できる（案件カード分断防止の回帰確認）',
+    '32件の案件カード（見出し+表）を含む実データ相当のボリュームでも、全件のテキストがPDFに描画される（Issue #172 回帰防止）',
     async () => {
       // projectBlockToMarkdown が生成する形（### 会社名 — タイトル 見出し + 直後の
-      // 項目/内容 表）を模した案件カードを32件並べる。Issue #147 (b) の再現条件
-      // （32件中16件でページ境界分断）に近いボリュームで、クラッシュしないことと
-      // 正常な複数ページPDFが生成されることを確認する。
-      //
-      // 既知の限界（#172）: このアサーションは PDF の構造的な正当性（ヘッダ/フッタ・
-      // 複数ページ）のみを見ており、32件全ての本文が実際にページへ描画されたかは
-      // 検証していない。実データ相当の32件規模では、レイアウトツリーを直接検証すると
-      // 大半のカードが無音で欠落する既存バグ（本PR起因ではない、詳細は #172）があり、
-      // その状態でもこのテストの現在のアサーションは全て通過してしまう。
-      const cards = Array.from({ length: 32 }, (_, i) =>
-        [
-          `### 株式会社サンプル${i} — 案件${i}のシステム開発`,
-          '',
-          '| 項目 | 内容 |',
-          '| :--- | :--- |',
-          `| 期間 | 202${i % 5}.04〜202${(i % 5) + 1}.03 |`,
-          '| 役割 | エンジニア |',
-          '| 規模・スコープ | 5名 |',
-          '| 技術スタック | TypeScript, React, Next.js |',
-          '| 担当工程 | 要件定義, 設計, 実装, テスト |',
-          '',
-          '**業務内容**',
-          '',
-          '要件定義から運用までを一貫して担当しました。',
-          '',
-        ].join('\n'),
-      ).join('\n');
+      // 項目/内容 表）を模した案件カードを32件並べる。Issue #172 の再現条件
+      // （32件中29件がPDFから消失）に近いボリュームで、全てのカードがテキストとして
+      // 抽出できることを検証する。
+      const headings = Array.from({ length: 32 }, (_, i) => `株式会社サンプル${i} — 案件${i}のシステム開発`);
+      const cards = headings
+        .map((heading, i) =>
+          [
+            `### ${heading}`,
+            '',
+            '| 項目 | 内容 |',
+            '| :--- | :--- |',
+            `| 期間 | 202${i % 5}.04〜202${(i % 5) + 1}.03 |`,
+            '| 役割 | エンジニア |',
+            '| 規模・スコープ | 5名 |',
+            '| 技術スタック | TypeScript, React, Next.js |',
+            '| 担当工程 | 要件定義, 設計, 実装, テスト |',
+            '',
+            '**業務内容**',
+            '',
+            '要件定義から運用までを一貫して担当しました。',
+            '',
+          ].join('\n'),
+        )
+        .join('\n');
       const content = ['## 職務経歴', '', cards].join('\n');
 
       const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
@@ -320,6 +339,12 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       // いることを確認する（/Type /Page の出現数で概算。/Type /Pages とは区別する）。
       const pageObjectCount = (bytes.match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
       expect(pageObjectCount).toBeGreaterThan(1);
+
+      // 全 32 件の見出しテキストが PDF から抽出できること（Issue #172 回帰防止）。
+      const text = await extractPdfText(buffer);
+      for (const heading of headings) {
+        expect(text).toContain(heading);
+      }
     },
     RENDER_TIMEOUT_MS,
   );
