@@ -4,8 +4,9 @@ import { useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 
-// 動的ルート（/view/[path]・/compare）のサーバー側システムエラーを受け取る
-// セグメント境界。ファイル不在は notFound() で別扱い、ここには予期せぬ障害だけが届く。
+// 動的ルート（/view/[path] 等）のサーバー側システムエラーを受け取るセグメント境界。
+// ファイル不在は notFound() で、設定不備（GitHub/DB未設定等）は isConfigError() で別扱い、
+// ここには予期せぬ障害だけが届く（#157）。
 // biome-ignore lint/suspicious/noShadowRestrictedNames: Next.js error boundary requires this function name
 export default function Error({ error: err, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {

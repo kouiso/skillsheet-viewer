@@ -28,5 +28,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   // 閲覧ゲート（requireViewer）が実際に呼ばれる範囲だけに絞る。
-  matcher: ['/view/:path*', '/compare'],
+  // /compare は #145 で削除済み（死にコードだった上、DBシートを受け付けなかった）。
+  matcher: ['/view/:path*'],
 };

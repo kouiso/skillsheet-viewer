@@ -90,7 +90,6 @@ Next.js App Router では `apps/web/app` 配下のディレクトリ構造がそ
 | `/view/db` | `app/view/db/page.tsx` | Server | デフォルトシート単体表示（後方互換） |
 | `/view/db/[id]` | `app/view/db/[id]/page.tsx` | Server | ID 指定のシート表示 |
 | `/view/[path]` | `app/view/[path]/page.tsx` | Server | GitHub 由来 `.md` の表示（レガシー経路） |
-| `/compare` | `app/compare/page.tsx` | Server | 2 シートの左右比較 |
 | `/builder` | `app/builder/page.tsx` | Server → Client | 編集者向けブロックビルダー |
 | `/login` | `app/login/page.tsx` | Client | 編集者ログイン（Better Auth） |
 | `/viewer-auth` | `app/viewer-auth/page.tsx` | Client | 閲覧コード認証（HMAC） |
@@ -139,7 +138,7 @@ export default async function ViewLayout({ children }: { children: React.ReactNo
 }
 ```
 
-`/viewer-auth` と `/login` はこのセグメントの外にあるため、ゲート対象外である。`/compare` は `view` セグメント外だが、ページ本体で明示的に `requireViewer()` を呼んで同じ保護をかけている。認証の詳細は [02 認証](02-authentication.md) を参照。
+`/viewer-auth` と `/login` はこのセグメントの外にあるため、ゲート対象外である。認証の詳細は [02 認証](02-authentication.md) を参照。
 
 ---
 
