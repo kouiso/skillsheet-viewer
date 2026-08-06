@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
 import { createSheet, deleteSheet, listSheets } from '@skillsheet/db';
@@ -5,7 +6,10 @@ import { createSheet, deleteSheet, listSheets } from '@skillsheet/db';
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
 
-const E2E_TITLE_PREFIX = 'E2E Test Sheet';
+// 実行ごとに一意な prefix にする。固定 prefix だと、CI で別の PR/ブランチの実行が
+// 同じ共有 DB に対して同時に走った場合、beforeAll/afterAll の一括掃除が
+// 他の実行が作成中・編集中のシートを削除してしまう（CodeRabbit 指摘）。
+const E2E_TITLE_PREFIX = `E2E Test Sheet ${randomUUID().slice(0, 8)}`;
 let currentSheetId = '';
 let currentSheetTitle = '';
 

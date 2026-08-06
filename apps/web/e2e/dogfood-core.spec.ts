@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
@@ -72,12 +73,19 @@ async function cleanupSheetsByPrefix(prefix: string) {
   }
 }
 
+// 実行ごとに一意な prefix にする。固定 prefix だと、CI で別の PR/ブランチの実行が
+// 同じ共有 DB に対して同時に走った場合、beforeAll の一括掃除が他の実行が
+// 作成中・編集中のシートを削除してしまう（CodeRabbit 指摘）。
+const RUN_ID = randomUUID().slice(0, 8);
+const CORE_SHEET_PREFIX = `Dogfood Core Sheet ${RUN_ID}`;
+const FULL_TEMPLATE_TITLE = `Dogfood フルスキルシート ${RUN_ID}`;
+
 test.beforeAll(async () => {
   fs.mkdirSync(reportDir, { recursive: true });
   // 前回の実行が残した同prefixのシートを掃除する
-  await cleanupSheetsByPrefix('Dogfood Core Sheet');
-  await cleanupSheetsByPrefix('Dogfood フルスキルシート');
-  richSheetTitle = `Dogfood Core Sheet ${Date.now()}`;
+  await cleanupSheetsByPrefix(CORE_SHEET_PREFIX);
+  await cleanupSheetsByPrefix(FULL_TEMPLATE_TITLE);
+  richSheetTitle = `${CORE_SHEET_PREFIX} ${Date.now()}`;
   richSheetId = await createSheet(richSheetTitle, buildConsoleDemoBlocks());
 });
 
@@ -113,7 +121,7 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   // 新規シート作成（フルスキルシート）
   await page.getByRole('button', { name: '新規シート' }).click();
   await expect(page.getByText('新規シートを作成')).toBeVisible();
-  await page.locator('#new-sheet-title').fill('Dogfood フルスキルシート');
+  await page.locator('#new-sheet-title').fill(FULL_TEMPLATE_TITLE);
   await page.locator('#new-sheet-template').selectOption('full');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
@@ -124,7 +132,7 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   await capture(page, 'A-editor-new-sheet-initial-light.png');
 
   // タイトル編集
-  await page.locator('#sheet-title').fill('Dogfood フルスキルシート 編集済');
+  await page.locator('#sheet-title').fill(`${FULL_TEMPLATE_TITLE} 編集済`);
 
   // スキルブロックに 1 行追加
   await page.getByRole('button', { name: 'スキルを追加' }).first().click();
@@ -152,7 +160,7 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   await previewPage.waitForLoadState('networkidle');
   await capture(previewPage, 'A-preview-light.png');
   const previewText = await previewPage.locator('body').innerText();
-  expect(previewText).toContain('Dogfood フルスキルシート 編集済');
+  expect(previewText).toContain(`${FULL_TEMPLATE_TITLE} 編集済`);
   expect(previewText).toContain('Playwright');
   await previewPage.close();
 
