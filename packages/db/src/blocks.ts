@@ -545,8 +545,15 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     const companyName = company?.name ?? '(不明な会社)';
     lines.push(`### ${companyName} — ${item.title}`);
     lines.push('');
+    // 会社概要文（CompanyInfo.note）。従来 PDF・バックアップのどちらにも出力先が無く、
+    // 案件単体では伝わらない「どういう立ち位置でその会社に入っていたか」が欠落していた（#139）。
+    if (company?.note?.trim()) {
+      lines.push(company.note.trim());
+      lines.push('');
+    }
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
+    if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
     if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
     if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);

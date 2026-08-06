@@ -63,4 +63,25 @@ describe('ProjectCard', () => {
     expect(screen.getByText(/1行目/)).toBeInTheDocument();
     expect(screen.getByText(/2行目/)).toBeInTheDocument();
   });
+
+  it('会社概要文（company.note）が読める（#139: 従来どこにも描画されなかった）', () => {
+    const company: CompanyInfo = { ...COMPANY, note: '大手SIベンダーにて複数の先進的なプロジェクトに参画。' };
+    render(<ProjectCard item={buildItem({})} no={1} company={company} activeTech={[]} tech={[]} />);
+    expect(screen.getByText('大手SIベンダーにて複数の先進的なプロジェクトに参画。')).toBeInTheDocument();
+  });
+
+  it('会社概要文が無ければ何も描画しない', () => {
+    render(<ProjectCard item={buildItem({})} no={1} company={COMPANY} activeTech={[]} tech={[]} />);
+    // COMPANY.note は '' なので note 由来の要素は無い（他の空文字チェックとの区別のため件数で確認）。
+    expect(screen.queryByText(/参画/)).not.toBeInTheDocument();
+  });
+
+  it('コメントは italic を使わない（#152 S-2: 和文長文が合成斜体になっていた）', () => {
+    const comment = '長めのコメント本文がここに入ります。';
+    render(<ProjectCard item={buildItem({ comment })} no={1} company={COMPANY} activeTech={[]} tech={[]} />);
+    const commentText = screen.getByText(/長めのコメント本文/);
+    // InlineMarkdown が p でラップするので、その祖先を辿って italic クラスが無いことを確認する。
+    const wrapper = commentText.closest('div');
+    expect(wrapper?.className).not.toContain('italic');
+  });
 });

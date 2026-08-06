@@ -35,8 +35,14 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
           </div>
           <h3 className="text-[17px] leading-snug text-foreground">{item.title || '(タイトル未入力)'}</h3>
           {item.scope && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{item.scope}</p>}
+          {/* 会社概要文（CompanyInfo.note）。従来どこにも描画先が無く、ビューア・PDF・バックアップの
+              全経路で欠落していた（#139）。projectBlockToMarkdown 側も同じ位置づけで出力する。 */}
+          {company?.note && <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/80">{company.note}</p>}
         </div>
-        <div className="shrink-0 text-right">
+        {/* shrink-0 だと flex item の既定 min-width:auto（コンテンツの折返し前の幅が下限）が効き、
+            320px では役割・会社名の長文が折り返さずカード幅を押し広げていた（#143）。
+            min-w-0 に変えて行として折り返せるようにする。 */}
+        <div className="min-w-0 text-right">
           {item.role && <div className="text-[12.5px] text-foreground">{item.role}</div>}
           <div className="mt-0.5 font-mono text-[11.5px] text-faint">
             {[company?.name, item.team, duration].filter(Boolean).join(' · ')}
@@ -81,10 +87,12 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
         </div>
       )}
 
+      {/* #152 S-2: 無条件 italic だと100〜918字の和文長文が合成斜体になり読みにくかった。
+          引用の意味合いは左罫線だけで十分表現できているので italic は外す。 */}
       {item.comment && (
         <InlineMarkdown
           content={item.comment}
-          className="break-words border-l-2 border-primary pl-3 text-sm italic text-muted-foreground"
+          className="break-words border-l-2 border-primary pl-3 text-sm text-muted-foreground"
         />
       )}
     </article>
