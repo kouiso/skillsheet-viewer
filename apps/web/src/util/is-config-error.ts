@@ -16,8 +16,16 @@ const CONFIG_ERROR_MESSAGES = [
 // 設定不備の一種として扱う（実測で GITHUB_TOKEN が無効なときも 500 になっていた）。
 const GITHUB_AUTH_ERROR_PATTERN = /GitHub API error (fetching file|listing directory): 401/;
 
+// PostgreSQL の undefined_table（テーブル不在＝ pnpm db:migrate 未実行）。
+// @neondatabase/serverless はメッセージだけでなく SQLSTATE を .code に載せるため、
+// 表記ゆれに強い .code を優先し、.code が取れない場合のみメッセージ文字列で判定する。
+const UNDEFINED_TABLE_SQLSTATE = '42P01';
+
 export function isConfigError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   if (CONFIG_ERROR_MESSAGES.some((msg) => err.message.includes(msg))) return true;
-  return GITHUB_AUTH_ERROR_PATTERN.test(err.message);
+  if (GITHUB_AUTH_ERROR_PATTERN.test(err.message)) return true;
+  const code = (err as { code?: unknown }).code;
+  if (code === UNDEFINED_TABLE_SQLSTATE) return true;
+  return /relation .* does not exist/.test(err.message);
 }

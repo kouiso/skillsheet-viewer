@@ -26,7 +26,16 @@ describe('isConfigError', () => {
 
   it('未知のエラーメッセージは設定エラーと判定しない（一時的な障害として扱う）', () => {
     expect(isConfigError(new Error('connect ECONNREFUSED'))).toBe(false);
-    expect(isConfigError(new Error('relation "blocks" does not exist'))).toBe(false);
+  });
+
+  it('未マイグレーション（テーブル不在）のエラーを設定エラーとして検出する（.code が取れる場合）', () => {
+    const err = new Error('relation "blocks" does not exist');
+    (err as { code?: string }).code = '42P01';
+    expect(isConfigError(err)).toBe(true);
+  });
+
+  it('未マイグレーション（テーブル不在）のエラーを設定エラーとして検出する（.code が無くメッセージのみの場合）', () => {
+    expect(isConfigError(new Error('relation "blocks" does not exist'))).toBe(true);
   });
 
   it('Error インスタンスでない値は false', () => {
