@@ -60,4 +60,13 @@ describe('splitForHyphenation', () => {
     const heartVs16 = '❤️';
     expect(splitForHyphenation(heartVs16)).toEqual([heartVs16]);
   });
+
+  it('漢字の異体字シーケンス（IVS、補助面の異体字セレクタ）は基底文字から分離しない', () => {
+    // 葛 (U+845B) + IVS選択子 (U+E0100, 補助特殊用途面)。補助面の符号点はサロゲート
+    // ペアになり isCjk の範囲（0x2E80–0xFFFF、BMPのみ）の外なので CJK 扱いにはならないが、
+    // 対策前は「非CJK文字」として prevWasCjk（直前がCJK）判定に基づき ZWNBSP が
+    // 挿入され、結果として基底の漢字から分離しうる。
+    const kanjiWithIvs = '葛\u{E0100}';
+    expect(splitForHyphenation(kanjiWithIvs)).toEqual([kanjiWithIvs]);
+  });
 });
