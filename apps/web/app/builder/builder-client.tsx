@@ -832,6 +832,11 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   );
   const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
   const savedRef = useRef(false);
+  // サイドバーの sheet.list は staleTime: 60s の間 initialData を再利用し続けるため、
+  // タイトルを変更して保存しても react-query 側は自動では気づかない。保存成功時に
+  // タイトルが変わっていた場合だけ invalidate してサイドバー表示を追従させる
+  // （毎回 invalidate すると自動保存のたびに一覧を再取得してしまい staleTime の意味が薄れる）。
+  const savedTitleRef = useRef(initialTitle);
   const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
   const [activeTab, setActiveTab] = useState<'blocks' | 'project'>('blocks');
 
@@ -994,6 +999,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       // superjson transformer が Date を server caller / HTTP の両経路で保つため型どおり
       // Date が返るが、念のため new Date() で正規化する（.getTime() 比較の破綻防止）。
       savedUpdatedAtRef.current = new Date(result.updatedAt);
+      if (savedTitleRef.current !== currentTitle) {
+        savedTitleRef.current = currentTitle;
+        void utils.sheet.list.invalidate();
+      }
       lastSavedSnapshotRef.current = savedSnapshot;
       failedSnapshotRef.current = null;
       // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
@@ -1020,9 +1029,11 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       followUpRef.current = false;
       void runAutosave();
     }
-    // saveMutation.mutateAsync は @tanstack/react-query が安定参照として返すため、
-    // 依存配列に加えても再レンダーごとの再生成は起きない。
-  }, [activeSheetId, saveMutation.mutateAsync]);
+    // saveMutation.mutateAsync / utils.sheet.list.invalidate は @tanstack/react-query・tRPC が
+    // 安定参照として返すため、依存配列に加えても再レンダーごとの再生成は起きない
+    // （utils オブジェクト自体ではなく末端の関数を指定する — utils は毎レンダー新しい
+    // オブジェクトを返す実装があり得るが、内部の関数参照は安定している）。
+  }, [activeSheetId, saveMutation.mutateAsync, utils.sheet.list.invalidate]);
 
   // dirty になってから AUTOSAVE_DEBOUNCE_MS 編集が止んだら自動保存する
   // （items/title が変わるたびにタイマーを引き直す＝デバウンス）。
@@ -1255,6 +1266,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
         // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。
         savedUpdatedAtRef.current = new Date(result.updatedAt);
+        if (savedTitleRef.current !== payload.title) {
+          savedTitleRef.current = payload.title;
+          void utils.sheet.list.invalidate();
+        }
         // 保存成功した内容をスナップショットとして記録し、dirty を解除する
         // （保存中に編集が入っていた場合は dirty のままにする）。
         lastSavedSnapshotRef.current = savedSnapshot;

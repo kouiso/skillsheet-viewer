@@ -289,6 +289,26 @@ describe('BuilderClient', () => {
       }),
     );
   });
+
+  // Codex 指摘の回帰テスト: sheet.list は staleTime: 60s の間 initialData を再利用するため、
+  // タイトルを変更して保存してもサイドバーは自動では気づかない。保存成功時にタイトルが
+  // 変わっていれば utils.sheet.list.invalidate() でサイドバー表示を追従させる。
+  it('タイトルを変更して保存すると sheet.list を invalidate する', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="旧" {...defaultProps} />);
+    const titleInput = screen.getByLabelText('タイトル');
+    await user.clear(titleInput);
+    await user.type(titleInput, '新タイトル');
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockInvalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('タイトルを変えずに保存しても sheet.list は invalidate しない', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="変わらないタイトル" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockInvalidate).not.toHaveBeenCalled();
+  });
 });
 
 describe('BuilderClient 自動保存', () => {
@@ -338,6 +358,28 @@ describe('BuilderClient 自動保存', () => {
       vi.advanceTimersByTime(5000);
     });
     expect(mockSave).toHaveBeenCalledTimes(1);
+  });
+
+  // Codex 指摘の回帰テスト（手動保存側と同じ理由）。自動保存でタイトルが変わった場合も
+  // サイドバーの sheet.list を invalidate してタイトルの追従を保証する。
+  it('タイトル変更を含む自動保存は sheet.list を invalidate する', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="旧" {...defaultProps} />);
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '新タイトル（自動保存）' } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockInvalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('内容のみの自動保存（タイトル不変）は sheet.list を invalidate しない', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="変わらないタイトル" {...defaultProps} />);
+    typeMarkdown('## A 追記');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockInvalidate).not.toHaveBeenCalled();
   });
 
   it('保存の実行中に編集が入ると、完了後にちょうど 1 回だけ追撃保存する', async () => {
