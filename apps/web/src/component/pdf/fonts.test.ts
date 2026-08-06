@@ -69,4 +69,11 @@ describe('splitForHyphenation', () => {
     const kanjiWithIvs = '葛\u{E0100}';
     expect(splitForHyphenation(kanjiWithIvs)).toEqual([kanjiWithIvs]);
   });
+
+  it('CJK記号への結合分音記号（U+20D0台）は基底文字から分離しない', () => {
+    // 漢 (U+6F22) + COMBINING ENCLOSING CIRCLE (U+20DD)。旧範囲（結合分音記号一般 /
+    // かな結合濁点 / 異体字セレクタのみ）には含まれず、対策前は分離しうる。
+    const kanjiWithEnclosingCircle = '漢\u{20DD}';
+    expect(splitForHyphenation(kanjiWithEnclosingCircle)).toEqual([kanjiWithEnclosingCircle]);
+  });
 });
