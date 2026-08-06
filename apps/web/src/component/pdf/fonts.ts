@@ -10,13 +10,26 @@ const NotoSansJPBold = '/fonts/NotoSansJP-Bold.otf';
 // CJK/全角文字の開始コードポイント。これ以上は1文字単位で改行を許可する。
 const CODEPOINT = { CJK_START: 0x2e80 } as const;
 
+// ZERO WIDTH NO-BREAK SPACE。ECMAScript の String.prototype.trim() が
+// 空白として扱う数少ない「表示幅が実質ゼロ」の文字で、@react-pdf/textkit の
+// レイアウトエンジンはこれを（ハイフン付き改行点＝penalty ではなく）通常の
+// 改行可能な空白＝glue として扱う。CJK 文字の境界に挟むことで、行末に
+// ハイフン記号を出さずに任意の文字境界で改行できるようにする。
+const ZWNBSP = '﻿';
+
 let registered = false;
 
 /**
  * 日本語は単語区切りが無いため、ASCII の連なりは保ちつつ、
  * 全角・CJK 文字の境界で改行を許可するように語を分割する。
+ *
+ * 各 CJK 文字の直前に ZWNBSP を挟んで返す。@react-pdf/textkit 側は
+ * 「次の要素が空白なら次で改行してよい（ハイフン無し）」と判定するため、
+ * 文字そのものを区切り値として返す（旧実装）とハイフン付きの改行点として
+ * 扱われてしまう。ZWNBSP を挟むことで改行点は空白側に付き、CJK 文字は
+ * 崩れずそのまま出力される。
  */
-function splitForHyphenation(word: string): string[] {
+export function splitForHyphenation(word: string): string[] {
   const parts: string[] = [];
   let buffer = '';
   const flush = (): void => {
@@ -31,6 +44,7 @@ function splitForHyphenation(word: string): string[] {
       continue;
     }
     flush();
+    if (parts.length > 0) parts.push(ZWNBSP);
     parts.push(ch);
   }
   flush();

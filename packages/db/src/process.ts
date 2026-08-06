@@ -289,13 +289,24 @@ export function deriveCompanyPeriod(periods: string[]): string {
 
 const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
 
-/** 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。 */
+// 元データの「該当なし」プレースホルダ。技術名として取り込まれても描画時点で除外する。
+const EMPTY_TECH_PLACEHOLDERS = new Set(['-', 'ー', '—']);
+
+function isEmptyTechValue(value: string): boolean {
+  return EMPTY_TECH_PLACEHOLDERS.has(value.trim()) || value.trim() === '';
+}
+
+/**
+ * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ */
 export function flattenTech(tech: ProjectTech): string[] {
   if (!tech) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const key of TECH_BUCKET_ORDER) {
     for (const value of tech[key] ?? []) {
+      if (isEmptyTechValue(value)) continue;
       if (!seen.has(value)) {
         seen.add(value);
         out.push(value);

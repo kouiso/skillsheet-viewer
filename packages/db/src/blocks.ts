@@ -8,7 +8,7 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
-import { formatMonthToken, formatPeriodDisplay } from './process';
+import { flattenTech, formatMonthToken, formatPeriodDisplay } from './process';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -551,8 +551,7 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
     if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
-    const tech = item.tech;
-    const techParts: string[] = [...tech.lang, ...tech.fw, ...tech.db, ...tech.infra, ...tech.tools, ...tech.collab];
+    const techParts = flattenTech(item.tech);
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
     if (item.process.length > 0) lines.push(`| 担当工程 | ${escapeCell(item.process.join(', '))} |`);
     if (item.duties.trim()) {

@@ -4,6 +4,8 @@ import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@skillsheet/db/process';
 import { useRef, useState } from 'react';
 
+import { InlineMarkdown } from '@/component/inline-markdown';
+
 interface ProjectPreviewProps {
   project: ProjectItem;
   company: CompanyInfo | undefined;
@@ -147,9 +149,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
             <div {...sync('meta')}>
               <div className="pv-meta">
                 {project.role || '役割未設定'}
-                <div className="m2">
-                  {[company?.name, project.team && `${project.team}名`, project.duration].filter(Boolean).join(' · ')}
-                </div>
+                <div className="m2">{[company?.name, project.team, project.duration].filter(Boolean).join(' · ')}</div>
               </div>
             </div>
           </div>
@@ -161,10 +161,10 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           {summary &&
             (hasOwnSummary ? (
               <div {...sync('summary')}>
-                <p className="pv-summary">{summary}</p>
+                <InlineMarkdown content={summary} className="pv-summary" />
               </div>
             ) : (
-              <p className="pv-summary">{summary}</p>
+              <InlineMarkdown content={summary} className="pv-summary" />
             ))}
 
           {shownTech.length > 0 && (
@@ -198,7 +198,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           <div key={key} className="pv-block">
             <div {...sync(key)}>
               <div className="bt">{heading}</div>
-              <div className="bc">{body}</div>
+              <InlineMarkdown content={body} className="bc" />
             </div>
           </div>
         ))}
