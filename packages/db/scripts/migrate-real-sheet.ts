@@ -11,7 +11,16 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from '../src/blocks';
+import type {
+  BlockInput,
+  CompanyInfo,
+  ProfileBlockData,
+  ProfileMeta,
+  ProjectItem,
+  ProjectTech,
+  SkillEntry,
+  SkillsBlockData,
+} from '../src/blocks';
 
 const SHEET_ID = '18a79e66-75e2-47e8-922e-d61342bb5233';
 const SHEET_TITLE = 'エンジニアスキルシート';
@@ -337,6 +346,147 @@ function parseCareerMarkdown(markdown: string): { companies: CompanyInfo[]; item
   return { companies, items };
 }
 
+// --- 技術者プロファイルパース --------------------------------------------------------------
+function deriveSkillLevel(years: number): string {
+  if (years >= 5) return '上級';
+  if (years >= 2) return '中級';
+  return '初級';
+}
+
+function normalizeProfileLabel(label: string): string {
+  return label.replace(/\s+/g, '').replace(/\*/g, '').replace(/:/g, '').trim();
+}
+
+function parseProfileMarkdown(markdown: string): ProfileBlockData | null {
+  const lines = markdown.split('\n');
+  const startIdx = lines.findIndex((line) => /^##\s*技術者プロファイル/.test(line));
+  if (startIdx === -1) return null;
+
+  let endIdx = lines.length;
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    // プロファイル内の「### 自己 PR」等はサブセクションとして含めるため、
+    // 区切りは `## ` 見出し（次セクション）または <details> の開始のみとする。
+    if (/^(?:#{2}\s|<details[\s>])/.test(lines[i])) {
+      endIdx = i;
+      break;
+    }
+  }
+  const section = lines.slice(startIdx + 1, endIdx);
+
+  const meta: ProfileMeta = {};
+  let name = '';
+  let company = '';
+  for (const line of section) {
+    if (!line.startsWith('|')) continue;
+    const row = parseTableRow(line);
+    if (!row) continue;
+    const [rawLabel, value] = row;
+    const label = normalizeProfileLabel(rawLabel);
+    if (!value) continue;
+    switch (label) {
+      case '技術者名':
+        name = value;
+        break;
+      case '所属':
+      case '所屬':
+        company = value;
+        break;
+      case '年齢':
+        meta.age = value;
+        break;
+      case '性別':
+        meta.gender = value;
+        break;
+      case '資格':
+        meta.qualifications = value;
+        break;
+      case '学歴':
+      case '学歷':
+        meta.education = value;
+        break;
+      case '稼働':
+      case '勤務形態':
+        meta.work = value;
+        break;
+      case '最寄駅':
+      case '最寄り駅':
+        meta.station = value;
+        break;
+      case '得意分野':
+        meta.specialties = value;
+        break;
+      case '得意業務':
+        meta.expertise = value;
+        break;
+    }
+  }
+
+  const prStart = section.findIndex((line) => /^###\s*自己\s*PR/.test(line));
+  const pr =
+    prStart !== -1
+      ? section
+          .slice(prStart + 1)
+          .join('\n')
+          .trim()
+      : '';
+
+  if (!name && !company && Object.values(meta).every((v) => !v) && !pr) {
+    return null;
+  }
+
+  return { name, title: '', pr, strengths: [], meta, company };
+}
+
+function parseSkillsMarkdown(markdown: string): SkillsBlockData[] {
+  const lines = markdown.split('\n');
+  let startIdx = lines.findIndex((line) => /^<details[\s>]/.test(line));
+  let endIdx = lines.length;
+  if (startIdx !== -1) {
+    endIdx = lines.findIndex((line) => /^<\/details>/.test(line), startIdx + 1);
+    if (endIdx === -1) endIdx = lines.length;
+  } else {
+    startIdx = lines.findIndex((line) => /スキル・経験年数/.test(line));
+    if (startIdx === -1) return [];
+  }
+  const section = lines.slice(startIdx + 1, endIdx);
+
+  const blocks: SkillsBlockData[] = [];
+  let currentCategory = '';
+  const currentSkills: SkillEntry[] = [];
+
+  const flushCategory = () => {
+    if (currentCategory && currentSkills.length > 0) {
+      blocks.push({ category: currentCategory, skills: [...currentSkills] });
+    }
+  };
+
+  for (const line of section) {
+    if (!line.startsWith('|')) continue;
+    const cells = line
+      .split('|')
+      .slice(1, -1)
+      .map((c) => c.trim());
+    if (cells.length < 3) continue;
+    const first = stripBold(cells[0]);
+    const skillName = stripBold(cells[1]);
+    const yearsRaw = stripBold(cells[2]);
+    if (first === '技術分類' || skillName === '技術名' || /^:?-+:?$/.test(first)) continue;
+
+    if (first) {
+      flushCategory();
+      currentCategory = first;
+      currentSkills.length = 0;
+    }
+    if (!skillName) continue;
+    const yearsMatch = yearsRaw.match(/(\d+(?:\.\d+)?)\s*年/);
+    const years = yearsMatch ? Number(yearsMatch[1]) : 0;
+    currentSkills.push({ name: skillName, years, level: deriveSkillLevel(years) });
+  }
+  flushCategory();
+
+  return blocks;
+}
+
 // --- メイン ---------------------------------------------------------------------------
 async function main() {
   const write = process.argv.includes('--write');
@@ -344,7 +494,7 @@ async function main() {
   const { getDb } = await import('../src/client');
   const { blocks: blocksTable } = await import('../src/schema');
   const { eq, asc } = await import('drizzle-orm');
-  const { isProfileBlockData, isStatsBlockData, isSkillsBlockData } = await import('../src/blocks');
+  const { isStatsBlockData } = await import('../src/blocks');
 
   const db = getDb();
   const rows = await db
@@ -353,18 +503,19 @@ async function main() {
     .where(eq(blocksTable.sheetId, SHEET_ID))
     .orderBy(asc(blocksTable.order));
 
-  const keepBlocks: BlockInput[] = [];
+  const statsBlocks: BlockInput[] = [];
   const markdownParts: string[] = [];
   let skippedExistingProject = false;
   for (const r of rows) {
-    if (r.type === 'profile' && isProfileBlockData(r.data)) keepBlocks.push({ type: 'profile', data: r.data });
-    else if (r.type === 'stats' && isStatsBlockData(r.data)) keepBlocks.push({ type: 'stats', data: r.data });
-    else if (r.type === 'skills' && isSkillsBlockData(r.data)) keepBlocks.push({ type: 'skills', data: r.data });
+    if (r.type === 'stats' && isStatsBlockData(r.data)) statsBlocks.push({ type: 'stats', data: r.data });
     else if (r.type === 'markdown') markdownParts.push((r.data as { markdown: string }).markdown);
     else if (r.type === 'project') {
       // 再実行（process.ts語彙修正の再適用等）を想定し、既存 project ブロックは
       // 再構築対象として無視する（元の legacy markdown からの再パースを正とする）。
       skippedExistingProject = true;
+    } else if (r.type === 'profile' || r.type === 'skills') {
+      // プロフィール・スキルは元 markdown から再生成するため既存ブロックは無視。
+      // markdown が無い場合は上位で fallback エラーになるため、ここでは単にスキップ。
     } else throw new Error(`未対応の既存ブロック type=${r.type} order=${r.order}（データ消失防止のため中断）`);
   }
   if (skippedExistingProject)
@@ -381,16 +532,37 @@ async function main() {
         : (() => {
             throw new Error('legacy markdown が DB にも /tmp/real_markdown.md にも見つかりません');
           })();
-  const { companies, items } = parseCareerMarkdown(fullMarkdown);
 
+  const profile = parseProfileMarkdown(fullMarkdown);
+  const skills = parseSkillsMarkdown(fullMarkdown);
+
+  const careerStart = fullMarkdown.search(/^##\s*経歴/im);
+  const careerMarkdown = careerStart !== -1 ? fullMarkdown.slice(careerStart) : fullMarkdown;
+  const { companies, items } = parseCareerMarkdown(careerMarkdown);
+
+  console.log('PARSED_PROFILE:', profile ? 'yes' : 'no');
+  console.log(
+    'PARSED_SKILLS_CATEGORIES:',
+    skills.length,
+    'TOTAL_SKILLS:',
+    skills.reduce((acc, s) => acc + s.skills.length, 0),
+  );
   console.log('PARSED_COMPANIES:', companies.length);
   console.log('PARSED_PROJECTS:', items.length);
 
+  const profileBlock: BlockInput | null = profile ? { type: 'profile', data: profile } : null;
+  const skillsBlocks: BlockInput[] = skills.map((s) => ({ type: 'skills', data: s }));
   const projectBlock: BlockInput = { type: 'project', data: { companies, items } };
-  const finalBlocks: BlockInput[] = [...keepBlocks, projectBlock];
+  const finalBlocks: BlockInput[] = [profileBlock, ...skillsBlocks, ...statsBlocks, projectBlock].filter(
+    (b): b is BlockInput => b !== null,
+  );
 
+  writeFileSync('/tmp/migrated_profile_block.json', JSON.stringify(profile, null, 2));
+  writeFileSync('/tmp/migrated_skills_blocks.json', JSON.stringify(skills, null, 2));
   writeFileSync('/tmp/migrated_project_block.json', JSON.stringify({ companies, items }, null, 2));
-  console.log('written /tmp/migrated_project_block.json');
+  console.log(
+    'written /tmp/migrated_profile_block.json, /tmp/migrated_skills_blocks.json, /tmp/migrated_project_block.json',
+  );
 
   if (!write) {
     console.log('DRY RUN — DB へは書き込んでいません（--write で実行すると保存します）');
