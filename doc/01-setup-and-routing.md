@@ -97,6 +97,7 @@ Next.js App Router では `apps/web/app` 配下のディレクトリ構造がそ
 | `/api/auth/[...all]` | `app/api/auth/[...all]/route.ts` | Route Handler | Better Auth の全エンドポイント |
 | `/api/logout` | `app/api/logout/route.ts` | Route Handler | 閲覧 cookie の失効 |
 | `/api/revalidate` | `app/api/revalidate/route.ts` | Route Handler | GitHub 読み経路のキャッシュ失効 |
+| `/api/trpc/[trpc]` | `app/api/trpc/[trpc]/route.ts` | Route Handler | tRPC の HTTP エンドポイント（`fetchRequestHandler`）。クライアントコンポーネントの `@trpc/react-query` フックのみが叩く |
 
 `[path]` や `[id]` は動的セグメントで、`params` は `Promise` として渡る（`const { id } = await params`）。
 
@@ -109,20 +110,21 @@ Next.js App Router では `apps/web/app` 配下のディレクトリ構造がそ
 - ハイドレーション前に `localStorage` のテーマ設定を `<html>` の `.dark` クラスへ反映するインラインスクリプトを注入（テーマの FOUC 防止）。
 - `Providers`（`app/providers.tsx`）で全体をラップ。
 
-### RSC とデータ取得
+### RSC とデータ取得（tRPC server caller）
 
-一覧・表示系のページはサーバー側で DB を読む Server Component である。DB 依存（`DATABASE_URL`）はランタイム専用のため、`next build` の静的解析で評価されないよう `connection()`（`next/server`）を先頭で呼び、そのコンポーネントを動的レンダリングに切り替えている。
+一覧・表示系のページはサーバー側で tRPC の server caller（`createServerCaller()`、`src/server/trpc/caller.ts`）経由でデータを読む Server Component である。`createCallerFactory` で作った caller は HTTP を経由せず procedure を直接呼び出すため、RSC からのデータ取得に往復コストが乗らない。DB 依存（`DATABASE_URL`）はランタイム専用のため、`next build` の静的解析で評価されないよう `connection()`（`next/server`）を先頭で呼び、そのコンポーネントを動的レンダリングに切り替えている。
 
 ```tsx
 // app/view/page.tsx（抜粋）
 export default async function SheetsListPage() {
   await connection(); // DATABASE_URL はランタイム専用。動的レンダリングを確保
-  const sheets = await getCachedDbSheets();
+  const caller = await createServerCaller();
+  const sheets = await caller.sheet.list();
   return <DbSheetsListClient initialSheets={sheets} hasError={hasError} />;
 }
 ```
 
-サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。
+サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。ビルダーのような書き込み系クライアントコンポーネントは `@trpc/react-query` の `trpc.sheet.*.useMutation()` / `useQuery()`（`src/lib/trpc-client.ts`、`app/providers.tsx` の `TRPCReactProvider`）を使い、HTTP 経由で `/api/trpc/[trpc]` を叩く。認可・入力検証（zod）・エラーコード（`TRPCError`）は procedure 側（`src/server/trpc/router/*.ts`）に集約されており、ページ側やクライアントコンポーネント側での再検証は行わない。
 
 ### /view 配下の閲覧ゲート（レイアウトによる保護）
 

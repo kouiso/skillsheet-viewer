@@ -1,9 +1,10 @@
-import { type Block, getSkillSheet, getSkillSheetById, listSheets, type SheetSummary } from '@skillsheet/db';
+import { type Block, listSheets, type SheetSummary } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 
 import { isEditor } from '@/server/auth-gate';
+import { createServerCaller } from '@/server/trpc/caller';
 
 import BuilderClient from './builder-client';
 
@@ -26,20 +27,24 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
   let sheets: SheetSummary[] = [];
 
   try {
-    sheets = await listSheets();
+    const caller = await createServerCaller();
+    sheets = await caller.sheet.list();
 
     if (sheetIdParam && sheets.some((s) => s.id === sheetIdParam)) {
       // URL パラメータで指定されたシートを読む
-      const sheet = await getSkillSheetById(sheetIdParam);
+      const sheet = await caller.sheet.byId({ id: sheetIdParam });
       initialBlocks = sheet.blocks;
       initialTitle = sheet.title;
       activeSheetId = sheetIdParam;
     } else {
       // デフォルト: 最初のシート（シードも実行される）
-      const sheet = await getSkillSheet();
+      const sheet = await caller.sheet.getDefault();
       initialBlocks = sheet.blocks;
       initialTitle = sheet.title;
-      // getSkillSheet はシードで作成されることがあるので再取得
+      // getDefault はシードで作成されることがある。sheet.list はキャッシュ経由
+      // （getCachedDbSheets, revalidate: 60s）なので、直前の sheet.list 呼び出しで
+      // 空配列がキャッシュされていた場合はこの再取得でも同じ空配列が返ってしまう
+      // （シード後もキャッシュタグは無効化されない）。ここは正本を直接読む。
       if (sheets.length === 0) {
         sheets = await listSheets();
       }

@@ -15,29 +15,37 @@ const CURRENT_PATH_HEADER = 'x-skillsheet-pathname';
 const INTERNAL_ORIGIN = 'http://skillsheet-viewer.internal';
 
 /**
- * /view 配下の閲覧認可の単一チェックポイント。
+ * 閲覧認可の判定のみを行う純関数。
  *
- * 次のいずれかを満たせば閲覧を許可する:
+ * 次のいずれかを満たせば true:
  *  (a) 有効な HMAC 閲覧用セッション cookie がある（/viewer-auth で発行）
  *  (b) Better Auth の編集者（オーナー）としてログイン済み（isEditor）
  *
- * どちらも満たさない場合は /viewer-auth へリダイレクトする。その際、
- * middleware.ts がヘッダーへ焼き込んだ現在のパスを ?next= に載せることで、
- * 認証後に元々開こうとしていたシートへ戻れるようにする（#155）。
- * resolveNextPath で内部パスであることを検証してからのみ載せる（オープンリダイレクト対策）。
- * redirect() は内部で例外を投げるため、許可時のみ正常 return する。
+ * redirect() を投げないため tRPC procedure からも呼べる
+ * （tRPC の実行コンテキストには Server Action/RSC 専用の redirect() 例外制御が無い）。
  */
-export async function requireViewer(): Promise<void> {
+export async function isViewer(): Promise<boolean> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (verifySessionToken(token)) {
+    return true;
+  }
+  return isEditor();
+}
+
+/**
+ * /view 配下の閲覧認可の単一チェックポイント。
+ * 未許可なら /viewer-auth へリダイレクトする（redirect() は内部で例外を投げるため、
+ * 許可時のみ正常 return する）。RSC / レイアウトからのみ呼ぶこと。
+ */
+export async function requireViewer(): Promise<void> {
+  if (await isViewer()) {
     return;
   }
 
-  if (await isEditor()) {
-    return;
-  }
-
+  // middleware.ts がヘッダーへ焼き込んだ現在のパスを ?next= に載せることで、
+  // 認証後に元々開こうとしていたシートへ戻れるようにする（#155）。
+  // resolveNextPath で内部パスであることを検証してからのみ載せる（オープンリダイレクト対策）。
   const headerList = await headers();
   const currentPath = headerList.get(CURRENT_PATH_HEADER);
   // fallback を空文字にし、内部パスとして無効（未取得含む）なら next を付けない。

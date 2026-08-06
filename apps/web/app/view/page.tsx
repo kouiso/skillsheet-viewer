@@ -1,8 +1,9 @@
 import type { SheetSummary } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
+
 import { isEditor } from '@/server/auth-gate';
-import { getCachedDbSheets } from '@/server/sheets-cache';
+import { createServerCaller } from '@/server/trpc/caller';
 import { isConfigError } from '@/util/is-config-error';
 
 import DbSheetsListClient from './db-sheets-list-client';
@@ -18,7 +19,8 @@ export default async function SheetsListPage() {
   let sheets: SheetSummary[] = [];
   let hasError = false;
   try {
-    sheets = await getCachedDbSheets();
+    const caller = await createServerCaller();
+    sheets = await caller.sheet.list();
   } catch (err) {
     // 設定不備（#157）は待っても直らない既知の原因なので console.error は出さない。
     if (!isConfigError(err)) {
