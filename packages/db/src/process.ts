@@ -292,8 +292,14 @@ const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', '
 // 元データの「該当なし」プレースホルダ。技術名として取り込まれても描画時点で除外する。
 const EMPTY_TECH_PLACEHOLDERS = new Set(['-', 'ー', '—']);
 
-function isEmptyTechValue(value: string): boolean {
-  return EMPTY_TECH_PLACEHOLDERS.has(value.trim()) || value.trim() === '';
+// tech の各バケットは型上は string[] だが、DB の JSON カラムは実行時の型を保証しない。
+// 非文字列が紛れた場合は trim() で例外にする代わりに「該当なし」と同じ扱いで除外する
+// （文字列以外を技術名としてそのままチップ表示に流すと、React の子要素として
+// 描画できず落ちる可能性がある）。
+function isEmptyTechValue(value: unknown): boolean {
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  return trimmed === '' || EMPTY_TECH_PLACEHOLDERS.has(trimmed);
 }
 
 /**

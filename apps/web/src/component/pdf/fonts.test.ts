@@ -24,6 +24,17 @@ describe('splitForHyphenation', () => {
     expect(splitForHyphenation('React連携')).toEqual(['React', ZWNBSP, '連', ZWNBSP, '携']);
   });
 
+  it('CJK → ASCII の境界にも ZWNBSP を挟む（逆方向）', () => {
+    expect(splitForHyphenation('連携React')).toEqual(['連', ZWNBSP, '携', ZWNBSP, 'React']);
+  });
+
+  it('サロゲートペアが必要な符号点（絵文字等）は CJK 扱いにせず ASCII ランへまとめる', () => {
+    // 🎉 (U+1F389) は基本多言語面の外（サロゲートペア必須）。CJK と誤判定すると、
+    // 国旗や ZWJ 連結絵文字のように複数符号点からなる文字の符号点間に ZWNBSP を
+    // 挟んでしまい、シーケンスが分断される。
+    expect(splitForHyphenation('🎉Party')).toEqual(['🎉Party']);
+  });
+
   it('戻り値の配列を結合すると元の語と一致する（ZWNBSP は不可視文字として残る想定）', () => {
     const word = '担当業務';
     const parts = splitForHyphenation(word);

@@ -2,11 +2,11 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { Font, renderToBuffer, View } from '@react-pdf/renderer';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { beforeAll, describe, expect, it } from 'vitest';
+
+import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 
 import PDF_FONT_FAMILY from './constants';
 import type { MdNode } from './skill-sheet-document';
@@ -81,7 +81,7 @@ function buildContent(): string {
 // SkillSheetDocument 本体と同じ remark パイプラインで markdown を mdast ノード列に変換する。
 // renderBlocks の構造検証テストで、コンポーネントと同じ木を組み立てるために使う。
 function parseMarkdown(content: string): MdNode[] {
-  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkBreaks);
+  const processor = unified().use(remarkParse).use(MARKDOWN_REMARK_PLUGINS);
   const tree = processor.runSync(processor.parse(content)) as unknown as MdNode;
   return tree.children ?? [];
 }
@@ -135,7 +135,7 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
   });
 
   it('1ページに収まらない見込みの表（行数が多いスキルカテゴリ相当）は wrap={true} のままクリップを防ぐ', () => {
-    // CARD_MAX_ROWS(14) を超える行数の表。文字数自体は短くても行数超過で
+    // CARD_MAX_ROWS を超える行数の表。文字数自体は短くても行数超過で
     // 「収まらない見込み」と判定され、見出し+表を丸ごと不可分にはしない
     // （renderTable 内の行単位 wrap 制御に委ねてクリップを防ぐ）。
     const nodes = parseMarkdown(buildCardMarkdown('### 多い項目のカテゴリ', 20));
@@ -284,6 +284,12 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       // 項目/内容 表）を模した案件カードを32件並べる。Issue #147 (b) の再現条件
       // （32件中16件でページ境界分断）に近いボリュームで、クラッシュしないことと
       // 正常な複数ページPDFが生成されることを確認する。
+      //
+      // 既知の限界（#172）: このアサーションは PDF の構造的な正当性（ヘッダ/フッタ・
+      // 複数ページ）のみを見ており、32件全ての本文が実際にページへ描画されたかは
+      // 検証していない。実データ相当の32件規模では、レイアウトツリーを直接検証すると
+      // 大半のカードが無音で欠落する既存バグ（本PR起因ではない、詳細は #172）があり、
+      // その状態でもこのテストの現在のアサーションは全て通過してしまう。
       const cards = Array.from({ length: 32 }, (_, i) =>
         [
           `### 株式会社サンプル${i} — 案件${i}のシステム開発`,
@@ -322,7 +328,7 @@ describe('SkillSheetDocument（実バイト描画）', () => {
     '6カテゴリ中2つが行数超過（15行以上）のスキル一覧でもクラッシュせず正常なPDFを生成できる（スキル表のページ境界分断防止の回帰確認）',
     async () => {
       // skillsBlockToMarkdown が生成する形（### カテゴリ名 見出し + 直後のスキル表）を
-      // 6カテゴリ分並べ、うち2カテゴリだけ CARD_MAX_ROWS(14) を超える行数にして
+      // 6カテゴリ分並べ、うち2カテゴリだけ CARD_MAX_ROWS を超える行数にして
       // Issue #147 (c) の再現条件（6カテゴリ中2つでページ境界分断）に近いボリュームにする。
       const buildCategory = (name: string, rowCount: number) => {
         const rows = Array.from({ length: rowCount }, (_, i) => `| ${name}${i} | ${i}年 | 業務利用 |`).join('\n');

@@ -27,11 +27,14 @@ export default async function DbSheetPage() {
       <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={await isEditor()} />
     );
   } catch (err) {
-    // 設定不備（#157）は待っても直らない既知の原因なので console.error は出さない。
-    // それ以外（DB接続エラー等）は一時的な障害の可能性があるのでログに残す。
-    if (!isConfigError(err)) {
-      console.error('Failed to load DB skill sheet:', err);
+    // #157: 待っても直らない設定不備（未設定・未マイグレーション）は 200 ＋ 原因と対処を返す。
+    if (isConfigError(err)) {
+      return <ConfigErrorNotice {...DB_CONFIG_NOTICE} />;
     }
-    return <ConfigErrorNotice {...DB_CONFIG_NOTICE} />;
+    // 接続先が到達不能等の一時的な障害は、/view/db/[id] と同じ基準で error.tsx /
+    // 監視ツールへ委ねる（一律で ConfigErrorNotice を返すと、実際の障害発生中に監視側が
+    // 200 で気付けず、閲覧者には的外れな設定手順だけが表示されるため区別する）。
+    console.error('Failed to load DB skill sheet:', err);
+    throw err;
   }
 }

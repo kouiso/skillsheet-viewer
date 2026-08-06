@@ -591,6 +591,35 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('| 会社区分 | SIer |');
   });
 
+  it('note は見出し直後ではなく表の後ろに置く（見出し+表の隣接を維持し、PDFの改ページ結合制御を壊さない）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '会社概要のテスト文。' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    const headingIndex = md.indexOf('### 株式会社テスト — テストシステム開発');
+    const tableStartIndex = md.indexOf('| 項目 | 内容 |');
+    const noteIndex = md.indexOf('会社概要のテスト文。');
+    expect(headingIndex).toBeGreaterThanOrEqual(0);
+    // 見出し直後〜表開始の間に note 由来の非空行が無い（見出し→表が隣接している）。
+    const betweenHeadingAndTable = md
+      .slice(headingIndex + '### 株式会社テスト — テストシステム開発'.length, tableStartIndex)
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    expect(betweenHeadingAndTable).toEqual([]);
+    expect(noteIndex).toBeGreaterThan(tableStartIndex);
+  });
+
+  it('note が "#" 等のブロック開始文字で始まっても独立した見出し等として解釈されないようエスケープする', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '# 偽の見出し\n- 偽のリスト' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('\\# 偽の見出し');
+    expect(md).toContain('\\- 偽のリスト');
+  });
+
   it('note が空文字のときは本文段落を出さない', () => {
     // PROJECT.companies[0].note は '' なので、note 由来の段落行は現れないはず。
     const md = projectBlockToMarkdown(PROJECT);

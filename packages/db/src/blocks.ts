@@ -440,6 +440,17 @@ function escapeCell(value: string): string {
   return single.length > 0 ? single : ' ';
 }
 
+// 行頭のブロック開始トークン（見出し/リスト/引用/コードフェンス/水平線/生HTML）をエスケープし、
+// 自由入力の1行が独立した markdown 構造として解釈されるのを防ぐ。ビューア側（project-card.tsx /
+// project-preview.tsx）は company.note を素のテキストとして描画しており、生成する markdown でも
+// 同じ「構造を持たない文章」として扱う必要がある。
+function escapeMarkdownParagraph(value: string): string {
+  return value
+    .split('\n')
+    .map((line) => line.replace(/^(\s*)([#>*+\-`~<]|\d+[.)])/, '$1\\$2'))
+    .join('\n');
+}
+
 /** 表ブロックを GFM markdown 表へ変換する。 */
 export function tableBlockToMarkdown(data: TableBlockData): string {
   const { columns, rows } = data;
@@ -545,12 +556,6 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     const companyName = company?.name ?? '(不明な会社)';
     lines.push(`### ${companyName} — ${item.title}`);
     lines.push('');
-    // 会社概要文（CompanyInfo.note）。従来 PDF・バックアップのどちらにも出力先が無く、
-    // 案件単体では伝わらない「どういう立ち位置でその会社に入っていたか」が欠落していた（#139）。
-    if (company?.note?.trim()) {
-      lines.push(company.note.trim());
-      lines.push('');
-    }
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
     if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
@@ -561,6 +566,17 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     const techParts = flattenTech(item.tech);
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
     if (item.process.length > 0) lines.push(`| 担当工程 | ${escapeCell(item.process.join(', '))} |`);
+    // 会社概要文（CompanyInfo.note）。従来 PDF・バックアップのどちらにも出力先が無く、
+    // 案件単体では伝わらない「どういう立ち位置でその会社に入っていたか」が欠落していた（#139）。
+    // 見出しと表の間に挟むと、PDF側の「見出し直後が表なら1ブロックとして分割禁止にする」
+    // （renderBlocks の heading+table 結合、#147）が効かなくなり、ページ境界で見出しと
+    // 表が分断される問題が再発する。表の後ろに置くことで見出し→表の隣接を保つ。
+    // ビューア側（project-card.tsx / project-preview.tsx）は note を素のテキストとして
+    // 描画するため、ここでも独立した見出し・リスト等として解釈されないようエスケープする。
+    if (company?.note?.trim()) {
+      lines.push('');
+      lines.push(escapeMarkdownParagraph(company.note.trim()));
+    }
     if (item.duties.trim()) {
       lines.push('');
       lines.push('**業務内容**');
