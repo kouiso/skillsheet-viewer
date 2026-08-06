@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { FileDown, Moon, PencilLine, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,8 @@ interface ViewerTopbarProps {
   onToggleView: (view: ViewKey) => void;
   onDownloadPdf?: () => void | Promise<void>;
   pdfLoading?: boolean;
+  /** 編集者ログイン済みか。false のときは編集導線（ビルダーリンク）を出さない。 */
+  canEdit?: boolean;
 }
 
 // ダッシュボードシート用の Console トップバー（redesign2 の topbar 変種）。
@@ -45,6 +47,7 @@ export function ViewerTopbar({
   onToggleView,
   onDownloadPdf,
   pdfLoading = false,
+  canEdit = true,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
 
@@ -57,11 +60,16 @@ export function ViewerTopbar({
       className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
     >
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
-        <div className="flex items-center gap-2.5">
+        <Link
+          href="/view"
+          className="flex min-h-11 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent"
+          aria-label="シート一覧へ戻る"
+        >
+          <ArrowLeft className="size-4 text-muted-foreground" aria-hidden="true" />
           <span aria-hidden className="size-[9px] rounded-[2px] bg-primary" />
           <span className="text-[15px] font-semibold text-foreground">{name || 'エンジニアスキルシート'}</span>
           {company && <span className="font-mono text-[11.5px] text-faint">{company}</span>}
-        </div>
+        </Link>
 
         <div className="min-w-4 flex-1" />
 
@@ -86,16 +94,18 @@ export function ViewerTopbar({
         </fieldset>
 
         <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
-                <Link href="/builder">
-                  <PencilLine />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>編集／ビルダー</TooltipContent>
-          </Tooltip>
+          {canEdit && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
+                  <Link href="/builder">
+                    <PencilLine />
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>編集／ビルダー</TooltipContent>
+            </Tooltip>
+          )}
 
           {onDownloadPdf && (
             <Tooltip>

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 
+import { isEditor } from '@/server/auth-gate';
 import { getCachedDbSheetById } from '@/server/sheets-cache';
 
 import SheetViewClient from '../../[path]/sheet-view-client';
@@ -30,7 +31,15 @@ export default async function DbSheetByIdPage({ params }: Props) {
     const sheet = await getCachedDbSheetById(id);
     // key={id}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー
     // ON/OFF トグルの state（初回マウント時に決まる）を新しいシートへ持ち越さない。
-    return <SheetViewClient key={id} title={sheet.title} content={sheet.content} blocks={sheet.blocks} />;
+    return (
+      <SheetViewClient
+        key={id}
+        title={sheet.title}
+        content={sheet.content}
+        blocks={sheet.blocks}
+        canEdit={await isEditor()}
+      />
+    );
   } catch (err) {
     if (err instanceof SkillSheetNotFoundError) {
       notFound();

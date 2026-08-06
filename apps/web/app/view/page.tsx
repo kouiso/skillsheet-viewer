@@ -1,6 +1,7 @@
 import type { SheetSummary } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
+import { isEditor } from '@/server/auth-gate';
 import { getCachedDbSheets } from '@/server/sheets-cache';
 
 import DbSheetsListClient from './db-sheets-list-client';
@@ -21,5 +22,5 @@ export default async function SheetsListPage() {
     console.error('Failed to fetch DB sheets:', err);
     hasError = true;
   }
-  return <DbSheetsListClient initialSheets={sheets} hasError={hasError} />;
+  return <DbSheetsListClient initialSheets={sheets} hasError={hasError} canEdit={await isEditor()} />;
 }
