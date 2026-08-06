@@ -1,24 +1,34 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
-import { listSheets, saveSkillSheetBlocks } from '@skillsheet/db';
+import { createSheet, deleteSheet, listSheets } from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
+
+const E2E_TITLE_PREFIX = 'E2E Test Sheet';
+let currentSheetId = '';
+let currentSheetTitle = '';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-let e2eSheetId = '';
-
-async function resetE2ESheet() {
+async function cleanupSheetsByPrefix(prefix: string) {
   const sheets = await listSheets();
-  const sheet = sheets.find((s) => s.title === 'E2E Test Sheet');
-  if (!sheet) throw new Error('E2E Test Sheet not found');
-  const initialBlocks = [{ type: 'markdown' as const, data: { markdown: 'E2E テスト用' as const } }];
-  await saveSkillSheetBlocks(sheet.title, initialBlocks, sheet.id);
-  e2eSheetId = sheet.id;
-  return sheet.id;
+  const matched = sheets.filter((s) => s.title.startsWith(prefix));
+  const failures: { id: string; error: unknown }[] = [];
+  await Promise.all(
+    matched.map(async (s) => {
+      try {
+        await deleteSheet(s.id);
+      } catch (err) {
+        failures.push({ id: s.id, error: err });
+      }
+    }),
+  );
+  if (failures.length > 0) {
+    console.warn('sheet cleanup failed:', failures);
+  }
 }
 
 async function login(page: Page) {
@@ -30,8 +40,8 @@ async function login(page: Page) {
 }
 
 async function openProjectEditor(page: Page) {
-  if (!e2eSheetId) throw new Error('E2E Test Sheet id not set; did resetE2ESheet() run?');
-  await page.goto(`/builder?sheet=${e2eSheetId}`);
+  if (!currentSheetId) throw new Error('E2E sheet id not set; did beforeEach run?');
+  await page.goto(`/builder?sheet=${currentSheetId}`);
   await page.getByRole('button', { name: '案件エディタ' }).click();
   await page.getByRole('button', { name: '＋ 会社' }).click();
   await expect(page.getByRole('textbox', { name: '会社名' })).toBeVisible();
@@ -43,11 +53,35 @@ async function waitForAutosave(page: Page, label: string, timeout = 10_000) {
   return indicator;
 }
 
-test.describe('builder autosave', () => {
-  test.beforeEach(async () => {
-    await resetE2ESheet();
-  });
+test.describe.configure({ mode: 'serial' });
 
+test.beforeAll(async () => {
+  // 前回の実行や手動作成で残った同prefixのシートを掃除する
+  await cleanupSheetsByPrefix(E2E_TITLE_PREFIX);
+});
+
+test.beforeEach(async () => {
+  currentSheetTitle = `${E2E_TITLE_PREFIX} ${Date.now()}`;
+  currentSheetId = await createSheet(currentSheetTitle, [
+    { type: 'markdown' as const, data: { markdown: 'E2E テスト用' as const } },
+  ]);
+});
+
+test.afterEach(async () => {
+  if (currentSheetId) {
+    const id = currentSheetId;
+    currentSheetId = '';
+    currentSheetTitle = '';
+    await deleteSheet(id);
+  }
+});
+
+test.afterAll(async () => {
+  // 各 afterEach で削除できなかった分を最後に掃除する
+  await cleanupSheetsByPrefix(E2E_TITLE_PREFIX);
+});
+
+test.describe('builder autosave', () => {
   test('正常系：会社名を編集すると自動保存され「保存済み（自動）」が表示される', async ({ page }) => {
     await login(page);
     await openProjectEditor(page);
@@ -93,8 +127,8 @@ test.describe('builder autosave', () => {
         await waitForAutosave(pageA, '保存済み（自動）');
 
         // セッション B は A と同じ cookie を使う（Better Auth の sign-in レートリミットを回避）
-        if (!e2eSheetId) throw new Error('E2E Test Sheet id not set; did resetE2ESheet() run?');
-        await pageB.goto(`/builder?sheet=${e2eSheetId}`);
+        if (!currentSheetId) throw new Error('E2E sheet id not set; did beforeEach run?');
+        await pageB.goto(`/builder?sheet=${currentSheetId}`);
         await pageB.getByRole('button', { name: '案件エディタ' }).click();
         const rowPattern = new RegExp(`^${escapeRegExp(companyName)}(?!.*を)`);
         await pageB.getByRole('button', { name: rowPattern }).click();

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { buildConsoleDemoBlocks, createSheet, deleteSheet } from '@skillsheet/db';
+import { buildConsoleDemoBlocks, createSheet, deleteSheet, listSheets } from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
@@ -54,19 +54,56 @@ let richSheetId = '';
 let richSheetTitle = '';
 let newSheetId = '';
 
+async function cleanupSheetsByPrefix(prefix: string) {
+  const sheets = await listSheets();
+  const matched = sheets.filter((s) => s.title.startsWith(prefix));
+  const failures: { id: string; error: unknown }[] = [];
+  await Promise.all(
+    matched.map(async (s) => {
+      try {
+        await deleteSheet(s.id);
+      } catch (err) {
+        failures.push({ id: s.id, error: err });
+      }
+    }),
+  );
+  if (failures.length > 0) {
+    console.warn('dogfood-core cleanup failed:', failures);
+  }
+}
+
 test.beforeAll(async () => {
   fs.mkdirSync(reportDir, { recursive: true });
+  // 前回の実行が残した同prefixのシートを掃除する
+  await cleanupSheetsByPrefix('Dogfood Core Sheet');
+  await cleanupSheetsByPrefix('Dogfood フルスキルシート');
   richSheetTitle = `Dogfood Core Sheet ${Date.now()}`;
   richSheetId = await createSheet(richSheetTitle, buildConsoleDemoBlocks());
 });
 
 test.afterAll(async () => {
-  try {
-    if (newSheetId) await deleteSheet(newSheetId);
-  } catch {}
-  try {
-    if (richSheetId) await deleteSheet(richSheetId);
-  } catch {}
+  const failures: { target: string; error: unknown }[] = [];
+  if (newSheetId) {
+    try {
+      await deleteSheet(newSheetId);
+    } catch (err) {
+      failures.push({ target: `newSheetId(${newSheetId})`, error: err });
+    }
+  }
+  if (richSheetId) {
+    try {
+      await deleteSheet(richSheetId);
+    } catch (err) {
+      failures.push({ target: `richSheetId(${richSheetId})`, error: err });
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `afterAll cleanup failed: ${failures
+        .map((f) => `${f.target}: ${f.error instanceof Error ? f.error.message : String(f.error)}`)
+        .join(', ')}`,
+    );
+  }
 });
 
 test('editor: create new sheet from full template and edit blocks', async ({ page }) => {
