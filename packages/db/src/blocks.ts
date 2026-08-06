@@ -445,10 +445,19 @@ function escapeCell(value: string): string {
 // project-preview.tsx）は company.note を素のテキストとして描画しており、生成する markdown でも
 // 同じ「構造を持たない文章」として扱う必要がある。
 function escapeMarkdownParagraph(value: string): string {
-  return value
-    .split('\n')
-    .map((line) => line.replace(/^(\s*)([#>*+\-`~<]|\d+[.)])/, '$1\\$2'))
-    .join('\n');
+  return (
+    value
+      .split('\n')
+      // 行頭の空白が4文字以上だと remark がインデントコードブロックとして解釈してしまう。
+      // 表示側（project-card.tsx / project-preview.tsx）は素のテキストとして描画するため
+      // 構造が食い違う。コードブロック化しない3文字までに削る。
+      .map((line) => line.replace(/^ {4,}/, '   '))
+      // 見出し(#)・引用(>)・リスト(*+-)・番号付きリスト・コード(`)・水平線/斜体(~<)に加え、
+      // Setext見出しの下線(=)・アンダースコア系の強調/水平線(_)・画像/リンク(![)も
+      // 構造として解釈されないようエスケープする。
+      .map((line) => line.replace(/^(\s*)([#>*+\-![_=`~<]|\d+[.)])/, '$1\\$2'))
+      .join('\n')
+  );
 }
 
 /** 表ブロックを GFM markdown 表へ変換する。 */

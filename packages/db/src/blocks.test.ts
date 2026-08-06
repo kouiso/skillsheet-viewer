@@ -620,6 +620,34 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('\\- 偽のリスト');
   });
 
+  it('note が Setext見出しの下線(=)・水平線/強調(_)・画像/リンク(![)で始まる行を含んでも構造化されないようエスケープする', () => {
+    const withNote: ProjectBlockData = {
+      companies: [
+        {
+          ...PROJECT.companies[0],
+          note: '会社概要\n===\n___\n![機密](https://example.com/x.png)\n[リンク](https://example.com)',
+        },
+      ],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('\\===');
+    expect(md.split('\n')).not.toContain('===');
+    expect(md).toContain('\\___');
+    expect(md).toContain('\\![機密]');
+    expect(md).toContain('\\[リンク]');
+  });
+
+  it('note の行頭が4文字以上のインデントでもコードブロック化されないよう3文字までに削る', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '通常の文\n    4スペースインデントの行' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).not.toContain('    4スペースインデントの行');
+    expect(md).toContain('   4スペースインデントの行');
+  });
+
   it('note が空文字のときは本文段落を出さない', () => {
     // PROJECT.companies[0].note は '' なので、note 由来の段落行は現れないはず。
     const md = projectBlockToMarkdown(PROJECT);
