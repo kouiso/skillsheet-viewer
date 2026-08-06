@@ -20,9 +20,13 @@
  * ブロックのみをこのボリュームで差し替える。
  */
 
+import { eq, sql } from 'drizzle-orm';
+
 import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from './blocks';
+import { getDb } from './client';
 import { buildConsoleDemoBlocks } from './console-demo';
-import { createSheet, listSheets } from './skillsheet';
+import { realVolumeDemoFixtures } from './schema';
+import { createSheetInTx, getOwnerId } from './skillsheet';
 
 const newId = () => crypto.randomUUID();
 
@@ -202,22 +206,40 @@ export function buildRealVolumeDemoBlocks(): BlockInput[] {
 
 export const REAL_VOLUME_DEMO_TITLE = '実データボリューム検証シート（19社/32案件）';
 
-// listSheets() での存在確認と createSheet() での作成は別操作のため、並行した E2E
-// 実行が両方とも「未作成」と判定すると同名シートを複数作成しうる（レビュー指摘）。
-// タイトルに一意制約は無く、スキーマ変更を伴う onConflict ガードは今回のスコープ外
-// （本番DBスキーマ変更を伴う対応は対象外というユーザー指示、テスト用フィクスチャで
-// あり本番データではないため）。
-//
-// 作成直後に再確認して重複があれば自分の分を削除する対症療法を一度試みたが、
-// レビュー指摘により棄却した: updatedAt は一意でも単調でもなく、並行実行同士が
-// それぞれ異なる行を「勝者」と判定しうる。互いに相手の行を削除すると、フィクスチャが
-// 1件も残らない（元の「重複が残る」より悪い結果になる）。生半可な対症療法よりは、
-// この既知の制約（低確率で重複が残りうる）を許容し、素朴な実装のままにする。
-// 完全な解決には一意制約 + onConflictDoNothing() が必要で、それは第0段（本番DB
-// スキーマ変更）の範囲になる。
+/**
+ * 実データボリュームデモ用のシートを作成または取得する。
+ *
+ * 同一オーナーで並行実行された場合、トランザクション内の advisory lock と
+ * `real_volume_demo_fixtures` テーブルの一意制約により、同名シートの重複作成を防ぐ。
+ * 既に fixture 行が存在する場合はその sheetId を返し、無ければシートを作成して
+ * fixture 行を登録する（両方同一トランザクションで行う）。
+ */
 export async function createRealVolumeDemoSheet(): Promise<string> {
-  const sheets = await listSheets();
-  const existing = sheets.find((s) => s.title === REAL_VOLUME_DEMO_TITLE);
-  if (existing) return existing.id;
-  return createSheet(REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
+  const ownerId = getOwnerId();
+  const db = getDb();
+  const fixtureKey = `${ownerId}:${REAL_VOLUME_DEMO_TITLE}`;
+
+  return db.transaction(async (tx) => {
+    // 同一オーナーでの並行フィクスチャ作成をトランザクション境界で直列化する。
+    // pg_advisory_xact_lock はトランザクション終了時に自動解放される。
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${fixtureKey}))`);
+
+    const existing = await tx
+      .select({ sheetId: realVolumeDemoFixtures.sheetId })
+      .from(realVolumeDemoFixtures)
+      .where(eq(realVolumeDemoFixtures.ownerId, ownerId))
+      .limit(1);
+    if (existing[0]?.sheetId) {
+      return existing[0].sheetId;
+    }
+
+    const sheetId = await createSheetInTx(tx, REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
+    // fixture 行の INSERT は onConflictDoNothing で二重登録を許容し、衝突しても無視する。
+    // これが最後の安全網（advisory lock と合わせて万全）。
+    await tx
+      .insert(realVolumeDemoFixtures)
+      .values({ ownerId, sheetId })
+      .onConflictDoNothing({ target: [realVolumeDemoFixtures.ownerId] });
+    return sheetId;
+  });
 }
