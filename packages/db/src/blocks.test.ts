@@ -634,7 +634,10 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('\\===');
     expect(md.split('\n')).not.toContain('===');
     expect(md).toContain('\\___');
-    expect(md).toContain('\\![機密]');
+    // `!` だけの escape だと直後の `[機密](...)` がリンクとして解釈されてしまうため、
+    // `!` と `[` の両方を escape する（\!\[）。
+    expect(md).toContain('\\!\\[機密]');
+    expect(md).not.toContain('\\![機密]');
     expect(md).toContain('\\[リンク]');
   });
 
@@ -646,6 +649,18 @@ describe('projectBlockToMarkdown', () => {
     const md = projectBlockToMarkdown(withNote);
     expect(md).not.toContain('    4スペースインデントの行');
     expect(md).toContain('   4スペースインデントの行');
+  });
+
+  it('note の行頭がタブ・タブ混在インデントでもコードブロック化されないよう3文字までに削る', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '通常の文\n\tタブインデントの行\n \t混在インデントの行' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).not.toContain('\tタブインデントの行');
+    expect(md).toContain('   タブインデントの行');
+    expect(md).not.toContain(' \t混在インデントの行');
+    expect(md).toContain('   混在インデントの行');
   });
 
   it('note が空文字のときは本文段落を出さない', () => {
