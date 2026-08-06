@@ -33,6 +33,21 @@ function isCjk(ch: string): boolean {
   return code >= CODEPOINT.CJK_START && code < CJK_END_EXCLUSIVE;
 }
 
+// 結合文字（結合分音記号・かな結合濁点/半濁点）や異体字セレクタは単独の文字ではなく、
+// 直前の基底文字と合わせて1つの書記素（grapheme）を構成する。isCjk の範囲チェック
+// （0x2E80–0xFFFF）に一致してしまう（例: U+3099 結合濁点、絵文字の異体字セレクタ
+// U+FE0F）ため、CJK境界の判定から明示的に除外し、常に直前の文字と同じグループに
+// 留める。NFD 正規化された日本語（「か」+結合濁点）や VS16 付き絵文字がここで
+// 分離されると、PDF 上で濁点や異体字セレクタだけが基底文字から離れて改行される。
+function isCombiningOrVariationSelector(ch: string): boolean {
+  const code = ch.codePointAt(0) ?? 0;
+  return (
+    (code >= 0x0300 && code <= 0x036f) || // Combining Diacritical Marks
+    (code >= 0x3099 && code <= 0x309a) || // かな結合濁点・半濁点
+    (code >= 0xfe00 && code <= 0xfe0f) // Variation Selectors
+  );
+}
+
 /**
  * 日本語は単語区切りが無いため、ASCII の連なりは保ちつつ、
  * 全角・CJK 文字の境界で改行を許可するように語を分割する。
@@ -55,6 +70,19 @@ export function splitForHyphenation(word: string): string[] {
     }
   };
   for (const ch of word) {
+    if (isCombiningOrVariationSelector(ch)) {
+      // 直前の基底文字がどちらに格納されていても（ASCII連なりの buffer か、
+      // CJK単独文字として直接 push された parts か）、そこへ結合するだけで
+      // prevWasCjk は変更しない（結合文字自身は境界判定に関与しない）。
+      if (buffer) {
+        buffer += ch;
+      } else if (parts.length > 0) {
+        parts[parts.length - 1] += ch;
+      } else {
+        buffer += ch;
+      }
+      continue;
+    }
     if (!isCjk(ch)) {
       if (prevWasCjk && parts.length > 0) parts.push(ZWNBSP);
       buffer += ch;

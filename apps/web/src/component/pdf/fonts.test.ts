@@ -44,4 +44,20 @@ describe('splitForHyphenation', () => {
   it('空文字は [word] のまま返す', () => {
     expect(splitForHyphenation('')).toEqual(['']);
   });
+
+  it('NFD 正規化された日本語（結合濁点）は基底文字から分離しない', () => {
+    // 'か' (U+304B) + 結合濁点 (U+3099) = NFD の「が」。結合濁点は isCjk の範囲
+    // （0x2E80–0xFFFF）に一致してしまうため、対策前は基底文字との間に ZWNBSP が
+    // 挟まり PDF 上で濁点だけ分離しうる。
+    const nfdGa = 'が';
+    expect(splitForHyphenation(nfdGa)).toEqual([nfdGa]);
+    expect(splitForHyphenation(`${nfdGa}んばれ`)).toEqual([nfdGa, ZWNBSP, 'ん', ZWNBSP, 'ば', ZWNBSP, 'れ']);
+  });
+
+  it('異体字セレクタ付き絵文字（VS16）は基底の符号点から分離しない', () => {
+    // ❤️ = U+2764 (HEAVY BLACK HEART) + U+FE0F (VARIATION SELECTOR-16)。
+    // VS16 も isCjk の範囲に一致するため、対策前は分離しうる。
+    const heartVs16 = '❤️';
+    expect(splitForHyphenation(heartVs16)).toEqual([heartVs16]);
+  });
 });
