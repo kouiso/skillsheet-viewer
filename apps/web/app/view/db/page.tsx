@@ -3,7 +3,7 @@ import { connection } from 'next/server';
 
 import { ConfigErrorNotice, DB_CONFIG_NOTICE } from '@/component/config-error-notice';
 import { isEditor } from '@/server/auth-gate';
-import { getCachedDbSheet } from '@/server/sheets-cache';
+import { createServerCaller } from '@/server/trpc/caller';
 import { isConfigError } from '@/util/is-config-error';
 
 import SheetViewClient from '../[path]/sheet-view-client';
@@ -21,7 +21,8 @@ export default async function DbSheetPage() {
   // DB 未マイグレーション（テーブル不在）や DATABASE_URL / SKILLSHEET_OWNER_ID 未設定でも
   // 生の 500 を出さず、対処手順を案内するフォールバック UI を表示する。
   try {
-    const sheet = await getCachedDbSheet();
+    const caller = await createServerCaller();
+    const sheet = await caller.sheet.getDefault();
     return (
       <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={await isEditor()} />
     );

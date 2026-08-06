@@ -12,6 +12,7 @@ alwaysApply: true
 - **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
 - **言語**: TypeScript
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
+- **データ層**: tRPC v11 + @trpc/react-query + @tanstack/react-query（`apps/web/src/server/trpc/`）
 - **UIライブラリ**: Tailwind CSS v4 + shadcn/ui（Radix UI）
 - **Markdownレンダリング**: react-markdown
 - **DB/ORM**: Drizzle ORM + Neon serverless Postgres（正本データ源）
