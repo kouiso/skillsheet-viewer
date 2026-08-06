@@ -185,19 +185,24 @@ function parseCommentSection(text: string): { duties: string; acquired: string; 
     return { duties: '', acquired: '', comment: text.trim() };
   }
 
+  // 先頭マーカー前の前置き文（≪担当業務≫等の前の自由文）をコメントに含める。
+  // 例: 案件21の "App Store から、PatentStart と検索すると、赤いアプリが表示されます。"
+  const preface = text.slice(0, positions[0].index).trim();
+  const commentBody = sectionFor('≪コメント≫');
   return {
     duties: sectionFor('≪担当業務≫'),
     acquired: sectionFor('≪習得スキル≫'),
-    comment: sectionFor('≪コメント≫'),
+    comment: [preface, commentBody].filter(Boolean).join('\n\n'),
   };
 }
 
-// --- プロジェクト見出し "■ (N.)? タイトル（スコープ）" のパース -------------------------------
+// --- プロジェクト見出し "■ (N.)? タイトル" のパース ---------------------------------------
+// タイトル末尾の括弧はスコープとして切り離さず、タイトルにそのまま含める。
+// 現行ソースでは "モバイル推薦システム開発（連合学習 + クラウド基盤）" のような
+// 括弧がタイトルの一部であるケースがあり、取り込みで失われていた（#160）。
 function parseProjectHeading(text: string): { title: string; scope: string } {
   const withoutMarker = text.replace(/^■\s*/, '').trim();
   const withoutNumber = withoutMarker.replace(/^\d+\.\s*/, '').trim();
-  const m = withoutNumber.match(/^(.*?)[\s]*[（(]([^）)]+)[）)]\s*$/);
-  if (m) return { title: m[1].trim(), scope: m[2].trim() };
   return { title: withoutNumber, scope: '' };
 }
 
