@@ -10,8 +10,7 @@
         ▼                                    ▼
 Next.js 16 App（apps/web, Vercel）
   ├── /builder  … ブロック単位で編集（要 Better Auth セッション）
-  ├── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
-  └── /compare  … 2 枚を並べて比較
+  └── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
         │
         ▼
 Neon serverless Postgres（正本データ源 / Drizzle ORM, packages/db）

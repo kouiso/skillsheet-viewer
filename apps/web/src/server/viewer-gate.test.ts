@@ -54,12 +54,12 @@ describe('requireViewer', () => {
     expect(redirectMock).toHaveBeenCalledWith('/viewer-auth?next=%2Fview%2Fdb%2Fabc123');
   });
 
-  it('クエリ付きの現在パス（/compare?a=..&b=..）も next に保持する', async () => {
+  it('クエリ付きの現在パス（/view/db/abc?tab=skills）も next に保持する', async () => {
     cookiesGet.mockReturnValue(undefined);
     verifyMock.mockReturnValue(false);
     isEditorMock.mockResolvedValue(false);
-    headersGet.mockReturnValue('/compare?a=foo&b=bar');
-    const expectedNext = encodeURIComponent('/compare?a=foo&b=bar');
+    headersGet.mockReturnValue('/view/db/abc?tab=skills');
+    const expectedNext = encodeURIComponent('/view/db/abc?tab=skills');
     await expect(requireViewer()).rejects.toThrow(`REDIRECT:/viewer-auth?next=${expectedNext}`);
   });
 
