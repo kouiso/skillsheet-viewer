@@ -127,6 +127,11 @@ async function main() {
     database: drizzleAdapter(createDb(databaseUrl), {
       provider: 'pg',
       schema: { user, session, account, verification },
+      // transaction: true を渡さないと better-auth の drizzleAdapter は
+      // ctx.adapter.transaction を「コールバックをそのまま呼ぶだけ」の no-op に
+      // フォールバックし、実DBトランザクションにならない（下の createUser/linkAccount の
+      // ロールバック保証が成立しない）。
+      transaction: true,
     }),
     emailAndPassword: {
       enabled: true,
