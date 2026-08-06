@@ -80,6 +80,18 @@ const RUN_ID = randomUUID().slice(0, 8);
 const CORE_SHEET_PREFIX = `Dogfood Core Sheet ${RUN_ID}`;
 const FULL_TEMPLATE_TITLE = `Dogfood フルスキルシート ${RUN_ID}`;
 
+async function revalidateCache() {
+  const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
+  const secret = process.env.REVALIDATE_SECRET ?? 'revalidate-local';
+  const res = await fetch(`${baseURL}/api/revalidate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  if (!res.ok) {
+    console.warn('revalidate failed:', res.status, await res.text());
+  }
+}
+
 test.beforeAll(async () => {
   fs.mkdirSync(reportDir, { recursive: true });
   // 前回の実行が残した同prefixのシートを掃除する
@@ -87,6 +99,8 @@ test.beforeAll(async () => {
   await cleanupSheetsByPrefix(FULL_TEMPLATE_TITLE);
   richSheetTitle = `${CORE_SHEET_PREFIX} ${Date.now()}`;
   richSheetId = await createSheet(richSheetTitle, buildConsoleDemoBlocks());
+  // DB に直接 insert したため、/view の unstable_cache を即無効化する
+  await revalidateCache();
 });
 
 test.afterAll(async () => {
