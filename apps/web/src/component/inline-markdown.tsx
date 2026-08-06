@@ -33,6 +33,13 @@ export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
           ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
           ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+          // Tailwind preflight がリンクの色・下線をリセットするため明示的に指定しないと、
+          // 周囲の地の文と見分けが付かず発見性が無くなる（レビュー指摘）。
+          a: ({ children, ...props }) => (
+            <a {...props} className="text-primary underline underline-offset-2 hover:text-primary/80">
+              {children}
+            </a>
+          ),
         }}
       >
         {content}

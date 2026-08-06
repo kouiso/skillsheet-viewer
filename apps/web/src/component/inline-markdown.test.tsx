@@ -19,4 +19,11 @@ describe('InlineMarkdown', () => {
     render(<InlineMarkdown content="これは **重要** な情報です。" />);
     expect(screen.getByText('重要').tagName).toBe('STRONG');
   });
+
+  it('リンクは周囲の地の文と区別できる見た目（下線・リンク色）を持つ（レビュー指摘: Tailwind preflightでリンクだと分からなくなっていた）', () => {
+    render(<InlineMarkdown content="[公式サイト](https://example.com)を参照。" />);
+    const link = screen.getByRole('link', { name: '公式サイト' });
+    expect(link).toHaveClass('underline');
+    expect(link).toHaveClass('text-primary');
+  });
 });
