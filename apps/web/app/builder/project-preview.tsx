@@ -145,6 +145,8 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
               <div {...sync('scope')}>
                 <div className="pv-scope">{project.scope || 'スコープ未入力'}</div>
               </div>
+              {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。 */}
+              {company?.note && <div className="pv-company-note">{company.note}</div>}
             </div>
             <div {...sync('meta')}>
               <div className="pv-meta">

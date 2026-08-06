@@ -580,6 +580,29 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('TypeScript');
     expect(md).toContain('業務内容テスト');
   });
+
+  it('会社概要文（note）と会社区分（kind）を出力する（#139）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '大手SIベンダーにて複数プロジェクトに参画。' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('大手SIベンダーにて複数プロジェクトに参画。');
+    expect(md).toContain('| 会社区分 | SIer |');
+  });
+
+  it('note が空文字のときは本文段落を出さない', () => {
+    // PROJECT.companies[0].note は '' なので、note 由来の段落行は現れないはず。
+    const md = projectBlockToMarkdown(PROJECT);
+    const headingIndex = md.indexOf('### 株式会社テスト — テストシステム開発');
+    const tableIndex = md.indexOf('| 項目 | 内容 |');
+    // 見出し直後〜表の直前に note 由来の非空行が無い（空行のみ）ことを確認する。
+    const between = md
+      .slice(headingIndex + '### 株式会社テスト — テストシステム開発'.length, tableIndex)
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    expect(between).toEqual([]);
+  });
 });
 
 describe('blocksToMarkdown — 新型ブロック dispatch', () => {
