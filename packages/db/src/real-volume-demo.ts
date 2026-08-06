@@ -22,7 +22,7 @@
 
 import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from './blocks';
 import { buildConsoleDemoBlocks } from './console-demo';
-import { createSheet, listSheets } from './skillsheet';
+import { createSheet, deleteSheet, listSheets } from './skillsheet';
 
 const newId = () => crypto.randomUUID();
 
@@ -206,5 +206,22 @@ export async function createRealVolumeDemoSheet(): Promise<string> {
   const sheets = await listSheets();
   const existing = sheets.find((s) => s.title === REAL_VOLUME_DEMO_TITLE);
   if (existing) return existing.id;
-  return createSheet(REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
+
+  // listSheets() での存在確認と createSheet() での作成は別操作のため、並行した E2E
+  // 実行が両方とも「未作成」と判定すると同名シートを複数作成しうる（レビュー指摘）。
+  // タイトルに一意制約は無く、スキーマ変更を伴う onConflict ガードは今回のスコープ外
+  // （テスト用フィクスチャであり本番データではないため）。代わりに作成直後に再確認し、
+  // レースに負けていた場合は自分が作った分を削除して、先に作られていた方の id を返す
+  // （updatedAt が最も古い = 最初に作られたものを正とする）ことで、完全ではないが
+  // 実害となる重複作成を狭い window に抑える。
+  const createdId = await createSheet(REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
+  const afterCreate = await listSheets();
+  const duplicates = afterCreate.filter((s) => s.title === REAL_VOLUME_DEMO_TITLE);
+  if (duplicates.length <= 1) return createdId;
+
+  const [winner, ...losers] = duplicates.sort(
+    (a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(),
+  );
+  await Promise.all(losers.map((s) => deleteSheet(s.id)));
+  return winner.id;
 }

@@ -33,10 +33,15 @@ function buildItem(overrides: Partial<ProjectItem>): ProjectItem {
 }
 
 describe('ProjectCard', () => {
-  it('チーム人数はそのまま出す（単位を二重に足さない）', () => {
+  it('チーム人数は既に単位が付いていればそのまま出す（単位を二重に足さない）', () => {
     render(<ProjectCard item={buildItem({})} no={1} company={COMPANY} activeTech={[]} tech={[]} />);
     expect(screen.getByText(/13 名/)).toBeInTheDocument();
     expect(screen.queryByText(/名名/)).not.toBeInTheDocument();
+  });
+
+  it('チーム人数が単位なしの数値のみ（ビルダーのplaceholder「例：13」通りの入力）なら「名」を補う', () => {
+    render(<ProjectCard item={buildItem({ team: '13' })} no={1} company={COMPANY} activeTech={[]} tech={[]} />);
+    expect(screen.getByText(/13名/)).toBeInTheDocument();
   });
 
   it('summary の "- " 箇条書きを <ul><li> として描画する（Markdown 未解釈だった回帰の防止）', () => {

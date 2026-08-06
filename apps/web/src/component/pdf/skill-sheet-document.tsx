@@ -1,11 +1,10 @@
 import { Document, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ReactNode } from 'react';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
+import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
 
 // Console テーマ（globals.css の light トークン）に合わせたデザイントークン。
@@ -40,7 +39,15 @@ const NUM = {
   // 必ずこれを下回る。行数が多い表（例: スキル一覧の1カテゴリに項目が多い場合）は
   // 1行あたりの文字数が短くても表全体では1ページに収まらないことがあるため、
   // ROW_UNBREAKABLE_CHAR_LIMIT による文字数判定だけでなく行数でも足切りする。
-  CARD_MAX_ROWS: 14,
+  //
+  // 実測（@react-pdf/renderer 4.5.1、実データ相当32件のカードで検証）: 案件カードが
+  // 多いドキュメントでは、ページ途中から始まるカードの内容が丸ごと欠落する（クリップ
+  // ではなく消失）バグが存在する。これは本 PR の見出し+表の結合描画（wrap=false）が
+  // 原因ではなく、結合を外しても再現する、より根深い既存バグと判明した（詳細は #172）。
+  // したがって CARD_MAX_ROWS だけでは #172 は解決しない。ここでの引き下げは、少なくとも
+  // 「1つの表が単独で大きすぎて footprint を圧迫する」経路の安全マージンを稼ぐための
+  // 対症療法であり、根本原因の追跡は #172 に委ねる。
+  CARD_MAX_ROWS: 10,
 } as const;
 
 const styles = StyleSheet.create({
@@ -466,7 +473,10 @@ export const SkillSheetDocument = ({ title, content }: SkillSheetDocumentProps) 
   // remark-breaks を加えてビューアと同じく単一改行（ソフトブレーク）を改行として扱う。
   // remark-breaks は tree トランスフォーマのため parse だけでは適用されない。
   // runSync まで通してプラグインの変換フェーズを実行する。
-  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkBreaks);
+  // プラグイン構成は MARKDOWN_REMARK_PLUGINS（ビューア側と共通）を使う。ここだけ独自に
+  // 組むと、プラグインを足したときに画面と PDF の解釈がズレる（remarkCjkFriendly の
+  // 取りこぼしで実際に発生した、#138 のレビュー指摘）。
+  const processor = unified().use(remarkParse).use(MARKDOWN_REMARK_PLUGINS);
   const tree = processor.runSync(processor.parse(content)) as unknown as MdNode;
 
   return (

@@ -1,5 +1,6 @@
 import { defaultSchema } from 'rehype-sanitize';
 import remarkBreaks from 'remark-breaks';
+import remarkCjkFriendly from 'remark-cjk-friendly';
 import remarkGfm from 'remark-gfm';
 
 // ページ本文（skill-sheet-viewer）・案件カードの短文フィールド（project-card）など、
@@ -34,4 +35,10 @@ export const MARKDOWN_SANITIZE_SCHEMA = {
 };
 
 // remark プラグイン配列はモジュールスコープで固定し、毎レンダーの新規生成を防ぐ。
-export const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks];
+//
+// remarkCjkFriendly: CommonMark の flanking 規則（強調 `**`/`*` の直前直後が空白・約物
+// でないと強調と認識しない）は日本語の文章と噛み合わない。和文直後に `**強調**` が続き、
+// 直後が句読点等の約物だと強調と見なされず、アスタリスクがそのまま表示されてしまう
+// （実データで確認: 「すべて**.htaccess**で記載」が画面にアスタリスクごと出る、#138）。
+// CJK 向けに flanking 規則を緩めるプラグインを挟んで解決する。
+export const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks, remarkCjkFriendly];
