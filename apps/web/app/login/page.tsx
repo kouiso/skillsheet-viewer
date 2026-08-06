@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { signIn } from '@/lib/auth-client';
+import { resolveNextPath } from '@/util/resolve-next-path';
 
 function LoginForm() {
   const router = useRouter();
@@ -29,8 +30,7 @@ function LoginForm() {
         setError('メールアドレスまたはパスワードが正しくありません');
         return;
       }
-      const next = searchParams.get('next');
-      const dest = next?.startsWith('/') && !next.startsWith('//') ? next : '/builder';
+      const dest = resolveNextPath(searchParams.get('next'), '/builder', window.location.origin);
       router.push(dest);
     } catch {
       setError('ログインに失敗しました。もう一度お試しください。');
