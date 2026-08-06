@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { resolveNextPath } from '@/util/resolve-next-path';
 
 const ViewerAuthPage = () => {
   const router = useRouter();
@@ -31,7 +32,7 @@ const ViewerAuthPage = () => {
       if (res.ok) {
         // 認証後の遷移先。?next= が内部パスのときのみ許可（オープンリダイレクト防止）。
         const next = new URLSearchParams(window.location.search).get('next');
-        const dest = next?.startsWith('/') && !next.startsWith('//') ? next : '/view';
+        const dest = resolveNextPath(next, '/view', window.location.origin);
         router.push(dest);
         return;
       }
