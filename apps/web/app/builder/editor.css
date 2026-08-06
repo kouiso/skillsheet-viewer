@@ -610,7 +610,10 @@
   opacity: 0.45;
   pointer-events: none;
 }
-.period-ongoing {
+/* .field label（display:block）と詳細度で衝突し、display:inline-flex が上書きされて
+   gap:6px が無効化されていた（チェックボックスとラベルの余白が 0px）。
+   .field label（0,1,1）より詳細な .field label.period-ongoing（0,2,1）にして確実に勝たせる（#152 S-5）。 */
+.field label.period-ongoing {
   display: inline-flex;
   align-items: center;
   gap: 6px;
