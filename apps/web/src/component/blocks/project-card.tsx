@@ -79,7 +79,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       )}
 
       {item.comment && (
-        <p className="break-words border-l-2 border-primary pl-3 text-sm italic text-muted-foreground">
+        <p className="whitespace-pre-line break-words border-l-2 border-primary pl-3 text-sm italic text-muted-foreground">
           {item.comment}
         </p>
       )}
