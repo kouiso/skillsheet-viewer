@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { isEditor } from '@/server/auth-gate';
 import { isSheetFileName, isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';
 import { getCachedSheet } from '@/server/sheets-cache';
 
@@ -43,5 +44,5 @@ export default async function SheetViewPage({ params }: PageProps) {
 
   // key={path}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー
   // ON/OFF トグルの state（初回マウント時に決まる）を新しいシートへ持ち越さない。
-  return <SheetViewClient key={path} title={sheet.title} content={sheet.content} />;
+  return <SheetViewClient key={path} title={sheet.title} content={sheet.content} canEdit={await isEditor()} />;
 }

@@ -10,9 +10,11 @@ import { Input } from '@/components/ui/input';
 interface DbSheetsListClientProps {
   initialSheets: SheetSummary[];
   hasError?: boolean;
+  /** 編集者ログイン済みか。false のときは編集導線を出さない。 */
+  canEdit?: boolean;
 }
 
-const DbSheetsListClient = ({ initialSheets, hasError = false }: DbSheetsListClientProps) => {
+const DbSheetsListClient = ({ initialSheets, hasError = false, canEdit = false }: DbSheetsListClientProps) => {
   const router = useRouter();
   const [query, setQuery] = useState('');
 
@@ -23,7 +25,7 @@ const DbSheetsListClient = ({ initialSheets, hasError = false }: DbSheetsListCli
 
   return (
     <div>
-      <Header title="スキルシート一覧" />
+      <Header title="スキルシート一覧" canEdit={canEdit} />
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
         <div className="mb-4 flex items-center gap-2">
           <div className="relative flex-1">
