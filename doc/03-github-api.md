@@ -145,9 +145,9 @@ return db.transaction(async (tx) => {
 
 `createSheet()` / `deleteSheet()` も同様にオーナーを検証し、`createSheet` はシートとブロックの挿入を単一トランザクションで囲む。
 
-### Server Action からの利用
+### tRPC mutation からの利用
 
-ビルダーの保存は `app/builder/actions.ts` の `saveBlocksAction` が入口。`isEditor()` で認可を再検証し、`isBlockInput` でペイロードを検証してから `saveSkillSheetBlocks` を呼ぶ。`ConflictError` は `{ ok: false, error: 'conflict' }` に変換してクライアントへ返す。保存成功後は `revalidateTag('db-sheet', {})` で `/view` 系のキャッシュを即時失効させる。
+ビルダーの保存は `src/server/trpc/router/sheet.ts` の `sheet.save` procedure が入口（`app/builder/actions.ts` の Server Action は廃止済み）。`editorProcedure` ミドルウェアが `getEditorUserId()` で認可を再検証し、zod スキーマ（`z.custom<BlockInput>(isBlockInput)`。既存の型ガードを正本として再利用し `packages/db` に zod は入れない）でペイロードを検証してから `saveSkillSheetBlocks` を呼ぶ。`ConflictError` は `TRPCError({ code: 'CONFLICT' })` に変換してクライアントへ返す。`sheet.create` / `sheet.delete` も同じ `editorProcedure` を使う。
 
 ---
 
@@ -174,8 +174,9 @@ GitHub 系の環境変数は任意扱いで、`assertServerEnv()` は欠けて�
 | `getCachedDbSheet` | デフォルト DB シート | `db-sheet` | 60s |
 | `getCachedSheets` / `getCachedSheet` | GitHub 経路（レガシー） | `sheets` | 3600s |
 
-- 編集系 Server Action は保存/作成/削除後に `revalidateTag('db-sheet', {})` を呼び、`db-sheet` タグを即時失効させる。
-- GitHub 読み経路（`sheets` タグ）は `POST /api/revalidate`（`app/api/revalidate/route.ts`）で手動失効できる。`REVALIDATE_SECRET` を `Authorization: Bearer` か `?secret=` で照合し、`timingSafeEqual` で比較する。Next 16 の `revalidateTag` は第 2 引数必須のため空の設定 `{}` を渡している。
+- `sheet.save` / `create` / `delete` の各 tRPC mutation は保存/作成/削除後に `revalidateTag('db-sheet', { expire: 0 })` を呼び、`db-sheet` タグを即時失効させる。
+  - **`next/cache` の `updateTag` は使えない**: `updateTag` は Server Action 専用の API で Route Handler から呼ぶと実行時エラーになる（Next.js 16 公式ドキュメント）。tRPC の mutation は必ず Route Handler（`/api/trpc/[trpc]`）経由で実行されるため、代わりに `revalidateTag(tag, { expire: 0 })` で即時失効させる。空の `{}` は expire 未指定＝即時失効の保証が無いため、明示的に `{ expire: 0 }` を指定する（`app/api/revalidate/route.ts` が先に解決していた同じ問題のパターンを踏襲）。
+- GitHub 読み経路（`sheets` タグ）は `POST /api/revalidate`（`app/api/revalidate/route.ts`）で手動失効できる。`REVALIDATE_SECRET` を `Authorization: Bearer` か `?secret=` で照合し、`timingSafeEqual` で比較する。
 
 ---
 
@@ -184,4 +185,5 @@ GitHub 系の環境変数は任意扱いで、`assertServerEnv()` は欠けて�
 - 正本は Neon DB。スキルシート＝順序付きブロック配列で、`blocksToMarkdown` が 1 つの Markdown へ連結する。
 - 保存は単一トランザクション内で所有者検証（A2）・楽観ロック（A3・`ConflictError`）・サーバー時刻返却（A4）を行う。
 - GitHub は DB 空時のシードとレガシー `/view/[path]` の副系統として残る。
-- 読み取りは `unstable_cache` でタグ付けし、編集後は `revalidateTag` で即時失効させる。
+- 読み取りは `unstable_cache` でタグ付けし、tRPC mutation 後は `revalidateTag(tag, { expire: 0 })` で即時失効させる（`updateTag` は Route Handler から使えないため使用しない）。
+- 認可・入力検証・エラーコードは `src/server/trpc/router/*.ts` の procedure に集約されている（詳細は `01-setup-and-routing.md` の「RSC とデータ取得（tRPC server caller）」参照）。

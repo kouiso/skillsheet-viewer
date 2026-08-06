@@ -39,8 +39,9 @@
 │           ├── components/  # shadcn/ui ベースの UI 部品
 │           ├── context/     # React Context
 │           ├── hooks/       # カスタムフック
-│           ├── lib/         # 認証クライアントなどの共通設定
-│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション）
+│           ├── lib/         # 認証クライアント・tRPC クライアントなどの共通設定
+│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション・tRPC router）
+│           │   └── trpc/    # tRPC: context / init / router / server caller
 │           └── util/        # ユーティリティ関数
 └── packages/
     └── db/                  # Drizzle ORM + Neon（スキルシートの正本）
@@ -111,9 +112,9 @@ CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ�
 | --- | --- |
 | `postcss: ^8.5.23` | `next` が `postcss` を `8.4.31` で完全固定するため、next を上げても GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 が残る |
 | `sharp: ^0.35.3` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
-| `brace-expansion@>=3: ^5.0.8` | GHSA-mh99-v99m-4gvg の修正版。3.0.0 以上にだけ適用する |
+| `brace-expansion@>=3: ^5.0.9` | GHSA-mh99-v99m-4gvg の修正版。3.0.0 以上にだけ適用する。5.0.8 は GHSA-mh99-v99m-4gvg の緩和が不完全で別途 GHSA-rgw5-rvv9-x895（CVE-2026-69152）の対象になるため 5.0.9 まで上げる |
 | `test-exclude: ^8.0.0` | 7.x は minimatch 9 → brace-expansion 2.x を引き、2.x 系には GHSA-mh99-v99m-4gvg の修正版が無い。8.0.0 は minimatch 10 → brace-expansion 5 になる |
-| `fast-uri@3: ^3.1.4` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6 |
+| `fast-uri@3: ^3.1.5` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6。3.1.4 は別途 GHSA-7p8r-x3mc-p8w7（CVE-2026-18446）の対象になるため 3.1.5 まで上げる |
 
 `brace-expansion` を全系統まとめて `^5.0.8` に寄せてはいけない。`require('brace-expansion')`
 の戻り値は 3.0.0 で関数から object へ変わっており、それを関数として呼ぶ minimatch 3.x / 9.x が
@@ -124,11 +125,11 @@ CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ�
 | --- | --- |
 | 1.1.16 / 2.1.2 | function |
 | 3.0.2 / 4.0.1 | object（`default` 経由） |
-| 5.0.8 | object（`expand` 経由） |
+| 5.0.8 / 5.0.9 | object（`expand` 経由） |
 
 3.x / 4.x と 5.x も取り出し方が違うので、3.x / 4.x を要求する依存が新しく入ってきた場合は
 この override が原因で読み込みに失敗する。現在のロックファイルに 3.x / 4.x は無く、
-`brace-expansion` は 5.0.8 の1個だけなので実害は無い。落ちる場合も起動時にエラーが出る。
+`brace-expansion` は 5.0.9 の1個だけなので実害は無い。落ちる場合も起動時にエラーが出る。
 その時は override を狭めるのではなく、依存側を上げる。狭めると脆弱性検査が赤くなる。
 
 ### Storybook のビルダー
