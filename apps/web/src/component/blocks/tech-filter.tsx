@@ -47,7 +47,11 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="案件・技術・役割を検索…"
-            className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground outline-none focus:border-primary focus:bg-card"
+            aria-label="案件・技術・役割を検索"
+            // outline-none で UA 既定のフォーカスリングを消したあと、それに代わるリング指定が
+            // 無く、枠線色の変化（focus:border-primary）だけになっていた（#156）。
+            // focus-visible:ring-2 を追加してキーボード操作時にリングが見えるようにする。
+            className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground outline-none focus:border-primary focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
         </div>
         <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
