@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 
+import { ConfigErrorNotice, GITHUB_CONFIG_NOTICE } from '@/component/config-error-notice';
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';
 import { getCachedSheet } from '@/server/sheets-cache';
 import { requireViewer } from '@/server/viewer-gate';
+import { isConfigError } from '@/util/is-config-error';
 
 interface PageProps {
   searchParams: Promise<{ a?: string; b?: string }>;
@@ -31,17 +33,13 @@ export default async function ComparePage({ searchParams }: PageProps) {
     [sheetA, sheetB] = await Promise.all([getCachedSheet(a), getCachedSheet(b)]);
   } catch (err) {
     if (err instanceof SheetNotFoundError) notFound();
-    // GitHub 連携の環境変数が未設定の場合は 500 で落とさず、原因の分かる案内を表示する。
-    if (err instanceof Error && err.message.includes('Missing required GitHub env vars')) {
+    // GitHub 連携未設定は待っても直らないので、200 で原因と対処を返す（#157）。
+    // console.error は出さない（一時的な障害ではないため）。
+    if (isConfigError(err)) {
       return (
         <div>
           <Header title="スキルシート比較" />
-          <div className="flex min-h-[calc(100vh-64px)] flex-col items-center justify-center gap-3 px-4 text-center">
-            <h2 className="text-2xl font-bold">比較できません</h2>
-            <p className="text-muted-foreground">
-              GitHub 連携が未設定のため比較できません。管理者に環境変数の設定を依頼してください。
-            </p>
-          </div>
+          <ConfigErrorNotice {...GITHUB_CONFIG_NOTICE} />
         </div>
       );
     }

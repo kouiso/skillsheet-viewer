@@ -1,8 +1,10 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
+import { ConfigErrorNotice, DB_CONFIG_NOTICE } from '@/component/config-error-notice';
 import { isEditor } from '@/server/auth-gate';
 import { getCachedDbSheet } from '@/server/sheets-cache';
+import { isConfigError } from '@/util/is-config-error';
 
 import SheetViewClient from '../[path]/sheet-view-client';
 
@@ -24,23 +26,11 @@ export default async function DbSheetPage() {
       <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={await isEditor()} />
     );
   } catch (err) {
-    console.error('Failed to load DB skill sheet:', err);
-    return (
-      <div className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center gap-4 px-4 text-center">
-        <h2 className="text-2xl font-bold">DB版スキルシートを表示できません</h2>
-        <p className="text-muted-foreground">
-          データベースのセットアップが完了していない可能性があります。以下を確認してください。
-        </p>
-        <ul className="text-muted-foreground list-disc space-y-1 text-left text-sm">
-          <li>
-            環境変数 <code className="font-mono">DATABASE_URL</code> と{' '}
-            <code className="font-mono">SKILLSHEET_OWNER_ID</code> を設定する
-          </li>
-          <li>
-            マイグレーションを実行する: <code className="font-mono">pnpm db:migrate</code>
-          </li>
-        </ul>
-      </div>
-    );
+    // 設定不備（#157）は待っても直らない既知の原因なので console.error は出さない。
+    // それ以外（DB接続エラー等）は一時的な障害の可能性があるのでログに残す。
+    if (!isConfigError(err)) {
+      console.error('Failed to load DB skill sheet:', err);
+    }
+    return <ConfigErrorNotice {...DB_CONFIG_NOTICE} />;
   }
 }

@@ -3,6 +3,7 @@ import type { Metadata } from 'next';
 import { connection } from 'next/server';
 import { isEditor } from '@/server/auth-gate';
 import { getCachedDbSheets } from '@/server/sheets-cache';
+import { isConfigError } from '@/util/is-config-error';
 
 import DbSheetsListClient from './db-sheets-list-client';
 
@@ -19,7 +20,10 @@ export default async function SheetsListPage() {
   try {
     sheets = await getCachedDbSheets();
   } catch (err) {
-    console.error('Failed to fetch DB sheets:', err);
+    // 設定不備（#157）は待っても直らない既知の原因なので console.error は出さない。
+    if (!isConfigError(err)) {
+      console.error('Failed to fetch DB sheets:', err);
+    }
     hasError = true;
   }
   return <DbSheetsListClient initialSheets={sheets} hasError={hasError} canEdit={await isEditor()} />;
