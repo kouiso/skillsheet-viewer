@@ -17,6 +17,7 @@
 - **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
 - **言語**: TypeScript
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
+- **データ層**: tRPC v11 + @trpc/react-query + @tanstack/react-query（`src/server/trpc/`）。RSC は server caller で直呼び、クライアントは HTTP 経由（`/api/trpc/[trpc]`）。認可・入力検証（zod）・エラーコードは procedure に集約
 - **UI**: Tailwind CSS v4 + shadcn/ui（Radix UI）
 - **Markdown レンダリング**: react-markdown
 - **PDF**: @react-pdf/renderer（クライアント側で動的 import）
