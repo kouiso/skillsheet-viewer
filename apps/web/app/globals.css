@@ -37,6 +37,9 @@
   --accent-foreground: #08665e;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
+  /* エラーバナー（bg-destructive/10 の上に text-destructive）は 3.88:1 で WCAG AA(4.5:1)
+     未達だった（#152 S-4）。ティント背景上でも AA を満たす濃い赤。 */
+  --destructive-strong: #b91c1c;
   --border: #dce3e4;
   --input: #dce3e4;
   --ring: #0d9488;
@@ -105,6 +108,8 @@
   --accent-foreground: #2dd4bf;
   --destructive: #ef4444;
   --destructive-foreground: #0a0d0f;
+  /* ダークはティント背景上でも既に AA を満たすため --destructive と同値。 */
+  --destructive-strong: #ef4444;
   --border: #1d262b;
   --input: #1d262b;
   --ring: #14b8a6;
@@ -152,6 +157,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-strong: var(--destructive-strong);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

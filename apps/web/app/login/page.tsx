@@ -52,7 +52,9 @@ function LoginForm() {
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+          // text-destructive（#dc2626）は bg-destructive/10 のティント背景上で 3.88:1 と
+          // WCAG AA(4.5:1) 未達だった（#152 S-4）。text-destructive-strong に切り替える。
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive-strong"
         >
           {error}
         </div>
