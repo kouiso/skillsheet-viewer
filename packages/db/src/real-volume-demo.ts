@@ -22,7 +22,7 @@
 
 import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from './blocks';
 import { buildConsoleDemoBlocks } from './console-demo';
-import { createSheet, deleteSheet, listSheets } from './skillsheet';
+import { createSheet, listSheets } from './skillsheet';
 
 const newId = () => crypto.randomUUID();
 
@@ -202,26 +202,22 @@ export function buildRealVolumeDemoBlocks(): BlockInput[] {
 
 export const REAL_VOLUME_DEMO_TITLE = '実データボリューム検証シート（19社/32案件）';
 
+// listSheets() での存在確認と createSheet() での作成は別操作のため、並行した E2E
+// 実行が両方とも「未作成」と判定すると同名シートを複数作成しうる（レビュー指摘）。
+// タイトルに一意制約は無く、スキーマ変更を伴う onConflict ガードは今回のスコープ外
+// （本番DBスキーマ変更を伴う対応は対象外というユーザー指示、テスト用フィクスチャで
+// あり本番データではないため）。
+//
+// 作成直後に再確認して重複があれば自分の分を削除する対症療法を一度試みたが、
+// レビュー指摘により棄却した: updatedAt は一意でも単調でもなく、並行実行同士が
+// それぞれ異なる行を「勝者」と判定しうる。互いに相手の行を削除すると、フィクスチャが
+// 1件も残らない（元の「重複が残る」より悪い結果になる）。生半可な対症療法よりは、
+// この既知の制約（低確率で重複が残りうる）を許容し、素朴な実装のままにする。
+// 完全な解決には一意制約 + onConflictDoNothing() が必要で、それは第0段（本番DB
+// スキーマ変更）の範囲になる。
 export async function createRealVolumeDemoSheet(): Promise<string> {
   const sheets = await listSheets();
   const existing = sheets.find((s) => s.title === REAL_VOLUME_DEMO_TITLE);
   if (existing) return existing.id;
-
-  // listSheets() での存在確認と createSheet() での作成は別操作のため、並行した E2E
-  // 実行が両方とも「未作成」と判定すると同名シートを複数作成しうる（レビュー指摘）。
-  // タイトルに一意制約は無く、スキーマ変更を伴う onConflict ガードは今回のスコープ外
-  // （テスト用フィクスチャであり本番データではないため）。代わりに作成直後に再確認し、
-  // レースに負けていた場合は自分が作った分を削除して、先に作られていた方の id を返す
-  // （updatedAt が最も古い = 最初に作られたものを正とする）ことで、完全ではないが
-  // 実害となる重複作成を狭い window に抑える。
-  const createdId = await createSheet(REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
-  const afterCreate = await listSheets();
-  const duplicates = afterCreate.filter((s) => s.title === REAL_VOLUME_DEMO_TITLE);
-  if (duplicates.length <= 1) return createdId;
-
-  const [winner, ...losers] = duplicates.sort(
-    (a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(),
-  );
-  await Promise.all(losers.map((s) => deleteSheet(s.id)));
-  return winner.id;
+  return createSheet(REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
 }
