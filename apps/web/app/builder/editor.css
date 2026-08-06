@@ -980,7 +980,6 @@
   font-size: 12px;
   line-height: 1.8;
   color: var(--foreground);
-  white-space: pre-wrap;
 }
 
 /* 編集欄 ⇄ プレビューの同期ハイライト */

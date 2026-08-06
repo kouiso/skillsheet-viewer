@@ -2,6 +2,7 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { deriveDuration, formatPeriodDisplay, normalizeProcess } from '@skillsheet/db/process';
+import { InlineMarkdown } from '../inline-markdown';
 import { ProcessStepper } from './process-stepper';
 
 interface ProjectCardProps {
@@ -38,12 +39,14 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
         <div className="shrink-0 text-right">
           {item.role && <div className="text-[12.5px] text-foreground">{item.role}</div>}
           <div className="mt-0.5 font-mono text-[11.5px] text-faint">
-            {[company?.name, item.team && `${item.team}名`, duration].filter(Boolean).join(' · ')}
+            {[company?.name, item.team, duration].filter(Boolean).join(' · ')}
           </div>
         </div>
       </div>
 
-      {summary && <p className="break-words text-[13.5px] leading-[1.85] text-muted-foreground">{summary}</p>}
+      {summary && (
+        <InlineMarkdown content={summary} className="break-words text-[13.5px] leading-[1.85] text-muted-foreground" />
+      )}
 
       {tech.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -74,14 +77,15 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       {item.acquired && (
         <div className="text-sm">
           <p className="mb-1 font-mono text-[10px] tracking-[0.1em] text-accent-text">≪習得スキル・実績≫</p>
-          <p className="whitespace-pre-wrap break-words leading-relaxed text-foreground/80">{item.acquired}</p>
+          <InlineMarkdown content={item.acquired} className="break-words leading-relaxed text-foreground/80" />
         </div>
       )}
 
       {item.comment && (
-        <p className="break-words border-l-2 border-primary pl-3 text-sm italic text-muted-foreground">
-          {item.comment}
-        </p>
+        <InlineMarkdown
+          content={item.comment}
+          className="break-words border-l-2 border-primary pl-3 text-sm italic text-muted-foreground"
+        />
       )}
     </article>
   );
