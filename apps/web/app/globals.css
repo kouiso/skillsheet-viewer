@@ -42,12 +42,20 @@
   --ring: #0d9488;
   --radius: 0.25rem;
 
-  /* Console: 影なし（ヘアライン境界のみ）— キーは保持し none へ remap */
-  --elevation-1: none;
-  --elevation-2: none;
-  --elevation-3: none;
-  --elevation-4: none;
-  --elevation-8: none;
+  /* Console: 影なし（ヘアライン境界のみ）— キーは保持し見た目上シャドウ無しの値へ remap。
+     以前は none だったが、Tailwind v4 の box-shadow は
+     `var(--tw-inset-shadow), ..., var(--tw-ring-shadow), var(--tw-shadow)` という
+     カンマ区切りリストとして合成される。CSS の <shadow># はリストの要素ごとに
+     <shadow> でなければならず、リストの1要素が裸の none だとリスト全体が invalid になり
+     宣言ごと無視される。shadow-elevation-* を持つボタン（デフォルト/gradient/secondary
+     variant）で focus-visible:ring-2 が一切描画されなかった原因はこれ（#156）。
+     0 0 #0000（透明・オフセット/ぼかし0）は見た目は none と同じ「影なし」だが、
+     文法上は有効な <shadow> なのでリストが壊れない。 */
+  --elevation-1: 0 0 #0000;
+  --elevation-2: 0 0 #0000;
+  --elevation-3: 0 0 #0000;
+  --elevation-4: 0 0 #0000;
+  --elevation-8: 0 0 #0000;
 
   /* ハンドオフ redesign2（console.light）のトークン語彙。既存トークンとは別名で追加し非破壊。 */
   --surface2: #f0f3f3;
