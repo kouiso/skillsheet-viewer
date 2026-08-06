@@ -97,7 +97,7 @@ function parseArg(flag: string): string | undefined {
 // 「作成成功」の出力が出るのに /login では Better Auth 側の検証で弾かれて
 // ログインできない、という事故になる（レビュー指摘）。
 export const EMAIL_PATTERN =
-  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+-]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
+  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+.-]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 async function main() {
   const email = parseArg('email') ?? process.env.SKILLSHEET_OWNER_EMAIL;

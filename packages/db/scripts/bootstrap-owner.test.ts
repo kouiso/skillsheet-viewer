@@ -33,6 +33,15 @@ describe('EMAIL_PATTERN（Better Auth の z.email() と同じ検証を先取り�
     expect(EMAIL_PATTERN.test('owner+tag@example.co.jp')).toBe(true);
   });
 
+  it('ローカル部にドットを含む通常のメールアドレスも許可する（Better Auth の z.email() は許可するため）', () => {
+    expect(EMAIL_PATTERN.test('owner.name@example.com')).toBe(true);
+  });
+
+  it('連続ドット・先頭ドットは引き続き拒否する', () => {
+    expect(EMAIL_PATTERN.test('owner..name@example.com')).toBe(false);
+    expect(EMAIL_PATTERN.test('.owner@example.com')).toBe(false);
+  });
+
   it('@ が無い、ドメイン部が無い等の明らかな不正形式を拒否する', () => {
     expect(EMAIL_PATTERN.test('not-an-email')).toBe(false);
     expect(EMAIL_PATTERN.test('owner@')).toBe(false);
