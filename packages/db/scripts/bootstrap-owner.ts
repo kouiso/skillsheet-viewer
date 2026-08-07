@@ -34,7 +34,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
@@ -282,7 +282,11 @@ async function main() {
 
 // import.meta.url を直接実行チェックに使う。テストからこのモジュールを import した
 // ときに main()（実DB接続・Better Auth 初期化）が副作用として走らないようにする。
-if (import.meta.url === `file://${process.argv[1]}`) {
+// `file://${process.argv[1]}` の文字列連結は、Windows のパス区切り（`\`）や
+// スペース等のURLエスケープ対象文字を含むパスで import.meta.url（正規化された
+// file: URL）と一致しなくなり、main() が実行されないままコマンドが黙って正常終了
+// してしまう（レビュー指摘）。pathToFileURL で同じ正規化を経てから比較する。
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main().catch((err) => {
     console.error(err);
     process.exitCode = 1;

@@ -418,12 +418,33 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
       expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
 
-      const text = normalizeExtractedText(await extractPdfText(buffer));
+      const rawText = await extractPdfText(buffer);
+      const text = normalizeExtractedText(rawText);
       // CJK文字と隣接するASCIIハイフンが無いこと（U+002Dを実際のハイフン挿入として扱う）。
       expect(text).not.toMatch(/[぀-ヿ一-鿿]-|-[぀-ヿ一-鿿]/);
       // ハイフンが混入していないため、空白除去後の抽出テキストに
       // 元の日本語連続文がそのまま含まれているはずである。
       expect(text).toContain(denseJapanese);
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    'CJK文字境界の改行マーカーがPDFのテキストレイヤーに残らない（レビュー指摘: ZWNBSP(U+FEFF)を使うと改行マーカー自体がテキストとして埋め込まれ、コピー・検索時に不可視文字が混入していた）',
+    async () => {
+      const denseJapanese =
+        '要件定義から基本設計詳細設計実装単体テスト結合テスト総合テスト運用保守まで一貫して担当し性能改善や障害対応にも従事しました';
+      const header = '| 列A | 列B | 列C | 列D | 列E | 列F | 列G | 列H |';
+      const sep = '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |';
+      const row = `| ${Array.from({ length: 8 }, () => denseJapanese).join(' | ')} |`;
+      const content = ['## 改行マーカー検証', '', header, sep, row, ''].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const rawText = await extractPdfText(buffer);
+
+      // 空白除去 (normalizeExtractedText) をかける前の生の抽出テキストに、
+      // 改行マーカーとして使っていた ZWNBSP（U+FEFF）が literal に残っていないこと。
+      expect(rawText).not.toContain('﻿');
     },
     RENDER_TIMEOUT_MS,
   );
