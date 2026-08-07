@@ -1,11 +1,11 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
 import {
-  blocksToMarkdown,
   createRealVolumeDemoSheet,
   getSkillSheetById,
   isProjectBlockData,
   REAL_VOLUME_COMPANY_COUNT,
+  REAL_VOLUME_DEMO_TITLE,
   REAL_VOLUME_PROJECT_COUNT,
 } from '@skillsheet/db';
 
@@ -36,15 +36,12 @@ async function authViewer(page: Page, route: string) {
   await page.waitForURL(route);
 }
 
-async function capturePage(
-  page: Page,
-  route: string,
-  viewport: (typeof viewports)[number],
-  theme: Theme,
-  name: string,
-) {
+/**
+ * viewport/テーマ設定 → reload → スクリーンショット・console計測の共通部分。
+ * ページ側は既に対象ルートを表示済みであることが前提（goto は呼び出し側の責務）。
+ */
+async function measureAndCapture(page: Page, viewport: (typeof viewports)[number], theme: Theme, name: string) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
-  await page.goto(route, { waitUntil: 'networkidle' });
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -78,6 +75,18 @@ async function capturePage(
   page.off('console', consoleHandler);
 
   return { overflow, errors, warnings, path: `test-results/playwright/audit-${name}-${theme}-${viewport.name}.png` };
+}
+
+async function capturePage(
+  page: Page,
+  route: string,
+  viewport: (typeof viewports)[number],
+  theme: Theme,
+  name: string,
+) {
+  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+  await page.goto(route, { waitUntil: 'networkidle' });
+  return measureAndCapture(page, viewport, theme, name);
 }
 async function login(page: Page) {
   await page.goto('/login');
@@ -167,16 +176,27 @@ test.describe('Claude Design 全画面監査', () => {
 
   test('builder /builder/preview（プレビュー）', async ({ page }) => {
     await login(page);
-    // 直接 /builder/preview を開いたときに表示が空にならないよう、
-    // 編集画面から渡される localStorage ペイロードを再現する。
-    const previewSheet = await getSkillSheetById(viewSheetId);
-    const previewPayload = { title: previewSheet.title, content: blocksToMarkdown(previewSheet.blocks) };
-    await page.evaluate((payload) => {
-      localStorage.setItem('builder-preview-payload', JSON.stringify(payload));
-    }, previewPayload);
+    // 実データ相当ボリュームのフィクスチャ（viewSheetId）を編集画面で開いた状態にする。
+    await page.goto(`/builder?sheet=${viewSheetId}`, { waitUntil: 'networkidle' });
+
+    // 「プレビューを別ウィンドウで開く」ボタンから実際に window.open() させ、
+    // window.opener を持つ本物のポップアップとしてプレビューを開く。直接
+    // page.goto('/builder/preview') すると window.opener が無く、
+    // preview-client.tsx の hadOpenerRef ガードにより localStorage のシードが
+    // 読み込まれず、実データではなく空のプレビューを監査してしまう（レビュー指摘）。
+    const [popup] = await Promise.all([
+      page.waitForEvent('popup'),
+      page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click(),
+    ]);
+    await popup.waitForLoadState('networkidle');
+
+    // 監査対象が実際に19社/32案件のフィクスチャであり、空のプレビューではないことを
+    // キャプチャ開始前に確認する。
+    await expect(popup.getByRole('heading', { name: REAL_VOLUME_DEMO_TITLE })).toBeVisible();
+
     for (const viewport of viewports) {
       for (const theme of ['light', 'dark'] as const) {
-        const result = await capturePage(page, '/builder/preview', viewport, theme, `preview-${viewport.name}`);
+        const result = await measureAndCapture(popup, viewport, theme, `preview-${viewport.name}`);
         expect(result.overflow.hasOverflow, `横スクロール: ${viewport.name} / ${theme}`).toBe(false);
         expect(result.errors, `console.error: ${viewport.name} / ${theme}`).toEqual([]);
       }
