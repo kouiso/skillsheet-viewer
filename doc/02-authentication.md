@@ -151,7 +151,7 @@ export async function requireViewer(): Promise<void> {
 
 - (a) 有効な HMAC 閲覧 cookie があるか、(b) Better Auth の編集者としてログイン済みなら閲覧を許可する。
 - どちらも満たさなければ `/viewer-auth` へリダイレクト（`redirect()` は内部で例外を投げるため、許可時のみ正常 return する）。
-- 呼び出し元は `app/view/layout.tsx`（`/view` 配下を一括保護）と `app/compare/page.tsx`（比較経由のバイパス防止）。
+- 呼び出し元は `app/view/layout.tsx`（`/view` 配下を一括保護）。
 
 ---
 

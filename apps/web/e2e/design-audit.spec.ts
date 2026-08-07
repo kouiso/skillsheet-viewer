@@ -1,6 +1,13 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
-import { blocksToMarkdown, createConsoleDemoSheet, getSkillSheetById } from '@skillsheet/db';
+import {
+  createRealVolumeDemoSheet,
+  getSkillSheetById,
+  isProjectBlockData,
+  REAL_VOLUME_COMPANY_COUNT,
+  REAL_VOLUME_DEMO_TITLE,
+  REAL_VOLUME_PROJECT_COUNT,
+} from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
@@ -29,15 +36,12 @@ async function authViewer(page: Page, route: string) {
   await page.waitForURL(route);
 }
 
-async function capturePage(
-  page: Page,
-  route: string,
-  viewport: (typeof viewports)[number],
-  theme: Theme,
-  name: string,
-) {
+/**
+ * viewport/テーマ設定 → reload → スクリーンショット・console計測の共通部分。
+ * ページ側は既に対象ルートを表示済みであることが前提（goto は呼び出し側の責務）。
+ */
+async function measureAndCapture(page: Page, viewport: (typeof viewports)[number], theme: Theme, name: string) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
-  await page.goto(route, { waitUntil: 'networkidle' });
 
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -72,6 +76,18 @@ async function capturePage(
 
   return { overflow, errors, warnings, path: `test-results/playwright/audit-${name}-${theme}-${viewport.name}.png` };
 }
+
+async function capturePage(
+  page: Page,
+  route: string,
+  viewport: (typeof viewports)[number],
+  theme: Theme,
+  name: string,
+) {
+  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+  await page.goto(route, { waitUntil: 'networkidle' });
+  return measureAndCapture(page, viewport, theme, name);
+}
 async function login(page: Page) {
   await page.goto('/login');
   await page.getByLabel('メールアドレス').fill(email);
@@ -82,7 +98,37 @@ async function login(page: Page) {
 
 test.describe('Claude Design 全画面監査', () => {
   test.beforeAll(async () => {
-    viewSheetId = await createConsoleDemoSheet();
+    // #143 / #153 X-2: 合成デモシート（createConsoleDemoSheet, 11案件）では実データ
+    // （19社/32案件）でのみ発生する 320px 横スクロールを検出できなかった。実データ相当の
+    // ボリュームを持つフィクスチャに差し替える。
+    viewSheetId = await createRealVolumeDemoSheet();
+  });
+
+  test('フィクスチャの件数が元データ（19社/32案件）と一致する', async () => {
+    const sheet = await getSkillSheetById(viewSheetId);
+    const projectBlock = sheet.blocks.find((b) => b.type === 'project');
+    expect(projectBlock, 'project ブロックが存在すること').toBeTruthy();
+    if (!projectBlock || !isProjectBlockData(projectBlock.data)) {
+      throw new Error('project ブロックのデータが不正です');
+    }
+    expect(projectBlock.data.companies.length, `会社数が元データ(${REAL_VOLUME_COMPANY_COUNT}社)と一致`).toBe(
+      REAL_VOLUME_COMPANY_COUNT,
+    );
+    expect(projectBlock.data.items.length, `案件数が元データ(${REAL_VOLUME_PROJECT_COUNT}案件)と一致`).toBe(
+      REAL_VOLUME_PROJECT_COUNT,
+    );
+  });
+
+  test('viewer /view/db/:id が320pxで横スクロールしない（#143 回帰検出）', async ({ page }) => {
+    const route = `/view/db/${viewSheetId}`;
+    await authViewer(page, route);
+    const narrow = viewports.find((v) => v.width === 320);
+    if (!narrow) throw new Error('320px の viewport 定義が見つかりません');
+    const result = await capturePage(page, route, narrow, 'light', 'regression-143-320');
+    expect(
+      result.overflow.scrollWidth,
+      `320px で scrollWidth(${result.overflow.scrollWidth}) が clientWidth(${result.overflow.clientWidth}) を超えないこと（#143）`,
+    ).toBeLessThanOrEqual(result.overflow.clientWidth);
   });
 
   test('viewer /view/db/:id ダッシュボード', async ({ page }) => {
@@ -130,16 +176,27 @@ test.describe('Claude Design 全画面監査', () => {
 
   test('builder /builder/preview（プレビュー）', async ({ page }) => {
     await login(page);
-    // 直接 /builder/preview を開いたときに表示が空にならないよう、
-    // 編集画面から渡される localStorage ペイロードを再現する。
-    const previewSheet = await getSkillSheetById(viewSheetId);
-    const previewPayload = { title: previewSheet.title, content: blocksToMarkdown(previewSheet.blocks) };
-    await page.evaluate((payload) => {
-      localStorage.setItem('builder-preview-payload', JSON.stringify(payload));
-    }, previewPayload);
+    // 実データ相当ボリュームのフィクスチャ（viewSheetId）を編集画面で開いた状態にする。
+    await page.goto(`/builder?sheet=${viewSheetId}`, { waitUntil: 'networkidle' });
+
+    // 「プレビューを別ウィンドウで開く」ボタンから実際に window.open() させ、
+    // window.opener を持つ本物のポップアップとしてプレビューを開く。直接
+    // page.goto('/builder/preview') すると window.opener が無く、
+    // preview-client.tsx の hadOpenerRef ガードにより localStorage のシードが
+    // 読み込まれず、実データではなく空のプレビューを監査してしまう（レビュー指摘）。
+    const [popup] = await Promise.all([
+      page.waitForEvent('popup'),
+      page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click(),
+    ]);
+    await popup.waitForLoadState('networkidle');
+
+    // 監査対象が実際に19社/32案件のフィクスチャであり、空のプレビューではないことを
+    // キャプチャ開始前に確認する。
+    await expect(popup.getByRole('heading', { name: REAL_VOLUME_DEMO_TITLE })).toBeVisible();
+
     for (const viewport of viewports) {
       for (const theme of ['light', 'dark'] as const) {
-        const result = await capturePage(page, '/builder/preview', viewport, theme, `preview-${viewport.name}`);
+        const result = await measureAndCapture(popup, viewport, theme, `preview-${viewport.name}`);
         expect(result.overflow.hasOverflow, `横スクロール: ${viewport.name} / ${theme}`).toBe(false);
         expect(result.errors, `console.error: ${viewport.name} / ${theme}`).toEqual([]);
       }

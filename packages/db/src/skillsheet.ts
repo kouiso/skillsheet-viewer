@@ -54,7 +54,7 @@ export class SkillSheetNotFoundError extends Error {
  * 単一オーナー運用では Better Auth のオーナーアカウントに対応する安定IDを設定する。
  * 書き込みは isEditor()（Better Auth セッション必須）でゲートされる。
  */
-function getOwnerId(): string {
+export function getOwnerId(): string {
   const id = process.env.SKILLSHEET_OWNER_ID;
   if (!id) throw new Error('SKILLSHEET_OWNER_ID is not set');
   return id;
@@ -254,32 +254,36 @@ export async function listSheets(): Promise<SheetSummary[]> {
 /** 新規シートを作成して ID を返す。initialBlocks を渡すとテンプレートブロックを初期値として挿入する。 */
 export async function createSheet(title: string, initialBlocks?: BlockInput[]): Promise<string> {
   const db = getDb();
+  return db.transaction(async (tx) => createSheetInTx(tx, title, initialBlocks));
+}
+
+/**
+ * 新規シートを作成するコア処理。トランザクションハンドルを受け取るため、
+ * 呼び出し側でトランザクションをはり、他のテーブル（fixture 等）との原子性を保てる。
+ */
+export async function createSheetInTx(tx: DbOrTx, title: string, initialBlocks?: BlockInput[]): Promise<string> {
   const ownerId = getOwnerId();
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
-  // skillSheets への insert と blocks への insert を同一トランザクションで囲み、
-  // ブロック挿入が失敗したときにシートだけが残る不整合を防ぐ（原子性の担保）。
-  return db.transaction(async (tx) => {
-    const inserted = await tx
-      .insert(skillSheets)
-      .values({ ownerId, title: resolvedTitle })
-      .returning({ id: skillSheets.id });
-    const sheetId = inserted[0]?.id;
-    if (!sheetId) {
-      throw new Error('Failed to create sheet: INSERT returned no id');
-    }
-    if (initialBlocks && initialBlocks.length > 0) {
-      // 空ブロックはここで落とさない — テンプレの入力用スカフォールドが消えて
-      // 見出しだけが残る不具合になる（issue #128）。空判定は描画時に行う。
-      // ユーザーが「追加」を連打して埋めずに放置した空ブロックも同様に残り続けるが、
-      // これは編集画面上で見えて削除もできる（閲覧側にだけ出ない）ので許容する。
-      const normalized = initialBlocks.map(normalizeBlockInput);
-      await tx
-        .insert(blocks)
-        .values(normalized.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
-    }
-    return sheetId;
-  });
+  const inserted = await tx
+    .insert(skillSheets)
+    .values({ ownerId, title: resolvedTitle })
+    .returning({ id: skillSheets.id });
+  const sheetId = inserted[0]?.id;
+  if (!sheetId) {
+    throw new Error('Failed to create sheet: INSERT returned no id');
+  }
+  if (initialBlocks && initialBlocks.length > 0) {
+    // 空ブロックはここで落とさない — テンプレの入力用スカフォールドが消えて
+    // 見出しだけが残る不具合になる（issue #128）。空判定は描画時に行う。
+    // ユーザーが「追加」を連打して埋めずに放置した空ブロックも同様に残り続けるが、
+    // これは編集画面上で見えて削除もできる（閲覧側にだけ出ない）ので許容する。
+    const normalized = initialBlocks.map(normalizeBlockInput);
+    await tx
+      .insert(blocks)
+      .values(normalized.map((block, order) => ({ sheetId, type: block.type, order, data: block.data })));
+  }
+  return sheetId;
 }
 
 /** 指定シートを削除する（ブロックも cascade で削除される）。 */

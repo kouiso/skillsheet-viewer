@@ -1,12 +1,18 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { Font, renderToBuffer } from '@react-pdf/renderer';
+import { Font, renderToBuffer, View } from '@react-pdf/renderer';
 import { getDocument } from 'pdfjs-dist';
+import remarkParse from 'remark-parse';
+import { unified } from 'unified';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
+
 import PDF_FONT_FAMILY from './constants';
-import { SkillSheetDocument } from './skill-sheet-document';
+import { splitForHyphenation } from './fonts';
+import type { MdNode } from './skill-sheet-document';
+import { renderBlocks, SkillSheetDocument } from './skill-sheet-document';
 
 // public/ 配下の実フォントファイルへの絶対パス。
 // 本番（pdf/fonts.ts）はブラウザ向けに URL 参照（/fonts/...）で登録するが、
@@ -44,6 +50,15 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   return text;
 }
 
+// splitForHyphenation は CJK 文字境界に ZWNBSP（表示幅ゼロ）を挟んで改行点を作るため、
+// PDF自体の見た目には影響しないが、pdf.js の getTextContent() はこの境界を独立した
+// テキストアイテムとして抽出し、アイテム間に空白を挿入することがある（抽出テキストの
+// アーティファクトであり、実際にPDF上に空白グリフが描画されるわけではない）。
+// 内容の欠落やハイフン混入を検証する目的では本質的でないため、比較前に空白を除去する。
+function normalizeExtractedText(text: string): string {
+  return text.replace(/\s+/g, '');
+}
+
 function registerNodeFonts(): void {
   Font.register({
     family: PDF_FONT_FAMILY,
@@ -55,6 +70,14 @@ function registerNodeFonts(): void {
       { src: BOLD_TTF, fontWeight: 700, fontStyle: 'italic' },
     ],
   });
+  // 本番の registerPdfFonts()（pdf/fonts.ts）はブラウザ向け URL でフォント登録するため
+  // Node のバイト描画では再利用できないが、CJK折り返し用の hyphenationCallback は
+  // フォントパスと無関係なので同じ実装を登録する。これを登録しないと
+  // splitForHyphenation() が一切使われず、CJK折り返しに関する回帰テストが本番の
+  // 改行ロジックを検証できていなかった（このテストファイルの既存の盲点）。
+  if (typeof Font.registerHyphenationCallback === 'function') {
+    Font.registerHyphenationCallback(splitForHyphenation);
+  }
 }
 
 // 日本語見出し・段落・テーブル・日本語入りコードブロックを含み、
@@ -94,6 +117,96 @@ function buildContent(): string {
     '',
   ].join('\n');
 }
+
+// SkillSheetDocument 本体と同じ remark パイプラインで markdown を mdast ノード列に変換する。
+// renderBlocks の構造検証テストで、コンポーネントと同じ木を組み立てるために使う。
+function parseMarkdown(content: string): MdNode[] {
+  const processor = unified().use(remarkParse).use(MARKDOWN_REMARK_PLUGINS);
+  const tree = processor.runSync(processor.parse(content)) as unknown as MdNode;
+  return tree.children ?? [];
+}
+
+// React 要素木（@react-pdf/renderer のプレーンな element オブジェクト）を再帰的にたどり、
+// Text の中身（文字列）だけを連結して取り出す。実際の描画エンジンを介さず、
+// renderBlocks が返す木を直接検証するために使う。
+function flattenText(node: unknown): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(flattenText).join('');
+  if (typeof node === 'object' && node !== null && 'props' in node) {
+    return flattenText((node as { props?: { children?: unknown } }).props?.children);
+  }
+  return '';
+}
+
+// N行の項目/内容テーブルを持つ、実際の projectBlockToMarkdown / skillsBlockToMarkdown
+// が生成する形（見出し + 直後の表）に近い小さな案件カード風 markdown を組み立てる。
+function buildCardMarkdown(heading: string, rowCount: number): string {
+  const rows = Array.from({ length: rowCount }, (_, i) => `| 項目${i} | 内容${i} |`).join('\n');
+  return [heading, '', '| 項目 | 内容 |', '| :--- | :--- |', rows, ''].join('\n');
+}
+
+describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', () => {
+  it('1ページに収まる見込みの小さな表（案件カード相当）は見出し+表を1つのViewにまとめ wrap={false} にする', () => {
+    // projectBlockToMarkdown 相当（期間/役割/規模/技術スタック/担当工程 程度で最大6行前後）を想定した
+    // 小さな表。CARD_MAX_ROWS を下回るため、見出し+表がまとめて分割不可になるべき。
+    const nodes = parseMarkdown(buildCardMarkdown('### 株式会社テスト — テストシステム開発', 4));
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    // 見出し+表が1つの要素にまとめられ、他の兄弟が無いため出力は1要素のみになる。
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as {
+      type: unknown;
+      props: { wrap?: boolean; minPresenceAhead?: number; children: unknown[] };
+    };
+
+    expect(merged.type).toBe(View);
+    // 1ページに収まる見込みなので分割不可（wrap=false）でまとめられている。
+    expect(merged.props.wrap).toBe(false);
+    // 見出し単独でページ末尾に残らないよう minPresenceAhead が設定されている。
+    expect(merged.props.minPresenceAhead).toBeGreaterThan(0);
+    // 見出しと表の2要素が1つの View の子としてまとまっている。
+    expect(Array.isArray(merged.props.children)).toBe(true);
+    expect(merged.props.children).toHaveLength(2);
+
+    const text = flattenText(merged);
+    expect(text).toContain('株式会社テスト — テストシステム開発');
+    expect(text).toContain('内容0');
+  });
+
+  it('1ページに収まらない見込みの表（行数が多いスキルカテゴリ相当）は wrap={true} のままクリップを防ぐ', () => {
+    // CARD_MAX_ROWS を超える行数の表。文字数自体は短くても行数超過で
+    // 「収まらない見込み」と判定され、見出し+表を丸ごと不可分にはしない
+    // （renderTable 内の行単位 wrap 制御に委ねてクリップを防ぐ）。
+    const nodes = parseMarkdown(buildCardMarkdown('### 多い項目のカテゴリ', 20));
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as {
+      type: unknown;
+      props: { wrap?: boolean; minPresenceAhead?: number; children: unknown[] };
+    };
+
+    expect(merged.type).toBe(View);
+    // 収まらない見込みなので分割を許容する（wrap=true）。
+    expect(merged.props.wrap).toBe(true);
+    // 収まらない場合でも見出し単独残留を防ぐ minPresenceAhead は維持される。
+    expect(merged.props.minPresenceAhead).toBeGreaterThan(0);
+    expect(merged.props.children).toHaveLength(2);
+  });
+
+  it('見出しの直後が表でない場合（通常の段落など）は結合せず、見出しを単独描画する', () => {
+    const nodes = parseMarkdown(['## 概要', '', '通常の説明文です。', ''].join('\n'));
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    // 見出しと段落、それぞれ独立した要素として出力される（結合されない）。
+    expect(rendered).toHaveLength(2);
+    const heading = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown } };
+    expect(heading.type).toBe(View);
+    // 表と結合されていないので wrap は明示設定されない（結合ケースのように boolean が入らない）。
+    expect(heading.props.wrap).toBeUndefined();
+  });
+});
 
 describe('SkillSheetDocument（実バイト描画）', () => {
   beforeAll(() => {
@@ -246,9 +359,9 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       expect(pageObjectCount).toBeGreaterThan(1);
 
       // 全 32 件の見出しテキストが PDF から抽出できること（Issue #172 回帰防止）。
-      const text = await extractPdfText(buffer);
+      const text = normalizeExtractedText(await extractPdfText(buffer));
       for (const heading of headings) {
-        expect(text).toContain(heading);
+        expect(text).toContain(normalizeExtractedText(heading));
       }
     },
     RENDER_TIMEOUT_MS,
@@ -282,6 +395,56 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       expect(bytes.slice(-1024)).toContain('%%EOF');
       const pageObjectCount = (bytes.match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
       expect(pageObjectCount).toBeGreaterThan(1);
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    '狭い列幅で日本語が複数行に折り返されても、CJK文字間に想定外のハイフン(-)が挿入されない（Issue #171 Codexレビュー指摘の回帰防止）',
+    async () => {
+      // 8列テーブルの各セルへ、区切りの無い長い日本語連続文（スペース・句読点なし）を
+      // 詰め込み、狭い列幅で頻繁な折り返しを強制する。@react-pdf/textkit の
+      // getNodes() は splitForHyphenation() が挟む ZWNBSP の直前の CJK 文字にも
+      // hyphenated:true を立てるため、hyphenationPenalty を大きくしていないと
+      // K&P改行選択がこの penalty ブレークポイントを選び、breakLines() が実際に
+      // ハイフン記号(U+002D)を挿入してしまう（修正前バグの再現条件）。
+      const denseJapanese =
+        '要件定義から基本設計詳細設計実装単体テスト結合テスト総合テスト運用保守まで一貫して担当し性能改善や障害対応にも従事しました';
+      const header = '| 列A | 列B | 列C | 列D | 列E | 列F | 列G | 列H |';
+      const sep = '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |';
+      const row = `| ${Array.from({ length: 8 }, () => denseJapanese).join(' | ')} |`;
+      const content = ['## 折り返し検証', '', header, sep, row, ''].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+
+      const rawText = await extractPdfText(buffer);
+      const text = normalizeExtractedText(rawText);
+      // CJK文字と隣接するASCIIハイフンが無いこと（U+002Dを実際のハイフン挿入として扱う）。
+      expect(text).not.toMatch(/[぀-ヿ一-鿿]-|-[぀-ヿ一-鿿]/);
+      // ハイフンが混入していないため、空白除去後の抽出テキストに
+      // 元の日本語連続文がそのまま含まれているはずである。
+      expect(text).toContain(denseJapanese);
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    'CJK文字境界の改行マーカーがPDFのテキストレイヤーに残らない（レビュー指摘: ZWNBSP(U+FEFF)を使うと改行マーカー自体がテキストとして埋め込まれ、コピー・検索時に不可視文字が混入していた）',
+    async () => {
+      const denseJapanese =
+        '要件定義から基本設計詳細設計実装単体テスト結合テスト総合テスト運用保守まで一貫して担当し性能改善や障害対応にも従事しました';
+      const header = '| 列A | 列B | 列C | 列D | 列E | 列F | 列G | 列H |';
+      const sep = '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |';
+      const row = `| ${Array.from({ length: 8 }, () => denseJapanese).join(' | ')} |`;
+      const content = ['## 改行マーカー検証', '', header, sep, row, ''].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const rawText = await extractPdfText(buffer);
+
+      // 空白除去 (normalizeExtractedText) をかける前の生の抽出テキストに、
+      // 改行マーカーとして使っていた ZWNBSP（U+FEFF）が literal に残っていないこと。
+      expect(rawText).not.toContain('﻿');
     },
     RENDER_TIMEOUT_MS,
   );

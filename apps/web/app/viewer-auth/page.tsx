@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { resolveNextPath } from '@/util/resolve-next-path';
 
 const ViewerAuthPage = () => {
   const router = useRouter();
@@ -31,7 +32,7 @@ const ViewerAuthPage = () => {
       if (res.ok) {
         // 認証後の遷移先。?next= が内部パスのときのみ許可（オープンリダイレクト防止）。
         const next = new URLSearchParams(window.location.search).get('next');
-        const dest = next?.startsWith('/') && !next.startsWith('//') ? next : '/view';
+        const dest = resolveNextPath(next, '/view', window.location.origin);
         router.push(dest);
         return;
       }
@@ -108,7 +109,9 @@ const ViewerAuthPage = () => {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.3 }}
                 role="alert"
-                className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+                // text-destructive（#dc2626）は bg-destructive/10 のティント背景上で 3.88:1 と
+                // WCAG AA(4.5:1) 未達だった（#152 S-4）。text-destructive-strong に切り替える。
+                className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive-strong"
               >
                 {error}
               </motion.div>

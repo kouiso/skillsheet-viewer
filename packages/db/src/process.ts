@@ -289,13 +289,30 @@ export function deriveCompanyPeriod(periods: string[]): string {
 
 const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
 
-/** 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。 */
+// 元データの「該当なし」プレースホルダ。技術名として取り込まれても描画時点で除外する。
+const EMPTY_TECH_PLACEHOLDERS = new Set(['-', 'ー', '—']);
+
+// tech の各バケットは型上は string[] だが、DB の JSON カラムは実行時の型を保証しない。
+// 非文字列が紛れた場合は trim() で例外にする代わりに「該当なし」と同じ扱いで除外する
+// （文字列以外を技術名としてそのままチップ表示に流すと、React の子要素として
+// 描画できず落ちる可能性がある）。
+function isEmptyTechValue(value: unknown): boolean {
+  if (typeof value !== 'string') return true;
+  const trimmed = value.trim();
+  return trimmed === '' || EMPTY_TECH_PLACEHOLDERS.has(trimmed);
+}
+
+/**
+ * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ */
 export function flattenTech(tech: ProjectTech): string[] {
   if (!tech) return [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const key of TECH_BUCKET_ORDER) {
     for (const value of tech[key] ?? []) {
+      if (isEmptyTechValue(value)) continue;
       if (!seen.has(value)) {
         seen.add(value);
         out.push(value);

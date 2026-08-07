@@ -2,7 +2,7 @@
 
 import './sync-bar.css';
 
-export type SyncState = 'live' | 'stale' | 'closed';
+export type SyncState = 'live' | 'stale' | 'closed' | 'standalone';
 
 interface SyncBarProps {
   state: SyncState;
@@ -15,6 +15,10 @@ const LABEL: Record<SyncState, string> = {
   live: '編集中の内容を同期表示',
   stale: '同期が途切れています',
   closed: '編集画面が閉じられました — 表示は最後の内容です',
+  // #151 U-5: 「編集画面を開いたことがない（このURLへ直接アクセスした）」を
+  // 「接続後に閉じられた」と同一の closed 扱いにしていたため、本文が空なのに
+  // 「最後の内容です」と出て、データを失ったと誤解させていた。
+  standalone: '表示できるプレビューがありません。ビルダー画面のプレビューボタンから開いてください。',
 };
 
 const formatStamp = (at: number): string => {

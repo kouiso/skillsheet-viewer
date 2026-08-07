@@ -23,6 +23,10 @@ KEBAB='^[a-z0-9]+(-[a-z0-9]+)*$'
 # drizzle/ 配下は drizzle-kit の生成物（手で変えるとマイグレーションが壊れる）
 # public/fonts・material は配布物・素材の原名
 # .github/ISSUE_TEMPLATE・PULL_REQUEST_TEMPLATE は GitHub が名前を規定している
+# patches/ は `pnpm patch-commit` が `<パッケージ名>@<バージョン>.patch`
+# （スコープ付きは `@` を `__` に置換）という形式でファイル名を自動生成し、
+# `pnpm install` 時にこの名前で package.json の patchedDependencies から
+# 参照されるため、手でケバブケースへ変えると解決できなくなる。
 is_exempt() {
   case "$1" in
     README.md|SETUP.md|VERIFY.md|TODO.md|CLAUDE.md|AGENTS.md|LICENSE|Makefile|Dockerfile) return 0 ;;
@@ -31,6 +35,7 @@ is_exempt() {
     apps/web/public/fonts/*) return 0 ;;
     material/*) return 0 ;;
     .github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE*) return 0 ;;
+    patches/*) return 0 ;;
   esac
   return 1
 }

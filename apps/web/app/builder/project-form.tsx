@@ -301,7 +301,9 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
                 value={ongoing ? '' : end}
                 onChange={(v) => commitPeriod(start, v, ongoing)}
                 label="終了月"
-                placeholder={ongoing ? '継続中' : '終了月'}
+                // 「継続中」がチェックボックスラベル・期間バッジと合わせて3箇所に重複していた
+                // （#152 S-5）。終了月欄は無効化された時点で理由が伝わるため空にする。
+                placeholder={ongoing ? '' : '終了月'}
                 disabled={ongoing}
                 error={orderError}
               />
