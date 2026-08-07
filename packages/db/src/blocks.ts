@@ -58,9 +58,13 @@ export interface ExperienceBlockData {
 /** プロフィールブロックのメタ情報。 */
 export interface ProfileMeta {
   age?: string;
+  gender?: string;
+  qualifications?: string;
+  education?: string;
   work?: string;
   station?: string;
-  education?: string;
+  specialties?: string;
+  expertise?: string;
 }
 
 /** プロフィールブロックの構造化データ。 */
@@ -498,9 +502,13 @@ export function profileBlockToMarkdown(data: ProfileBlockData): string {
   // 所属会社はビューア（トップバー/kicker）で表示するため、markdown/PDF でも欠落させない（表示パリティ）。
   if (data.company?.trim()) metaItems.push(`| 所属会社 | ${escapeCell(data.company.trim())} |`);
   if (meta.age) metaItems.push(`| 年齢 | ${escapeCell(meta.age)} |`);
+  if (meta.gender) metaItems.push(`| 性別 | ${escapeCell(meta.gender)} |`);
+  if (meta.qualifications) metaItems.push(`| 資格 | ${escapeCell(meta.qualifications)} |`);
+  if (meta.education) metaItems.push(`| 学歴 | ${escapeCell(meta.education)} |`);
   if (meta.work) metaItems.push(`| 勤務形態 | ${escapeCell(meta.work)} |`);
   if (meta.station) metaItems.push(`| 最寄り駅 | ${escapeCell(meta.station)} |`);
-  if (meta.education) metaItems.push(`| 学歴 | ${escapeCell(meta.education)} |`);
+  if (meta.specialties) metaItems.push(`| 得意分野 | ${escapeCell(meta.specialties)} |`);
+  if (meta.expertise) metaItems.push(`| 得意業務 | ${escapeCell(meta.expertise)} |`);
   if (metaItems.length > 0) {
     lines.push('\n| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
