@@ -70,6 +70,14 @@ describe('splitForHyphenation', () => {
     expect(splitForHyphenation(kanjiWithIvs)).toEqual([kanjiWithIvs]);
   });
 
+  it('補助面のCJK統合漢字拡張（U+20000以降）も改行可能な1文字として扱う（レビュー指摘: BMP外を一律除外していたためテーブルセルからはみ出していた）', () => {
+    // 𠀀 (U+20000, CJK統合漢字拡張Bの先頭)。対策前は CJK_END_EXCLUSIVE（0x10000）
+    // による一律除外で「CJKではない1文字」として ASCII ランへまとめられ、
+    // 改行不可能な1シラブルとして扱われていた。
+    const supplementaryCjk = '\u{20000}';
+    expect(splitForHyphenation(`${supplementaryCjk}本`)).toEqual([supplementaryCjk, ZWNBSP, '本']);
+  });
+
   it('CJK記号への結合分音記号（U+20D0台）は基底文字から分離しない', () => {
     // 漢 (U+6F22) + COMBINING ENCLOSING CIRCLE (U+20DD)。旧範囲（結合分音記号一般 /
     // かな結合濁点 / 異体字セレクタのみ）には含まれず、対策前は分離しうる。

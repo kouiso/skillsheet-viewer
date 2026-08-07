@@ -643,6 +643,26 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('\\[リンク\\]');
   });
 
+  it('note に元からバックスラッシュを含む文字列（例: エスケープ済みHTMLタグを意図した記述）があっても、後続のメタ文字エスケープと組み合わさって二重エスケープが消費され生HTMLとして復元されないよう、既存のバックスラッシュを先にエスケープする（レビュー指摘）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [
+        {
+          ...PROJECT.companies[0],
+          note: '説明文\n\\<img src="https://example.com/x.png">',
+        },
+      ],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    // remark は `\\`（連続する2つのバックスラッシュ）を「エスケープされたバックスラッシュ1文字」
+    // として消費するため、既存のバックスラッシュを先にエスケープしていないと、後続で追加される
+    // `<` の前のバックスラッシュと合わせて `\\<` になり、`<img ...>` が未エスケープの生HTMLとして
+    // 復元されてしまう。既存のバックスラッシュを先に `\\` へエスケープしておくことで、
+    // 都合3連続のバックスラッシュ（元のバックスラッシュのエスケープ分 + `<` のエスケープ分）になり、
+    // remark 上でも「バックスラッシュ1文字 + エスケープされた `<`」として元の見た目を維持する。
+    expect(md).toContain(`${'\\'.repeat(3)}<img`);
+  });
+
   it('note内の行中（行頭以外）に出現する画像/リンク/強調記法もエスケープする（レビュー指摘: 従来は行頭アンカーの正規表現のため行中は素通りしていた）', () => {
     const withNote: ProjectBlockData = {
       companies: [

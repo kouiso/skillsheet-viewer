@@ -115,27 +115,32 @@ export function promptHiddenPassword(promptText: string, stdin: NodeJS.ReadStrea
       stdin.removeListener('data', onData);
     };
     const onData = (chunk: Buffer | string) => {
-      const char = chunk.toString();
-      switch (char) {
-        case '\n':
-        case '\r':
-        case '\u0004': // Ctrl-D
-          cleanup();
-          process.stdout.write('\n');
-          resolve(input);
-          break;
-        case '\u0003': // Ctrl-C
-          cleanup();
-          process.stdout.write('\n');
-          reject(new Error('入力がキャンセルされました'));
-          break;
-        case '\u007f': // Backspace（多くの端末）
-        case '\b':
-          input = input.slice(0, -1);
-          break;
-        default:
-          input += char;
-          break;
+      // ペースト入力やバッファリングにより、1回の data イベントに複数文字
+      // （例: "Secret\r"）がまとめて届くことがある。chunk 全体を1つの文字列として
+      // switch で厳密一致させると制御文字のケースに一致せず、Enter等がそのまま
+      // パスワードへ追記されてしまう（レビュー指摘）ため。1文字ずつ処理する。
+      for (const char of chunk.toString()) {
+        switch (char) {
+          case '\n':
+          case '\r':
+          case '\u0004': // Ctrl-D
+            cleanup();
+            process.stdout.write('\n');
+            resolve(input);
+            return;
+          case '\u0003': // Ctrl-C
+            cleanup();
+            process.stdout.write('\n');
+            reject(new Error('入力がキャンセルされました'));
+            return;
+          case '\u007f': // Backspace（多くの端末）
+          case '\b':
+            input = input.slice(0, -1);
+            break;
+          default:
+            input += char;
+            break;
+        }
       }
     };
     stdin.setEncoding('utf8');

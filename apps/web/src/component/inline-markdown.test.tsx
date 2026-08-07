@@ -38,4 +38,16 @@ describe('InlineMarkdown', () => {
     const link = screen.getByRole('link', { name: '公式サイト' });
     expect(link).toHaveAttribute('tabindex', '-1');
   });
+
+  it('画像記法（Markdown/生HTMLどちらも）は <img> を描画せず、altテキストのみ残す（レビュー指摘: これらのフィールドはこれまで素のテキストで、外部画像を埋め込む想定が無いため）', () => {
+    render(<InlineMarkdown content="![説明テキスト](https://example.com/tracking.png)" />);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(screen.getByText('説明テキスト')).toBeInTheDocument();
+  });
+
+  it('altが無い画像は何も描画しない', () => {
+    const { container } = render(<InlineMarkdown content="![](https://example.com/tracking.png)" />);
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+  });
 });

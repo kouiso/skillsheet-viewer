@@ -90,6 +90,13 @@ describe('promptHiddenPassword（対話プロンプトでのパスワード入�
     await expect(promise).resolves.toBe('ac');
   });
 
+  it('1回のdataイベントに複数文字がまとめて届いても（ペースト・バッファリング相当）Enterまでを正しく1つのパスワード文字列として解決する（レビュー指摘: chunk全体を1文字として厳密一致していたため制御文字を認識できなかった）', async () => {
+    const stdin = createFakeStdin();
+    const promise = promptHiddenPassword('prompt', stdin as unknown as NodeJS.ReadStream);
+    stdin.emit('data', 'Secret\n');
+    await expect(promise).resolves.toBe('Secret');
+  });
+
   it('Ctrl-C（\\u0003）で入力がキャンセルされエラーになる', async () => {
     const stdin = createFakeStdin();
     const promise = promptHiddenPassword('prompt', stdin as unknown as NodeJS.ReadStream);
