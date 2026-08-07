@@ -22,7 +22,7 @@ import type {
   SkillsBlockData,
 } from '../src/blocks';
 
-const SHEET_ID = '18a79e66-75e2-47e8-922e-d61342bb5233';
+const SHEET_ID = process.env.SHEET_ID ?? '18a79e66-75e2-47e8-922e-d61342bb5233';
 const SHEET_TITLE = 'エンジニアスキルシート';
 
 function loadWebEnvLocal(): void {
