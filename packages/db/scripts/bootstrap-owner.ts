@@ -18,9 +18,12 @@
  *
  * 実行（新規オーナー作成、リポジトリルートの `.env`（無ければ `apps/web/.env.local`）の
  * DATABASE_URL / BETTER_AUTH_SECRET を使用）:
- *   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=owner@example.com --password='Str0ng-Pass!'
+ *   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=owner@example.com
+ * `--password` を省略し対話端末（TTY）から実行すると、画面に表示されない対話プロンプトで
+ * パスワードを読み取る（シェル履歴・`ps` への平文露出を避けるため、これが推奨経路）。
  *
- * 環境変数での指定も可（CLI引数が優先）:
+ * CI 等の非対話環境向けに `--password=<password>` 引数や環境変数での指定も可
+ * （CLI引数が優先。ただしどちらもシェル履歴・`ps` に残るリスクがある）:
  *   SKILLSHEET_OWNER_EMAIL=owner@example.com SKILLSHEET_OWNER_PASSWORD='Str0ng-Pass!' \
  *     pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts
  *
@@ -41,9 +44,12 @@ import { createDb } from '../src/client';
 import { account, session, user, verification } from '../src/schema';
 
 const USAGE = `使い方:
-  pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=<email> --password=<password> [--name=<name>]
+  pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=<email> [--name=<name>]
 
-  もしくは環境変数 SKILLSHEET_OWNER_EMAIL / SKILLSHEET_OWNER_PASSWORD / SKILLSHEET_OWNER_NAME でも指定可能（CLI引数が優先）。
+  --password を省略し対話端末（TTY）から実行すると、画面に表示されない対話プロンプトで
+  パスワードを読み取る（推奨）。CI 等の非対話環境向けに --password=<password> 引数や
+  環境変数 SKILLSHEET_OWNER_EMAIL / SKILLSHEET_OWNER_PASSWORD / SKILLSHEET_OWNER_NAME でも
+  指定可能（CLI引数が優先。どちらもシェル履歴・ps に平文で残るリスクがある）。
   DATABASE_URL / BETTER_AUTH_SECRET はリポジトリルートの .env（無ければ apps/web/.env.local）から読み込む。
   どちらも無くても、実行環境の環境変数に既に設定済みなら（CI/Vercel 等）そのまま使う。`;
 
@@ -91,6 +97,54 @@ function parseArg(flag: string): string | undefined {
   return found ? found.slice(prefix.length) : undefined;
 }
 
+// --password 引数やコマンドと同じ行の環境変数指定（SKILLSHEET_OWNER_PASSWORD='...' pnpm ...）は
+// どちらもシェル履歴・`ps` のプロセス引数一覧に平文で残ってしまう（レビュー指摘）。
+// これを避けるため、対話端末（TTY）から実行され、かつ password が未指定の場合のみ
+// エコーを抑制した対話プロンプトで読み取る。外部依存は追加せず、標準の stdin raw mode で実装する。
+export function promptHiddenPassword(promptText: string, stdin: NodeJS.ReadStream = process.stdin): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!stdin.isTTY) {
+      reject(new Error('非対話環境のためパスワードの対話入力ができません'));
+      return;
+    }
+    process.stdout.write(promptText);
+    let input = '';
+    const cleanup = () => {
+      stdin.setRawMode?.(false);
+      stdin.pause();
+      stdin.removeListener('data', onData);
+    };
+    const onData = (chunk: Buffer | string) => {
+      const char = chunk.toString();
+      switch (char) {
+        case '\n':
+        case '\r':
+        case '\u0004': // Ctrl-D
+          cleanup();
+          process.stdout.write('\n');
+          resolve(input);
+          break;
+        case '\u0003': // Ctrl-C
+          cleanup();
+          process.stdout.write('\n');
+          reject(new Error('入力がキャンセルされました'));
+          break;
+        case '\u007f': // Backspace（多くの端末）
+        case '\b':
+          input = input.slice(0, -1);
+          break;
+        default:
+          input += char;
+          break;
+      }
+    };
+    stdin.setEncoding('utf8');
+    stdin.setRawMode?.(true);
+    stdin.resume();
+    stdin.on('data', onData);
+  });
+}
+
 // Better Auth（/sign-in/email）は zod の z.email() で検証しており、この正規表現と
 // 同じものを使う（node_modules/zod の v4/core/regexes.js の email 定義）。ここで
 // 弾かないと、`owner@example`（TLD無し）のような値でも user/account 行が作成され、
@@ -101,12 +155,23 @@ export const EMAIL_PATTERN =
 
 async function main() {
   const email = parseArg('email') ?? process.env.SKILLSHEET_OWNER_EMAIL;
-  const password = parseArg('password') ?? process.env.SKILLSHEET_OWNER_PASSWORD;
+  let password = parseArg('password') ?? process.env.SKILLSHEET_OWNER_PASSWORD;
   const name = parseArg('name') ?? process.env.SKILLSHEET_OWNER_NAME ?? 'Owner';
 
-  if (!email || !password) {
+  if (!email) {
     console.error(USAGE);
-    throw new Error('email / password が指定されていません');
+    throw new Error('email が指定されていません');
+  }
+  if (!password && process.stdin.isTTY) {
+    // --password 引数・環境変数のどちらも無ければ、対話端末からの実行時のみ
+    // エコー抑制プロンプトで読み取る（シェル履歴・ps 一覧への平文露出を避ける）。
+    password = await promptHiddenPassword('パスワードを入力してください（画面には表示されません）: ');
+  }
+  if (!password) {
+    console.error(USAGE);
+    throw new Error(
+      'password が指定されていません（--password 引数、SKILLSHEET_OWNER_PASSWORD 環境変数、または対話プロンプトのいずれかで指定してください）',
+    );
   }
   if (!EMAIL_PATTERN.test(email)) {
     // Better Auth 自身の /sign-in/email がこの形式を弾くため、ここで先に弾かないと

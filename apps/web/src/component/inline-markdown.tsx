@@ -14,6 +14,14 @@ const REHYPE_PLUGINS = [
 interface InlineMarkdownProps {
   content: string;
   className?: string;
+  /**
+   * false の場合、生成する <a> を tabIndex={-1} にしてキーボードフォーカスの対象から外す。
+   * 呼び出し元が roving-tabindex（1つの toolbar 全体で tab 停止点を1つにまとめる）を
+   * 実装している場合、内側の <a> がネイティブに tabIndex=0 相当でフォーカス可能なままだと
+   * 親の roving-tabindex 設計が崩れる（Tab がリンクの数だけ余計に止まる）ため、
+   * その文脈でのみ false を渡す（既定は通常のフォーカス可能なリンクのまま）。
+   */
+  linksTabbable?: boolean;
 }
 
 /**
@@ -22,7 +30,7 @@ interface InlineMarkdownProps {
  * MARKDOWN_SANITIZE_SCHEMA）を共有しつつ、見出しID付与・画像ライトボックスなど
  * ページ本文向けの重い機能は持たない。箇条書き・強調・改行のみを想定した最小構成。
  */
-export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
+export function InlineMarkdown({ content, className, linksTabbable = true }: InlineMarkdownProps) {
   return (
     <div className={className}>
       <ReactMarkdown
@@ -36,7 +44,11 @@ export function InlineMarkdown({ content, className }: InlineMarkdownProps) {
           // Tailwind preflight がリンクの色・下線をリセットするため明示的に指定しないと、
           // 周囲の地の文と見分けが付かず発見性が無くなる（レビュー指摘）。
           a: ({ children, ...props }) => (
-            <a {...props} className="text-primary underline underline-offset-2 hover:text-primary/80">
+            <a
+              {...props}
+              tabIndex={linksTabbable ? undefined : -1}
+              className="text-primary underline underline-offset-2 hover:text-primary/80"
+            >
               {children}
             </a>
           ),

@@ -26,4 +26,16 @@ describe('InlineMarkdown', () => {
     expect(link).toHaveClass('underline');
     expect(link).toHaveClass('text-primary');
   });
+
+  it('既定（linksTabbable未指定）ではリンクは通常通りTabでフォーカス可能', () => {
+    render(<InlineMarkdown content="[公式サイト](https://example.com)を参照。" />);
+    const link = screen.getByRole('link', { name: '公式サイト' });
+    expect(link).not.toHaveAttribute('tabindex', '-1');
+  });
+
+  it('linksTabbable={false} のときリンクは tabIndex=-1 になる（レビュー指摘: roving-tabindexの親を持つ文脈でリンクが独立したTab停止点になっていた）', () => {
+    render(<InlineMarkdown content="[公式サイト](https://example.com)を参照。" linksTabbable={false} />);
+    const link = screen.getByRole('link', { name: '公式サイト' });
+    expect(link).toHaveAttribute('tabindex', '-1');
+  });
 });

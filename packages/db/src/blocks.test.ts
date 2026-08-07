@@ -633,12 +633,30 @@ describe('projectBlockToMarkdown', () => {
     const md = projectBlockToMarkdown(withNote);
     expect(md).toContain('\\===');
     expect(md.split('\n')).not.toContain('===');
-    expect(md).toContain('\\___');
+    // `_` は行頭のリスト等ではなく行中でも強調/水平線として解釈されうるインライン記号
+    // のため、行内の全出現を escape する（`___` の3文字すべてに `\` が付く）。
+    expect(md).toContain('\\_\\_\\_');
     // `!` だけの escape だと直後の `[機密](...)` がリンクとして解釈されてしまうため、
-    // `!` と `[` の両方を escape する（\!\[）。
-    expect(md).toContain('\\!\\[機密]');
+    // `!`・`[`・`]` を escape する（\!\[機密\]）。
+    expect(md).toContain('\\!\\[機密\\]');
     expect(md).not.toContain('\\![機密]');
-    expect(md).toContain('\\[リンク]');
+    expect(md).toContain('\\[リンク\\]');
+  });
+
+  it('note内の行中（行頭以外）に出現する画像/リンク/強調記法もエスケープする（レビュー指摘: 従来は行頭アンカーの正規表現のため行中は素通りしていた）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [
+        {
+          ...PROJECT.companies[0],
+          note: '会社概要 ![機密](https://example.com/x.png) の説明。[リンク](https://example.com)も参照。*強調*は行中にもある。',
+        },
+      ],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('\\!\\[機密\\]');
+    expect(md).toContain('\\[リンク\\]');
+    expect(md).toContain('\\*強調\\*');
   });
 
   it('note の行頭が4文字以上のインデントでもコードブロック化されないよう3文字までに削る', () => {

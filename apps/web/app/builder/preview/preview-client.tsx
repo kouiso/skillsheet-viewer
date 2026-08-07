@@ -55,17 +55,23 @@ export default function PreviewClient() {
   useEffect(() => {
     // マウント時: window.open 直前にエディタ側がシード保存した内容を読み、
     // 別窓を開いた瞬間から即座にプレビューが見える状態にする。
-    try {
-      const seeded = localStorage.getItem(PREVIEW_STORAGE_KEY);
-      if (seeded) {
-        const parsed = JSON.parse(seeded);
-        if (isPreviewPayload(parsed)) {
-          setPayload(parsed);
-          setLastUpdatedAt(Date.now());
+    // hadOpenerRef が false（このURLへの直接アクセス）の場合は読み込まない。
+    // ここを無条件にすると、過去に別窓プレビューを開いたブラウザで直接アクセスした際、
+    // localStorage に残った前回セッションの内容が「表示できるプレビューがありません」の
+    // 下に薄く表示され続けてしまう（レビュー指摘）。
+    if (hadOpenerRef.current) {
+      try {
+        const seeded = localStorage.getItem(PREVIEW_STORAGE_KEY);
+        if (seeded) {
+          const parsed = JSON.parse(seeded);
+          if (isPreviewPayload(parsed)) {
+            setPayload(parsed);
+            setLastUpdatedAt(Date.now());
+          }
         }
+      } catch {
+        // localStorage が読めない環境では BroadcastChannel の初回更新を待つ。
       }
-    } catch {
-      // localStorage が読めない環境では BroadcastChannel の初回更新を待つ。
     }
     connect();
     return () => channelRef.current?.close();

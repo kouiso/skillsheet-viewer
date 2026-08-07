@@ -33,6 +33,16 @@ describe('PreviewClient', () => {
     expect(screen.queryByText(/編集画面が閉じられました/)).not.toBeInTheDocument();
   });
 
+  it('localStorage に前回セッションの残留 seed があっても、window.opener が無ければ残留内容自体を読み込まない（レビュー指摘: ラベルは standalone なのに古いタイトル/本文が薄く表示され続けていた）', () => {
+    localStorage.setItem('builder-preview-payload', JSON.stringify({ title: '残留タイトル', content: '残留本文' }));
+    render(<PreviewClient />);
+    vi.advanceTimersByTime(0);
+
+    expect(screen.queryByText('残留タイトル')).not.toBeInTheDocument();
+    expect(screen.queryByText('残留本文')).not.toBeInTheDocument();
+    expect(screen.getByText('プレビュー')).toBeInTheDocument();
+  });
+
   it('window.opener があり（別窓として開かれた）、その後閉じられた場合は closed（最後の内容）を表示する', () => {
     Object.defineProperty(window, 'opener', { value: { closed: true }, configurable: true });
     localStorage.setItem('builder-preview-payload', JSON.stringify({ title: 'テスト', content: '本文' }));
