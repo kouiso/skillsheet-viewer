@@ -1,0 +1,55 @@
+{
+  "double-slash": {
+    "payload": "//evil.example.com",
+    "finalUrl": "http://127.0.0.1:3210/builder",
+    "finalHost": "127.0.0.1",
+    "navigationRequests": [
+      {
+        "url": "http://127.0.0.1:3210/login?next=%2F%2Fevil.example.com",
+        "host": "127.0.0.1"
+      }
+    ],
+    "localNavigationCount": 1,
+    "externalNavigationCount": 0,
+    "reachedExternal": false,
+    "legacyReachedExternal_substringMatch": true
+  },
+  "backslash": {
+    "payload": "/\\/evil.example.com",
+    "finalUrl": "chrome-error://chromewebdata/",
+    "finalHost": "chromewebdata",
+    "navigationRequests": [
+      {
+        "url": "http://127.0.0.1:3210/login?next=%2F%5C%2Fevil.example.com",
+        "host": "127.0.0.1"
+      },
+      {
+        "url": "http://evil.example.com/",
+        "host": "evil.example.com"
+      },
+      {
+        "url": "http://evil.example.com/",
+        "host": "evil.example.com"
+      }
+    ],
+    "localNavigationCount": 1,
+    "externalNavigationCount": 2,
+    "reachedExternal": true,
+    "legacyReachedExternal_substringMatch": true
+  },
+  "absolute-https": {
+    "payload": "https://evil.example.com",
+    "finalUrl": "http://127.0.0.1:3210/builder",
+    "finalHost": "127.0.0.1",
+    "navigationRequests": [
+      {
+        "url": "http://127.0.0.1:3210/login?next=https%3A%2F%2Fevil.example.com",
+        "host": "127.0.0.1"
+      }
+    ],
+    "localNavigationCount": 1,
+    "externalNavigationCount": 0,
+    "reachedExternal": false,
+    "legacyReachedExternal_substringMatch": true
+  }
+}

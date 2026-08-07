@@ -34,6 +34,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
         {data.title && <p className="font-mono text-[14.5px] text-accent-text">{data.title}</p>}
       </div>
 
+      {/* 自己PR は段落を改行で区切って保存されるため、pre-line で改行を保持する */}
       {data.pr && (
         <p className="mt-4 max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80">{data.pr}</p>
       )}

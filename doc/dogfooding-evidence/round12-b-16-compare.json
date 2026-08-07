@@ -1,0 +1,43 @@
+{
+  "no-params": {
+    "requested": "/compare",
+    "status": 200,
+    "finalPath": "/view",
+    "redirectedToView": true,
+    "paneCount": 0,
+    "bodyHead": "スキルシート一覧 / エンジニアスキルシート / 更新: 2026/8/5 / エンジニアスキルシート / 更新: 2026/8/5 / Full 1785899040988 / 更新: 2026/8/5",
+    "consoleErrors": 0
+  },
+  "only-a": {
+    "requested": "/compare?a=18a79e66-75e2-47e8-922e-d61342bb5233",
+    "status": 200,
+    "finalPath": "/view",
+    "redirectedToView": true,
+    "paneCount": 0,
+    "bodyHead": "スキルシート一覧 / エンジニアスキルシート / 更新: 2026/8/5 / エンジニアスキルシート / 更新: 2026/8/5 / Full 1785899040988 / 更新: 2026/8/5",
+    "consoleErrors": 0
+  },
+  "db-ids": {
+    "requested": "/compare?a=18a79e66-75e2-47e8-922e-d61342bb5233&b=88883075-035c-4046-9bd4-050e01d26667",
+    "status": 200,
+    "finalPath": "/view",
+    "redirectedToView": true,
+    "paneCount": 0,
+    "bodyHead": "スキルシート一覧 / エンジニアスキルシート / 更新: 2026/8/5 / エンジニアスキルシート / 更新: 2026/8/5 / Full 1785899040988 / 更新: 2026/8/5",
+    "consoleErrors": 0
+  },
+  "md-paths": {
+    "requested": "/compare?a=skillsheet.md&b=skillsheet.md",
+    "status": 500,
+    "finalPath": "/compare?a=skillsheet.md&b=skillsheet.md",
+    "redirectedToView": false,
+    "paneCount": 0,
+    "bodyHead": "エラーが発生しました / スキルシートの読み込みに失敗しました。時間をおいて再度お試しください。 / 再試行",
+    "consoleErrors": 3
+  },
+  "narrow-375": {
+    "finalPath": "/compare?a=skillsheet.md&b=skillsheet.md",
+    "bodyHead": "エラーが発生しました / スキルシートの読み込みに失敗しました。時間をおいて再度お試しください。 / 再試行",
+    "horizontalScroll": false
+  }
+}

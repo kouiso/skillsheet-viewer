@@ -1,0 +1,55 @@
+{
+  "login": {
+    "path": "/login",
+    "tabStops": 4,
+    "uniqueStops": 3,
+    "withRing": 3,
+    "withoutRing": [
+      "button:ログイン"
+    ]
+  },
+  "viewer-auth": {
+    "path": "/viewer-auth",
+    "tabStops": 2,
+    "uniqueStops": 2,
+    "withRing": 1,
+    "withoutRing": [
+      "button:認証"
+    ]
+  },
+  "view-list": {
+    "path": "/view",
+    "tabStops": 6,
+    "uniqueStops": 5,
+    "withRing": 5,
+    "withoutRing": [
+      "a:編集／ビルダー"
+    ]
+  },
+  "view-db-sheet": {
+    "path": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+    "tabStops": 40,
+    "uniqueStops": 40,
+    "withRing": 39,
+    "withoutRing": [
+      "a:編集／ビルダー"
+    ]
+  },
+  "builder": {
+    "path": "/builder",
+    "tabStops": 29,
+    "uniqueStops": 24,
+    "withRing": 27,
+    "withoutRing": [
+      "button:プレビューを別ウィンドウで開く",
+      "button:保存"
+    ]
+  },
+  "builder-preview": {
+    "path": "/builder/preview",
+    "tabStops": 0,
+    "uniqueStops": 0,
+    "withRing": 0,
+    "withoutRing": []
+  }
+}
