@@ -1,0 +1,31 @@
+{
+  "B-10": {
+    "tocCount": 7,
+    "activeAtTop": null,
+    "headingIds": 7,
+    "samples": [
+      {
+        "scrolledTo": "e018a6cb-5f30-44aa-8c0e-774ffe889460-round5-の検証見出し",
+        "active": "round5-値0（現在）"
+      },
+      {
+        "scrolledTo": "77486744-6f5a-4a86-ab7f-6736c468ec7c-round5-の検証見出し",
+        "active": "round5-値0（現在）"
+      },
+      {
+        "scrolledTo": "e21651c0-2384-46d9-9e05-5745fc685b1a-round5-値0現在",
+        "active": "round5-値0（現在）"
+      }
+    ],
+    "activeChanged": true
+  },
+  "C-5": {
+    "sheetId": "88883075-035c-4046-9bd4-050e01d26667",
+    "statusWhileOffline": "自動保存に失敗",
+    "statusAfterOnlineNoEdit": "自動保存に失敗",
+    "inDbAfterOnlineNoEdit": false,
+    "statusAfterManualSave": null,
+    "inDbAfterManualSave": true,
+    "marker": "round9-オフライン編集-1785906551"
+  }
+}

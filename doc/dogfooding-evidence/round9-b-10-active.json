@@ -1,0 +1,36 @@
+{
+  "tocCount": 7,
+  "headingIds": 7,
+  "activeAtTop": -1,
+  "steps": [
+    {
+      "headingIndex": 0,
+      "activeButtonIndex": 0
+    },
+    {
+      "headingIndex": 1,
+      "activeButtonIndex": 2
+    },
+    {
+      "headingIndex": 2,
+      "activeButtonIndex": 2
+    },
+    {
+      "headingIndex": 3,
+      "activeButtonIndex": 4
+    },
+    {
+      "headingIndex": 4,
+      "activeButtonIndex": 4
+    },
+    {
+      "headingIndex": 5,
+      "activeButtonIndex": 4
+    },
+    {
+      "headingIndex": 6,
+      "activeButtonIndex": 4
+    }
+  ],
+  "followed": 3
+}

@@ -96,7 +96,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       {item.comment && (
         <InlineMarkdown
           content={item.comment}
-          className="break-words border-l-2 border-primary pl-3 text-sm text-muted-foreground"
+          className="whitespace-pre-line break-words border-l-2 border-primary pl-3 text-sm text-muted-foreground"
         />
       )}
     </article>

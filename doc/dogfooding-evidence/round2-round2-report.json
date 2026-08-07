@@ -1,0 +1,67 @@
+[
+  {
+    "id": "A-7",
+    "result": "PASS",
+    "note": "認証後=http://127.0.0.1:3210/view / logout status=200 / 再訪問後=http://127.0.0.1:3210/viewer-auth"
+  },
+  {
+    "id": "B-15",
+    "result": "FAIL",
+    "note": "url=http://127.0.0.1:3210/view/skillsheet.md textLen=52 overflow=1280>1280"
+  },
+  {
+    "id": "B-13",
+    "result": "FAIL",
+    "note": "table=0 区切り行の生露出=false details=0 開閉=false"
+  },
+  {
+    "id": "B-10",
+    "result": "FAIL",
+    "note": "markdown経路のTOC項目数=0"
+  },
+  {
+    "id": "B-8",
+    "result": "PASS",
+    "note": "期間表記 64 件 / 継続中の表示=true / 先頭=2025.11〜現在"
+  },
+  {
+    "id": "E-3",
+    "result": "FAIL",
+    "note": "Tabで到達 12 要素 / フォーカス可視 3 要素"
+  },
+  {
+    "id": "C-13",
+    "result": "PASS",
+    "note": "dirty 状態で beforeunload の preventDefault=true dialog=false"
+  },
+  {
+    "id": "C-8",
+    "result": "PASS",
+    "note": "目玉ボタン 21 個 / 非表示化後に「表示する」状態=1 個"
+  },
+  {
+    "id": "C-3",
+    "result": "DONE",
+    "note": "並べ替えハンドル 9 個。1→2 へドラッグを実行（DB 反映は後段で確認）"
+  },
+  {
+    "id": "C-9",
+    "result": "PASS",
+    "note": "ドロワー表示=true / 中身 66 文字 / 復元ボタン 0 個"
+  },
+  {
+    "id": "C-12-hidden",
+    "result": "DONE",
+    "note": "バックアップ 21723 bytes / 会社概要文「業務委託にて」を含む=false"
+  },
+  {
+    "id": "C-14-nav",
+    "result": "DONE",
+    "note": "375/320px を撮影。ナビ開閉候補ボタン 1 個 / 320px overflow=336>320"
+  },
+  {
+    "id": "D-5",
+    "result": "DONE",
+    "note": "hidden 反映後のビューア件数表示=不明 / PDF 再取得済み"
+  }
+]

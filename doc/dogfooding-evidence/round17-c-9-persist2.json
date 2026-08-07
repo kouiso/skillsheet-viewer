@@ -1,0 +1,41 @@
+{
+  "sheetId": "50407b97-68b5-4684-bdc6-9105df7e7def",
+  "original": "r17-1785929409104-会社もと",
+  "dbAtStart": "r17-1785929409104-会社もと",
+  "indicatorAfterEdit1": "保存済み（自動）",
+  "dbAfterEdit1": "r17-1785929409104-会社V1",
+  "indicatorAfterEdit2": "保存済み（自動）",
+  "dbAfterEdit2": "r17-1785929409104-会社V2",
+  "drawerVisible": true,
+  "historyEntries": 2,
+  "historyLabels": [
+    "会社「r17-1785929409104-会社V2」の情報を編集",
+    "会社「r17-1785929409104-会社V1」の情報を編集"
+  ],
+  "storageEntries": [
+    {
+      "label": "会社「r17-1785929409104-会社V2」の情報を編集",
+      "snapshotCompany": "r17-1785929409104-会社V2"
+    },
+    {
+      "label": "会社「r17-1785929409104-会社V1」の情報を編集",
+      "snapshotCompany": "r17-1785929409104-会社V1"
+    }
+  ],
+  "restoreButtonCount": 1,
+  "restoreButtonLabel": "この時点に戻す",
+  "drawerVisibleAfterClick": true,
+  "valueRightAfterClick": "r17-1785929409104-会社V2",
+  "valueAfterRestore": "r17-1785929409104-会社V2",
+  "indicatorAfterRestore": "保存済み（自動）",
+  "dbAfterRestore": "r17-1785929409104-会社V2",
+  "valueAfterReload": "r17-1785929409104-会社V2",
+  "dbAfterReload": "r17-1785929409104-会社V2",
+  "restoredToPreviousValue": false,
+  "persistedAfterReload": true,
+  "values": {
+    "V1": "r17-1785929409104-会社V1",
+    "V2": "r17-1785929409104-会社V2"
+  },
+  "cleanedUp": true
+}

@@ -1,0 +1,28 @@
+{
+  "sheetId": "c4c2450d-acee-46b3-9931-37fab60190e9",
+  "original": "r17-1785929357508-会社もと",
+  "dbAtStart": "r17-1785929357508-会社もと",
+  "indicatorAfterEdit1": "保存済み（自動）",
+  "dbAfterEdit1": "r17-1785929357508-会社V1",
+  "indicatorAfterEdit2": "保存済み（自動）",
+  "dbAfterEdit2": "r17-1785929357508-会社V2",
+  "drawerVisible": true,
+  "historyEntries": 2,
+  "historyLabels": [
+    "会社「r17-1785929357508-会社V2」の情報を編集",
+    "会社「r17-1785929357508-会社V1」の情報を編集"
+  ],
+  "restoreButtonCount": 1,
+  "valueAfterRestore": "r17-1785929357508-会社V2",
+  "indicatorAfterRestore": "保存済み（自動）",
+  "dbAfterRestore": "r17-1785929357508-会社V2",
+  "valueAfterReload": "r17-1785929357508-会社V2",
+  "dbAfterReload": "r17-1785929357508-会社V2",
+  "restoredToPreviousValue": false,
+  "persistedAfterReload": true,
+  "values": {
+    "V1": "r17-1785929357508-会社V1",
+    "V2": "r17-1785929357508-会社V2"
+  },
+  "cleanedUp": true
+}

@@ -1,0 +1,74 @@
+[
+  {
+    "tag": "button",
+    "label": "スキルマトリクス",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "button",
+    "label": "工程の俯瞰",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "button",
+    "label": "案件詳細",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "button",
+    "label": "タイムライン",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "a",
+    "label": "編集／ビルダー",
+    "outline": false,
+    "boxShadow": true
+  },
+  {
+    "tag": "button",
+    "label": "PDFダウンロード",
+    "outline": false,
+    "boxShadow": true
+  },
+  {
+    "tag": "button",
+    "label": "テーマ切り替え",
+    "outline": false,
+    "boxShadow": true
+  },
+  {
+    "tag": "input",
+    "label": "",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "button",
+    "label": "HTML20",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "button",
+    "label": "TypeScript18",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "button",
+    "label": "Slack15",
+    "outline": false,
+    "boxShadow": false
+  },
+  {
+    "tag": "button",
+    "label": "CSS13",
+    "outline": false,
+    "boxShadow": false
+  }
+]

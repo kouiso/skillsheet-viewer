@@ -1,0 +1,24 @@
+▲ Next.js 16.2.11
+- Local:         http://127.0.0.1:3210
+- Network:       http://127.0.0.1:3210
+✓ Ready in 236ms
+Failed to load sheets for compare: skillsheet.md skillsheet.md Error: GitHub API error fetching file: 401
+    at k (.next/server/chunks/ssr/[root-of-the-server]__046atw0._.js:8:3473)
+    at async (.next/server/chunks/ssr/1pum_next_1ftd_og._.js:8:30034)
+    at async i (.next/server/chunks/ssr/[root-of-the-server]__1lzj4er._.js:1:15696)
+⨯ Error: GitHub API error fetching file: 401
+    at k (.next/server/chunks/ssr/[root-of-the-server]__046atw0._.js:8:3473)
+    at async (.next/server/chunks/ssr/1pum_next_1ftd_og._.js:8:30034)
+    at async i (.next/server/chunks/ssr/[root-of-the-server]__1lzj4er._.js:1:15696) {
+  digest: '3367311018'
+}
+Failed to load sheets for compare: skillsheet.md skillsheet.md Error: GitHub API error fetching file: 401
+    at k (.next/server/chunks/ssr/[root-of-the-server]__046atw0._.js:8:3473)
+    at async (.next/server/chunks/ssr/1pum_next_1ftd_og._.js:8:30034)
+    at async i (.next/server/chunks/ssr/[root-of-the-server]__1lzj4er._.js:1:15696)
+⨯ Error: GitHub API error fetching file: 401
+    at k (.next/server/chunks/ssr/[root-of-the-server]__046atw0._.js:8:3473)
+    at async (.next/server/chunks/ssr/1pum_next_1ftd_og._.js:8:30034)
+    at async i (.next/server/chunks/ssr/[root-of-the-server]__1lzj4er._.js:1:15696) {
+  digest: '3367311018'
+}

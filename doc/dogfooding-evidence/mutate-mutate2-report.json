@@ -1,0 +1,60 @@
+{
+  "log": [
+    {
+      "id": "setup",
+      "result": "DONE",
+      "note": "作業シート -> http://127.0.0.1:3210/builder"
+    },
+    {
+      "id": "C-2:テキスト",
+      "result": "FAIL",
+      "note": "要素数 0 -> 0"
+    },
+    {
+      "id": "C-2:テーブル",
+      "result": "FAIL",
+      "note": "要素数 0 -> 0"
+    },
+    {
+      "id": "C-2:スキル一覧",
+      "result": "PASS",
+      "note": "要素数 0 -> 8"
+    },
+    {
+      "id": "C-2:職務経歴",
+      "result": "PASS",
+      "note": "要素数 8 -> 9"
+    },
+    {
+      "id": "C-5b",
+      "result": "PASS",
+      "note": "indicator=\"保存済み（自動）\""
+    },
+    {
+      "id": "C-4",
+      "result": "PASS",
+      "note": "削除ボタン数 10 -> 1"
+    },
+    {
+      "id": "C-7",
+      "result": "PASS",
+      "note": "会社追加と会社名入力ができた"
+    },
+    {
+      "id": "C-8",
+      "result": "NOT-FOUND",
+      "note": "hidden トグル候補 0 個"
+    },
+    {
+      "id": "C-13",
+      "result": "INFO",
+      "note": "beforeunload preventDefault = false"
+    },
+    {
+      "id": "C-11",
+      "result": "DONE",
+      "note": "削除ボタンを押した（候補 1 件）-> http://127.0.0.1:3210/builder?sheet=18a79e66-75e2-47e8-922e-d61342bb5233"
+    }
+  ],
+  "consoleErrors": []
+}

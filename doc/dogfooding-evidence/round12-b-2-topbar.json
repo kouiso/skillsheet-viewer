@@ -1,0 +1,23 @@
+{
+  "dbProfileName": "見本 花子（架空）",
+  "dbProfileCompany": null,
+  "dbProfileKeys": [
+    "pr",
+    "meta",
+    "name",
+    "title",
+    "strengths"
+  ],
+  "headerText": "見本 花子（架空） / 表示するビュー / スキルマトリクス / 工程の俯瞰 / 案件詳細 / タイムライン",
+  "brandSpans": [
+    "",
+    "見本 花子（架空）",
+    "",
+    "",
+    "",
+    ""
+  ],
+  "showsName": true,
+  "showsCompany": false,
+  "fallbackTitleUsed": false
+}
