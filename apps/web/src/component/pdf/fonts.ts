@@ -23,18 +23,33 @@ const ZWNBSP = '﻿';
 
 let registered = false;
 
-// この値以上の符号点（絵文字・記号ブロック等）は CJK ではないため 1 文字ずつの改行対象に
-// しない。for...of はサロゲートペアを 1 符号点として1回のイテレーションで返すが、国旗
-// （地域指示記号2つ）や ZWJ 連結絵文字（結合子で繋いだ複数符号点）は符号点ごとに別々の
-// イテレーションになる。各符号点を独立に CJK 判定すると、本来ひと繋がりであるべき
-// 絵文字シーケンスの符号点間に改行点（ZWNBSP）を挟んでしまう。CJK は全て基本多言語面
-// （U+0000–U+FFFF）に収まるため、それより上（サロゲートペアが必要な符号点）は一律で
-// 対象外にする。
+// この値以上の符号点（絵文字・記号ブロック等）は基本多言語面外だが、CJK 統合漢字の
+// 拡張領域（人名・地名等の異体字を含む、いわゆる補助多言語面のCJK）もここに含まれる
+// ため、一律で除外すると U+20000 以降の拡張漢字が改行不可能な1シラブルとして扱われ、
+// 狭いテーブルセルからはみ出す（レビュー指摘）。基本多言語面の上限は区切りとして
+// 使わず、CJK 補助面の実際の範囲を isSupplementaryCjkIdeograph で個別に判定する。
 const CJK_END_EXCLUSIVE = 0x10000;
+
+// CJK 統合漢字の補助面拡張ブロック（Unicode の Unihan 系ブロック定義に基づく）。
+// 絵文字（U+1F300 系等）や国旗の地域指示記号など、CJK ではない他の補助面文字は
+// これらの範囲に含まれないため誤って改行可能扱いにはならない。
+function isSupplementaryCjkIdeograph(code: number): boolean {
+  return (
+    (code >= 0x20000 && code <= 0x2a6df) || // CJK統合漢字拡張B
+    (code >= 0x2a700 && code <= 0x2b73f) || // 拡張C
+    (code >= 0x2b740 && code <= 0x2b81f) || // 拡張D
+    (code >= 0x2b820 && code <= 0x2ceaf) || // 拡張E
+    (code >= 0x2ceb0 && code <= 0x2ebef) || // 拡張F
+    (code >= 0x2f800 && code <= 0x2fa1f) || // CJK互換漢字補助
+    (code >= 0x30000 && code <= 0x3134f) || // 拡張G
+    (code >= 0x31350 && code <= 0x323af) // 拡張H
+  );
+}
 
 function isCjk(ch: string): boolean {
   const code = ch.codePointAt(0) ?? 0;
-  return code >= CODEPOINT.CJK_START && code < CJK_END_EXCLUSIVE;
+  if (code >= CODEPOINT.CJK_START && code < CJK_END_EXCLUSIVE) return true;
+  return isSupplementaryCjkIdeograph(code);
 }
 
 // 結合文字（結合分音記号・かな結合濁点/半濁点）や異体字セレクタは単独の文字ではなく、

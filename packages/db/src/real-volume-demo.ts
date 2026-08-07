@@ -25,7 +25,7 @@ import { eq, sql } from 'drizzle-orm';
 import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from './blocks';
 import { getDb } from './client';
 import { buildConsoleDemoBlocks } from './console-demo';
-import { realVolumeDemoFixtures } from './schema';
+import { blocks as blocksTable, realVolumeDemoFixtures } from './schema';
 import { createSheetInTx, getOwnerId } from './skillsheet';
 
 const newId = () => crypto.randomUUID();
@@ -211,8 +211,12 @@ export const REAL_VOLUME_DEMO_TITLE = '実データボリューム検証シー�
  *
  * 同一オーナーで並行実行された場合、トランザクション内の advisory lock と
  * `real_volume_demo_fixtures` テーブルの一意制約により、同名シートの重複作成を防ぐ。
- * 既に fixture 行が存在する場合はその sheetId を返し、無ければシートを作成して
- * fixture 行を登録する（両方同一トランザクションで行う）。
+ * 既に fixture 行が存在する場合、以前は既存 sheetId をそのまま返していたが、
+ * それだと初回のCI実行で作られたDB行が固定化され、以降 buildRealVolumeDemoBlocks() の
+ * 出力（合成データの内容・件数等）を変更しても design-audit.spec.ts はDB内の古い内容
+ * のまま実行され続け、変更が全く検証されない状態になっていた（レビュー指摘）。
+ * 既存シートが見つかった場合も、そのブロックを常に現在の buildRealVolumeDemoBlocks()
+ * 出力へ同一トランザクション内でアトミックに置き換えてから sheetId を返す。
  */
 export async function createRealVolumeDemoSheet(): Promise<string> {
   const ownerId = getOwnerId();
@@ -230,7 +234,16 @@ export async function createRealVolumeDemoSheet(): Promise<string> {
       .where(eq(realVolumeDemoFixtures.ownerId, ownerId))
       .limit(1);
     if (existing[0]?.sheetId) {
-      return existing[0].sheetId;
+      const sheetId = existing[0].sheetId;
+      // 既存フィクスチャを最新の buildRealVolumeDemoBlocks() 出力へ置き換える
+      // （delete + insert を同一トランザクションで行い、途中状態を残さない）。
+      await tx.delete(blocksTable).where(eq(blocksTable.sheetId, sheetId));
+      await tx
+        .insert(blocksTable)
+        .values(
+          buildRealVolumeDemoBlocks().map((block, order) => ({ sheetId, type: block.type, order, data: block.data })),
+        );
+      return sheetId;
     }
 
     const sheetId = await createSheetInTx(tx, REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
