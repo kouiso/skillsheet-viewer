@@ -1,0 +1,69 @@
+{
+  "restore": {
+    "hiddenCompanies": 0,
+    "hiddenItems": 0,
+    "companies": 19,
+    "items": 32
+  },
+  "counts": {
+    "src": {
+      "companySections": 19,
+      "projectTitles": 30
+    },
+    "db": {
+      "companies": 19,
+      "items": 32,
+      "skills": 34
+    }
+  },
+  "screenCounter": "32 / 32 件",
+  "pdfPages": 19,
+  "reconcile": {
+    "items": {
+      "db": 32,
+      "inScreen": 32,
+      "inPdf": 31,
+      "missingFromScreen": [],
+      "missingFromPdf": [
+        "弁理士と特許申請希望者をつなぐマッチングアプリ【PatentStart】"
+      ]
+    },
+    "skills": {
+      "db": 34,
+      "inScreen": 34,
+      "inPdf": 34,
+      "missingFromScreen": [],
+      "missingFromPdf": []
+    },
+    "companies": {
+      "db": 19,
+      "inScreen": 19,
+      "inPdf": 19,
+      "missingFromPdf": []
+    },
+    "srcSkills": {
+      "countedInSource": 46,
+      "missingFromDb": [
+        "Java",
+        "WordPress",
+        "Expo",
+        "Nest.js",
+        "GraphQL",
+        "Sanity CMS (GROQ)",
+        "Prisma",
+        "CakePHP",
+        "Vitest",
+        "Playwright",
+        "Jest",
+        "Turborepo",
+        "Biome"
+      ]
+    },
+    "srcItems": {
+      "countedInSource": 30,
+      "missingFromDb": [
+        "モバイル推薦システム開発（連合学習 + クラウド基盤）"
+      ]
+    }
+  }
+}

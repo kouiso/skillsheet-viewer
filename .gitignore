@@ -12,6 +12,8 @@ node_modules/
 # debug
 logs
 *.log
+# dogfooding の証跡サーバーログは判定根拠なので追跡する（*.log に黙って弾かれていた）
+!doc/dogfooding-evidence/*.log
 
 # build output
 dist

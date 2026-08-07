@@ -1,0 +1,165 @@
+{
+  "numPages": 19,
+  "projects": 32,
+  "notFound": [],
+  "split": [
+    {
+      "title": "マッチングアプリの開発",
+      "pages": [
+        3,
+        4
+      ]
+    },
+    {
+      "title": "モバイル推薦システム開発",
+      "pages": [
+        4,
+        5
+      ]
+    },
+    {
+      "title": "不動産業界向け AI 物件推薦システム バックエンド開発",
+      "pages": [
+        5,
+        6
+      ]
+    },
+    {
+      "title": "企業向けドキュメント管理・AI 活用支援システム",
+      "pages": [
+        6,
+        7
+      ]
+    },
+    {
+      "title": "RPA 自動化支援プラットフォームの開発",
+      "pages": [
+        7,
+        8
+      ]
+    },
+    {
+      "title": "EC ポイント還元サービスの Web システム",
+      "pages": [
+        8,
+        9
+      ]
+    },
+    {
+      "title": "book 購入アプリの web へのリプレイス化",
+      "pages": [
+        9,
+        10
+      ]
+    },
+    {
+      "title": "不動産ポイントサイトの開発",
+      "pages": [
+        10,
+        11
+      ]
+    },
+    {
+      "title": "自動車監査の WEB システム",
+      "pages": [
+        11,
+        12
+      ]
+    },
+    {
+      "title": "雑誌などの販売システム",
+      "pages": [
+        12,
+        13
+      ]
+    },
+    {
+      "title": "英語教材のスマホアプリ",
+      "pages": [
+        13,
+        14
+      ]
+    },
+    {
+      "title": "弁理士と特許申請希望者をつなぐマッチングアプリ【PatentStart】",
+      "pages": [
+        14,
+        15
+      ]
+    },
+    {
+      "title": "Jewels ～お問い合わせフォームの修正～",
+      "pages": [
+        15,
+        16
+      ]
+    },
+    {
+      "title": "盾の勇者 ～ Google Sheet にフォームからの問い合わせを記録～",
+      "pages": [
+        16,
+        17
+      ]
+    },
+    {
+      "title": "ランディングページからの自動予約申し込み受付",
+      "pages": [
+        17,
+        18
+      ]
+    },
+    {
+      "title": "HorseManager ～馬匹の健康管理システム～ 第二弾",
+      "pages": [
+        18,
+        19
+      ]
+    }
+  ],
+  "skillTables": [
+    {
+      "category": "言語",
+      "pages": [
+        1
+      ],
+      "split": false
+    },
+    {
+      "category": "フロントエンド",
+      "pages": [
+        1,
+        2
+      ],
+      "split": true
+    },
+    {
+      "category": "バックエンド",
+      "pages": [
+        2
+      ],
+      "split": false
+    },
+    {
+      "category": "データベース",
+      "pages": [
+        2
+      ],
+      "split": false
+    },
+    {
+      "category": "インフラ",
+      "pages": [
+        2,
+        3
+      ],
+      "split": true
+    },
+    {
+      "category": "ツール・その他",
+      "pages": [
+        3
+      ],
+      "split": false
+    }
+  ]
+}

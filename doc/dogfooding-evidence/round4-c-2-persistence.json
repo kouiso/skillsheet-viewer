@@ -1,0 +1,37 @@
+{
+  "sheetUrl": "http://127.0.0.1:3210/builder?sheet=88883075-035c-4046-9bd4-050e01d26667",
+  "sheet": "Full 1785899040988",
+  "beforeAdd": 6,
+  "addedLabels": [
+    {
+      "label": "テキスト",
+      "candidates": 2,
+      "delta": 1
+    },
+    {
+      "label": "テーブル",
+      "candidates": 2,
+      "delta": 1
+    },
+    {
+      "label": "スキル一覧",
+      "candidates": 1,
+      "delta": 1
+    },
+    {
+      "label": "職務経歴",
+      "candidates": 1,
+      "delta": 1
+    }
+  ],
+  "afterAdd": 10,
+  "saveToast": "保存しました",
+  "sheetAfterReload": "Full 1785899040988",
+  "afterReload": 8,
+  "markers": {
+    "tableRowButton": true,
+    "skillsAddButton": true
+  },
+  "sameSheet": true,
+  "persisted": false
+}

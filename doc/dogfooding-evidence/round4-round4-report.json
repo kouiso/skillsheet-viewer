@@ -1,0 +1,326 @@
+{
+  "C-2": {
+    "added": [
+      "テキスト",
+      "テーブル",
+      "スキル一覧",
+      "職務経歴"
+    ],
+    "saved": true,
+    "before": 200,
+    "afterAdd": 233,
+    "afterReload": 286,
+    "savedText": "スキルシートビルダー\nプレビュー\nバックアップ\n閲覧へ\n保存\nシート一覧\n新規シート\nFull 1785899040988\nエンジニアスキルシート\nエンジニアスキルシート\nタイトル\nブロック編集\n案件エディタ\nドラッグして追加:\nテキスト\nテーブル\n\t\n\t\n\n\t\t\n\n\t\t\n\n\t\t\n\n\t\t\n行を追加\nスキル\t経験年数\t習熟度\t\n\t\t\n習熟度\n実務経験あり\n設計可能\n指導可能\n基礎知識のみ\nその他\n\t\nスキルを追加\nスキル\t経験年数\t習熟度\t\n\t\t\n習熟度\n実務経験あり\n設計可能\n指導可能\n基礎知識のみ\nその他\n\t\nスキルを追加\nテキスト\nテーブル\nスキル一覧\n職務経歴\n保存しました",
+    "blocks": 0
+  },
+  "B-11": {
+    "hasSearch": 1,
+    "counterBefore": "30 / 30 件",
+    "counterZero": "0 / 30 件",
+    "emptyMsg": "条件に一致する案件がありません",
+    "chipName": "スキルマトリクス",
+    "counterChip": "30 / 30 件",
+    "counterBoth": "0 / 30 件",
+    "emptyMsg2": "条件に一致する案件がありません",
+    "hadClear": 1,
+    "counterAfterClear": "30 / 30 件"
+  },
+  "E-1-extra": {
+    "login-sp-narrow-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "login-sp-narrow-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "login-sp-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "login-sp-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "login-tablet-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "login-tablet-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "login-desktop-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "login-desktop-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/login",
+      "overflow": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "編集者ログイン\n\nスキルシートビルダーへのアクセス\n\nメールアドレス\nパスワード\nログイン\n\n閲覧のみの場合は 閲覧コード認証"
+    },
+    "viewer-auth-sp-narrow-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "viewer-auth-sp-narrow-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "viewer-auth-sp-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "viewer-auth-sp-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "viewer-auth-tablet-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "viewer-auth-tablet-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "viewer-auth-desktop-light": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "viewer-auth-desktop-dark": {
+      "status": 200,
+      "finalUrl": "http://127.0.0.1:3210/viewer-auth",
+      "overflow": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [],
+      "text": "エンジニアスキルシート閲覧\n\n共有された認証コードを入力してください\n\n認証コード\n認証"
+    },
+    "view-path-sp-narrow-light": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    },
+    "view-path-sp-narrow-dark": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 320,
+        "clientWidth": 320
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    },
+    "view-path-sp-light": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    },
+    "view-path-sp-dark": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 375,
+        "clientWidth": 375
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    },
+    "view-path-tablet-light": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    },
+    "view-path-tablet-dark": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 768,
+        "clientWidth": 768
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    },
+    "view-path-desktop-light": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    },
+    "view-path-desktop-dark": {
+      "status": 500,
+      "finalUrl": "http://127.0.0.1:3210/view/skillsheet.md",
+      "overflow": {
+        "scrollWidth": 1280,
+        "clientWidth": 1280
+      },
+      "horizontalScroll": false,
+      "consoleErrors": [
+        "Failed to load resource: the server responded with a status of 500 (Internal Server Error)",
+        "Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest prop",
+        "Route error boundary: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive "
+      ],
+      "text": "エラーが発生しました\n\nスキルシートの読み込みに失敗しました。時間をおいて再度お試しください。\n\n再試行"
+    }
+  }
+}

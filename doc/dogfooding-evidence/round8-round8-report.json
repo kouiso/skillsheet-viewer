@@ -1,0 +1,34 @@
+{
+  "C-6": {
+    "textareaFound": 1,
+    "toast": "保存中…",
+    "inDb": true,
+    "afterReloadInTextarea": true,
+    "marker": "round8-手動保存-1785905826"
+  },
+  "B-10": {
+    "sheetId": "88883075-035c-4046-9bd4-050e01d26667",
+    "markdownBlocks": 4,
+    "headingsInDb": 4,
+    "tocLinks": [],
+    "tocCount": 0,
+    "headingIdsOnPage": [
+      "64772938-923f-497f-a31e-e84da915b463-round8-手動保存-1785905826",
+      "e018a6cb-5f30-44aa-8c0e-774ffe889460-round5-の検証見出し",
+      "6a150343-b9ff-4403-8cf4-26ff665ac57e-round5-値0現在",
+      "77486744-6f5a-4a86-ab7f-6736c468ec7c-round5-の検証見出し",
+      "45e49fdc-fe5b-4508-8e69-5e8053e2d244-round5-値0現在",
+      "9d3d2343-f720-4a13-be1a-df2821947abf-round5-の検証見出し",
+      "e21651c0-2384-46d9-9e05-5745fc685b1a-round5-値0現在"
+    ],
+    "bodyHasMarker": true,
+    "dashboardTocCount": 0,
+    "dashboardHeadingIds": 0
+  },
+  "D-1": {
+    "suggestedFilename": "download",
+    "toasts": [
+      "PDFをダウンロードしました"
+    ]
+  }
+}

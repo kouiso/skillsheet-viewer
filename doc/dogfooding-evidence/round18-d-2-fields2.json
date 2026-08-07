@@ -1,0 +1,361 @@
+{
+  "summary": {
+    "minProbeChars": 8,
+    "pdfPages": 19,
+    "companyNotes": {
+      "total": 18,
+      "measurable": 18,
+      "tooShortSkipped": [],
+      "inPdf": 0,
+      "inScreen": 0,
+      "missingInPdf": [
+        "note:Q 社（自社サービス事業会社）",
+        "note:A 社（大手 SI ベンダー）",
+        "note:C 社",
+        "note:D 社",
+        "note:E 社",
+        "note:G 社",
+        "note:H 社",
+        "note:I 社",
+        "note:受託",
+        "note:受託",
+        "note:L 社",
+        "note:M 社",
+        "note:N 社",
+        "note:O 社",
+        "note:B 社（ベンチャー企業）",
+        "note:受託",
+        "note:P 社（ベンチャー企業）",
+        "note:受託"
+      ],
+      "missingInScreen": [
+        "note:Q 社（自社サービス事業会社）",
+        "note:A 社（大手 SI ベンダー）",
+        "note:C 社",
+        "note:D 社",
+        "note:E 社",
+        "note:G 社",
+        "note:H 社",
+        "note:I 社",
+        "note:受託",
+        "note:受託",
+        "note:L 社",
+        "note:M 社",
+        "note:N 社",
+        "note:O 社",
+        "note:B 社（ベンチャー企業）",
+        "note:受託",
+        "note:P 社（ベンチャー企業）",
+        "note:受託"
+      ]
+    },
+    "profile": {
+      "total": 11,
+      "measurable": 8,
+      "tooShortSkipped": [
+        "profile:meta.age",
+        "profile:meta.station",
+        "profile:meta.education"
+      ],
+      "inPdf": 8,
+      "inScreen": 8,
+      "missingInPdf": [],
+      "missingInScreen": []
+    },
+    "stats": {
+      "total": 7,
+      "measurable": 6,
+      "tooShortSkipped": [
+        "stats:枠[3] 年齢"
+      ],
+      "inPdf": 6,
+      "inScreen": 4,
+      "missingInPdf": [],
+      "missingInScreen": [
+        "stats:PDFラベル行(全ラベル連結)",
+        "stats:PDF値行(全 value+unit 連結)"
+      ]
+    }
+  },
+  "noteResults": [
+    {
+      "company": "Q 社（自社サービス事業会社）",
+      "label": "note:Q 社（自社サービス事業会社）",
+      "probe": "自社サビスを開発する事業会社にてマッチングアプリとコンテンツメディアの2プロダクトに参画フルスタック開発に加えCI/CD開発基盤の整備レビュ体制づくりAIエジェントを活用した開発体制の構築を担当エンジニアリングマネジャとしてチムの生産性と品質にも責任を持つ",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "A 社（大手 SI ベンダー）",
+      "label": "note:A 社（大手 SI ベンダー）",
+      "probe": "大手SIベンダにて複数の先進的なプロジェクトに参画AI技術連合学習LLM活用やクラウドネイティブアキテクチャを用いた次世代システムの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "C 社",
+      "label": "note:C 社",
+      "probe": "業務委託にてECポイント還元サビスのWebシステムの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "D 社",
+      "label": "note:D 社",
+      "probe": "業務委託にて配達業務アプリの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "E 社",
+      "label": "note:E 社",
+      "probe": "業務委託にて3Dメディア販売向けのポトフォリオサイトの構築book購入アプリのwebへのリプレイス化を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "G 社",
+      "label": "note:G 社",
+      "probe": "業務委託にて環境ポイントアプリの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "H 社",
+      "label": "note:H 社",
+      "probe": "業務委託にて不動産ポイントサイトの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "I 社",
+      "label": "note:I 社",
+      "probe": "業務委託にて高槻市スマホアプリの修正作業を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "label": "note:受託",
+      "probe": "小売のWebサイトにおける決済機能の実装を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "label": "note:受託",
+      "probe": "自動車監査のWEBシステムの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "L 社",
+      "label": "note:L 社",
+      "probe": "業務委託にてSESシステムの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "M 社",
+      "label": "note:M 社",
+      "probe": "業務委託にて雑誌などの販売システムの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "N 社",
+      "label": "note:N 社",
+      "probe": "業務委託にて英語教材のスマホアプリ開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "O 社",
+      "label": "note:O 社",
+      "probe": "業務委託にて医療Webシステムの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "B 社（ベンチャー企業）",
+      "label": "note:B 社（ベンチャー企業）",
+      "probe": "ベンチャ企業にてマッチングアプリの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "label": "note:受託",
+      "probe": "業務委託にて運転手のアルコル検査システムの開発を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "P 社（ベンチャー企業）",
+      "label": "note:P 社（ベンチャー企業）",
+      "probe": "ベンチャ企業にてWebアプリケション開発ECサイト構築WordPressカスタマイズなど幅広い案件を担当フロントエンドバックエンドの両面で経験を積みクライアントワクの基礎を確立",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    },
+    {
+      "company": "受託",
+      "label": "note:受託",
+      "probe": "Webペジ制作を担当",
+      "tooShort": false,
+      "inPdf": false,
+      "inScreen": false
+    }
+  ],
+  "profileResults": [
+    {
+      "label": "profile:name+title",
+      "probe": "IKフルスタックエンジニア/エンジニアリングマネジャ",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:pr",
+      "probe": "人工知能開発に携わっていた知人から教えを受けエンジニアになりましたフロントエンドバックエンドデタベス構築などにおいて幅広い知識経験を持っていますプロジェクトリダプロジェクトマネジメント要件定義などの上流工程に関しても経験を積んでおり担当可能です業務を通して開発を教える活動もしており現在4名の教え子がおります",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:strengths[0]",
+      "probe": "React/TypeScript/Nextjs",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:strengths[1]",
+      "probe": "クロスプラットフォム開発Ionic/Capacitor",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:strengths[2]",
+      "probe": "チムリドPM技術教育",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:strengths[3]",
+      "probe": "AI活用CI/CD開発基盤構築",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:meta全項目(ラベル+値の連結)",
+      "probe": "年齢28歳勤務形態フルリモト最寄り駅成田駅学歴高卒",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:meta.age",
+      "probe": "年齢28歳",
+      "tooShort": true,
+      "inPdf": null,
+      "inScreen": null
+    },
+    {
+      "label": "profile:meta.work",
+      "probe": "勤務形態フルリモト",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "profile:meta.station",
+      "probe": "最寄り駅成田駅",
+      "tooShort": true,
+      "inPdf": null,
+      "inScreen": null
+    },
+    {
+      "label": "profile:meta.education",
+      "probe": "学歴高卒",
+      "tooShort": true,
+      "inPdf": null,
+      "inScreen": null
+    }
+  ],
+  "statsResults": [
+    {
+      "label": "stats:全枠(PDF=ラベル行/値行, 画面=カード連結)",
+      "pdfProbe": "エンジニア歴参画プロジェクト数育成した教え子年齢8年30+案件4名28歳",
+      "screenProbe": "8年エンジニア歴30+案件参画プロジェクト数4名育成した教え子28歳年齢",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "stats:PDFラベル行(全ラベル連結)",
+      "probe": "エンジニア歴参画プロジェクト数育成した教え子年齢",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": false
+    },
+    {
+      "label": "stats:PDF値行(全 value+unit 連結)",
+      "probe": "8年30+案件4名28歳",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": false
+    },
+    {
+      "label": "stats:枠[0] エンジニア歴",
+      "pdfProbe": "エンジニア歴参画プロジェクト数",
+      "screenProbe": "8年エンジニア歴",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "stats:枠[1] 参画プロジェクト数",
+      "pdfProbe": "参画プロジェクト数育成した教え子",
+      "screenProbe": "30+案件参画プロジェクト数",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "stats:枠[2] 育成した教え子",
+      "pdfProbe": "育成した教え子年齢",
+      "screenProbe": "4名育成した教え子",
+      "tooShort": false,
+      "inPdf": true,
+      "inScreen": true
+    },
+    {
+      "label": "stats:枠[3] 年齢",
+      "pdfProbe": "エンジニア歴参画プロジェクト数育成した教え子年齢",
+      "screenProbe": "28歳年齢",
+      "tooShort": true,
+      "inPdf": null,
+      "inScreen": null
+    }
+  ]
+}

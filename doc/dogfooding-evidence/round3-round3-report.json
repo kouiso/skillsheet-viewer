@@ -1,0 +1,37 @@
+[
+  {
+    "id": "E-4-github",
+    "result": "FAIL",
+    "note": "console.error 2 件: Error: An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details. A digest property is included on this error instance "
+  },
+  {
+    "id": "C-10-full",
+    "result": "FAIL",
+    "note": "テンプレ選択方法=select / 作成後のブロック数=0"
+  },
+  {
+    "id": "C-5-offline",
+    "result": "FAIL",
+    "note": "オフライン時=\"自動保存に失敗 — 保存ボタンで再試行\" / 復帰後=\"自動保存に失敗 — 保存ボタンで再試行\""
+  },
+  {
+    "id": "C-7-tag",
+    "result": "FAIL",
+    "note": "技術タグ入力欄が見つからない（textbox 総数 19）"
+  },
+  {
+    "id": "C-7-process",
+    "result": "PASS",
+    "note": "工程ボタン 11 個 / aria-pressed true -> false"
+  },
+  {
+    "id": "C-9-restore",
+    "result": "FAIL",
+    "note": "履歴 5 行あるが復元ボタンが 0 個"
+  },
+  {
+    "id": "B-1-empty",
+    "result": "PASS",
+    "note": "空状態の文言: スキルシート一覧 / シートが見つかりません"
+  }
+]

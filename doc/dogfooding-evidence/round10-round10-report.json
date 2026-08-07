@@ -1,0 +1,53 @@
+{
+  "B-13b": {
+    "tableCount": 1,
+    "tableHeaders": [
+      "左寄せ",
+      "中央",
+      "右寄せ"
+    ],
+    "tableCells": [
+      "あ",
+      "い",
+      "う",
+      "か",
+      "き",
+      "く"
+    ],
+    "rawPipeLeaked": false,
+    "detailsCount": 1,
+    "summaryText": "折りたたみの見出し",
+    "detailsOpenBefore": false,
+    "bodyVisibleBefore": false,
+    "detailsOpenAfter": true,
+    "bodyVisibleAfter": true,
+    "cleanedUp": true
+  },
+  "C-10": {
+    "templates": [
+      {
+        "label": "技術者プロファイル",
+        "created": true,
+        "uiBlocks": 2,
+        "dbBlockTypes": [
+          "markdown",
+          "table"
+        ]
+      },
+      {
+        "label": "ダッシュボード（プロフィール・統計・案件）",
+        "created": true,
+        "uiBlocks": 1,
+        "dbBlockTypes": [
+          "skills"
+        ]
+      },
+      {
+        "label": "空白",
+        "created": true,
+        "uiBlocks": 0,
+        "dbBlockTypes": []
+      }
+    ]
+  }
+}

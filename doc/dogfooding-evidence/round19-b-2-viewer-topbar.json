@@ -1,0 +1,27 @@
+{
+  "sheetUrl": "http://127.0.0.1:3210/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+  "topbarText": "I・K / 表示するビュー / スキルマトリクス / 工程の俯瞰 / 案件詳細 / タイムライン",
+  "topbarLinks": [
+    {
+      "href": "/builder",
+      "text": "",
+      "ariaLabel": "編集／ビルダー",
+      "title": null
+    }
+  ],
+  "returnToListLinks": [],
+  "hasReturnToList": false,
+  "anyViewLinkOnPage": 0,
+  "builderLinks": [
+    {
+      "href": "/builder",
+      "text": "",
+      "ariaLabel": "編集／ビルダー",
+      "title": null
+    }
+  ],
+  "hasBuilderAffordance": true,
+  "builderLinkVisible": true,
+  "afterClickingBuilderUrl": "http://127.0.0.1:3210/login?next=/builder",
+  "afterClickingBuilderIsLogin": true
+}
