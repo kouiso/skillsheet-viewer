@@ -22,7 +22,6 @@ import type {
   SkillsBlockData,
 } from '../src/blocks';
 
-const SHEET_ID = process.env.SHEET_ID ?? '18a79e66-75e2-47e8-922e-d61342bb5233';
 const SHEET_TITLE = 'エンジニアスキルシート';
 
 function loadWebEnvLocal(): void {
@@ -44,6 +43,11 @@ function loadWebEnvLocal(): void {
   }
 }
 loadWebEnvLocal();
+
+// loadWebEnvLocal() より後に評価する。SHEET_ID を先に定数化していると
+// apps/web/.env.local 側の SHEET_ID 上書きが process.env へ反映される前に
+// 読まれてしまい、無視される（レビュー指摘。--write時に誤ったシートを更新しうる）。
+const SHEET_ID = process.env.SHEET_ID ?? '18a79e66-75e2-47e8-922e-d61342bb5233';
 
 const newId = () => crypto.randomUUID();
 

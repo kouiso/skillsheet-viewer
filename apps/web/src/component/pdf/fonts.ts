@@ -14,12 +14,18 @@ const NotoSansJPBold = '/fonts/NotoSansJP-Bold.ttf';
 // CJK/全角文字の開始コードポイント。これ以上は1文字単位で改行を許可する。
 const CODEPOINT = { CJK_START: 0x2e80 } as const;
 
-// ZERO WIDTH NO-BREAK SPACE。ECMAScript の String.prototype.trim() が
-// 空白として扱う数少ない「表示幅が実質ゼロ」の文字で、@react-pdf/textkit の
-// レイアウトエンジンはこれを（ハイフン付き改行点＝penalty ではなく）通常の
-// 改行可能な空白＝glue として扱う。CJK 文字の境界に挟むことで、行末に
-// ハイフン記号を出さずに任意の文字境界で改行できるようにする。
-const ZWNBSP = '﻿';
+// CJK文字境界に挟む改行マーカー。以前は ZWNBSP（U+FEFF、表示幅ゼロの不可視文字）を
+// 使っていたが、@react-pdf/textkit の getNodes()/breakLines() はハイフネーション
+// コールバックが返すシラブル配列から実際のPDFテキストレイヤーの文字列を
+// 再構築するため、ZWNBSP自体がPDFのテキストコンテンツに literal に残ってしまい、
+// テキスト選択・コピーや検索時に不可視の区切り文字が混入する問題があった
+// （レビュー指摘）。空文字列は String.prototype.trim() === '' を満たし
+// getNodes() 側で同じ「改行可能な空白＝glue」として扱われる一方、シラブルの
+// 長さが0のため PDF のテキスト内容には一切文字を追加しない
+// （patches/@react-pdf__textkit@6.3.0.patch の hyphenated 判定も
+// nextSyllable.trim() === '' で一致するため、空文字列でも従来通りハイフンは
+// 付与されない）。
+const BREAK_MARKER = '';
 
 let registered = false;
 
@@ -76,10 +82,10 @@ function isCombiningOrVariationSelector(ch: string): boolean {
  * 日本語は単語区切りが無いため、ASCII の連なりは保ちつつ、
  * 全角・CJK 文字の境界で改行を許可するように語を分割する。
  *
- * 各 CJK 文字の前後に ZWNBSP を挟んで返す。@react-pdf/textkit 側は
- * 「次の要素が空白なら次で改行してよい（ハイフン無し）」と判定するため、
+ * 各 CJK 文字の前後に BREAK_MARKER（空文字列）を挟んで返す。@react-pdf/textkit 側は
+ * 「次の要素が空白（trim()===''）なら次で改行してよい（ハイフン無し）」と判定するため、
  * 文字そのものを区切り値として返す（旧実装）とハイフン付きの改行点として
- * 扱われてしまう。ZWNBSP を挟むことで改行点は空白側に付き、CJK 文字は
+ * 扱われてしまう。BREAK_MARKER を挟むことで改行点はその空要素側に付き、CJK 文字は
  * 崩れずそのまま出力される。CJK→ASCII の境界（例:「連携React」の携/R間）にも
  * 挟まないと、その境界だけ改行機会が無くなる。
  */
@@ -108,13 +114,13 @@ export function splitForHyphenation(word: string): string[] {
       continue;
     }
     if (!isCjk(ch)) {
-      if (prevWasCjk && parts.length > 0) parts.push(ZWNBSP);
+      if (prevWasCjk && parts.length > 0) parts.push(BREAK_MARKER);
       buffer += ch;
       prevWasCjk = false;
       continue;
     }
     flush();
-    if (parts.length > 0) parts.push(ZWNBSP);
+    if (parts.length > 0) parts.push(BREAK_MARKER);
     parts.push(ch);
     prevWasCjk = true;
   }
