@@ -8,7 +8,7 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
-import { formatMonthToken, formatPeriodDisplay } from './process';
+import { flattenTech, formatMonthToken, formatPeriodDisplay } from './process';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -444,6 +444,44 @@ function escapeCell(value: string): string {
   return single.length > 0 ? single : ' ';
 }
 
+// 行頭のブロック開始トークン（見出し/リスト/引用/コードフェンス/水平線/生HTML）をエスケープし、
+// 自由入力の1行が独立した markdown 構造として解釈されるのを防ぐ。ビューア側（project-card.tsx /
+// project-preview.tsx）は company.note を素のテキストとして描画しており、生成する markdown でも
+// 同じ「構造を持たない文章」として扱う必要がある。
+function escapeMarkdownParagraph(value: string): string {
+  return (
+    value
+      .split('\n')
+      // 元の文章に既にバックスラッシュが含まれる場合（例:「\<img ...>」という文字列を
+      // 意図した入力）、先にこれをエスケープしておかないと、後続のメタ文字エスケープが
+      // 追加した `\` と合わせて `\\<` になってしまう。remark は `\\` を「リテラルな
+      // バックスラッシュ1文字」の escape として消費するため、その直後の `<img ...>` が
+      // エスケープされていない生のHTMLとして解釈されてしまう（レビュー指摘）。
+      // 既存のバックスラッシュを先に `\\` へエスケープしておけば、後続のメタ文字
+      // エスケープと合わせて remark 上も元の見た目（バックスラッシュ+文字）を維持できる。
+      .map((line) => line.replace(/\\/g, '\\\\'))
+      // 行頭の空白が4文字以上（タブ混在含む）だと remark がインデントコードブロックとして
+      // 解釈してしまう。表示側（project-card.tsx / project-preview.tsx）は素のテキストとして
+      // 描画するため構造が食い違う。タブを含む・4文字以上のときだけコードブロック化しない
+      // 3文字までに削る（タブ無しの1〜3文字の空白はそのまま維持する）。
+      .map((line) =>
+        line.replace(/^[ \t]+/, (indent) => (indent.includes('\t') || indent.length >= 4 ? '   ' : indent)),
+      )
+      // 行中のどこに出現しても remark に解釈されるインライン構文の記号
+      // （画像/リンクの `!`・`[`・`]`、強調の `*`・`_`、コードスパンの `` ` ``、
+      // 取り消し線/水平線の `~`、生HTMLの `<`）は、行頭以外に出現しても解釈されてしまう
+      // （例:「会社概要 ![機密](url)」のように行中に画像記法が来るケース、レビュー指摘）ため、
+      // 位置を問わず一括でエスケープする。`*` は行頭のリストマーカーとしても使われるが、
+      // この一括エスケープで行頭・行中どちらの意味も無効化される。
+      .map((line) => line.replace(/[![\]*_`~<]/g, '\\$&'))
+      // 見出し(#)・引用(>)・リスト(+-)・番号付きリスト・Setext見出しの下線(=)は
+      // 行頭にのみ構造として解釈されるため、行頭のときだけエスケープする
+      // （行中の `#` や `-` は remark 上ただの文字として扱われるため過剰エスケープを避ける）。
+      .map((line) => line.replace(/^(\s*)([#>+\-=]|\d+[.)])/, '$1\\$2'))
+      .join('\n')
+  );
+}
+
 /** 表ブロックを GFM markdown 表へ変換する。 */
 export function tableBlockToMarkdown(data: TableBlockData): string {
   const { columns, rows } = data;
@@ -555,14 +593,25 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     lines.push('');
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
+    if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
     if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
     if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
-    const tech = item.tech;
-    const techParts: string[] = [...tech.lang, ...tech.fw, ...tech.db, ...tech.infra, ...tech.tools, ...tech.collab];
+    const techParts = flattenTech(item.tech);
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
     if (item.process.length > 0) lines.push(`| 担当工程 | ${escapeCell(item.process.join(', '))} |`);
+    // 会社概要文（CompanyInfo.note）。従来 PDF・バックアップのどちらにも出力先が無く、
+    // 案件単体では伝わらない「どういう立ち位置でその会社に入っていたか」が欠落していた（#139）。
+    // 見出しと表の間に挟むと、PDF側の「見出し直後が表なら1ブロックとして分割禁止にする」
+    // （renderBlocks の heading+table 結合、#147）が効かなくなり、ページ境界で見出しと
+    // 表が分断される問題が再発する。表の後ろに置くことで見出し→表の隣接を保つ。
+    // ビューア側（project-card.tsx / project-preview.tsx）は note を素のテキストとして
+    // 描画するため、ここでも独立した見出し・リスト等として解釈されないようエスケープする。
+    if (company?.note?.trim()) {
+      lines.push('');
+      lines.push(escapeMarkdownParagraph(company.note.trim()));
+    }
     if (item.duties.trim()) {
       lines.push('');
       lines.push('**業務内容**');

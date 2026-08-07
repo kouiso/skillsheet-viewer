@@ -1,12 +1,27 @@
-import { Document, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
-import type { ReactNode } from 'react';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
+import { Document, Link, Page, Text as PdfText, StyleSheet, View } from '@react-pdf/renderer';
+import type { ComponentProps, ComponentType, ReactNode } from 'react';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
+import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
+
+// @react-pdf/textkit の getNodes() は、非空白シラブルの直後が厳密に半角スペース ' ' で
+// ない限り hyphenated:true を立て、penalty ノード（既定 hyphenPenalty=600）を追加する。
+// splitForHyphenation()（pdf/fonts.ts）が挟む ZWNBSP（U+FEFF）は ' ' と一致しないため、
+// CJK文字の直後には常にこの penalty ノードが付いてしまう。K&P改行選択がこのブレーク
+// ポイントを選んだ場合、breakLines() が実際にハイフン記号(U+002D)を挿入する（隣接する
+// ZWNBSP境界＝penalty=0のglueブレークの方がdemeritは低く通常は選ばれないが、狭い列幅
+// では選ばれうる。Issue #171 Codexレビュー指摘）。hyphenationPenalty は Text ノード
+// 単位のプロパティ（node.props を直接読む実装で、公開型には未定義）で、十分大きい値に
+// すればこのブレークポイントを事実上選択不可能にし、ZWNBSP境界を常に優先させられる。
+const HYPHENATION_PENALTY_SUPPRESSED = 100000;
+type LocalTextProps = ComponentProps<typeof PdfText> & { hyphenationPenalty?: number };
+const PdfTextEx = PdfText as unknown as ComponentType<LocalTextProps>;
+function Text({ hyphenationPenalty = HYPHENATION_PENALTY_SUPPRESSED, ...props }: LocalTextProps) {
+  return <PdfTextEx hyphenationPenalty={hyphenationPenalty} {...props} />;
+}
 
 // Console テーマ（globals.css の light トークン）に合わせたデザイントークン。
 // 値は design-tokens.ts を単一の真実として import し、globals.css との乖離を
@@ -35,6 +50,20 @@ const NUM = {
   // A4 1ページに収まる目安の行内文字数。これを超える行は複数ページにまたがってよい
   // (wrap=true) とし、収まる行だけを1ページ内で分割不可 (wrap=false) にする。
   ROW_UNBREAKABLE_CHAR_LIMIT: 600,
+  // 見出し+直後の表をまとめて分割不可 (wrap=false) にしてよい表の最大行数。
+  // 案件カードの表（期間/役割/規模/チーム/技術スタック/担当工程 等、最大6行程度）は
+  // 必ずこれを下回る。行数が多い表（例: スキル一覧の1カテゴリに項目が多い場合）は
+  // 1行あたりの文字数が短くても表全体では1ページに収まらないことがあるため、
+  // ROW_UNBREAKABLE_CHAR_LIMIT による文字数判定だけでなく行数でも足切りする。
+  //
+  // 実測（@react-pdf/renderer 4.5.1、実データ相当32件のカードで検証）: 案件カードが
+  // 多いドキュメントでは、ページ途中から始まるカードの内容が丸ごと欠落する（クリップ
+  // ではなく消失）バグが存在する。これは本 PR の見出し+表の結合描画（wrap=false）が
+  // 原因ではなく、結合を外しても再現する、より根深い既存バグと判明した（詳細は #172）。
+  // したがって CARD_MAX_ROWS だけでは #172 は解決しない。ここでの引き下げは、少なくとも
+  // 「1つの表が単独で大きすぎて footprint を圧迫する」経路の安全マージンを稼ぐための
+  // 対症療法であり、根本原因の追跡は #172 に委ねる。
+  CARD_MAX_ROWS: 10,
 } as const;
 
 const styles = StyleSheet.create({
@@ -143,7 +172,9 @@ const styles = StyleSheet.create({
 
 type PdfStyle = (typeof styles)[keyof typeof styles];
 
-interface MdNode {
+// テスト（skill-sheet-document.render.test.tsx の見出し+表 wrap 制御の構造検証）
+// から直接 mdast ノードを組み立てられるようにエクスポートする。
+export interface MdNode {
   type: string;
   value?: string;
   depth?: number;
@@ -238,13 +269,24 @@ function headingStyle(depth: number): PdfStyle {
   return styles.h4;
 }
 
-function renderHeading(node: MdNode, key: number): ReactNode {
+function isProjectHeading(node: MdNode): boolean {
+  return nodeText(node).trimStart().startsWith('■');
+}
+
+// 見出しの Text 部分のみを組み立てる。見出し単体描画 (renderHeading) と
+// 見出し+表の結合描画 (renderHeadingWithTable) の両方から共有する。
+function renderHeadingText(node: MdNode): ReactNode {
   const depth = node.depth ?? NUM.HEADING_H1;
-  const isProject = nodeText(node).trimStart().startsWith('■');
   const base = headingStyle(depth);
+  const isProject = isProjectHeading(node);
+  return <Text style={isProject ? [base, styles.hProject] : base}>{renderInline(node.children)}</Text>;
+}
+
+function renderHeading(node: MdNode, key: number): ReactNode {
+  const isProject = isProjectHeading(node);
   return (
     <View key={key} style={styles.headingWrap} minPresenceAhead={isProject ? NUM.MIN_PRESENCE_PROJECT : 0}>
-      <Text style={isProject ? [base, styles.hProject] : base}>{renderInline(node.children)}</Text>
+      {renderHeadingText(node)}
     </View>
   );
 }
@@ -337,6 +379,35 @@ function renderTable(node: MdNode, key: number): ReactNode {
   );
 }
 
+// 表全体が1ページに収まる見込みかどうかの目安判定。renderTable が行単位で使う
+// rowTextLength / ROW_UNBREAKABLE_CHAR_LIMIT をそのまま再利用しつつ、行数が多い
+// 表（1行1行は短くても合計すると1ページに収まらないケース）を CARD_MAX_ROWS で
+// 足切りする。新しい閾値ロジックを重複実装せず、renderTable と同じ考え方を踏襲する。
+function isTableLikelyToFitOnePage(node: MdNode): boolean {
+  const rows = node.children ?? [];
+  if (rows.length > NUM.CARD_MAX_ROWS) return false;
+  return rows.every((row) => rowTextLength(row) <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT);
+}
+
+// 見出し直後に表が続くケース（案件カードの見出し+項目表、スキルカテゴリ見出し+
+// スキル表）を1つの View にまとめて描画する。
+// - 表が1ページに収まる見込みなら wrap={false} で丸ごと分割不可にし、見出しだけが
+//   前ページに取り残されたり、見出し直後で表が分断されたりするのを防ぐ。
+// - 収まらない見込みなら wrap={true} にして renderTable 内の行単位wrap制御に委ね、
+//   内容が強制的に1ページへ押し込まれてクリップされるのを防ぐ
+//   （renderTable が採用している閾値方式をそのまま踏襲）。
+// - どちらの場合も minPresenceAhead を設定し、見出し単独がページ末尾に残るのを防ぐ
+//   （表が収まらず wrap=true になるケースのフォールバック保護でもある）。
+function renderHeadingWithTable(headingNode: MdNode, tableNode: MdNode, key: number): ReactNode {
+  const fitsOnePage = isTableLikelyToFitOnePage(tableNode);
+  return (
+    <View key={key} wrap={!fitsOnePage} minPresenceAhead={NUM.MIN_PRESENCE_PROJECT}>
+      <View style={styles.headingWrap}>{renderHeadingText(headingNode)}</View>
+      {renderTable(tableNode, key)}
+    </View>
+  );
+}
+
 function renderBlockquote(node: MdNode, key: number): ReactNode {
   return (
     <View key={key} style={styles.blockquote}>
@@ -384,12 +455,25 @@ const BLOCK_RENDERERS = new Map<string, BlockRenderer>([
   ['html', renderHtmlBlock],
 ]);
 
-function renderBlocks(nodes: MdNode[] | undefined): ReactNode {
+// テストから直接呼び出し、見出し+表の結合（renderHeadingWithTable への振り分けと
+// wrap/minPresenceAhead 制御）が意図どおり構造化されているかを検証できるようにする。
+export function renderBlocks(nodes: MdNode[] | undefined): ReactNode {
   if (!nodes) return null;
-  return nodes.map((node, i) => {
+  const out: ReactNode[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const next = nodes[i + 1];
+    // 見出しの直後に表が続く場合は1つの分割制御単位にまとめる（案件カード/
+    // スキルカテゴリ表のページ境界分断対策）。表は結合済みとしてスキップする。
+    if (node.type === 'heading' && next?.type === 'table') {
+      out.push(renderHeadingWithTable(node, next, i));
+      i += 1;
+      continue;
+    }
     const renderer = BLOCK_RENDERERS.get(node.type);
-    return renderer ? renderer(node, i) : null;
-  });
+    out.push(renderer ? renderer(node, i) : null);
+  }
+  return out;
 }
 
 export interface SkillSheetDocumentProps {
@@ -405,7 +489,10 @@ export const SkillSheetDocument = ({ title, content }: SkillSheetDocumentProps) 
   // remark-breaks を加えてビューアと同じく単一改行（ソフトブレーク）を改行として扱う。
   // remark-breaks は tree トランスフォーマのため parse だけでは適用されない。
   // runSync まで通してプラグインの変換フェーズを実行する。
-  const processor = unified().use(remarkParse).use(remarkGfm).use(remarkBreaks);
+  // プラグイン構成は MARKDOWN_REMARK_PLUGINS（ビューア側と共通）を使う。ここだけ独自に
+  // 組むと、プラグインを足したときに画面と PDF の解釈がズレる（remarkCjkFriendly の
+  // 取りこぼしで実際に発生した、#138 のレビュー指摘）。
+  const processor = unified().use(remarkParse).use(MARKDOWN_REMARK_PLUGINS);
   const tree = processor.runSync(processor.parse(content)) as unknown as MdNode;
 
   return (

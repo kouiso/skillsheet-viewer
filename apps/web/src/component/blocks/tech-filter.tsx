@@ -1,5 +1,6 @@
 'use client';
 
+import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 export interface TechCount {
@@ -42,12 +43,23 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
     <div className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="relative min-w-[220px] flex-1">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint">⌕</span>
+          {/* U+2315（テキストグリフ）だけ lucide の SVG アイコン群と質感が揃わず、
+              aria-hidden も無かった（#152 S-5）。 */}
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-faint"
+            aria-hidden="true"
+          />
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="案件・技術・役割を検索…"
-            className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground outline-none focus:border-primary focus:bg-card"
+            aria-label="案件・技術・役割を検索"
+            // outline-none で UA 既定のフォーカスリングを消したあと、それに代わるリング指定が
+            // 無く、枠線色の変化（focus:border-primary）だけになっていた（#156）。
+            // focus-visible:ring-2 を追加してキーボード操作時にリングが見えるようにする。
+            // placeholder の色指定が無いと UA 既定（currentColor 50%）にフォールバックし、
+            // ライトテーマで 3.35:1（WCAG AA 未達）になっていた（#152 S-4）。
+            className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
         </div>
         <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
