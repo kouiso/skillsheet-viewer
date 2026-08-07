@@ -8,9 +8,13 @@ interface ProfileIntroProps {
 
 const META_LABELS: Record<string, string> = {
   age: '年齢',
+  gender: '性別',
+  qualifications: '資格',
+  education: '学歴',
   work: '勤務形態',
   station: '最寄り駅',
-  education: '学歴',
+  specialties: '得意分野',
+  expertise: '得意業務',
 };
 
 export const ProfileIntro = ({ data }: ProfileIntroProps) => {
@@ -30,7 +34,9 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
         {data.title && <p className="font-mono text-[14.5px] text-accent-text">{data.title}</p>}
       </div>
 
-      {data.pr && <p className="mt-4 max-w-[720px] text-sm leading-[1.95] text-foreground/80">{data.pr}</p>}
+      {data.pr && (
+        <p className="mt-4 max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80">{data.pr}</p>
+      )}
 
       {data.strengths.length > 0 && (
         <ul className="mt-4 flex flex-wrap gap-2">
