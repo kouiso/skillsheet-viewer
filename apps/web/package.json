@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "biome check .",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --config vitest.config.pdf.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:playwright": "playwright test",
