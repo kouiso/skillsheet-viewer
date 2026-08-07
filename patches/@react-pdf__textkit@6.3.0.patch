@@ -1,0 +1,23 @@
+diff --git a/lib/textkit.js b/lib/textkit.js
+index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..adfb6d63e803fc5188f9418a60d884efb60fc823 100644
+--- a/lib/textkit.js
++++ b/lib/textkit.js
+@@ -2635,7 +2635,17 @@ const getNodes = (attributedString, { align }, options) => {
+             acc.push(linebreak.glue(width, start, end, stretch, shrink));
+         }
+         else {
+-            const hyphenated = syllables[index + 1] !== ' ';
++            // 元実装は次シラブルが厳密に半角スペース(' ')でなければ常に hyphenated:true を
++            // 立てる。ZWNBSP（trim()===''になる非表示の区切り文字）を挟んで改行点を作る
++            // 呼び出し側（skillsheet-viewer の splitForHyphenation）では、次シラブルが
++            // ' ' と一致しないためこの判定に該当してしまい、breakLines() が実際に選ばれた
++            // ブレークポイントへハイフン記号を挿入してしまう（アプリ側のIssue #171）。
++            // 次シラブルが「空白として扱われるべきもの」かどうかは trim()==='' で判定する
++            // のが本来の意図（このファイル上部の s.trim()==='' によるglue判定と同じ基準）
++            // であり、' ' 単体への厳密一致は本来のケース（半角スペース区切り）を含みつつ
++            // ZWNBSP 等の非表示区切りも正しく非ハイフン化対象にする。
++            const nextSyllable = syllables[index + 1];
++            const hyphenated = nextSyllable !== undefined && nextSyllable.trim() !== '';
+             const end = start + s.length;
+             // Add box node. Box nodes are used to represent words.
+             acc.push(linebreak.box(width, start, end, hyphenated));

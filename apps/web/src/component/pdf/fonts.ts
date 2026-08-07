@@ -46,13 +46,13 @@ function isCjk(ch: string): boolean {
 function isCombiningOrVariationSelector(ch: string): boolean {
   const code = ch.codePointAt(0) ?? 0;
   return (
-    (code >= 0x0300 && code <= 0x036f) || // Combining Diacritical Marks
-    (code >= 0x1ab0 && code <= 0x1aff) || // Combining Diacritical Marks Extended
-    (code >= 0x1dc0 && code <= 0x1dff) || // Combining Diacritical Marks Supplement
-    (code >= 0x20d0 && code <= 0x20ff) || // Combining Diacritical Marks for Symbols
+    (code >= 0x0300 && code <= 0x036f) || // 結合ダイアクリティカル記号
+    (code >= 0x1ab0 && code <= 0x1aff) || // 結合ダイアクリティカル記号拡張
+    (code >= 0x1dc0 && code <= 0x1dff) || // 結合ダイアクリティカル記号補助
+    (code >= 0x20d0 && code <= 0x20ff) || // 記号用結合ダイアクリティカル記号
     (code >= 0x3099 && code <= 0x309a) || // かな結合濁点・半濁点
-    (code >= 0xfe00 && code <= 0xfe0f) || // Variation Selectors
-    (code >= 0xfe20 && code <= 0xfe2f) || // Combining Half Marks
+    (code >= 0xfe00 && code <= 0xfe0f) || // 異体字セレクタ
+    (code >= 0xfe20 && code <= 0xfe2f) || // 結合ハーフマーク
     (code >= 0xe0100 && code <= 0xe01ef) // Variation Selectors Supplement（漢字の異体字シーケンス、IVS）
   );
 }

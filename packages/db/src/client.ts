@@ -14,8 +14,8 @@ import ws from 'ws';
 
 import { account, blocks, realVolumeDemoFixtures, session, skillSheets, user, verification } from './schema';
 
-// Node (Vercel nodejs runtime) may lack a global WebSocket; wire the `ws`
-// polyfill so the serverless driver can open its WebSocket connection.
+// Node（Vercel nodejs runtime）にはグローバル WebSocket が無い場合があるため、
+// serverless ドライバが WebSocket 接続を張れるよう `ws` ポリフィルを設定する。
 if (!neonConfig.webSocketConstructor) {
   neonConfig.webSocketConstructor = ws;
 }

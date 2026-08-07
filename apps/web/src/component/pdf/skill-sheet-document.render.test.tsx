@@ -10,6 +10,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 
 import PDF_FONT_FAMILY from './constants';
+import { splitForHyphenation } from './fonts';
 import type { MdNode } from './skill-sheet-document';
 import { renderBlocks, SkillSheetDocument } from './skill-sheet-document';
 
@@ -49,6 +50,15 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
   return text;
 }
 
+// splitForHyphenation は CJK 文字境界に ZWNBSP（表示幅ゼロ）を挟んで改行点を作るため、
+// PDF自体の見た目には影響しないが、pdf.js の getTextContent() はこの境界を独立した
+// テキストアイテムとして抽出し、アイテム間に空白を挿入することがある（抽出テキストの
+// アーティファクトであり、実際にPDF上に空白グリフが描画されるわけではない）。
+// 内容の欠落やハイフン混入を検証する目的では本質的でないため、比較前に空白を除去する。
+function normalizeExtractedText(text: string): string {
+  return text.replace(/\s+/g, '');
+}
+
 function registerNodeFonts(): void {
   Font.register({
     family: PDF_FONT_FAMILY,
@@ -60,6 +70,14 @@ function registerNodeFonts(): void {
       { src: BOLD_TTF, fontWeight: 700, fontStyle: 'italic' },
     ],
   });
+  // 本番の registerPdfFonts()（pdf/fonts.ts）はブラウザ向け URL でフォント登録するため
+  // Node のバイト描画では再利用できないが、CJK折り返し用の hyphenationCallback は
+  // フォントパスと無関係なので同じ実装を登録する。これを登録しないと
+  // splitForHyphenation() が一切使われず、CJK折り返しに関する回帰テストが本番の
+  // 改行ロジックを検証できていなかった（このテストファイルの既存の盲点）。
+  if (typeof Font.registerHyphenationCallback === 'function') {
+    Font.registerHyphenationCallback(splitForHyphenation);
+  }
 }
 
 // 日本語見出し・段落・テーブル・日本語入りコードブロックを含み、
@@ -341,9 +359,9 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       expect(pageObjectCount).toBeGreaterThan(1);
 
       // 全 32 件の見出しテキストが PDF から抽出できること（Issue #172 回帰防止）。
-      const text = await extractPdfText(buffer);
+      const text = normalizeExtractedText(await extractPdfText(buffer));
       for (const heading of headings) {
-        expect(text).toContain(heading);
+        expect(text).toContain(normalizeExtractedText(heading));
       }
     },
     RENDER_TIMEOUT_MS,
@@ -377,6 +395,35 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       expect(bytes.slice(-1024)).toContain('%%EOF');
       const pageObjectCount = (bytes.match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
       expect(pageObjectCount).toBeGreaterThan(1);
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    '狭い列幅で日本語が複数行に折り返されても、CJK文字間に想定外のハイフン(-)が挿入されない（Issue #171 Codexレビュー指摘の回帰防止）',
+    async () => {
+      // 8列テーブルの各セルへ、区切りの無い長い日本語連続文（スペース・句読点なし）を
+      // 詰め込み、狭い列幅で頻繁な折り返しを強制する。@react-pdf/textkit の
+      // getNodes() は splitForHyphenation() が挟む ZWNBSP の直前の CJK 文字にも
+      // hyphenated:true を立てるため、hyphenationPenalty を大きくしていないと
+      // K&P改行選択がこの penalty ブレークポイントを選び、breakLines() が実際に
+      // ハイフン記号(U+002D)を挿入してしまう（修正前バグの再現条件）。
+      const denseJapanese =
+        '要件定義から基本設計詳細設計実装単体テスト結合テスト総合テスト運用保守まで一貫して担当し性能改善や障害対応にも従事しました';
+      const header = '| 列A | 列B | 列C | 列D | 列E | 列F | 列G | 列H |';
+      const sep = '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |';
+      const row = `| ${Array.from({ length: 8 }, () => denseJapanese).join(' | ')} |`;
+      const content = ['## 折り返し検証', '', header, sep, row, ''].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+
+      const text = normalizeExtractedText(await extractPdfText(buffer));
+      // CJK文字と隣接するASCIIハイフンが無いこと（U+002Dを実際のハイフン挿入として扱う）。
+      expect(text).not.toMatch(/[぀-ヿ一-鿿]-|-[぀-ヿ一-鿿]/);
+      // ハイフンが混入していないため、空白除去後の抽出テキストに
+      // 元の日本語連続文がそのまま含まれているはずである。
+      expect(text).toContain(denseJapanese);
     },
     RENDER_TIMEOUT_MS,
   );
