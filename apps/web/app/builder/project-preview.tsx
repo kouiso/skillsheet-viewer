@@ -183,10 +183,10 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           {summary &&
             (hasOwnSummary ? (
               <div {...sync('summary')}>
-                <InlineMarkdown content={summary} className="pv-summary" />
+                <InlineMarkdown content={summary} className="pv-summary" linksTabbable={false} />
               </div>
             ) : (
-              <InlineMarkdown content={summary} className="pv-summary" />
+              <InlineMarkdown content={summary} className="pv-summary" linksTabbable={false} />
             ))}
 
           {shownTech.length > 0 && (
@@ -220,7 +220,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           <div key={key} className="pv-block">
             <div {...sync(key)}>
               <div className="bt">{heading}</div>
-              <InlineMarkdown content={body} className="bc" />
+              <InlineMarkdown content={body} className="bc" linksTabbable={false} />
             </div>
           </div>
         ))}

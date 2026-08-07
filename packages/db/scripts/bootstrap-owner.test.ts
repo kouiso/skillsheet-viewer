@@ -1,6 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
 
-import { EMAIL_PATTERN, parseEnvFile } from './bootstrap-owner';
+import { describe, expect, it, vi } from 'vitest';
+
+import { EMAIL_PATTERN, parseEnvFile, promptHiddenPassword } from './bootstrap-owner';
+
+/** stdin の raw mode 対話入力を模した最小限のフェイク。 */
+function createFakeStdin(isTTY = true) {
+  const emitter = new EventEmitter() as EventEmitter & {
+    isTTY: boolean;
+    setRawMode: (v: boolean) => void;
+    setEncoding: (v: string) => void;
+    resume: () => void;
+    pause: () => void;
+  };
+  emitter.isTTY = isTTY;
+  emitter.setRawMode = vi.fn();
+  emitter.setEncoding = vi.fn();
+  emitter.resume = vi.fn();
+  emitter.pause = vi.fn();
+  return emitter;
+}
 
 describe('parseEnvFile', () => {
   it('KEY=value 形式を読む', () => {
@@ -46,5 +65,41 @@ describe('EMAIL_PATTERN（Better Auth の z.email() と同じ検証を先取り�
     expect(EMAIL_PATTERN.test('not-an-email')).toBe(false);
     expect(EMAIL_PATTERN.test('owner@')).toBe(false);
     expect(EMAIL_PATTERN.test('@example.com')).toBe(false);
+  });
+});
+
+describe('promptHiddenPassword（対話プロンプトでのパスワード入力。シェル履歴・ps へのargv露出を避けるため追加）', () => {
+  it('通常の文字入力からEnterまでを1つのパスワード文字列として解決する', async () => {
+    const stdin = createFakeStdin();
+    const promise = promptHiddenPassword('prompt', stdin as unknown as NodeJS.ReadStream);
+    stdin.emit('data', 'a');
+    stdin.emit('data', 'b');
+    stdin.emit('data', 'c');
+    stdin.emit('data', '\n');
+    await expect(promise).resolves.toBe('abc');
+  });
+
+  it('バックスペースで直前の1文字を取り消す', async () => {
+    const stdin = createFakeStdin();
+    const promise = promptHiddenPassword('prompt', stdin as unknown as NodeJS.ReadStream);
+    stdin.emit('data', 'a');
+    stdin.emit('data', 'b');
+    stdin.emit('data', '');
+    stdin.emit('data', 'c');
+    stdin.emit('data', '\n');
+    await expect(promise).resolves.toBe('ac');
+  });
+
+  it('Ctrl-C（\\u0003）で入力がキャンセルされエラーになる', async () => {
+    const stdin = createFakeStdin();
+    const promise = promptHiddenPassword('prompt', stdin as unknown as NodeJS.ReadStream);
+    stdin.emit('data', 'a');
+    stdin.emit('data', '');
+    await expect(promise).rejects.toThrow('入力がキャンセルされました');
+  });
+
+  it('非TTY環境ではエラーになる（対話入力できないため）', async () => {
+    const stdin = createFakeStdin(false);
+    await expect(promptHiddenPassword('prompt', stdin as unknown as NodeJS.ReadStream)).rejects.toThrow('非対話環境');
   });
 });
