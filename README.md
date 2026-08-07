@@ -105,6 +105,14 @@ pnpm dev
 | [doc/04-markdown-display.md](./doc/04-markdown-display.md) | Markdown 表示（rehype パイプライン）と PDF 出力 |
 | [doc/05-toc-and-deploy.md](./doc/05-toc-and-deploy.md) | 目次（TOC / アクティブ見出し）と Vercel デプロイ |
 
+### 検証
+
+| ドキュメント | 内容 |
+|------------|------|
+| [doc/dogfooding-test-spec.md](./doc/dogfooding-test-spec.md) | 全画面 dogfooding のテスト仕様書（元データ ↔ 正本 ↔ 画面の突合手順） |
+| [doc/dogfooding-result-20260804.md](./doc/dogfooding-result-20260804.md) | 上記の実施結果と逸脱一覧 |
+| [doc/dogfooding-evidence/](./doc/dogfooding-evidence/) | 実施結果が参照している証跡のテキスト分（JSON / サーバーログ） |
+
 ## ライセンス
 
 UNLICENSED

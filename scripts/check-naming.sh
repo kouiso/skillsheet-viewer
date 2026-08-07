@@ -12,6 +12,11 @@
 #   scripts/check-naming.sh --staged ステージ済みの追加/リネームのみ検査（コミット前フック向け）
 set -euo pipefail
 
+# Git の非 ASCII パス出力を端末側のロケールに依存させない。
+# CI 等で LC_ALL=C だと core.quotePath=false でも非 ASCII ファイル名が
+# C クォートされて is_exempt のパターン判定がずれるため固定する。
+export LC_ALL=C.UTF-8
+
 cd "$(dirname "$0")/.."
 
 # ケバブケース: 小文字英数字を - でつないだ形のみ。拡張子は判定対象外。

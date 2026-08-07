@@ -1,0 +1,50 @@
+{
+  "log": [
+    {
+      "id": "A-5",
+      "result": "PASS",
+      "note": "ログイン成功 -> http://127.0.0.1:3210/builder"
+    },
+    {
+      "id": "C-10",
+      "result": "DONE",
+      "note": "新規シート作成を試行 -> http://127.0.0.1:3210/builder?sheet=2ccc8039-a6ea-465d-93fe-48a6e06b1cf8"
+    },
+    {
+      "id": "C-2",
+      "result": "FAIL",
+      "note": "textarea 2 -> 2"
+    },
+    {
+      "id": "C-5",
+      "result": "PASS",
+      "note": "autosave indicator = \"保存済み（自動）\""
+    },
+    {
+      "id": "C-6",
+      "result": "DONE",
+      "note": "手動保存を実行"
+    },
+    {
+      "id": "C-6-persist",
+      "result": "FAIL",
+      "note": "リロード後に追記が残る: false"
+    },
+    {
+      "id": "C-12",
+      "result": "PASS",
+      "note": "バックアップ skillsheet-backup-2026-08-04T12-51-42-491Z.md / 21806 bytes"
+    },
+    {
+      "id": "C-15",
+      "result": "PASS",
+      "note": "プレビュー窓 textLength=18850"
+    },
+    {
+      "id": "D-1",
+      "result": "PASS",
+      "note": "PDF 取得 download / 266866 bytes"
+    }
+  ],
+  "consoleErrors": []
+}

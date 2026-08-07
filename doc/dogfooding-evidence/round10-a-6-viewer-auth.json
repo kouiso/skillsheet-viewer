@@ -1,0 +1,42 @@
+[
+  {
+    "next": "//evil.example.com",
+    "shouldFollow": false,
+    "finalUrl": "http://127.0.0.1:3210/view",
+    "stayedOnHost": true,
+    "landedOnView": true,
+    "landedOnRequested": false
+  },
+  {
+    "next": "https://evil.example.com",
+    "shouldFollow": false,
+    "finalUrl": "http://127.0.0.1:3210/view",
+    "stayedOnHost": true,
+    "landedOnView": true,
+    "landedOnRequested": false
+  },
+  {
+    "next": "/\\/evil.example.com",
+    "shouldFollow": false,
+    "finalUrl": "chrome-error://chromewebdata/",
+    "stayedOnHost": false,
+    "landedOnView": false,
+    "landedOnRequested": false
+  },
+  {
+    "next": "http://127.0.0.1:3210/view",
+    "shouldFollow": false,
+    "finalUrl": "http://127.0.0.1:3210/view",
+    "stayedOnHost": true,
+    "landedOnView": true,
+    "landedOnRequested": false
+  },
+  {
+    "next": "/view/db",
+    "shouldFollow": true,
+    "finalUrl": "http://127.0.0.1:3210/view/db",
+    "stayedOnHost": true,
+    "landedOnView": false,
+    "landedOnRequested": true
+  }
+]

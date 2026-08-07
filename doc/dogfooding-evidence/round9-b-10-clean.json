@@ -1,0 +1,35 @@
+{
+  "sheetId": "a3898d29-989d-4438-9fb8-4febe1233e7a",
+  "tocTexts": [
+    "アルファ章",
+    "ブラボー章",
+    "チャーリー章",
+    "デルタ章",
+    "エコー章"
+  ],
+  "steps": [
+    {
+      "expected": "アルファ章",
+      "active": "アルファ章"
+    },
+    {
+      "expected": "ブラボー章",
+      "active": "ブラボー章"
+    },
+    {
+      "expected": "チャーリー章",
+      "active": "チャーリー章"
+    },
+    {
+      "expected": "デルタ章",
+      "active": "デルタ章"
+    },
+    {
+      "expected": "エコー章",
+      "active": "エコー章"
+    }
+  ],
+  "headingCount": 5,
+  "matched": 5,
+  "cleanedUp": true
+}

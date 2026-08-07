@@ -1,0 +1,18 @@
+{
+  "empty": {
+    "status": 200,
+    "text": "スキルシート一覧\n\nシートがまだありません（ビルダーで作成してください）",
+    "emptyMsg": true,
+    "errorMsg": false,
+    "mentionsFix": false,
+    "consoleErrors": 0
+  },
+  "error": {
+    "status": 200,
+    "text": "スキルシート一覧\n\nシートがまだありません（ビルダーで作成してください）",
+    "emptyMsg": true,
+    "errorMsg": false,
+    "mentionsFix": false,
+    "consoleErrors": 0
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "login": {
+    "path": "/login",
+    "checked": 4,
+    "withRing": 3,
+    "withoutRing": [
+      "button:ログイン"
+    ],
+    "skipped": 0
+  },
+  "viewer-auth": {
+    "path": "/viewer-auth",
+    "checked": 2,
+    "withRing": 1,
+    "withoutRing": [
+      "button:認証"
+    ],
+    "skipped": 0
+  },
+  "view-list": {
+    "path": "/view",
+    "checked": 6,
+    "withRing": 6,
+    "withoutRing": [],
+    "skipped": 0
+  },
+  "view-db-sheet": {
+    "path": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+    "checked": 14,
+    "withRing": 14,
+    "withoutRing": [],
+    "skipped": 0
+  },
+  "builder": {
+    "path": "/builder",
+    "checked": 14,
+    "withRing": 13,
+    "withoutRing": [
+      "button:保存"
+    ],
+    "skipped": 0
+  }
+}
