@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import PreviewClient from './preview-client';
@@ -38,6 +38,25 @@ describe('PreviewClient', () => {
     localStorage.setItem('builder-preview-payload', JSON.stringify({ title: 'テスト', content: '本文' }));
     render(<PreviewClient />);
     vi.advanceTimersByTime(0);
+
+    expect(screen.getByText(/編集画面が閉じられました/)).toBeInTheDocument();
+  });
+
+  it('window.opener があり、マウント後に編集画面が閉じられた場合は live から closed へ遷移する', () => {
+    const opener = { closed: false };
+    Object.defineProperty(window, 'opener', { value: opener, configurable: true });
+    localStorage.setItem('builder-preview-payload', JSON.stringify({ title: 'テスト', content: '本文' }));
+    render(<PreviewClient />);
+    vi.advanceTimersByTime(0);
+
+    expect(screen.queryByText(/編集画面が閉じられました/)).not.toBeInTheDocument();
+
+    opener.closed = true;
+    // setInterval のコールバック内での setState は act() の外で発火するため、
+    // React の再レンダーがDOMへ反映されるまでを明示的に待つ。
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
 
     expect(screen.getByText(/編集画面が閉じられました/)).toBeInTheDocument();
   });

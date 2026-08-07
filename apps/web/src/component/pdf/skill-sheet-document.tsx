@@ -1,11 +1,27 @@
-import { Document, Link, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
-import type { ReactNode } from 'react';
+import { Document, Link, Page, Text as PdfText, StyleSheet, View } from '@react-pdf/renderer';
+import type { ComponentProps, ComponentType, ReactNode } from 'react';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
 import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
+
+// @react-pdf/textkit の getNodes() は、非空白シラブルの直後が厳密に半角スペース ' ' で
+// ない限り hyphenated:true を立て、penalty ノード（既定 hyphenPenalty=600）を追加する。
+// splitForHyphenation()（pdf/fonts.ts）が挟む ZWNBSP（U+FEFF）は ' ' と一致しないため、
+// CJK文字の直後には常にこの penalty ノードが付いてしまう。K&P改行選択がこのブレーク
+// ポイントを選んだ場合、breakLines() が実際にハイフン記号(U+002D)を挿入する（隣接する
+// ZWNBSP境界＝penalty=0のglueブレークの方がdemeritは低く通常は選ばれないが、狭い列幅
+// では選ばれうる。Issue #171 Codexレビュー指摘）。hyphenationPenalty は Text ノード
+// 単位のプロパティ（node.props を直接読む実装で、公開型には未定義）で、十分大きい値に
+// すればこのブレークポイントを事実上選択不可能にし、ZWNBSP境界を常に優先させられる。
+const HYPHENATION_PENALTY_SUPPRESSED = 100000;
+type LocalTextProps = ComponentProps<typeof PdfText> & { hyphenationPenalty?: number };
+const PdfTextEx = PdfText as unknown as ComponentType<LocalTextProps>;
+function Text({ hyphenationPenalty = HYPHENATION_PENALTY_SUPPRESSED, ...props }: LocalTextProps) {
+  return <PdfTextEx hyphenationPenalty={hyphenationPenalty} {...props} />;
+}
 
 // Console テーマ（globals.css の light トークン）に合わせたデザイントークン。
 // 値は design-tokens.ts を単一の真実として import し、globals.css との乖離を
