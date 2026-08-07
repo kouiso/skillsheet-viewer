@@ -3,8 +3,7 @@ name: Security Audit
 on:
   pull_request:
     paths:
-      - "pnpm-lock.yaml"
-      - "**/package.json"
+      - \"pnpm-lock.yaml\"
   workflow_dispatch:
 
 jobs:
