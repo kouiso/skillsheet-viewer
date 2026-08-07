@@ -56,6 +56,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install system dependencies for PDF rasterization
+        if: matrix.check-type == 'test'
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
       - name: Lint
         if: matrix.check-type == 'lint'
         run: pnpm run lint
