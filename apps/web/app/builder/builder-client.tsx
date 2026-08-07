@@ -412,8 +412,11 @@ const SkillsBlockEditor = ({
         placeholder="カテゴリ（例: プログラミング言語）"
         className="w-full rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
+      {/* w-full だけだと table-layout:auto がコンテナ幅に収めようと各列を圧縮し、320px では
+          「経験年数」ヘッダーが1文字ずつ縦積みになっていた（#150）。min-w を与えてテーブル自体を
+          コンテナよりワイドにし、overflow-x-auto の横スクロールを実際に発火させる。 */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr>
               <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
@@ -639,7 +642,14 @@ const SortableBlock = ({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex gap-2 rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div
+      ref={setNodeRef}
+      style={style}
+      // items-start 欠落で align-items:stretch（既定）になり、ドラッグハンドルが行の
+      // 全高に引き伸ばされて中身のアイコンが垂直中央に見えていた（削除ボタンは shadcn
+      // Button の内部 flex で自己完結して上端寄りに見えるため非対称だった）（#152 S-5）。
+      className="flex items-start gap-2 rounded-lg border border-border bg-card p-3 shadow-sm"
+    >
       <button
         type="button"
         className="mt-1 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
@@ -1406,7 +1416,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 aria-pressed={showProjectPreview}
                 className="pv-toggle btn sm"
               >
-                ◧ {showProjectPreview ? 'プレビューを隠す' : 'プレビュー'}
+                {/* ペイン非表示時に「プレビュー」だけだと、隣の別窓起動ボタン（同じく
+                    「プレビュー」表記）と可視ラベルが完全一致して判別できなかった（#152 S-5）。 */}
+                ◧ {showProjectPreview ? 'プレビューを隠す' : 'プレビューを表示'}
               </button>
             )}
             <Button variant="ghost" size="sm" onClick={handleOpenPreview} aria-label="プレビューを別ウィンドウで開く">

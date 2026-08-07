@@ -1,6 +1,13 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
-import { blocksToMarkdown, createConsoleDemoSheet, getSkillSheetById } from '@skillsheet/db';
+import {
+  blocksToMarkdown,
+  createRealVolumeDemoSheet,
+  getSkillSheetById,
+  isProjectBlockData,
+  REAL_VOLUME_COMPANY_COUNT,
+  REAL_VOLUME_PROJECT_COUNT,
+} from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
@@ -82,7 +89,37 @@ async function login(page: Page) {
 
 test.describe('Claude Design 全画面監査', () => {
   test.beforeAll(async () => {
-    viewSheetId = await createConsoleDemoSheet();
+    // #143 / #153 X-2: 合成デモシート（createConsoleDemoSheet, 11案件）では実データ
+    // （19社/32案件）でのみ発生する 320px 横スクロールを検出できなかった。実データ相当の
+    // ボリュームを持つフィクスチャに差し替える。
+    viewSheetId = await createRealVolumeDemoSheet();
+  });
+
+  test('フィクスチャの件数が元データ（19社/32案件）と一致する', async () => {
+    const sheet = await getSkillSheetById(viewSheetId);
+    const projectBlock = sheet.blocks.find((b) => b.type === 'project');
+    expect(projectBlock, 'project ブロックが存在すること').toBeTruthy();
+    if (!projectBlock || !isProjectBlockData(projectBlock.data)) {
+      throw new Error('project ブロックのデータが不正です');
+    }
+    expect(projectBlock.data.companies.length, `会社数が元データ(${REAL_VOLUME_COMPANY_COUNT}社)と一致`).toBe(
+      REAL_VOLUME_COMPANY_COUNT,
+    );
+    expect(projectBlock.data.items.length, `案件数が元データ(${REAL_VOLUME_PROJECT_COUNT}案件)と一致`).toBe(
+      REAL_VOLUME_PROJECT_COUNT,
+    );
+  });
+
+  test('viewer /view/db/:id が320pxで横スクロールしない（#143 回帰検出）', async ({ page }) => {
+    const route = `/view/db/${viewSheetId}`;
+    await authViewer(page, route);
+    const narrow = viewports.find((v) => v.width === 320);
+    if (!narrow) throw new Error('320px の viewport 定義が見つかりません');
+    const result = await capturePage(page, route, narrow, 'light', 'regression-143-320');
+    expect(
+      result.overflow.scrollWidth,
+      `320px で scrollWidth(${result.overflow.scrollWidth}) が clientWidth(${result.overflow.clientWidth}) を超えないこと（#143）`,
+    ).toBeLessThanOrEqual(result.overflow.clientWidth);
   });
 
   test('viewer /view/db/:id ダッシュボード', async ({ page }) => {

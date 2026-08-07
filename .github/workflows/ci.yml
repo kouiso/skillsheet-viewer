@@ -72,6 +72,12 @@ jobs:
         if: matrix.check-type == 'build'
         run: pnpm run build
 
+      - name: Migrate database
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: pnpm run db:migrate
+
       - name: Install Playwright browsers
         if: matrix.check-type == 'e2e'
         run: pnpm --filter @skillsheet/web exec playwright install --with-deps chromium
