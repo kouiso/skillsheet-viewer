@@ -30,6 +30,13 @@ export default function PreviewClient() {
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [syncState, setSyncState] = useState<SyncState>('live');
   const channelRef = useRef<BroadcastChannel | null>(null);
+  // window.open() で開かれた別窓は必ず window.opener を持つ（後で閉じられても消えない）。
+  // このURLへ直接アクセスした場合は最初から null。lastUpdatedAt はローカルストレージの
+  // シード（前回セッションの残留データ）でも立ってしまうため、standalone/closed の判定は
+  // lastUpdatedAt ではなくマウント時の window.opener の有無で行う（レビュー指摘: 過去に
+  // 一度でも別窓を開いたことがあるブラウザで直接アクセスすると、古いシードのせいで
+  // 「編集画面が閉じられました」と誤表示していた）。
+  const hadOpenerRef = useRef(typeof window !== 'undefined' && !!window.opener);
 
   /** BroadcastChannel を張り直す。初回マウントと「再接続」ボタンの両方から呼ぶ。 */
   const connect = useCallback(() => {
@@ -66,11 +73,16 @@ export default function PreviewClient() {
 
   // 状態の判定は「編集画面が生きているか」→「最近更新が来たか」の順。
   // 編集画面が閉じられた場合は再接続しても内容は来ないので、再接続ボタンを出さない。
+  //
+  // openerGone は「一度も接続していない（このURLへ直接アクセスした）」と
+  // 「接続後に編集画面が閉じられた」の両方で true になる。hadOpenerRef（マウント時に
+  // window.opener があったか）で前者を判別し、実態と食い違う「表示は最後の内容です」
+  // という文言を出さないようにする（#151 U-5）。
   useEffect(() => {
     const tick = () => {
       const openerGone = typeof window !== 'undefined' && (!window.opener || window.opener.closed);
       if (openerGone) {
-        setSyncState('closed');
+        setSyncState(hadOpenerRef.current ? 'closed' : 'standalone');
         return;
       }
       setSyncState(lastUpdatedAt && Date.now() - lastUpdatedAt > STALE_AFTER_MS ? 'stale' : 'live');

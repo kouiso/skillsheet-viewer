@@ -11,11 +11,13 @@ interface SheetViewClientProps {
   title: string;
   content: string;
   blocks?: Block[];
+  /** 編集者ログイン済みか。false（閲覧コードのみ等）のときは編集導線を出さない。 */
+  canEdit?: boolean;
 }
 
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
-const SheetViewClient = ({ title, content, blocks }: SheetViewClientProps) => {
+const SheetViewClient = ({ title, content, blocks, canEdit = false }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
   // 意図的に raw blocks（中身が空でも）で判定する — skill-sheet-viewer.tsx の isDashboard と
@@ -74,9 +76,10 @@ const SheetViewClient = ({ title, content, blocks }: SheetViewClientProps) => {
           onToggleView={toggleView}
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
+          canEdit={canEdit}
         />
       ) : (
-        <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} />
+        <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} canEdit={canEdit} backHref="/view" />
       )}
       <SkillSheetViewer skillSheet={{ title, content }} blocks={blocks} views={isDashboard ? views : undefined} />
     </div>

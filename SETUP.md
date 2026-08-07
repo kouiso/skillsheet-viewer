@@ -10,8 +10,7 @@
         ▼                                    ▼
 Next.js 16 App（apps/web, Vercel）
   ├── /builder  … ブロック単位で編集（要 Better Auth セッション）
-  ├── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
-  └── /compare  … 2 枚を並べて比較
+  └── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
         │
         ▼
 Neon serverless Postgres（正本データ源 / Drizzle ORM, packages/db）
@@ -110,7 +109,24 @@ pnpm dev
 
 ### オーナーアカウントのブートストラップ手順
 
-> TODO（親エージェントが最終補記）: 単一オーナー運用のため、UI からのサインアップは無効です。オーナーアカウントは Better Auth のテーブル（`user` / `account`）に一時的な手段で直接作成し、その `user.id` を `SKILLSHEET_OWNER_ID` に設定します。作成した email / password で `/login` からログインし、`/builder` で編集できることを確認してください。（具体的な作成コマンド・SQL はここに補記予定）
+単一オーナー運用のため、UI からのサインアップは無効です（`emailAndPassword.disableSignUp: true`）。最初のオーナーアカウントは `packages/db/scripts/bootstrap-owner.ts` で直接作成します。このスクリプトは Better Auth 自身の `/sign-up/email` と同じ手順（`auth.$context` → `ctx.password.hash()` でハッシュ生成 → `user` 行を作成 → `provider_id = 'credential'` の `account` 行を作成）を踏むため、パスワードハッシュの形式や `user.id` の生成規則を手で合わせる必要はありません。
+
+1. `.env` に `DATABASE_URL` / `BETTER_AUTH_SECRET` を設定済みであること（`SKILLSHEET_OWNER_ID` はこの時点ではまだ値が無くて構いません）
+2. マイグレーションを適用し、`user` / `account` テーブルを作成しておく（未実施なら `pnpm db:migrate`）
+3. オーナーアカウントを作成する（メールアドレス・パスワードは任意の値に置き換えてください。パスワードは 8 文字以上を推奨）
+
+   ```bash
+   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts \
+     --email='owner@example.com' \
+     --password='Str0ng-Owner-Pass!'
+   ```
+
+   標準出力に `user.id`（例: `f47ac10b-58cc-4372-a567-0e02b2c3d479` のような文字列）が表示されます。
+
+4. 出力された `user.id` を `.env`（本番は Vercel の環境変数）の `SKILLSHEET_OWNER_ID` に設定する
+5. `pnpm dev` を起動し、手順3で使った email / password で `/login` からログインできること、`/builder` で編集できることを確認する
+
+> 既に同じ email のオーナーが存在する状態で再実行した場合は、新規作成ではなく**パスワードの再発行**として動作します（`user.id` は変わらないため `SKILLSHEET_OWNER_ID` の再設定は不要です）。パスワードを紛失した場合の再発行手順としても同じコマンドが使えます。
 
 ## Vercel へのデプロイ
 

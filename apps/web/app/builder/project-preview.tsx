@@ -4,6 +4,9 @@ import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@skillsheet/db/process';
 import { useRef, useState } from 'react';
 
+import { InlineMarkdown } from '@/component/inline-markdown';
+import { formatTeamSize } from '@/util/format-team-size';
+
 interface ProjectPreviewProps {
   project: ProjectItem;
   company: CompanyInfo | undefined;
@@ -21,6 +24,12 @@ interface ProjectPreviewProps {
 
 /** 技術チップは多すぎると縦に伸びてカードの形が崩れるため、この件数で打ち切って残数を出す。 */
 const MAX_TECH_CHIPS = 16;
+
+/** イベント発生元が sync() 要素自身ではなく、内側のリンク等インタラクティブ要素かどうか。 */
+const isInteractiveDescendant = (currentTarget: EventTarget, target: EventTarget | null): boolean =>
+  target instanceof Element &&
+  target !== currentTarget &&
+  Boolean(target.closest('a, button, input, select, textarea'));
 
 /**
  * 右ペイン：ライブプレビュー。
@@ -82,9 +91,17 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
     tabIndex: slot === activeSlot ? 0 : -1,
     title: '編集欄へ移動',
     onFocus: () => setFocusSlot(slot),
-    onClick: () => onJump?.(key),
+    // summary/duties/acquired/comment は InlineMarkdown を通すため、内側に <a> が
+    // 出ることがある（#138）。role="button" のこの要素が Enter/クリックを奪うと、
+    // リンクへフォーカスして Enter を押しても遷移せず編集欄へ飛んでしまう。
+    // イベントの発生元が内側のリンク等インタラクティブ要素なら、飛び先へは移動しない。
+    onClick: (e: React.MouseEvent) => {
+      if (isInteractiveDescendant(e.currentTarget, e.target)) return;
+      onJump?.(key);
+    },
     onKeyDown: (e: React.KeyboardEvent) => {
       if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (isInteractiveDescendant(e.currentTarget, e.target)) return;
       e.preventDefault();
       onJump?.(key);
     },
@@ -143,12 +160,17 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
               <div {...sync('scope')}>
                 <div className="pv-scope">{project.scope || 'スコープ未入力'}</div>
               </div>
+              {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。
+                  空白のみの値は blocks.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}
+              {company?.note?.trim() && <div className="pv-company-note">{company.note.trim()}</div>}
             </div>
             <div {...sync('meta')}>
               <div className="pv-meta">
                 {project.role || '役割未設定'}
                 <div className="m2">
-                  {[company?.name, project.team && `${project.team}名`, project.duration].filter(Boolean).join(' · ')}
+                  {[company?.name, project.team && formatTeamSize(project.team), project.duration]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </div>
               </div>
             </div>
@@ -161,10 +183,10 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           {summary &&
             (hasOwnSummary ? (
               <div {...sync('summary')}>
-                <p className="pv-summary">{summary}</p>
+                <InlineMarkdown content={summary} className="pv-summary" />
               </div>
             ) : (
-              <p className="pv-summary">{summary}</p>
+              <InlineMarkdown content={summary} className="pv-summary" />
             ))}
 
           {shownTech.length > 0 && (
@@ -198,7 +220,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
           <div key={key} className="pv-block">
             <div {...sync(key)}>
               <div className="bt">{heading}</div>
-              <div className="bc">{body}</div>
+              <InlineMarkdown content={body} className="bc" />
             </div>
           </div>
         ))}

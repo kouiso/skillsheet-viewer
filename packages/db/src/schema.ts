@@ -37,6 +37,23 @@ export const blocks = pgTable(
 );
 
 /**
+ * 実ボリュームデモ用のフィクスチャ管理テーブル。
+ * 同名シートの並行作成を防ぐため、owner_id 単位で一意制約を持つ。
+ * シート削除時はカスケード削除される。
+ */
+export const realVolumeDemoFixtures = pgTable(
+  'real_volume_demo_fixtures',
+  {
+    id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
+    ownerId: text('owner_id').notNull(),
+    sheetId: uuid('sheet_id')
+      .notNull()
+      .references(() => skillSheets.id, { onDelete: 'cascade' }),
+  },
+  (table) => [unique('real_volume_demo_fixtures_owner_id_unique').on(table.ownerId)],
+);
+
+/**
  * Better Auth コアテーブル（user/session/account/verification）。
  * better-auth v1.6 のデフォルト Drizzle スキーマ（単数形テーブル名）に準拠。
  * email/password 認証で使用する。drizzleAdapter はスキーマのキー名でモデルを

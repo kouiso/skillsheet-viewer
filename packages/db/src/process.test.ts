@@ -126,6 +126,18 @@ describe('flattenTech', () => {
     // @ts-expect-error 一部バケット欠損のレガシーデータを想定する。
     expect(flattenTech(tech)).toEqual(['TS', 'Next.js']);
   });
+
+  it('「該当なし」プレースホルダ（-・ー・—・空白のみ）を技術名として扱わない', () => {
+    const tech = {
+      lang: ['TS', '-'],
+      fw: ['Next.js'],
+      db: ['ー'],
+      infra: ['—'],
+      tools: ['  '],
+      collab: [''],
+    };
+    expect(flattenTech(tech)).toEqual(['TS', 'Next.js']);
+  });
 });
 
 describe('sortByStartDesc', () => {

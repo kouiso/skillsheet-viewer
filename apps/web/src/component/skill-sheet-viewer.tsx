@@ -4,16 +4,15 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
-import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import rehypeSanitize from 'rehype-sanitize';
 import rehypeSlug from 'rehype-slug';
-import remarkBreaks from 'remark-breaks';
-import remarkGfm from 'remark-gfm';
 import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 
 import type { Block } from '@skillsheet/db/blocks';
 import { experienceBlockToMarkdown, isBlockInputEmpty, tableBlockToMarkdown } from '@skillsheet/db/blocks';
 import { useActiveHeading } from '@/hooks/use-active-heading';
+import { isSafeImageSrc, MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from '@/lib/markdown-config';
 import { ProfileIntro } from './blocks/profile-intro';
 import { ProjectSection } from './blocks/project-section';
 import { SectionHead } from './blocks/section-head';
@@ -43,42 +42,12 @@ interface SkillSheetViewerProps {
   views?: ViewKey[];
 }
 
-// img src として許可するURLスキーム。http/https/相対パスのみ通し、
-// javascript: や data: 等は除外して XSS を防ぐ。
-const IMG_SRC_PROTOCOLS = ['http', 'https'] as const;
-
-// src が http(s) または相対パスかを判定する（javascript:/data: 等を拒否）。
-const isSafeImageSrc = (src: string): boolean => {
-  // 相対パス（スキームを持たない）は許可する。
-  if (!/^[a-z][a-z0-9+.-]*:/i.test(src)) return true;
-  return IMG_SRC_PROTOCOLS.some((p) => src.toLowerCase().startsWith(`${p}:`));
-};
-
 // GFM の列 alignment（remark-rehype が th/td の properties.align に left/center/right で
 // 載せる。rehype-sanitize の defaultSchema は align を保持する）を inline text-align へ。
 // 未指定列は left（GitHub 既定・従来挙動）。CSS の固定 text-align は撤去済みのため、
 // この inline スタイルが桁揃えの唯一の決定要因になる。
 const cellTextAlign = (align: unknown): 'left' | 'center' | 'right' =>
   align === 'center' ? 'center' : align === 'right' ? 'right' : 'left';
-
-// rehype-raw が有効化する生HTML描画を details/summary タグに限定する。
-// style属性はデフォルトスキーマで除外済み（XSS防止）。
-// img の src は http/https/相対パスのみ許可し、javascript:/data: 等を除外する。
-const SANITIZE_SCHEMA = {
-  ...defaultSchema,
-  tagNames: [...(defaultSchema.tagNames ?? []), 'details', 'summary'],
-  attributes: {
-    ...defaultSchema.attributes,
-    details: ['open'],
-  },
-  protocols: {
-    ...defaultSchema.protocols,
-    src: [...IMG_SRC_PROTOCOLS],
-  },
-};
-
-// remark プラグイン配列はモジュールスコープで固定し、毎レンダーの新規生成を防ぐ。
-const REMARK_PLUGINS = [remarkGfm, remarkBreaks];
 
 // hast のノードを最小限の形で扱う（rehype プラグインの型は unified 側で any 相当のため）。
 interface HastLikeNode {
@@ -118,7 +87,7 @@ const MarkdownContent = memo(function MarkdownContent({ content, blockId, onImag
   const rehypePlugins = useMemo(
     () => [
       rehypeRaw,
-      [rehypeSanitize, SANITIZE_SCHEMA] as [typeof rehypeSanitize, typeof SANITIZE_SCHEMA],
+      [rehypeSanitize, MARKDOWN_SANITIZE_SCHEMA] as [typeof rehypeSanitize, typeof MARKDOWN_SANITIZE_SCHEMA],
       rehypeSlug,
       [rehypePrefixHeadingIds, blockId] as [typeof rehypePrefixHeadingIds, string],
     ],
@@ -128,7 +97,7 @@ const MarkdownContent = memo(function MarkdownContent({ content, blockId, onImag
   return (
     <div className="markdown-content">
       <ReactMarkdown
-        remarkPlugins={REMARK_PLUGINS}
+        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
         rehypePlugins={rehypePlugins}
         components={{
           code(props) {

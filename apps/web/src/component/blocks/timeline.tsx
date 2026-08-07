@@ -31,8 +31,10 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
                   hit ? 'border-primary bg-primary' : 'border-border bg-card'
                 }`}
               />
-              <div className="flex flex-wrap items-baseline gap-4">
-                <span className="min-w-[132px] font-mono text-[11.5px] text-accent-text">
+              {/* 320px では日付列 min-w-[132px] がタイトル列を圧迫し5〜6行に断片化していた（#150）。
+                  狭幅は日付を独立行に落とし、sm 以上でのみ従来どおり横並びにする。 */}
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
+                <span className="font-mono text-[11.5px] text-accent-text sm:min-w-[132px]">
                   {formatPeriodDisplay(item.period) || '(期間未入力)'}
                 </span>
                 <div className="min-w-0 flex-1">

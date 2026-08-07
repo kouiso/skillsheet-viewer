@@ -24,4 +24,13 @@ describe('ProcessStepper', () => {
     render(<ProcessStepper done={[true, false, false, false, false, false, false]} compact />);
     expect(screen.queryByText('要件定義')).toBeNull();
   });
+
+  it('320px 幅では4列グリッドに折り返す（#144: 7等分だと1文字ずつ縦積みになる回帰防止）', () => {
+    const { container } = render(<ProcessStepper done={[false, false, false, false, false, false, false]} />);
+    const grid = container.firstElementChild;
+    expect(grid?.className).toContain('grid-cols-4');
+    expect(grid?.className).toContain('sm:grid-cols-7');
+    // 7等分フレックス（flex-1 が7要素に均等配分される）へ戻っていないことも確認する。
+    expect(grid?.className).not.toContain('flex-1');
+  });
 });
