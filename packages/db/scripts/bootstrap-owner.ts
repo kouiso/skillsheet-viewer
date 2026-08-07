@@ -135,7 +135,14 @@ export function promptHiddenPassword(promptText: string, stdin: NodeJS.ReadStrea
             return;
           case '\u007f': // Backspace（多くの端末）
           case '\b':
-            input = input.slice(0, -1);
+            // input.slice(0, -1) はUTF-16コードユニット単位で末尾を削るため、
+            // 絵文字等サロゲートペアが必要な符号点を含むパスワードでBackspaceを
+            // 押すと下位サロゲートのみ消え、上位サロゲートが取り残される
+            // （不可視の不正な符号列としてそのままハッシュ化され、ブラウザの
+            // ログインフォームでは再現できないパスワードでアカウントが
+            // 作成されてしまう。レビュー指摘）。スプレッド構文は符号点単位で
+            // イテレートするため、これを使って末尾の1符号点を丸ごと削る。
+            input = [...input].slice(0, -1).join('');
             break;
           default:
             input += char;
