@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import './sync-bar.css';
 
 export type SyncState = 'live' | 'stale' | 'closed' | 'standalone';
@@ -45,6 +47,14 @@ export const SyncBar = ({ state, lastUpdatedAt, onReconnect }: SyncBarProps) => 
       <button type="button" className="reconnect" onClick={onReconnect}>
         ↻ 再接続
       </button>
+    )}
+    {/* #201: standalone（編集画面を経由せずこのURLを直接開いた）は再接続しても内容が
+        来ないため意図的に再接続ボタンを出していないが、案内文が指す編集画面への
+        リンクも無く、キーボード操作では Tab で止まる要素が0個で行き止まりだった。 */}
+    {state === 'standalone' && (
+      <Link href="/builder" className="reconnect">
+        ビルダー画面を開く
+      </Link>
     )}
   </div>
 );

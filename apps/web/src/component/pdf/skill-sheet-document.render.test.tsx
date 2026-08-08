@@ -35,19 +35,38 @@ const RENDER_TIMEOUT_MS = 30_000;
 // PDF バッファからテキストを抽出する。Issue #172 の回帰防止で、生成された PDF に
 // 期待した日本語テキストが実際に含まれているかを検証するため使う。
 async function extractPdfText(buffer: Buffer): Promise<string> {
+  const pages = await extractPdfTextByPage(buffer);
+  return pages.join('');
+}
+
+// ページ境界を保持したままテキストを抽出する。extractPdfText() は全ページを1本の
+// 文字列に結合するため、あるカードの見出しが N ページ末尾・末尾段落が N+1 ページ先頭に
+// 分かれて描画されても、結合後の文字列では単に隣接して見えてしまい「同一カード内で
+// 分断されていないか」を検証できない（Issue #194 の実際の症状はページ分割そのものであり、
+// codex レビューでこの盲点を指摘された）。ページ境界をまたいでいないかを検証したい
+// 呼び出し元は、この配列上でどのページ番号に現れるかを直接比較すること。
+async function extractPdfTextByPage(buffer: Buffer): Promise<string[]> {
   const data = new Uint8Array(buffer);
   const doc = await getDocument({ data }).promise;
-  let text = '';
+  const pages: string[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
+    let text = '';
     for (const item of content.items) {
       if ('str' in item && typeof item.str === 'string') {
         text += item.str;
       }
     }
+    pages.push(text);
   }
-  return text;
+  return pages;
+}
+
+// normalizeExtractedText 済みの needle が最初に現れるページ番号（0始まり）。見つからなければ -1。
+function findPageIndexOf(pages: string[], needle: string): number {
+  const target = normalizeExtractedText(needle);
+  return pages.findIndex((page) => normalizeExtractedText(page).includes(target));
 }
 
 // splitForHyphenation は CJK 文字境界に ZWNBSP（表示幅ゼロ）を挟んで改行点を作るため、
@@ -146,6 +165,24 @@ function buildCardMarkdown(heading: string, rowCount: number): string {
   return [heading, '', '| 項目 | 内容 |', '| :--- | :--- |', rows, ''].join('\n');
 }
 
+// projectBlockToMarkdown が実際に出す形（見出し→表→会社概要文→**業務内容**→本文→
+// **習得スキル・実績**→本文、全て paragraph）に近い案件カードを組み立てる。
+function buildProjectCardMarkdown(heading: string, note: string, duties: string, acquired: string): string {
+  return [
+    buildCardMarkdown(heading, 4),
+    note,
+    '',
+    '**業務内容**',
+    '',
+    duties,
+    '',
+    '**習得スキル・実績**',
+    '',
+    acquired,
+    '',
+  ].join('\n');
+}
+
 describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', () => {
   it('1ページに収まる見込みの小さな表（案件カード相当）は見出し+表を1つのViewにまとめ wrap={false} にする', () => {
     // projectBlockToMarkdown 相当（期間/役割/規模/技術スタック/担当工程 程度で最大6行前後）を想定した
@@ -206,6 +243,182 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     // 表と結合されていないので wrap は明示設定されない（結合ケースのように boolean が入らない）。
     expect(heading.props.wrap).toBeUndefined();
   });
+
+  it('表の直後に続く会社概要文・業務内容・習得スキル・実績も同じ分割制御単位にまとめる（Issue #194）', () => {
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown(
+        '### 株式会社テスト — テストシステム開発',
+        '会社概要文です。',
+        '業務内容の本文。',
+        '習得スキルの本文。',
+      ),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    // 見出し+表+後続3段落が1つの要素にまとまる（他の兄弟が無いため出力は1要素のみ）。
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as {
+      type: unknown;
+      props: { wrap?: boolean; minPresenceAhead?: number; children: unknown[] };
+    };
+    expect(merged.type).toBe(View);
+    // 表4行+短い段落3つは CARD_TOTAL_CHAR_LIMIT を大きく下回るので分割不可（wrap=false）。
+    expect(merged.props.wrap).toBe(false);
+    // 見出し+表(2) + 後続段落5つ（会社概要文 / 「業務内容」見出し / 本文 /
+    // 「習得スキル・実績」見出し / 本文。太字見出しも独立した paragraph になる）= 7要素。
+    expect(merged.props.children).toHaveLength(7);
+
+    const text = flattenText(merged);
+    expect(text).toContain('会社概要文です。');
+    expect(text).toContain('業務内容の本文。');
+    expect(text).toContain('習得スキルの本文。');
+  });
+
+  it('業務内容・習得スキルが箇条書き（list）でも同じ分割制御単位にまとめる（chatgpt-codex-connector レビュー指摘: paragraph 限定だとリストで途切れていた）', () => {
+    // duties/acquired はユーザーの自由記述で、Markdown の箇条書き（- item）になりうる。
+    // mdast 上では paragraph ではなく list ノードになるため、paragraph だけを集める旧実装
+    // では表直後の会社概要文までしか収まらず、箇条書きの本体（業務内容・習得スキル）が
+    // 別の分割単位に外れて見出し+表とは別ページに漏れうる。
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown(
+        '### 株式会社テスト — 箇条書き案件',
+        '会社概要文です。',
+        '- 要件定義\n- 設計\n- 実装',
+        '- Docker\n- Kubernetes',
+      ),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    // 見出し+表+後続内容（段落・見出しラベル・リスト2つ）が1つの要素にまとまる。
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as {
+      type: unknown;
+      props: { wrap?: boolean; minPresenceAhead?: number; children: unknown[] };
+    };
+    expect(merged.type).toBe(View);
+    expect(merged.props.wrap).toBe(false);
+    // 見出し+表(2) + 会社概要文(1) + 「業務内容」見出し(1) + list(1) +
+    // 「習得スキル・実績」見出し(1) + list(1) = 7要素。
+    expect(merged.props.children).toHaveLength(7);
+
+    const text = flattenText(merged);
+    expect(text).toContain('会社概要文です。');
+    expect(text).toContain('要件定義');
+    expect(text).toContain('Kubernetes');
+  });
+
+  // chatgpt-codex-connector レビュー指摘: primary の表だけに課していた行単位のチェック
+  // （CARD_MAX_ROWS / ROW_UNBREAKABLE_CHAR_LIMIT）が trailing 中の表・リストには
+  // 及んでおらず、短い項目/セルが多数並ぶケースでは合計文字数だけ閾値内に収まり
+  // 誤って wrap={false}（分割不可）になりクリップしうる欠陥があった。
+  it('trailing のリスト項目数が多い場合は合計文字数が閾値内でも wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
+    const manyShortItems = Array.from({ length: 8 }, (_, i) => `- 項目${i}`).join('\n');
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown('### 株式会社テスト — 項目多数案件', '会社概要文です。', manyShortItems, '短い実績。'),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    // 表4行 + リスト8項目 = 12行相当で CARD_MAX_ROWS(10) を超えるため、
+    // 合計文字数（十分に小さい）に関わらず分割を許容する。
+    expect(merged.props.wrap).toBe(true);
+
+    const text = flattenText(merged);
+    expect(text).toContain('項目0');
+    expect(text).toContain('項目7');
+    expect(text).toContain('短い実績。');
+  });
+
+  it('trailing の表に1行あたりの文字数が閾値を超える行がある場合は wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
+    const oversizedRow = `| 項目 | ${'あ'.repeat(650)} |`;
+    const trailingTable = ['| 項目 | 内容 |', '| :--- | :--- |', oversizedRow].join('\n');
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown('### 株式会社テスト — 長大セル案件', '会社概要文です。', trailingTable, '短い実績。'),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    // trailing の表の1行が ROW_UNBREAKABLE_CHAR_LIMIT を超えるため分割を許容する。
+    expect(merged.props.wrap).toBe(true);
+
+    const text = flattenText(merged);
+    expect(text).toContain('あ'.repeat(650));
+  });
+
+  it('カード全体の合計文字数が大きすぎる場合は wrap={true} のままクリップを防ぐ（Issue #147/#172 の再発防止）', () => {
+    const longParagraph = '長文段落です。'.repeat(200); // 十分に長い段落
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown('### 株式会社テスト — 長文案件', longParagraph, longParagraph, longParagraph),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    // 合計文字数が閾値を超えるため分割を許容する（内容のクリップを防ぐ）。
+    expect(merged.props.wrap).toBe(true);
+    expect(merged.props.children).toHaveLength(7);
+  });
+});
+
+describe('renderBlocks（案件カード実バイト描画・Issue #194）', () => {
+  beforeAll(() => {
+    registerNodeFonts();
+  });
+
+  it(
+    '案件カード3件が実際にページ境界をまたがず1ページに収まる（実データで確認した Issue #194 の症状の回帰防止）',
+    async () => {
+      // Issue #194 で報告された3件のカード（M社/B社/P社）と同じ「見出し+短い表+3段落」の
+      // 形を複数積んで、ページ境界付近に配置されたカードが分割されないことを確認する。
+      // 20件分のフル描画+全ページ抽出は既定の5秒タイムアウトを超えうる（他の実バイト描画
+      // テストと同じ RENDER_TIMEOUT_MS を明示しないと、CI の並列実行下でフレーキーになる。
+      // CodeRabbit レビュー指摘）。
+      const cards = Array.from({ length: 20 }, (_, i) =>
+        buildProjectCardMarkdown(
+          `### 会社${i} — 案件${i}の開発`,
+          `会社${i}の概要文です。`,
+          `案件${i}の業務内容の本文です。要件定義から運用まで担当しました。`,
+          `案件${i}で得た習得スキルの本文です。`,
+        ),
+      ).join('\n');
+      const content = ['## 職務経歴', '', cards].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const pages = await extractPdfTextByPage(buffer);
+      const rawText = pages.join('');
+      const text = normalizeExtractedText(rawText);
+
+      for (let i = 0; i < 20; i++) {
+        const heading = `会社${i}—案件${i}の開発`;
+        const acquired = `案件${i}で得た習得スキルの本文です。`;
+        const headingIndex = text.indexOf(heading);
+        const acquiredIndex = text.indexOf(acquired);
+        expect(headingIndex).toBeGreaterThanOrEqual(0);
+        expect(acquiredIndex).toBeGreaterThan(headingIndex);
+        // 見出しから習得スキル本文までの間に含まれる「会社N—案件Nの開発」形の見出しは
+        // 自分自身の1件だけであること（＝別カードの見出しが割り込んでいない＝分断されていない）。
+        const between = text.slice(headingIndex, acquiredIndex);
+        const headingsInBetween = between.match(/会社\d+—案件\d+の開発/g) ?? [];
+        expect(headingsInBetween).toEqual([heading]);
+
+        // 上記の連結テキストでの隣接チェックだけでは、見出しがページ末尾・習得スキル本文が
+        // 次ページ先頭に分かれて描画されるケース（#194 の実際の症状そのもの）を見逃す。
+        // 結合前の pages 配列上で、見出しと習得スキル本文が同一ページに乗っているかを直接見る
+        // （chatgpt-codex-connector レビュー指摘: 旧実装は全ページ結合後の文字列しか見ておらず
+        // ページ分割そのものを検知できなかった）。
+        const headingPage = findPageIndexOf(pages, heading);
+        const acquiredPage = findPageIndexOf(pages, acquired);
+        expect(headingPage).toBeGreaterThanOrEqual(0);
+        expect(acquiredPage).toBe(headingPage);
+      }
+    },
+    RENDER_TIMEOUT_MS,
+  );
 });
 
 describe('SkillSheetDocument（実バイト描画）', () => {
@@ -445,6 +658,50 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       // 空白除去 (normalizeExtractedText) をかける前の生の抽出テキストに、
       // 改行マーカーとして使っていた ZWNBSP（U+FEFF）が literal に残っていないこと。
       expect(rawText).not.toContain('﻿');
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    '通常の長文段落がページ／行をまたいで再分割(reflow)されても、句点直後の日本語にハイフンが挿入されない（Issue #203 の再発防止）',
+    async () => {
+      // Issue #203: テーブルセル（#171 のケース）とは異なり、通常の段落テキストが
+      // 長くなってページ境界・行境界をまたいで react-pdf 側に再分割されると、
+      // splitForHyphenation() が挟んだ BREAK_MARKER が境界のどちら側に残るかが
+      // 揃わず、和文の句点（。）の直後に本物の次シラブルが来て hyphenated:true に
+      // なることがあった（DB上の実データ25ページ分で実測・再現済み。
+      // apps/web/scripts/repro-203-hyphen.tsx で再検証できる）。
+      // この特定の marker 消失は react-pdf 内部のページ割り付けアルゴリズムの
+      // 挙動に依存しており、この程度の合成データでは同一の消失を再現できなかった
+      // （fix 適用前後どちらでもこのテストは pass する＝reflow 消失そのものの
+      // 回帰検知はできていない）。それでも「単一CJK文字の直後には常に非ハイフン化」
+      // という fix 後の不変条件そのものは有効な回帰防止になるため、
+      // 広めの文書量で一般的な確認として残す。
+      // 実データ（Issue #203 の再現に使ったDB上の会社概要文）と同じ形：句点で終わる文の
+      // 直後に別の文が続く。案件カード相当（見出し+小さな表+段落）を多数積んで
+      // 25ページ前後まで伸ばし、実際にバグが出たページ／行境界をまたぐ再分割を誘発する。
+      const sentence =
+        'ベンチャー企業にて、WebアプリケーションやECサイトの開発など幅広い案件を担当。フロントエンド・バックエンドの両面で経験を積み、クライアントワークの基礎を確立。';
+      const card = (i: number) =>
+        [
+          `### ■ 会社${i} — プロジェクト${i}`,
+          '',
+          '| 期間 | 役割 |',
+          '| :--- | :--- |',
+          `| 2020-0${(i % 9) + 1} | エンジニア |`,
+          '',
+          Array.from({ length: 6 }, () => sentence).join(''),
+          '',
+        ].join('\n');
+      const content = ['## 職務要約', '', Array.from({ length: 20 }, (_, i) => card(i)).join('\n'), ''].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+
+      const rawText = await extractPdfText(buffer);
+      const text = normalizeExtractedText(rawText);
+      // CJK文字（句読点含む）と隣接するASCIIハイフンが無いこと。
+      expect(text).not.toMatch(/[぀-ヿ一-鿿、。]-|-[぀-ヿ一-鿿、。]/);
     },
     RENDER_TIMEOUT_MS,
   );

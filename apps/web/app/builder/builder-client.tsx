@@ -30,6 +30,7 @@ import {
   type ExperienceBlockData,
   experienceBlockToMarkdown,
   isBlockInputEmpty,
+  PROFILE_META_LABELS,
   type ProfileBlockData,
   type ProfileMeta,
   type ProjectBlockData,
@@ -61,7 +62,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DateTokenPicker } from '@/components/date-token-picker';
 import { SelectOrCustom } from '@/components/select-or-custom';
@@ -532,26 +533,150 @@ const ExperienceBlockEditor = ({
   );
 };
 
-/** メタ情報（年齢/勤務形態/最寄り駅/学歴）の入力定義。 */
-const PROFILE_META_FIELDS: { key: keyof ProfileMeta; label: string; placeholder: string }[] = [
-  { key: 'age', label: '年齢', placeholder: '例: 30代前半' },
-  { key: 'work', label: '勤務形態', placeholder: '例: フルリモート' },
-  { key: 'station', label: '最寄り駅', placeholder: '例: 守山駅' },
-  { key: 'education', label: '学歴', placeholder: '例: ○○大学卒' },
+// よく使う既知8項目の入力欄（プレースホルダ）。PROFILE_META_LABELS（packages/db）と
+// キーを揃えること。並び順もここが基準になる。
+const KNOWN_PROFILE_META_FIELDS: { key: keyof ProfileMeta; placeholder: string }[] = [
+  { key: 'age', placeholder: '例: 30代前半' },
+  { key: 'gender', placeholder: '例: 男' },
+  { key: 'qualifications', placeholder: '例: 自動車普通車免許' },
+  { key: 'education', placeholder: '例: ○○大学卒' },
+  { key: 'work', placeholder: '例: フルリモート' },
+  { key: 'station', placeholder: '例: 守山駅' },
+  { key: 'specialties', placeholder: '例: フロントエンド設計' },
+  { key: 'expertise', placeholder: '例: チームマネジメント' },
 ];
+const KNOWN_PROFILE_META_KEYS = new Set(KNOWN_PROFILE_META_FIELDS.map((f) => f.key));
 
-/** プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。 */
+let customMetaRowSeq = 0;
+
+/** 既知8項目に無い任意のメタ項目の編集行。ラベル自体を data.meta のキーとして保存する。 */
+interface CustomMetaRow {
+  /** React の再レンダリング間でも安定させるためのローカル識別子（保存キーではない）。 */
+  id: string;
+  label: string;
+  value: string;
+}
+
+// 既知8項目の表示ラベル（「年齢」等）。任意項目のラベルにこれと同じ文字列を使われると、
+// 内部キーは別（例: 既知の `age` と任意項目の `年齢`）でも画面・PDF上は同じラベルで
+// 2行表示され紛らわしい（CodeRabbit レビュー指摘）。内部キーと合わせて予約する。
+const RESERVED_PROFILE_META_LABELS = new Set(Object.values(PROFILE_META_LABELS));
+
+/**
+ * ラベルが既知8項目のキー・表示ラベル、または他の行のラベルと衝突している行の id を返す。
+ * 衝突したまま meta へ詰めると `meta[label] = value` の代入が先勝ちの値を無警告で
+ * 上書きし、保存後にリロードすると片方が消えたように見える（Codex レビュー指摘）。
+ * 最初に出現した行だけを有効とし、以降の同名行は衝突として保存対象から除外する。
+ */
+const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
+  const conflicts = new Set<string>();
+  const seenLabels = new Set<string>();
+  for (const row of rows) {
+    const label = row.label.trim();
+    if (!label) continue;
+    if (
+      KNOWN_PROFILE_META_KEYS.has(label as keyof ProfileMeta) ||
+      RESERVED_PROFILE_META_LABELS.has(label) ||
+      seenLabels.has(label)
+    ) {
+      conflicts.add(row.id);
+    } else {
+      seenLabels.add(label);
+    }
+  }
+  return conflicts;
+};
+
+/**
+ * プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。
+ *
+ * meta の既知8項目（年齢・性別・資格・学歴・勤務形態・最寄り駅・得意分野・得意業務）は
+ * 固定の入力欄を出す。それ以外の任意項目は「項目を追加」で行を増やせる（Issue #193:
+ * 固定4項目のみで、値がある性別・資格を編集画面から直せなかった。固定リストへ1個ずつ
+ * 足す設計は同じ問題を再生産するため、任意キーを許容する設計にした）。
+ *
+ * 任意項目のラベル入力は data.meta のキーそのものを1文字ごとに書き換えると、
+ * オブジェクトキーの挿入順が変わって行の並びが跳ねたり、React の key 変化で
+ * 入力中にフォーカスが飛んだりする。そのため、ラベル編集中の行識別子はローカル
+ * state（CustomMetaRow.id）で持ち、変更のたびに data.meta 全体を組み立て直して
+ * 親へ渡す。
+ */
 const ProfileBlockEditor = ({
   data,
   onChange,
+  id,
+  onValidityChange,
 }: {
   data: ProfileBlockData;
   onChange: (data: ProfileBlockData) => void;
+  /** items 内でのブロック id。onValidityChange にそのまま渡すためだけに使う。 */
+  id: string;
+  /** ラベル重複の有無を親へ通知する。親はこれを見て保存（自動/手動）を止める。 */
+  onValidityChange: (id: string, hasConflict: boolean) => void;
 }) => {
   const set = <K extends keyof ProfileBlockData>(field: K, value: ProfileBlockData[K]) =>
     onChange({ ...data, [field]: value });
-  const setMeta = (key: keyof ProfileMeta, value: string) =>
+  const setKnownMeta = (key: keyof ProfileMeta, value: string) =>
     onChange({ ...data, meta: { ...(data.meta ?? {}), [key]: value } });
+
+  const [customRows, setCustomRows] = useState<CustomMetaRow[]>(() =>
+    Object.entries(data.meta ?? {})
+      .filter((e): e is [string, string] => !KNOWN_PROFILE_META_KEYS.has(e[0]) && e[1] !== undefined)
+      .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value })),
+  );
+  const conflictingRowIds = useMemo(() => findConflictingRowIds(customRows), [customRows]);
+  // ラベルが一時的に空（リネーム中の一瞬等）で、かつ値が既にある行。このまま親へ
+  // コミットすると値ごと消える（Codex レビュー指摘）ため、確定した状態になるまで
+  // commitCustomRows は親へ伝播しない。
+  const hasEmptyLabelWithValue = useMemo(
+    () => customRows.some((row) => row.label.trim() === '' && row.value.trim() !== ''),
+    [customRows],
+  );
+  const isBlocked = conflictingRowIds.size > 0 || hasEmptyLabelWithValue;
+  // アンマウント時（タブ切替・ブロック削除）にも false を報告し、ブロックした保存を解除する。
+  // commitCustomRows がブロック中は親へ伝播しないため（下記）、アンマウントで local な
+  // customRows が失われても親の data.meta は最後に確定した状態のままで、消えるのは
+  // 未確定の編集内容だけ（Codex レビュー指摘: 以前は衝突行を除外した meta を確定として
+  // 親へ渡していたため、タブ切替でこのブロックが再マウントすると衝突が解消したかのように
+  // 見え、除外済みの内容がそのまま自動保存されてしまっていた）。
+  // onValidityChange は親（builder-client 本体）の useCallback（安定参照）をそのまま渡して
+  // もらう前提（SortableBlock 側でインライン矢印にラップしない）。ラップすると毎レンダーで
+  // 参照が変わり、isBlocked が変わっていなくてもこの effect が再実行され、
+  // cleanup の false 報告が直後の true 報告と競合するため。
+  useEffect(() => {
+    onValidityChange(id, isBlocked);
+    return () => onValidityChange(id, false);
+  }, [id, isBlocked, onValidityChange]);
+
+  // customRows（ローカル state）が変わるたびに、既知キーと合わせて meta 全体を作り直す。
+  // ただし未確定の行（ラベル衝突・ラベル空で値あり）が1つでもあれば親へは伝播しない
+  // （画面上は customRows のまま残り、エラー表示で気付ける）。親の data.meta を
+  // 「最後に確定した安全な状態」のまま保つことで、タブ切替等での消失を防ぐ。
+  const commitCustomRows = (rows: CustomMetaRow[]) => {
+    setCustomRows(rows);
+    const conflicts = findConflictingRowIds(rows);
+    if (conflicts.size > 0 || rows.some((row) => row.label.trim() === '' && row.value.trim() !== '')) return;
+    const meta: ProfileMeta = {};
+    for (const key of KNOWN_PROFILE_META_KEYS) {
+      const v = data.meta?.[key];
+      if (v !== undefined) meta[key] = v;
+    }
+    for (const row of rows) {
+      const label = row.label.trim();
+      if (label) meta[label] = row.value;
+    }
+    onChange({ ...data, meta });
+  };
+
+  const addCustomRow = () => {
+    commitCustomRows([...customRows, { id: `custom-${customMetaRowSeq++}`, label: '', value: '' }]);
+  };
+  const updateCustomRow = (id: string, patch: Partial<Pick<CustomMetaRow, 'label' | 'value'>>) => {
+    commitCustomRows(customRows.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
+  const removeCustomRow = (id: string) => {
+    commitCustomRows(customRows.filter((row) => row.id !== id));
+  };
 
   return (
     <div className="min-w-0 flex-1 space-y-2 text-sm">
@@ -599,19 +724,71 @@ const ProfileBlockEditor = ({
         />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {PROFILE_META_FIELDS.map(({ key, label, placeholder }) => (
+        {KNOWN_PROFILE_META_FIELDS.map(({ key, placeholder }) => (
           <div key={key}>
-            <p className="mb-1 text-xs text-muted-foreground">{label}</p>
+            <p className="mb-1 text-xs text-muted-foreground">{PROFILE_META_LABELS[key]}</p>
             <input
               value={data.meta?.[key] ?? ''}
-              onChange={(e) => setMeta(key, e.target.value)}
+              onChange={(e) => setKnownMeta(key, e.target.value)}
               placeholder={placeholder}
-              aria-label={label}
+              aria-label={PROFILE_META_LABELS[key]}
               className="w-full min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
         ))}
       </div>
+      {customRows.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">その他の項目</p>
+          {customRows.map((row) => {
+            const isConflicting = conflictingRowIds.has(row.id);
+            return (
+              <div key={row.id} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={row.label}
+                    onChange={(e) => updateCustomRow(row.id, { label: e.target.value })}
+                    placeholder="項目名（例: 得意分野）"
+                    aria-label="項目名"
+                    aria-invalid={isConflicting}
+                    className={`w-28 shrink-0 min-h-11 rounded border bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring ${
+                      isConflicting ? 'border-destructive' : 'border-input'
+                    }`}
+                  />
+                  <input
+                    value={row.value}
+                    onChange={(e) => updateCustomRow(row.id, { value: e.target.value })}
+                    placeholder="値"
+                    aria-label={row.label || '値'}
+                    className="min-w-0 flex-1 min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCustomRow(row.id)}
+                    aria-label="この項目を削除"
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+                {isConflicting && (
+                  <p className="text-xs text-destructive">
+                    項目名が他の項目と重複しているため、この項目は保存されません。項目名を変更してください。
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={addCustomRow}
+        className="inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Plus className="size-4" />
+        項目を追加
+      </button>
     </div>
   );
 };
@@ -623,6 +800,7 @@ const SortableBlock = ({
   onSkillsChange,
   onExperienceChange,
   onProfileChange,
+  onProfileValidityChange,
   onDelete,
 }: {
   item: EditorItem;
@@ -631,6 +809,7 @@ const SortableBlock = ({
   onSkillsChange: (id: string, category: string, skills: SkillEntry[]) => void;
   onExperienceChange: (id: string, data: ExperienceBlockData) => void;
   onProfileChange: (id: string, data: ProfileBlockData) => void;
+  onProfileValidityChange: (id: string, hasConflict: boolean) => void;
   onDelete: (id: string) => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -695,6 +874,8 @@ const SortableBlock = ({
             company: item.company,
           }}
           onChange={(data) => onProfileChange(item.id, data)}
+          id={item.id}
+          onValidityChange={onProfileValidityChange}
         />
       ) : item.type === 'stats' ? (
         <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
@@ -820,10 +1001,14 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const utils = trpc.useUtils();
   // RSC が渡す initialSheets を initialData にして、作成/削除後は invalidate() で
   // react-query に再取得させる（手動での配列操作をやめ、正本を一箇所に保つ）。
-  const { data: sheets } = trpc.sheet.list.useQuery(undefined, {
-    initialData: initialSheets,
+  // sheet.list は一覧の鮮度（stale）も返すようになったが（Issue #204 の一覧版）、
+  // ビルダーのサイドバーは編集者自身の操作直後に invalidate() で追従させる前提のため
+  // 鮮度表示までは持たない。
+  const { data: sheetsList } = trpc.sheet.list.useQuery(undefined, {
+    initialData: { sheets: initialSheets, stale: false },
     staleTime: SHEET_LIST_STALE_TIME_MS,
   });
+  const sheets = sheetsList.sheets;
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
   // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
@@ -880,6 +1065,28 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     itemsRef.current = items;
     titleRef.current = title;
   }, [items, title]);
+
+  // プロフィールブロックの自由項目でラベルが重複している間は保存をブロックする。
+  // ProfileBlockEditor 側は衝突した行を data.meta から除外して onChange するため
+  // （#193）、除外後の meta だけを見る自動保存はこの重複自体を検知できない。
+  // ブロックごとに衝突有無を報告してもらい、1件でもあれば自動保存・手動保存の
+  // どちらも止める（除外＝保存を止めないと、600ms のデバウンス満了で消えた値が
+  // そのまま自動保存されてしまう。Codex レビュー指摘）。
+  const [blockedItemIds, setBlockedItemIds] = useState<Set<string>>(new Set());
+  const blockedItemIdsRef = useRef(blockedItemIds);
+  useEffect(() => {
+    blockedItemIdsRef.current = blockedItemIds;
+  }, [blockedItemIds]);
+  const handleProfileValidityChange = useCallback((id: string, hasConflict: boolean) => {
+    setBlockedItemIds((prev) => {
+      const has = prev.has(id);
+      if (hasConflict === has) return prev;
+      const next = new Set(prev);
+      if (hasConflict) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -983,6 +1190,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   // 保存が既に実行中なら追撃を予約して戻り、完了後にちょうど 1 回だけ再実行する。
   const runAutosave = useCallback(async () => {
     if (autosaveStoppedRef.current) return;
+    // プロフィールの自由項目にラベル重複がある間は、除外後の meta を自動保存しない。
+    if (blockedItemIdsRef.current.size > 0) return;
     if (saveInFlightRef.current) {
       followUpRef.current = true;
       return;
@@ -1048,7 +1257,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   // dirty になってから AUTOSAVE_DEBOUNCE_MS 編集が止んだら自動保存する
   // （items/title が変わるたびにタイマーを引き直す＝デバウンス）。
   useEffect(() => {
-    if (!isDirty || autosaveStatus === 'conflict') return;
+    if (!isDirty || autosaveStatus === 'conflict' || blockedItemIds.size > 0) return;
     // 失敗直後の status 遷移（saving → error）だけでタイマーを再armしない。
     // 失敗時と同一内容のままなら再試行せず、新しい編集で snapshot が変わったときだけ再デバウンスする。
     if (autosaveStatus === 'error' && snapshot(items, title) === failedSnapshotRef.current) return;
@@ -1056,7 +1265,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       void runAutosave();
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [items, title, isDirty, autosaveStatus, runAutosave]);
+  }, [items, title, isDirty, autosaveStatus, runAutosave, blockedItemIds]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const blockType = event.active.data.current?.blockType as PaletteBlockType | undefined;
@@ -1250,6 +1459,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       followUpRef.current = true;
       return;
     }
+    if (blockedItemIds.size > 0) {
+      toast.error('プロフィールの項目名が重複しています。解消してから保存してください。');
+      return;
+    }
     // データ消失ガード: 全ブロックが空（type 別判定）なら、保存で全内容が消える。
     // 明示的な確認が取れた場合のみ続行する。
     const isAllEmpty = items.every((item) => isBlockInputEmpty(itemToBlockInput(item)));
@@ -1321,15 +1534,25 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const autosaveIndicator =
     autosaveStatus === 'conflict'
       ? { label: '競合 — 再読み込みが必要', dotClass: 'bg-destructive', textClass: 'text-destructive' }
-      : isSaving || autosaveStatus === 'saving'
-        ? { label: '保存中…', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
-        : autosaveStatus === 'error'
-          ? { label: '自動保存に失敗 — 保存ボタンで再試行', dotClass: 'bg-destructive', textClass: 'text-destructive' }
-          : isDirty
-            ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
-            : autosaveStatus === 'saved'
-              ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
-              : null;
+      : blockedItemIds.size > 0
+        ? {
+            label: '項目名の重複を解消してください — 保存できません',
+            dotClass: 'bg-destructive',
+            textClass: 'text-destructive',
+          }
+        : isSaving || autosaveStatus === 'saving'
+          ? { label: '保存中…', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
+          : autosaveStatus === 'error'
+            ? {
+                label: '自動保存に失敗 — 保存ボタンで再試行',
+                dotClass: 'bg-destructive',
+                textClass: 'text-destructive',
+              }
+            : isDirty
+              ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
+              : autosaveStatus === 'saved'
+                ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
+                : null;
 
   return (
     <div className="min-h-screen">
@@ -1562,7 +1785,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 onClick={() => setActiveTab('blocks')}
                 className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'blocks'
-                    ? 'border-b-2 border-primary text-primary'
+                    ? 'border-b-2 border-primary text-primary-dark'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -1573,7 +1796,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 onClick={() => setActiveTab('project')}
                 className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'project'
-                    ? 'border-b-2 border-primary text-primary'
+                    ? 'border-b-2 border-primary text-primary-dark'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -1629,6 +1852,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                         onSkillsChange={updateSkills}
                         onExperienceChange={updateExperience}
                         onProfileChange={updateProfile}
+                        onProfileValidityChange={handleProfileValidityChange}
                         onDelete={deleteBlock}
                       />
                     ))}
