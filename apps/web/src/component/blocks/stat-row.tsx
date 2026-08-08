@@ -14,8 +14,8 @@ export const StatRow = ({ data }: StatRowProps) => {
     <div className="mb-6 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
       {data.items.map((item, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
-        <div key={i} className="bg-card px-4 py-[18px]">
-          <span className="font-mono text-[30px] font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground">
+        <div key={i} className="bg-card px-4 py-3 sm:py-[18px]">
+          <span className="font-mono text-2xl font-semibold leading-none tracking-[-0.02em] tabular-nums text-foreground sm:text-[30px]">
             {item.value}
             <span className="ml-0.5 font-mono text-sm font-normal tracking-normal text-accent-text">{item.unit}</span>
           </span>

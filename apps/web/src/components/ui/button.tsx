@@ -11,7 +11,8 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground shadow-elevation-1 hover:bg-primary-dark hover:shadow-elevation-3',
-        gradient: 'bg-linear-to-br from-primary to-secondary text-white shadow-elevation-3 hover:shadow-elevation-8',
+        gradient:
+          'bg-linear-to-br from-primary to-secondary text-primary-foreground shadow-elevation-3 hover:shadow-elevation-8',
         secondary: 'bg-secondary text-secondary-foreground shadow-elevation-1 hover:bg-secondary-dark',
         outline: 'border border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
         ghost: 'hover:bg-accent hover:text-accent-foreground',

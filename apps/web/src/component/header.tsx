@@ -75,8 +75,10 @@ const Header = ({
                   onClick={() => void onDownloadPdf()}
                   disabled={pdfLoading}
                   aria-label="PDFダウンロード"
+                  className="h-11 w-auto gap-1 px-2 sm:w-11 sm:px-0"
                 >
                   <FileDown />
+                  <span className="sm:hidden">PDF</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>PDFをダウンロード</TooltipContent>

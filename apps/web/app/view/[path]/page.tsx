@@ -2,10 +2,9 @@ import { TRPCError } from '@trpc/server';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { ConfigErrorNotice, GITHUB_CONFIG_NOTICE } from '@/component/config-error-notice';
+import { ConfigErrorNotice, getConfigErrorNotice } from '@/component/config-error-notice';
 import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/github-sheets';
 import { createServerCaller } from '@/server/trpc/caller';
-import { isConfigError } from '@/util/is-config-error';
 
 import SheetViewClient from './sheet-view-client';
 
@@ -49,8 +48,9 @@ export default async function SheetViewPage({ params }: PageProps) {
     if (err instanceof TRPCError && err.code === 'NOT_FOUND') notFound();
     // GitHub 連携未設定は待っても直らないので、200 で原因と対処を返す。
     // console.error は出さない（一時的な障害ではないため）（#157）。
-    if (isConfigError(err)) {
-      return <ConfigErrorNotice {...GITHUB_CONFIG_NOTICE} />;
+    const notice = getConfigErrorNotice(err);
+    if (notice) {
+      return <ConfigErrorNotice {...notice} />;
     }
     // それ以外（レートリミットやネットワーク等の一時的なシステムエラー）は
     // error.tsx / 監視ツールに委ねるため再スローする。

@@ -1,5 +1,7 @@
 import type { SheetSummary } from '@skillsheet/db';
+import { TRPCError } from '@trpc/server';
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 
 import { createServerCaller } from '@/server/trpc/caller';
@@ -23,6 +25,10 @@ export default async function SheetsListPage() {
     ({ canEdit } = await caller.auth.status());
     sheets = await caller.sheet.list();
   } catch (err) {
+    // 未認証は閲覧者ログインへ誘導（監視ログへのノイズを避けるため throw しない）。
+    if (err instanceof TRPCError && err.code === 'UNAUTHORIZED') {
+      redirect('/viewer-auth');
+    }
     // #157: 待っても直らない設定不備（未設定・未マイグレーション）は 200 ＋ 原因と対処を返す。
     if (!isConfigError(err)) {
       // 接続先が到達不能等の一時的な障害は、/view/db・/view/db/[id] と同じ基準で

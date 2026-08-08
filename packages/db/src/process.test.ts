@@ -7,6 +7,7 @@ import {
   formatMonthToken,
   formatPeriodDisplay,
   formatPeriodRange,
+  formatProcessForDisplay,
   labelsForProcessIndex,
   normalizeProcess,
   parsePeriodToRange,
@@ -75,6 +76,25 @@ describe('labelsForProcessIndex', () => {
   it('曖昧な「テスト」は含まれない（トグルOFFで消える対象にしない）', () => {
     expect(labelsForProcessIndex(4)).not.toContain('テスト');
     expect(labelsForProcessIndex(5)).not.toContain('テスト');
+  });
+});
+
+describe('formatProcessForDisplay', () => {
+  it('レガシー語彙を正準ラベルに変換して7段順で並べる', () => {
+    expect(formatProcessForDisplay(['実装', '運用・保守', '要件定義'])).toBe('要件定義, 実装・単体, 保守・運用');
+  });
+
+  it('正準ラベルはそのまま7段順で並ぶ', () => {
+    expect(formatProcessForDisplay(['保守・運用', '実装・単体'])).toBe('実装・単体, 保守・運用');
+  });
+
+  it('対応表に無い語彙は末尾にそのまま残す', () => {
+    expect(formatProcessForDisplay(['インフラ構築', '要件定義'])).toBe('要件定義, インフラ構築');
+  });
+
+  it('空配列は空文字を返す', () => {
+    expect(formatProcessForDisplay([])).toBe('');
+    expect(formatProcessForDisplay(undefined)).toBe('');
   });
 });
 

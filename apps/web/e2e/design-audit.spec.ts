@@ -8,9 +8,7 @@ import {
   REAL_VOLUME_DEMO_TITLE,
   REAL_VOLUME_PROJECT_COUNT,
 } from '@skillsheet/db';
-
-const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
-const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
+import { login } from './auth';
 
 let viewSheetId = '';
 
@@ -88,14 +86,6 @@ async function capturePage(
   await page.goto(route, { waitUntil: 'networkidle' });
   return measureAndCapture(page, viewport, theme, name);
 }
-async function login(page: Page) {
-  await page.goto('/login');
-  await page.getByLabel('メールアドレス').fill(email);
-  await page.getByLabel('パスワード').fill(password);
-  await page.getByRole('button', { name: 'ログイン' }).click();
-  await page.waitForURL('/builder');
-}
-
 test.describe('Claude Design 全画面監査', () => {
   test.beforeAll(async () => {
     // #143 / #153 X-2: 合成デモシート（createConsoleDemoSheet, 11案件）では実データ

@@ -44,8 +44,10 @@ export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
           // 名前 / 習熟度(★) / バー / 年数 の4列。習熟度は PDF（表形式）と同じ情報量になるよう、
           // ホバー不要で常時可視のテキストとして表示する（issue #142）。
           // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
-          <div key={i} className="grid grid-cols-[1fr_44px_84px_28px] items-center gap-3">
-            <span className="truncate text-sm text-foreground">{skill.name}</span>
+          <div key={i} className="grid grid-cols-[1fr_44px_84px_28px] items-start gap-3">
+            <span className="min-w-0 break-words text-sm text-foreground" title={skill.name}>
+              {skill.name}
+            </span>
             <span className="truncate text-center text-xs text-foreground" title={skill.level}>
               {skill.level}
             </span>

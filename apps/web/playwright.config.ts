@@ -3,6 +3,7 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+import { authFile } from './e2e/auth';
 
 // Playwright 実行プロセスでも .env.local を読み込む（Web サーバーは Next.js が読むがテスト本体は読まないため）。
 const envPath = resolve(dirname(fileURLToPath(import.meta.url)), '.env.local');
@@ -31,7 +32,6 @@ export default defineConfig({
     baseURL,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    ...devices['Desktop Chrome'],
     launchOptions: {
       args: ['--no-sandbox'],
       ...(chromePath ? { executablePath: chromePath } : {}),
@@ -39,9 +39,16 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
       name: 'Desktop Chrome',
+      dependencies: ['setup'],
+      testMatch: /.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
+        storageState: authFile,
         launchOptions: {
           args: ['--no-sandbox'],
           ...(chromePath ? { executablePath: chromePath } : {}),
@@ -50,7 +57,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm start -p 3210',
+    command: 'PORT=3210 pnpm start',
     port: 3210,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

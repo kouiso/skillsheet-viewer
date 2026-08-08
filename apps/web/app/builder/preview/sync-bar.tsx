@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import './sync-bar.css';
 
 export type SyncState = 'live' | 'stale' | 'closed' | 'standalone';
@@ -45,6 +47,11 @@ export const SyncBar = ({ state, lastUpdatedAt, onReconnect }: SyncBarProps) => 
       <button type="button" className="reconnect" onClick={onReconnect}>
         ↻ 再接続
       </button>
+    )}
+    {state === 'standalone' && (
+      <Link href="/builder" className="reconnect">
+        編集画面へ
+      </Link>
     )}
   </div>
 );

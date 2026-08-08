@@ -1,9 +1,10 @@
+import { TRPCError } from '@trpc/server';
 import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 
-import { ConfigErrorNotice, DB_CONFIG_NOTICE } from '@/component/config-error-notice';
+import { ConfigErrorNotice, getConfigErrorNotice } from '@/component/config-error-notice';
 import { createServerCaller } from '@/server/trpc/caller';
-import { isConfigError } from '@/util/is-config-error';
 
 import SheetViewClient from '../[path]/sheet-view-client';
 
@@ -25,9 +26,14 @@ export default async function DbSheetPage() {
     const [{ canEdit }, sheet] = await Promise.all([caller.auth.status(), caller.sheet.getDefault()]);
     return <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={canEdit} />;
   } catch (err) {
-    // #157: 待っても直らない設定不備（未設定・未マイグレーション）は 200 ＋ 原因と対処を返す。
-    if (isConfigError(err)) {
-      return <ConfigErrorNotice {...DB_CONFIG_NOTICE} />;
+    // 未認証は閲覧者ログインへ誘導。
+    if (err instanceof TRPCError && err.code === 'UNAUTHORIZED') {
+      redirect('/viewer-auth');
+    }
+    // #157/#195: 待っても直らない設定不備は 200 ＋ 原因と対処を返す。
+    const notice = getConfigErrorNotice(err);
+    if (notice) {
+      return <ConfigErrorNotice {...notice} />;
     }
     // 接続先が到達不能等の一時的な障害は、/view/db/[id] と同じ基準で error.tsx /
     // 監視ツールへ委ねる（一律で ConfigErrorNotice を返すと、実際の障害発生中に監視側が

@@ -3,9 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
 import { buildConsoleDemoBlocks, createSheet, deleteSheet, listSheets } from '@skillsheet/db';
+import { login } from './auth';
 
-const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
-const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
 
@@ -17,14 +16,6 @@ const viewports = [
 ] as const;
 
 type Theme = 'light' | 'dark';
-
-async function login(page: Page) {
-  await page.goto('/login');
-  await page.getByLabel('メールアドレス').fill(email);
-  await page.getByLabel('パスワード').fill(password);
-  await page.getByRole('button', { name: 'ログイン' }).click();
-  await page.waitForURL('/builder');
-}
 
 async function setTheme(page: Page, theme: Theme) {
   await page.evaluate((t) => localStorage.setItem('theme-mode', t), theme);
@@ -240,7 +231,7 @@ test('editor: edit all block types on dashboard sheet', async ({ page }) => {
 });
 
 test('viewer: auth, list, detail, PDF download, theme and viewports', async ({ browser }) => {
-  const context = await browser.newContext({});
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
   const page = await context.newPage();
   const { errors, warnings, off } = collectErrors(page);
 

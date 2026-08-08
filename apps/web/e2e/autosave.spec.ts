@@ -1,10 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
 import { createSheet, deleteSheet, listSheets } from '@skillsheet/db';
-
-const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
-const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
+import { authFile, login } from './auth';
 
 // 実行ごとに一意な prefix にする。固定 prefix だと、CI で別の PR/ブランチの実行が
 // 同じ共有 DB に対して同時に走った場合、beforeAll/afterAll の一括掃除が
@@ -37,14 +34,6 @@ async function cleanupSheetsByPrefix(prefix: string) {
     // afterAll/beforeAll を失敗させ、CI で可視化する。
     throw new Error(`sheet cleanup failed for ${failures.length} sheet(s): ${failures.map((f) => f.id).join(', ')}`);
   }
-}
-
-async function login(page: Page) {
-  await page.goto('/login');
-  await page.getByLabel('メールアドレス').fill(email);
-  await page.getByLabel('パスワード').fill(password);
-  await page.getByRole('button', { name: 'ログイン' }).click();
-  await page.waitForURL('/builder');
 }
 
 async function openProjectEditor(page: Page) {
@@ -117,7 +106,7 @@ test.describe('builder autosave', () => {
   });
 
   test('競合系：別セッションで保存後に編集すると「競合」が表示される', async ({ browser }) => {
-    const contextA = await browser.newContext();
+    const contextA = await browser.newContext({ storageState: authFile });
     const pageA = await contextA.newPage();
 
     try {
