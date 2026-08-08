@@ -12,7 +12,7 @@ import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
 import { splitForHyphenation } from './fonts';
 import type { MdNode } from './skill-sheet-document';
-import { renderBlocks, SkillSheetDocument } from './skill-sheet-document';
+import { NUM, renderBlocks, SkillSheetDocument } from './skill-sheet-document';
 
 // public/ 配下の実フォントファイルへの絶対パス。
 // 本番（pdf/fonts.ts）はブラウザ向けに URL 参照（/fonts/...）で登録するが、
@@ -312,7 +312,11 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
   // 及んでおらず、短い項目/セルが多数並ぶケースでは合計文字数だけ閾値内に収まり
   // 誤って wrap={false}（分割不可）になりクリップしうる欠陥があった。
   it('trailing のリスト項目数が多い場合は合計文字数が閾値内でも wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
-    const manyShortItems = Array.from({ length: 8 }, (_, i) => `- 項目${i}`).join('\n');
+    // primary の表の行数（buildCardMarkdown 側で固定4行）に関わらず、リスト単独でも
+    // CARD_MAX_ROWS を超えるようにする（CodeRabbit レビュー指摘: ハードコードした個数だと
+    // 実装側の閾値変更にテストが追従しない）。
+    const itemCount = NUM.CARD_MAX_ROWS + 1;
+    const manyShortItems = Array.from({ length: itemCount }, (_, i) => `- 項目${i}`).join('\n');
     const nodes = parseMarkdown(
       buildProjectCardMarkdown('### 株式会社テスト — 項目多数案件', '会社概要文です。', manyShortItems, '短い実績。'),
     );
@@ -321,18 +325,19 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(rendered).toHaveLength(1);
     const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
     expect(merged.type).toBe(View);
-    // 表4行 + リスト8項目 = 12行相当で CARD_MAX_ROWS(10) を超えるため、
-    // 合計文字数（十分に小さい）に関わらず分割を許容する。
+    // リスト項目数だけで CARD_MAX_ROWS を超えるため、合計文字数（十分に小さい）に
+    // 関わらず分割を許容する。
     expect(merged.props.wrap).toBe(true);
 
     const text = flattenText(merged);
     expect(text).toContain('項目0');
-    expect(text).toContain('項目7');
+    expect(text).toContain(`項目${itemCount - 1}`);
     expect(text).toContain('短い実績。');
   });
 
   it('trailing の表に1行あたりの文字数が閾値を超える行がある場合は wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
-    const oversizedRow = `| 項目 | ${'あ'.repeat(650)} |`;
+    const oversizedCell = 'あ'.repeat(NUM.ROW_UNBREAKABLE_CHAR_LIMIT + 1);
+    const oversizedRow = `| 項目 | ${oversizedCell} |`;
     const trailingTable = ['| 項目 | 内容 |', '| :--- | :--- |', oversizedRow].join('\n');
     const nodes = parseMarkdown(
       buildProjectCardMarkdown('### 株式会社テスト — 長大セル案件', '会社概要文です。', trailingTable, '短い実績。'),
@@ -346,7 +351,7 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(merged.props.wrap).toBe(true);
 
     const text = flattenText(merged);
-    expect(text).toContain('あ'.repeat(650));
+    expect(text).toContain(oversizedCell);
   });
 
   // chatgpt-codex-connector レビュー指摘: トップレベルの list 項目数だけを数えると、
@@ -354,7 +359,10 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
   // renderList は再帰的に全ネスト項目を描画する）で行数チェックをすり抜け、合計文字数も
   // 閾値内に収まって誤って wrap={false} になりうる欠陥があった。
   it('trailing のリストがトップレベル1項目でもネストした項目数が多ければ wrap={true} のままにする（ネストリスト版 #147/#172 再発防止）', () => {
-    const nestedItems = Array.from({ length: 10 }, (_, i) => `  - サブ項目${i}`).join('\n');
+    // トップレベル項目自身(1) + ネスト項目数だけで CARD_MAX_ROWS を超えるようにする
+    // （primary の表の行数には依存しない）。
+    const nestedCount = NUM.CARD_MAX_ROWS + 1;
+    const nestedItems = Array.from({ length: nestedCount }, (_, i) => `  - サブ項目${i}`).join('\n');
     const nestedList = `- 案件A\n${nestedItems}`;
     const nodes = parseMarkdown(
       buildProjectCardMarkdown('### 株式会社テスト — ネストリスト案件', '会社概要文です。', nestedList, '短い実績。'),
@@ -364,13 +372,36 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(rendered).toHaveLength(1);
     const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
     expect(merged.type).toBe(View);
-    // 表4行 + トップレベル項目自身(1) + ネスト項目10 = 15行相当で CARD_MAX_ROWS(10) を超える。
+    // トップレベル項目自身(1) + ネスト項目(nestedCount) だけで CARD_MAX_ROWS を超える。
     expect(merged.props.wrap).toBe(true);
 
     const text = flattenText(merged);
     expect(text).toContain('案件A');
     expect(text).toContain('サブ項目0');
-    expect(text).toContain('サブ項目9');
+    expect(text).toContain(`サブ項目${nestedCount - 1}`);
+  });
+
+  // CodeRabbit レビュー指摘: rowLikeLengths は table/list しか見ておらず、blockquote に
+  // 入れ子になった表・リストは行数・行文字数チェックをすり抜けていた（trailing の表・
+  // リスト自体を塞いだのと同じ穴が blockquote 経由で残っていた）。
+  it('trailing の blockquote に入れ子の表があり行数が多い場合も wrap={true} のままにする（blockquote 版 #147/#172 再発防止）', () => {
+    const rowCount = NUM.CARD_MAX_ROWS + 1;
+    const rows = Array.from({ length: rowCount }, (_, i) => `| 項目${i} | 内容${i} |`);
+    const blockquoteTable = ['| 項目 | 内容 |', '| :--- | :--- |', ...rows].map((line) => `> ${line}`).join('\n');
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown('### 株式会社テスト — 引用表案件', '会社概要文です。', blockquoteTable, '短い実績。'),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    // blockquote 内の表の行数だけで CARD_MAX_ROWS を超えるため分割を許容する。
+    expect(merged.props.wrap).toBe(true);
+
+    const text = flattenText(merged);
+    expect(text).toContain('項目0');
+    expect(text).toContain(`項目${rowCount - 1}`);
   });
 
   it('カード全体の合計文字数が大きすぎる場合は wrap={true} のままクリップを防ぐ（Issue #147/#172 の再発防止）', () => {

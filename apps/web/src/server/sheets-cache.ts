@@ -67,7 +67,7 @@ export const getCachedSheet = unstable_cache((path: string) => fetchSheetFile(pa
 export const getCachedDbSheets = unstable_cache(
   async () => ({ sheets: await dbListSheets(), fetchedAt: Date.now() }),
   ['db-sheets-list'],
-  { tags: ['db-sheet'], revalidate: 60 },
+  { tags: ['db-sheet'], revalidate: DB_REVALIDATE_SECONDS },
 );
 
 // 指定 ID のシートを読む（/view/db/[id] が使う）。fetchedAt を同梱する（Issue #204）。

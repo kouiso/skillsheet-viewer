@@ -36,8 +36,10 @@ const COLOR = {
   codeBg: DESIGN_TOKENS_LIGHT.muted,
 } as const;
 
-// ロジック中で使う数値（マジックナンバー回避のため定数化）
-const NUM = {
+// ロジック中で使う数値（マジックナンバー回避のため定数化）。テストから閾値を直接
+// 参照できるよう export する（CodeRabbit レビュー指摘: 回帰テストが閾値をハードコード
+// すると、実装側で閾値を変更してもテストが追従せず静かに意味を失う）。
+export const NUM = {
   HEADING_H1: 1,
   HEADING_H2: 2,
   HEADING_H3: 3,
@@ -407,6 +409,13 @@ function renderTable(node: MdNode, key: number): ReactNode {
 function rowLikeLengths(node: MdNode): number[] {
   if (node.type === 'table') return (node.children ?? []).map(rowTextLength);
   if (node.type === 'list') return (node.children ?? []).flatMap(listItemRowLikeLengths);
+  // blockquote 等のコンテナに表・リストが入れ子になっているケースを取りこぼさないよう
+  // 再帰的に展開する（CodeRabbit レビュー指摘）。この結果は下記 proseCharCount の
+  // 除外対象に含めていないため、blockquote 配下の表・リスト文字数は構造チェック側
+  // （行数・行文字数）とプロース側の両方で数えられるが、二重計上は総文字数を実際より
+  // 大きく見積もる方向にしか働かず、安全側（wrap={true} になりやすい）に倒れるだけで
+  // クリップのリスクは生まない。
+  if (node.type === 'blockquote') return (node.children ?? []).flatMap(rowLikeLengths);
   return [];
 }
 
@@ -427,14 +436,14 @@ function listItemRowLikeLengths(item: MdNode): number[] {
   return [ownText.length, ...nestedLists.flatMap((list) => (list.children ?? []).flatMap(listItemRowLikeLengths))];
 }
 
-function isCardLikelyToFitOnePage(tableNode: MdNode, trailingParagraphs: MdNode[]): boolean {
-  const rowLike = [tableNode, ...trailingParagraphs].flatMap(rowLikeLengths);
+function isCardLikelyToFitOnePage(tableNode: MdNode, trailingBlocks: MdNode[]): boolean {
+  const rowLike = [tableNode, ...trailingBlocks].flatMap(rowLikeLengths);
   if (rowLike.length > NUM.CARD_MAX_ROWS) return false;
   if (!rowLike.every((len) => len <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT)) return false;
   const structuralCharCount = rowLike.reduce((sum, len) => sum + len, 0);
-  const proseCharCount = trailingParagraphs
-    .filter((p) => p.type !== 'table' && p.type !== 'list')
-    .reduce((sum, p) => sum + nodeText(p).length, 0);
+  const proseCharCount = trailingBlocks
+    .filter((block) => block.type !== 'table' && block.type !== 'list')
+    .reduce((sum, block) => sum + nodeText(block).length, 0);
   return structuralCharCount + proseCharCount <= NUM.CARD_TOTAL_CHAR_LIMIT;
 }
 
@@ -452,21 +461,21 @@ function isCardLikelyToFitOnePage(tableNode: MdNode, trailingParagraphs: MdNode[
 function renderHeadingWithTable(
   headingNode: MdNode,
   tableNode: MdNode,
-  trailingParagraphs: MdNode[],
+  trailingBlocks: MdNode[],
   key: number,
 ): ReactNode {
-  const fitsOnePage = isCardLikelyToFitOnePage(tableNode, trailingParagraphs);
+  const fitsOnePage = isCardLikelyToFitOnePage(tableNode, trailingBlocks);
   // children を1つの配列としてまとめて渡す（JSX の子要素を個別の式スロットで並べると、
-  // trailingParagraphs が空でも props.children にその分の要素が残ってしまい、
+  // trailingBlocks が空でも props.children にその分の要素が残ってしまい、
   // 「見出し+表の2要素だけの場合」の構造検証テストと形が食い違うため）。
   const children: ReactNode[] = [
     <View key="heading" style={styles.headingWrap}>
       {renderHeadingText(headingNode)}
     </View>,
     renderTable(tableNode, key),
-    // trailingParagraphs は paragraph に限らない（duties/acquired 等の自由記述が
+    // trailingBlocks は paragraph に限らない（duties/acquired 等の自由記述が
     // list になりうるため）。型ごとの描画は renderBlocks と同じ BLOCK_RENDERERS を使う。
-    ...trailingParagraphs.map((p, i) => {
+    ...trailingBlocks.map((p, i) => {
       const renderer = BLOCK_RENDERERS.get(p.type);
       return renderer ? renderer(p, key * 1000 + i + 1) : null;
     }),
