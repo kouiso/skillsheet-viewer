@@ -14,13 +14,18 @@ const buttonVariants = cva(
         // WCAG AA（通常文字4.5）を満たさない（Issue #198）。--primary-dark はダーク/ライト
         // 両テーマで白文字/近黒文字のどちらの --*-foreground とも4.5以上を確保できているため、
         // ボタン背景には --primary ではなく --primary-dark を使う。
-        default: 'bg-primary-dark text-primary-foreground shadow-elevation-1 hover:opacity-90 hover:shadow-elevation-3',
+        // hover は opacity-90（bg・文字色ともページ背景へブレンド）だと、暗テーマの
+        // primary-dark×primary-foreground が 5.21:1 → 約4.35:1 まで下がり AA を割り込む
+        // （Codex レビュー指摘）。文字色は変えず、不透明な専用トークン（--primary-hover）
+        // へ背景だけ差し替える。
+        default:
+          'bg-primary-dark text-primary-foreground shadow-elevation-1 hover:bg-primary-hover hover:shadow-elevation-3',
         gradient:
           'bg-linear-to-br from-primary-dark to-secondary-dark text-primary-foreground shadow-elevation-3 hover:shadow-elevation-8',
-        secondary: 'bg-secondary-dark text-secondary-foreground shadow-elevation-1 hover:opacity-90',
+        secondary: 'bg-secondary-dark text-secondary-foreground shadow-elevation-1 hover:bg-secondary-hover',
         outline: 'border border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
-        destructive: 'bg-destructive text-destructive-foreground hover:opacity-90',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive-hover',
         // text-primary は背景（--background）に対してライトテーマで3.51〜3.74と
         // AA未達（Issue #198）。--primary-dark は両テーマで背景に対し5以上を確保できる。
         link: 'text-primary-dark underline-offset-4 hover:underline',

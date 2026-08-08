@@ -4,17 +4,19 @@ import type { SheetSummary } from '@skillsheet/db';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
+import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
 import Header from '@/component/header';
 import { Input } from '@/components/ui/input';
+import type { ConfigErrorKind } from '@/util/is-config-error';
 
 interface DbSheetsListClientProps {
   initialSheets: SheetSummary[];
-  hasError?: boolean;
+  errorKind?: ConfigErrorKind | null;
   /** 編集者ログイン済みか。false のときは編集導線を出さない。 */
   canEdit?: boolean;
 }
 
-const DbSheetsListClient = ({ initialSheets, hasError = false, canEdit = false }: DbSheetsListClientProps) => {
+const DbSheetsListClient = ({ initialSheets, errorKind = null, canEdit = false }: DbSheetsListClientProps) => {
   const router = useRouter();
   const [query, setQuery] = useState('');
 
@@ -22,6 +24,13 @@ const DbSheetsListClient = ({ initialSheets, hasError = false, canEdit = false }
     () => initialSheets.filter((sheet) => sheet.title.toLowerCase().includes(query.toLowerCase())),
     [initialSheets, query],
   );
+
+  // 他の DB 正本経路（/view/db・/view/db/[id]）と同じ見た目・同じ原因別の案内文を出す
+  // （config-error-notice.tsx の doc comment 参照。以前は真偽値だけ見て固定の汎用文言
+  // しか出せず、書式ミス等でも「未設定」向けの案内になっていた。Codex レビュー指摘）。
+  if (errorKind) {
+    return <ConfigErrorNotice {...CONFIG_ERROR_NOTICES[errorKind]} />;
+  }
 
   return (
     <div>
@@ -40,14 +49,7 @@ const DbSheetsListClient = ({ initialSheets, hasError = false, canEdit = false }
         </div>
 
         <div className="rounded-lg border border-border bg-card shadow-sm">
-          {hasError ? (
-            <div className="space-y-2 px-4 py-6 text-center text-sm">
-              <p className="text-destructive">一覧の取得に失敗しました。</p>
-              <p className="text-muted-foreground text-xs">
-                環境変数 DATABASE_URL / SKILLSHEET_OWNER_ID を確認し、pnpm db:migrate を実行してください。
-              </p>
-            </div>
-          ) : filtered.length === 0 ? (
+          {filtered.length === 0 ? (
             <p className="px-4 py-6 text-center text-sm text-muted-foreground">
               {initialSheets.length === 0
                 ? 'シートがまだありません（ビルダーで作成してください）'

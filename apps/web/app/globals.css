@@ -27,10 +27,17 @@
   --primary-light: #14b8a6;
   --primary-dark: #08665e;
   --primary-foreground: #ffffff;
+  /* ボタンの hover は元々 opacity-90 で bg・fg 双方をページ背景へ透過blendしていたが、
+     背景付きボタン（default/secondary/destructive）はこれで文字コントラストが
+     4.5:1 を割り込んでいた（例: primary-dark×primary-foreground は 6.83:1 だが
+     opacity-90 後は約4.35:1。Codex レビュー指摘）。opacity ではなく不透明な専用トークンへ
+     差し替える（fg 色は変えない。bg だけ変えても十分「押せる」感が出る）。 */
+  --primary-hover: #075a52;
   --secondary: #0d9488;
   --secondary-light: #14b8a6;
   --secondary-dark: #08665e;
   --secondary-foreground: #ffffff;
+  --secondary-hover: #075a52;
   --muted: #f0f3f3;
   --muted-foreground: #4a565c;
   --accent: #ecfaf8;
@@ -40,6 +47,9 @@
   /* エラーバナー（bg-destructive/10 の上に text-destructive）は 3.88:1 で WCAG AA(4.5:1)
      未達だった（#152 S-4）。ティント背景上でも AA を満たす濃い赤。 */
   --destructive-strong: #b91c1c;
+  /* destructive ボタンの hover も同じ opacity-90 問題があったため、既存の
+     --destructive-strong をそのまま流用する（新規の色を増やさない）。 */
+  --destructive-hover: #b91c1c;
   --border: #dce3e4;
   --input: #dce3e4;
   --ring: #0d9488;
@@ -101,10 +111,14 @@
   --primary-light: #2dd4bf;
   --primary-dark: #0d9488;
   --primary-foreground: #0a0d0f;
+  /* ダークの hover も opacity-90 で 4.5:1 を割り込んでいた（primary-dark×primary-foreground
+     5.21:1 → opacity-90 後 約4.43:1）。既存の --primary（#14b8a6、7.83:1）を hover 専用に流用する。 */
+  --primary-hover: #14b8a6;
   --secondary: #14b8a6;
   --secondary-light: #2dd4bf;
   --secondary-dark: #0d9488;
   --secondary-foreground: #0a0d0f;
+  --secondary-hover: #14b8a6;
   --muted: #141a1e;
   --muted-foreground: #8b969d;
   --accent: #0c2320;
@@ -113,6 +127,9 @@
   --destructive-foreground: #0a0d0f;
   /* ダークはティント背景上でも既に AA を満たすため --destructive と同値。 */
   --destructive-strong: #ef4444;
+  /* destructive ボタンの hover（opacity-90 で 4.36:1 に低下）。#ef4444 より明るい赤で
+     opacity を使わず不透明のまま 7.05:1 を確保する。 */
+  --destructive-hover: #f87171;
   --border: #1d262b;
   --input: #1d262b;
   --ring: #14b8a6;
@@ -151,10 +168,12 @@
   --color-primary-light: var(--primary-light);
   --color-primary-dark: var(--primary-dark);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-light: var(--secondary-light);
   --color-secondary-dark: var(--secondary-dark);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
@@ -162,6 +181,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-strong: var(--destructive-strong);
+  --color-destructive-hover: var(--destructive-hover);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

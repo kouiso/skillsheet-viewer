@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
 import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
-import { isDbContentStale } from '@/server/sheets-cache';
 import { createServerCaller } from '@/server/trpc/caller';
 import { classifyConfigError } from '@/util/is-config-error';
 
@@ -30,7 +29,7 @@ export default async function DbSheetPage() {
         content={sheet.content}
         blocks={sheet.blocks}
         canEdit={canEdit}
-        stale={isDbContentStale(sheet.fetchedAt)}
+        stale={sheet.stale}
       />
     );
   } catch (err) {

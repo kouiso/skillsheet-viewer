@@ -13,13 +13,31 @@ const DB_REVALIDATE_SECONDS = 60;
 // キャッシュが空のとき（初回・.next 丸ごと削除後）だけ 500 になる、という気付きにくい形）。
 //
 // 取得できた時刻をキャッシュされる値そのものに同梱しておけば、古い値が再度返された
-// ときにも「いつ時点の内容か」を応答から判定できる。revalidate 間隔を大きく超えて
-// 古い場合は、直近の再検証が失敗している可能性が高いとみなして画面側に注意書きを出す。
+// ときにも「いつ時点の内容か」を応答から判定できる。
+//
+// 注意: revalidate 間隔を超えて古いことは「直近の再検証が失敗した」ことの証明にはならない
+// （Codex レビュー指摘）。unstable_cache の stale-while-revalidate は、revalidate 秒数を
+// 過ぎてもアクセスが無ければバックグラウンド再検証そのものが走らず、fetchedAt は前回
+// 成功時のまま古くなり続ける。つまりアクセス頻度の低い健全なシートでも、単に「しばらく
+// 見られていなかった」だけで DB_STALE_THRESHOLD_MS を超えうる。この関数からは
+// 「失敗している」と「アクセスが無く更新機会がなかった」を区別できないため、
+// isDbContentStale() の呼び出し側では「再検証に失敗している可能性」ではなく
+// 「表示内容が最新でない可能性がある（原因は問わない）」という、両ケースで真になる
+// 弱い主張だけを画面に出すこと（sheet-view-client.tsx のバナー文言を参照）。
 const DB_STALE_THRESHOLD_MS = DB_REVALIDATE_SECONDS * 3 * 1000;
 
-/** fetchedAt が DB_STALE_THRESHOLD_MS より古ければ、再検証に失敗している可能性が高いと判定する。 */
+/** fetchedAt が DB_STALE_THRESHOLD_MS より古ければ、表示内容が最新でない可能性がある。 */
 export function isDbContentStale(fetchedAt: number): boolean {
   return Date.now() - fetchedAt > DB_STALE_THRESHOLD_MS;
+}
+
+// fetchedAt は unstable_cache の再検証時刻を判定するための内部実装詳細であり、公開 API
+// （viewerProcedure 経由の sheet.byId 等）のレスポンスに生のタイムスタンプとして含める
+// 意図はない（レビュー指摘）。tRPC ルータ側でこのヘルパーを通し、判定結果（stale）だけを
+// 返してタイムスタンプ自体は落とす。
+export function toStaleSheet<T extends { fetchedAt: number }>(sheet: T): Omit<T, 'fetchedAt'> & { stale: boolean } {
+  const { fetchedAt, ...rest } = sheet;
+  return { ...rest, stale: isDbContentStale(fetchedAt) };
 }
 
 // GitHub legacy 経路（/view/[path] 等）。標準導線からは外れているが将来削除まで温存。

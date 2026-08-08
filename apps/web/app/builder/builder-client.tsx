@@ -595,9 +595,15 @@ const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
 const ProfileBlockEditor = ({
   data,
   onChange,
+  id,
+  onValidityChange,
 }: {
   data: ProfileBlockData;
   onChange: (data: ProfileBlockData) => void;
+  /** items 内でのブロック id。onValidityChange にそのまま渡すためだけに使う。 */
+  id: string;
+  /** ラベル重複の有無を親へ通知する。親はこれを見て保存（自動/手動）を止める。 */
+  onValidityChange: (id: string, hasConflict: boolean) => void;
 }) => {
   const set = <K extends keyof ProfileBlockData>(field: K, value: ProfileBlockData[K]) =>
     onChange({ ...data, [field]: value });
@@ -610,6 +616,15 @@ const ProfileBlockEditor = ({
       .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value })),
   );
   const conflictingRowIds = useMemo(() => findConflictingRowIds(customRows), [customRows]);
+  // アンマウント時（ブロック削除）にも false を報告し、ブロックした保存を解除する。
+  // onValidityChange は親（builder-client 本体）の useCallback（安定参照）をそのまま渡して
+  // もらう前提（SortableBlock 側でインライン矢印にラップしない）。ラップすると毎レンダーで
+  // 参照が変わり、conflictingRowIds が変わっていなくてもこの effect が再実行され、
+  // cleanup の false 報告が直後の true 報告と競合するため。
+  useEffect(() => {
+    onValidityChange(id, conflictingRowIds.size > 0);
+    return () => onValidityChange(id, false);
+  }, [id, conflictingRowIds, onValidityChange]);
 
   // customRows（ローカル state）が変わるたびに、既知キーと合わせて meta 全体を作り直す。
   // ラベルが衝突している行は保存対象から除外する（画面上は残し、エラー表示で気付けるようにする）。
@@ -760,6 +775,7 @@ const SortableBlock = ({
   onSkillsChange,
   onExperienceChange,
   onProfileChange,
+  onProfileValidityChange,
   onDelete,
 }: {
   item: EditorItem;
@@ -768,6 +784,7 @@ const SortableBlock = ({
   onSkillsChange: (id: string, category: string, skills: SkillEntry[]) => void;
   onExperienceChange: (id: string, data: ExperienceBlockData) => void;
   onProfileChange: (id: string, data: ProfileBlockData) => void;
+  onProfileValidityChange: (id: string, hasConflict: boolean) => void;
   onDelete: (id: string) => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -832,6 +849,8 @@ const SortableBlock = ({
             company: item.company,
           }}
           onChange={(data) => onProfileChange(item.id, data)}
+          id={item.id}
+          onValidityChange={onProfileValidityChange}
         />
       ) : item.type === 'stats' ? (
         <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
@@ -1018,6 +1037,28 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     titleRef.current = title;
   }, [items, title]);
 
+  // プロフィールブロックの自由項目でラベルが重複している間は保存をブロックする。
+  // ProfileBlockEditor 側は衝突した行を data.meta から除外して onChange するため
+  // （#193）、除外後の meta だけを見る自動保存はこの重複自体を検知できない。
+  // ブロックごとに衝突有無を報告してもらい、1件でもあれば自動保存・手動保存の
+  // どちらも止める（除外＝保存を止めないと、600ms のデバウンス満了で消えた値が
+  // そのまま自動保存されてしまう。Codex レビュー指摘）。
+  const [blockedItemIds, setBlockedItemIds] = useState<Set<string>>(new Set());
+  const blockedItemIdsRef = useRef(blockedItemIds);
+  useEffect(() => {
+    blockedItemIdsRef.current = blockedItemIds;
+  }, [blockedItemIds]);
+  const handleProfileValidityChange = useCallback((id: string, hasConflict: boolean) => {
+    setBlockedItemIds((prev) => {
+      const has = prev.has(id);
+      if (hasConflict === has) return prev;
+      const next = new Set(prev);
+      if (hasConflict) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -1120,6 +1161,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   // 保存が既に実行中なら追撃を予約して戻り、完了後にちょうど 1 回だけ再実行する。
   const runAutosave = useCallback(async () => {
     if (autosaveStoppedRef.current) return;
+    // プロフィールの自由項目にラベル重複がある間は、除外後の meta を自動保存しない。
+    if (blockedItemIdsRef.current.size > 0) return;
     if (saveInFlightRef.current) {
       followUpRef.current = true;
       return;
@@ -1185,7 +1228,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   // dirty になってから AUTOSAVE_DEBOUNCE_MS 編集が止んだら自動保存する
   // （items/title が変わるたびにタイマーを引き直す＝デバウンス）。
   useEffect(() => {
-    if (!isDirty || autosaveStatus === 'conflict') return;
+    if (!isDirty || autosaveStatus === 'conflict' || blockedItemIds.size > 0) return;
     // 失敗直後の status 遷移（saving → error）だけでタイマーを再armしない。
     // 失敗時と同一内容のままなら再試行せず、新しい編集で snapshot が変わったときだけ再デバウンスする。
     if (autosaveStatus === 'error' && snapshot(items, title) === failedSnapshotRef.current) return;
@@ -1193,7 +1236,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       void runAutosave();
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [items, title, isDirty, autosaveStatus, runAutosave]);
+  }, [items, title, isDirty, autosaveStatus, runAutosave, blockedItemIds]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const blockType = event.active.data.current?.blockType as PaletteBlockType | undefined;
@@ -1387,6 +1430,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       followUpRef.current = true;
       return;
     }
+    if (blockedItemIds.size > 0) {
+      toast.error('プロフィールの項目名が重複しています。解消してから保存してください。');
+      return;
+    }
     // データ消失ガード: 全ブロックが空（type 別判定）なら、保存で全内容が消える。
     // 明示的な確認が取れた場合のみ続行する。
     const isAllEmpty = items.every((item) => isBlockInputEmpty(itemToBlockInput(item)));
@@ -1458,15 +1505,25 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const autosaveIndicator =
     autosaveStatus === 'conflict'
       ? { label: '競合 — 再読み込みが必要', dotClass: 'bg-destructive', textClass: 'text-destructive' }
-      : isSaving || autosaveStatus === 'saving'
-        ? { label: '保存中…', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
-        : autosaveStatus === 'error'
-          ? { label: '自動保存に失敗 — 保存ボタンで再試行', dotClass: 'bg-destructive', textClass: 'text-destructive' }
-          : isDirty
-            ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
-            : autosaveStatus === 'saved'
-              ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
-              : null;
+      : blockedItemIds.size > 0
+        ? {
+            label: '項目名の重複を解消してください — 保存できません',
+            dotClass: 'bg-destructive',
+            textClass: 'text-destructive',
+          }
+        : isSaving || autosaveStatus === 'saving'
+          ? { label: '保存中…', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
+          : autosaveStatus === 'error'
+            ? {
+                label: '自動保存に失敗 — 保存ボタンで再試行',
+                dotClass: 'bg-destructive',
+                textClass: 'text-destructive',
+              }
+            : isDirty
+              ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
+              : autosaveStatus === 'saved'
+                ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
+                : null;
 
   return (
     <div className="min-h-screen">
@@ -1766,6 +1823,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                         onSkillsChange={updateSkills}
                         onExperienceChange={updateExperience}
                         onProfileChange={updateProfile}
+                        onProfileValidityChange={handleProfileValidityChange}
                         onDelete={deleteBlock}
                       />
                     ))}
