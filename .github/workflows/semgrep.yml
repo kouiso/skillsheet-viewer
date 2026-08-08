@@ -34,6 +34,13 @@ jobs:
 
       # 依存脆弱性は security-scan.yml の pnpm audit と security-audit.yml の audit-ci が
       # 見ているため、ここは SAST に専念する。
-      # --config auto はメトリクス送信が必須で無効化できず、private 化した際に
-      # リポジトリのメタデータが外部へ出る。明示的なルールパックなら送信なしで動く。
+      # --metrics=off は使用状況メトリクスの送信のみを無効化する。ルール自体は
+      # p/default 指定時に Semgrep Registry から取得するため通信は残る。
+      # --config auto は metrics=off と併用できずエラーになるため、private 化に
+      # 備えて明示的なルールパック指定に変更している。
+      #
+      # --error は付けていない。導入時点でこのルールセットは既存コードに対して
+      # 21件の findings（ERROR severity 1件を含む）を出すため、即座に付けると
+      # 本PRと無関係な既存コードでCIが赤くなる。まず findings を triage
+      # （修正 or nosemgrep/.semgrepignoreで除外）してから、別PRでハードゲート化する。
       - run: semgrep scan --config p/default --metrics=off
