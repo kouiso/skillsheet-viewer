@@ -309,6 +309,31 @@ describe('BuilderClient', () => {
     await user.click(screen.getByRole('button', { name: /保存/ }));
     expect(mockInvalidate).not.toHaveBeenCalled();
   });
+
+  // chatgpt-codex-connector レビュー指摘: 項目名が空で値だけある行は、ラベル重複と同じ
+  // blockedItemIds にまとめられて保存をブロックするが、行単位の aria-invalid・エラー文言は
+  // ラベル重複（isConflicting）だけを見ており、この行には何の印も付かず「重複」という
+  // 誤った診断だけが画面全体に出ていた。行単位でも実際の理由（未入力）を示すことを確認する。
+  it('カスタム項目のラベルが空で値だけある行は、重複メッセージではなく未入力の専用メッセージを表示する', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('値'), 'A型');
+
+    expect(
+      screen.getByText('項目名が未入力のため、この項目は保存されません。項目名を入力してください。'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/項目名が他の項目と重複しているため/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('項目名')).toHaveAttribute('aria-invalid', 'true');
+  });
 });
 
 describe('BuilderClient 自動保存', () => {

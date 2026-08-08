@@ -93,6 +93,20 @@ export const PROFILE_META_LABELS: Record<string, string> = {
 };
 
 /**
+ * 任意項目のキー（ユーザーが自由入力するラベル文字列）から表示ラベルを解決する。
+ * `PROFILE_META_LABELS[key]` を直接ブラケットアクセスすると、key が
+ * `constructor` / `toString` / `hasOwnProperty` 等の Object.prototype のプロパティ名と
+ * 一致した場合、それらの継承メンバ（関数やオブジェクト）を返してしまい、呼び出し先
+ * （escapeCell は文字列以外を渡されると例外、React は関数/オブジェクトを子要素に
+ * 取れず例外）でクラッシュする（chatgpt-codex-connector レビュー指摘。エディタは
+ * ラベルをこれらの予約語として弾いていないため、ユーザー入力だけで再現する）。
+ * Object.hasOwn で自プロパティのみを見て、無ければ key 自体をラベルとして使う。
+ */
+export function resolveProfileMetaLabel(key: string): string {
+  return Object.hasOwn(PROFILE_META_LABELS, key) ? PROFILE_META_LABELS[key] : key;
+}
+
+/**
  * meta を「既知キー（PROFILE_META_LABELS の宣言順）→ それ以外のキー（オブジェクトの
  * 挿入順）」の順に並べ、値が空の項目を除いて返す。ビューアと markdown/PDF 変換の
  * どちらも同じ並び順になるよう、順序決定をこの1箇所に集約する。
@@ -478,10 +492,20 @@ const ALIGN_MARKER: Record<TableAlign, string> = {
  * セルを GFM 表で安全な単一行へ整える。
  * - セル内改行は半角スペースへ（複数行貼り付けで表が崩れるのを防止）
  * - `|` はエスケープ
+ * - `<` `>` は実体参照へ（下記参照）
  * - 空セルは半角スペース 1 つ（空文字だと GFM の表がずれる）
+ *
+ * `<` `>` を素通しすると、"Reference <URL>" のような自由入力が remark に生 HTML の
+ * インラインノードとして解釈される（`<URL>` が HTML タグらしいパターンに一致するため。
+ * HTML5 の既知タグかどうかは問われない）。構造化ビューアは値を素のテキストとして
+ * 表示するため見た目には影響しないが、PDF 側（skill-sheet-document.tsx の
+ * INLINE_LEAF）は html ノードを意図的に描画せず捨てるため、"Reference <URL>" の
+ * "<URL>" 部分だけが PDF から消える（chatgpt-codex-connector レビュー指摘）。
+ * `&lt;`/`&gt;` は CommonMark の実体参照としてテキストノードへ復元されるため、
+ * 生 HTML として再解釈されずに見た目どおりの文字が残る。
  */
 function escapeCell(value: string): string {
-  const single = value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+  const single = value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return single.length > 0 ? single : ' ';
 }
 
@@ -581,7 +605,7 @@ export function profileBlockToMarkdown(data: ProfileBlockData): string {
   if (data.company?.trim()) metaItems.push(`| 所属会社 | ${escapeCell(data.company.trim())} |`);
   // 既知8項目に限らず、編集画面で追加した任意の項目も同じ並び順で出す（Issue #193）。
   for (const [key, value] of orderedProfileMetaEntries(data.meta)) {
-    metaItems.push(`| ${escapeCell(PROFILE_META_LABELS[key] ?? key)} | ${escapeCell(value)} |`);
+    metaItems.push(`| ${escapeCell(resolveProfileMetaLabel(key))} | ${escapeCell(value)} |`);
   }
   if (metaItems.length > 0) {
     lines.push('\n| 項目 | 内容 |');

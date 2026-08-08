@@ -349,6 +349,30 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain('あ'.repeat(650));
   });
 
+  // chatgpt-codex-connector レビュー指摘: トップレベルの list 項目数だけを数えると、
+  // 1項目の中にネストした箇条書きが多数ぶら下がっているケース（見た目は1項目でも
+  // renderList は再帰的に全ネスト項目を描画する）で行数チェックをすり抜け、合計文字数も
+  // 閾値内に収まって誤って wrap={false} になりうる欠陥があった。
+  it('trailing のリストがトップレベル1項目でもネストした項目数が多ければ wrap={true} のままにする（ネストリスト版 #147/#172 再発防止）', () => {
+    const nestedItems = Array.from({ length: 10 }, (_, i) => `  - サブ項目${i}`).join('\n');
+    const nestedList = `- 案件A\n${nestedItems}`;
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown('### 株式会社テスト — ネストリスト案件', '会社概要文です。', nestedList, '短い実績。'),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    // 表4行 + トップレベル項目自身(1) + ネスト項目10 = 15行相当で CARD_MAX_ROWS(10) を超える。
+    expect(merged.props.wrap).toBe(true);
+
+    const text = flattenText(merged);
+    expect(text).toContain('案件A');
+    expect(text).toContain('サブ項目0');
+    expect(text).toContain('サブ項目9');
+  });
+
   it('カード全体の合計文字数が大きすぎる場合は wrap={true} のままクリップを防ぐ（Issue #147/#172 の再発防止）', () => {
     const longParagraph = '長文段落です。'.repeat(200); // 十分に長い段落
     const nodes = parseMarkdown(

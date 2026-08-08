@@ -600,6 +600,30 @@ describe('profileBlockToMarkdown', () => {
     expect(md).not.toContain('| 性別 |');
     expect(md).not.toContain('| 資格 |');
   });
+
+  // chatgpt-codex-connector レビュー指摘: PROFILE_META_LABELS[key] のブラケットアクセスは
+  // key が Object.prototype のプロパティ名と一致すると継承メンバ（関数）を返し、
+  // escapeCell が文字列以外を渡されて例外になっていた。ユーザーがエディタで
+  // 自由に入力できるラベルだけで再現するため、通常の入力として扱い例外にしない。
+  it('任意キーが constructor/toString 等の Object.prototype 予約語と一致してもクラッシュせず、キー名をラベルとして出力する', () => {
+    expect(() =>
+      profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, constructor: '値1', toString: '値2' } }),
+    ).not.toThrow();
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, constructor: '値1', toString: '値2' } });
+    expect(md).toContain('| constructor | 値1 |');
+    expect(md).toContain('| toString | 値2 |');
+  });
+
+  // chatgpt-codex-connector レビュー指摘: escapeCell が `<` `>` を素通ししていたため、
+  // 自由入力に "Reference <URL>" のような文字列があると remark がインラインHTMLと
+  // 誤認し、PDF描画（skill-sheet-document.tsx の INLINE_LEAF）がその部分を丸ごと
+  // 落としていた（PDF/viewer間の表示不一致・内容欠落）。生成した markdown 自体に
+  // 実体参照として残ることを確認する（デコード後にPDFへ literal な `<`/`>` が残る）。
+  it('任意キーの値に < > を含んでも実体参照へエスケープし、生 HTML として解釈されない形で出力する', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, 参考: 'Reference <URL> here' } });
+    expect(md).toContain('Reference &lt;URL&gt; here');
+    expect(md).not.toContain('Reference <URL> here');
+  });
 });
 
 describe('statsBlockToMarkdown', () => {
