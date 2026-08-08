@@ -559,6 +559,47 @@ describe('profileBlockToMarkdown', () => {
     expect(profileBlockToMarkdown(PROFILE)).not.toContain('所属会社');
     expect(profileBlockToMarkdown({ ...PROFILE, company: '  ' })).not.toContain('所属会社');
   });
+
+  it('性別・資格・得意分野・得意業務（既知だが従来UI未対応だった4項目）も表に出力する（Issue #193）', () => {
+    const md = profileBlockToMarkdown({
+      ...PROFILE,
+      meta: {
+        ...PROFILE.meta,
+        gender: '男',
+        qualifications: '自動車普通車免許',
+        specialties: 'フロントエンド',
+        expertise: 'チーム運営',
+      },
+    });
+    expect(md).toContain('| 性別 | 男 |');
+    expect(md).toContain('| 資格 | 自動車普通車免許 |');
+    expect(md).toContain('| 得意分野 | フロントエンド |');
+    expect(md).toContain('| 得意業務 | チーム運営 |');
+  });
+
+  it('既知8項目に無い任意のキーも、キー名をラベルとして表に出力する（Issue #193 の自由項目）', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, 血液型: 'A型' } });
+    expect(md).toContain('| 血液型 | A型 |');
+  });
+
+  it('既知項目 → 任意項目の順で並ぶ', () => {
+    const md = profileBlockToMarkdown({
+      ...PROFILE,
+      meta: { 血液型: 'A型', age: '30歳', work: 'フルリモート' },
+    });
+    const ageIndex = md.indexOf('| 年齢 |');
+    const workIndex = md.indexOf('| 勤務形態 |');
+    const customIndex = md.indexOf('| 血液型 |');
+    expect(ageIndex).toBeGreaterThan(-1);
+    expect(ageIndex).toBeLessThan(workIndex);
+    expect(workIndex).toBeLessThan(customIndex);
+  });
+
+  it('値が空文字/空白のみの項目は表に出さない', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, gender: '', qualifications: '  ' } });
+    expect(md).not.toContain('| 性別 |');
+    expect(md).not.toContain('| 資格 |');
+  });
 });
 
 describe('statsBlockToMarkdown', () => {

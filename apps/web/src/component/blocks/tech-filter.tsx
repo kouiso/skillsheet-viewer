@@ -92,9 +92,11 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
               className={`chip max-w-[220px] gap-1.5 ${active.includes(tech.name) ? 'on' : ''}`}
             >
               <span className="overflow-hidden text-ellipsis">{tech.name}</span>
-              <span className={`text-[10px] ${active.includes(tech.name) ? 'opacity-70' : 'text-faint'}`}>
-                {tech.count}
-              </span>
+              {/* active時は opacity-70 で .chip.on の色(--on-accent)を薄めていたため、
+                  基準を満たしていた組み合わせでも実効コントラストが4.5を割っていた
+                  （Issue #198: 技術チップの件数 4.33/4.26）。active時は薄めず .chip.on の
+                  色をそのまま使う。 */}
+              <span className={`text-[10px] ${active.includes(tech.name) ? '' : 'text-faint'}`}>{tech.count}</span>
             </button>
           ))}
         </div>

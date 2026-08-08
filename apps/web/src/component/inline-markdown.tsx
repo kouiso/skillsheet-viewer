@@ -53,7 +53,9 @@ export function InlineMarkdown({ content, className, linksTabbable = true }: Inl
             <a
               {...props}
               tabIndex={linksTabbable ? undefined : -1}
-              className="text-primary underline underline-offset-2 hover:text-primary/80"
+              // text-primary は背景に対しライトテーマで3.74と WCAG AA 未達（Issue #198:
+              // 「案件内のURLリンク」）。
+              className="text-primary-dark underline underline-offset-2 hover:text-primary-dark/80"
             >
               {children}
             </a>

@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import type { ConfigErrorKind } from '@/util/is-config-error';
+
 interface ConfigErrorNoticeProps {
   title: string;
   message: string;
@@ -29,7 +31,7 @@ export function ConfigErrorNotice({ title, message, hints }: ConfigErrorNoticePr
   );
 }
 
-// DB 正本経路（/view・/view/db・/view/db/[id]）が共通で使う案内文。
+// DB 正本経路（/view・/view/db・/view/db/[id]）が共通で使う案内文（未設定・未マイグレーション）。
 export const DB_CONFIG_NOTICE = {
   title: 'スキルシートを表示できません',
   message: 'データベースのセットアップが完了していない可能性があります。以下を確認してください。',
@@ -54,8 +56,79 @@ export const DB_CONFIG_NOTICE = {
   ],
 };
 
-// GitHub 連携経路（/view/[path]）が使う案内文。
-export const GITHUB_CONFIG_NOTICE = {
+// DB 正本経路で、DATABASE_URL の値はあるが書式が壊れている場合の案内文（Issue #195）。
+// いちばん多い踏み方は値を引用符ごと環境変数へ渡してしまうケースなので、そのものを名指しする。
+export const DB_MALFORMED_URL_NOTICE = {
+  title: 'スキルシートを表示できません',
+  message: '接続文字列（DATABASE_URL）の書式が正しくありません。以下を確認してください。',
+  hints: [
+    {
+      key: 'quotes',
+      content: (
+        <>
+          値に引用符（<code className="font-mono">&quot;</code> や <code className="font-mono">&apos;</code>
+          ）が混ざっていないか確認する（<code className="font-mono">.env</code>{' '}
+          には引用符を含めず生の接続文字列だけを書く）
+        </>
+      ),
+    },
+    {
+      key: 'format',
+      content: (
+        <>
+          値が <code className="font-mono">postgres://user:password@host/db?sslmode=require</code>{' '}
+          の形式になっているか確認する
+        </>
+      ),
+    },
+  ],
+};
+
+// GitHub 連携経路（/view/[path]）で、環境変数自体が未設定の場合の案内文。
+export const GITHUB_MISSING_ENV_NOTICE = {
   title: '表示できません',
-  message: 'GitHub 連携が未設定のため表示できません。管理者に環境変数の設定を依頼してください。',
+  message: 'GitHub 連携が未設定のため表示できません。以下の環境変数を設定してください。',
+  hints: [
+    {
+      key: 'vars',
+      content: (
+        <>
+          <code className="font-mono">GITHUB_TOKEN</code> / <code className="font-mono">GITHUB_OWNER</code> /{' '}
+          <code className="font-mono">GITHUB_REPO</code> / <code className="font-mono">GITHUB_FILE_PATH</code> /{' '}
+          <code className="font-mono">GITHUB_BRANCH</code>
+        </>
+      ),
+    },
+  ],
+};
+
+// GitHub 連携経路で、トークンが GitHub 側に拒否された（401）場合の案内文。
+// 従来はこのケースも「未設定」と同じ文面で案内しており、環境変数は設定済みなのに
+// 未設定を疑わせて調査を誤誘導していた（Issue #195）。
+export const GITHUB_AUTH_FAILED_NOTICE = {
+  title: '表示できません',
+  message:
+    'GitHub のアクセストークンが拒否されました（認証エラー）。環境変数は設定済みですが、トークンが無効か失効しています。',
+  hints: [
+    {
+      key: 'reissue',
+      content: (
+        <>
+          <code className="font-mono">GITHUB_TOKEN</code> を GitHub 側で再発行し、環境変数を差し替える
+        </>
+      ),
+    },
+  ],
+};
+
+/** classifyConfigError() の結果からそのまま渡せる案内文の一覧。 */
+export const CONFIG_ERROR_NOTICES: Record<
+  ConfigErrorKind,
+  { title: string; message: string; hints?: { key: string; content: ReactNode }[] }
+> = {
+  'db-missing-env': DB_CONFIG_NOTICE,
+  'db-table-missing': DB_CONFIG_NOTICE,
+  'db-malformed-url': DB_MALFORMED_URL_NOTICE,
+  'github-missing-env': GITHUB_MISSING_ENV_NOTICE,
+  'github-auth-failed': GITHUB_AUTH_FAILED_NOTICE,
 };

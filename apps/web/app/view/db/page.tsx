@@ -1,9 +1,10 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
-import { ConfigErrorNotice, DB_CONFIG_NOTICE } from '@/component/config-error-notice';
+import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
+import { isDbContentStale } from '@/server/sheets-cache';
 import { createServerCaller } from '@/server/trpc/caller';
-import { isConfigError } from '@/util/is-config-error';
+import { classifyConfigError } from '@/util/is-config-error';
 
 import SheetViewClient from '../[path]/sheet-view-client';
 
@@ -23,11 +24,22 @@ export default async function DbSheetPage() {
     const caller = await createServerCaller();
     // auth.status() はシート取得の入力に使わないため、直列待機せず並列で開始する。
     const [{ canEdit }, sheet] = await Promise.all([caller.auth.status(), caller.sheet.getDefault()]);
-    return <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={canEdit} />;
+    return (
+      <SheetViewClient
+        title={sheet.title}
+        content={sheet.content}
+        blocks={sheet.blocks}
+        canEdit={canEdit}
+        stale={isDbContentStale(sheet.fetchedAt)}
+      />
+    );
   } catch (err) {
-    // #157: 待っても直らない設定不備（未設定・未マイグレーション）は 200 ＋ 原因と対処を返す。
-    if (isConfigError(err)) {
-      return <ConfigErrorNotice {...DB_CONFIG_NOTICE} />;
+    // #157: 待っても直らない設定不備（未設定・未マイグレーション・接続文字列の書式ミス）は
+    // 200 ＋ 原因と対処を返す。書式ミス（Issue #195）は従来 isConfigError の判定対象に
+    // 入っておらず 500 まで抜けていたため、classifyConfigError() の対象へ加えている。
+    const configErrorKind = classifyConfigError(err);
+    if (configErrorKind) {
+      return <ConfigErrorNotice {...CONFIG_ERROR_NOTICES[configErrorKind]} />;
     }
     // 接続先が到達不能等の一時的な障害は、/view/db/[id] と同じ基準で error.tsx /
     // 監視ツールへ委ねる（一律で ConfigErrorNotice を返すと、実際の障害発生中に監視側が

@@ -30,6 +30,7 @@ import {
   type ExperienceBlockData,
   experienceBlockToMarkdown,
   isBlockInputEmpty,
+  PROFILE_META_LABELS,
   type ProfileBlockData,
   type ProfileMeta,
   type ProjectBlockData,
@@ -532,15 +533,44 @@ const ExperienceBlockEditor = ({
   );
 };
 
-/** メタ情報（年齢/勤務形態/最寄り駅/学歴）の入力定義。 */
-const PROFILE_META_FIELDS: { key: keyof ProfileMeta; label: string; placeholder: string }[] = [
-  { key: 'age', label: '年齢', placeholder: '例: 30代前半' },
-  { key: 'work', label: '勤務形態', placeholder: '例: フルリモート' },
-  { key: 'station', label: '最寄り駅', placeholder: '例: 守山駅' },
-  { key: 'education', label: '学歴', placeholder: '例: ○○大学卒' },
+// よく使う既知8項目の入力欄（プレースホルダ）。PROFILE_META_LABELS（packages/db）と
+// キーを揃えること。並び順もここが基準になる。
+const KNOWN_PROFILE_META_FIELDS: { key: keyof ProfileMeta; placeholder: string }[] = [
+  { key: 'age', placeholder: '例: 30代前半' },
+  { key: 'gender', placeholder: '例: 男' },
+  { key: 'qualifications', placeholder: '例: 自動車普通車免許' },
+  { key: 'education', placeholder: '例: ○○大学卒' },
+  { key: 'work', placeholder: '例: フルリモート' },
+  { key: 'station', placeholder: '例: 守山駅' },
+  { key: 'specialties', placeholder: '例: フロントエンド設計' },
+  { key: 'expertise', placeholder: '例: チームマネジメント' },
 ];
+const KNOWN_PROFILE_META_KEYS = new Set(KNOWN_PROFILE_META_FIELDS.map((f) => f.key));
 
-/** プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。 */
+let customMetaRowSeq = 0;
+
+/** 既知8項目に無い任意のメタ項目の編集行。ラベル自体を data.meta のキーとして保存する。 */
+interface CustomMetaRow {
+  /** React の再レンダリング間でも安定させるためのローカル識別子（保存キーではない）。 */
+  id: string;
+  label: string;
+  value: string;
+}
+
+/**
+ * プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。
+ *
+ * meta の既知8項目（年齢・性別・資格・学歴・勤務形態・最寄り駅・得意分野・得意業務）は
+ * 固定の入力欄を出す。それ以外の任意項目は「項目を追加」で行を増やせる（Issue #193:
+ * 固定4項目のみで、値がある性別・資格を編集画面から直せなかった。固定リストへ1個ずつ
+ * 足す設計は同じ問題を再生産するため、任意キーを許容する設計にした）。
+ *
+ * 任意項目のラベル入力は data.meta のキーそのものを1文字ごとに書き換えると、
+ * オブジェクトキーの挿入順が変わって行の並びが跳ねたり、React の key 変化で
+ * 入力中にフォーカスが飛んだりする。そのため、ラベル編集中の行識別子はローカル
+ * state（CustomMetaRow.id）で持ち、変更のたびに data.meta 全体を組み立て直して
+ * 親へ渡す。
+ */
 const ProfileBlockEditor = ({
   data,
   onChange,
@@ -550,8 +580,38 @@ const ProfileBlockEditor = ({
 }) => {
   const set = <K extends keyof ProfileBlockData>(field: K, value: ProfileBlockData[K]) =>
     onChange({ ...data, [field]: value });
-  const setMeta = (key: keyof ProfileMeta, value: string) =>
+  const setKnownMeta = (key: keyof ProfileMeta, value: string) =>
     onChange({ ...data, meta: { ...(data.meta ?? {}), [key]: value } });
+
+  const [customRows, setCustomRows] = useState<CustomMetaRow[]>(() =>
+    Object.entries(data.meta ?? {})
+      .filter((e): e is [string, string] => !KNOWN_PROFILE_META_KEYS.has(e[0]) && e[1] !== undefined)
+      .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value })),
+  );
+
+  // customRows（ローカル state）が変わるたびに、既知キーと合わせて meta 全体を作り直す。
+  const commitCustomRows = (rows: CustomMetaRow[]) => {
+    setCustomRows(rows);
+    const meta: ProfileMeta = {};
+    for (const key of KNOWN_PROFILE_META_KEYS) {
+      const v = data.meta?.[key];
+      if (v !== undefined) meta[key] = v;
+    }
+    for (const row of rows) {
+      if (row.label.trim()) meta[row.label] = row.value;
+    }
+    onChange({ ...data, meta });
+  };
+
+  const addCustomRow = () => {
+    commitCustomRows([...customRows, { id: `custom-${customMetaRowSeq++}`, label: '', value: '' }]);
+  };
+  const updateCustomRow = (id: string, patch: Partial<Pick<CustomMetaRow, 'label' | 'value'>>) => {
+    commitCustomRows(customRows.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
+  const removeCustomRow = (id: string) => {
+    commitCustomRows(customRows.filter((row) => row.id !== id));
+  };
 
   return (
     <div className="min-w-0 flex-1 space-y-2 text-sm">
@@ -599,19 +659,58 @@ const ProfileBlockEditor = ({
         />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {PROFILE_META_FIELDS.map(({ key, label, placeholder }) => (
+        {KNOWN_PROFILE_META_FIELDS.map(({ key, placeholder }) => (
           <div key={key}>
-            <p className="mb-1 text-xs text-muted-foreground">{label}</p>
+            <p className="mb-1 text-xs text-muted-foreground">{PROFILE_META_LABELS[key]}</p>
             <input
               value={data.meta?.[key] ?? ''}
-              onChange={(e) => setMeta(key, e.target.value)}
+              onChange={(e) => setKnownMeta(key, e.target.value)}
               placeholder={placeholder}
-              aria-label={label}
+              aria-label={PROFILE_META_LABELS[key]}
               className="w-full min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
         ))}
       </div>
+      {customRows.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">その他の項目</p>
+          {customRows.map((row) => (
+            <div key={row.id} className="flex items-center gap-2">
+              <input
+                value={row.label}
+                onChange={(e) => updateCustomRow(row.id, { label: e.target.value })}
+                placeholder="項目名（例: 得意分野）"
+                aria-label="項目名"
+                className="w-28 shrink-0 min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <input
+                value={row.value}
+                onChange={(e) => updateCustomRow(row.id, { value: e.target.value })}
+                placeholder="値"
+                aria-label={row.label || '値'}
+                className="min-w-0 flex-1 min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={() => removeCustomRow(row.id)}
+                aria-label="この項目を削除"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={addCustomRow}
+        className="inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Plus className="size-4" />
+        項目を追加
+      </button>
     </div>
   );
 };
@@ -1562,7 +1661,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 onClick={() => setActiveTab('blocks')}
                 className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'blocks'
-                    ? 'border-b-2 border-primary text-primary'
+                    ? 'border-b-2 border-primary text-primary-dark'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -1573,7 +1672,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 onClick={() => setActiveTab('project')}
                 className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'project'
-                    ? 'border-b-2 border-primary text-primary'
+                    ? 'border-b-2 border-primary text-primary-dark'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >

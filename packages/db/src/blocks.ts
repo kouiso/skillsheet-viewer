@@ -55,7 +55,14 @@ export interface ExperienceBlockData {
   description: string;
 }
 
-/** プロフィールブロックのメタ情報。 */
+/**
+ * プロフィールブロックのメタ情報（年齢・勤務形態などの1行見出し+値の付随情報）。
+ *
+ * よく使う8項目には既知のキーでラベルを割り当てるが（PROFILE_META_LABELS）、
+ * それ以外の任意のラベルも自由に追加できる（Issue #193: 固定4項目のみ編集画面から
+ * 入力できず、性別・資格のように既知のキーでも入力欄が無いと編集画面から直せなかった。
+ * 固定リストへ1個ずつ足す設計は同じ問題を再生産するため、任意キーを許容する）。
+ */
 export interface ProfileMeta {
   age?: string;
   gender?: string;
@@ -65,6 +72,40 @@ export interface ProfileMeta {
   station?: string;
   specialties?: string;
   expertise?: string;
+  /** 上記以外の任意の項目。キーがそのまま表示ラベルになる。 */
+  [key: string]: string | undefined;
+}
+
+/**
+ * ProfileMeta の既知キー → 表示ラベル。既知キー以外は orderedProfileMetaEntries() が
+ * キー自体をラベルとして使う。ビューア（profile-intro.tsx）と markdown/PDF 変換
+ * （profileBlockToMarkdown）の両方がこの1つの定義を共有する。
+ */
+export const PROFILE_META_LABELS: Record<string, string> = {
+  age: '年齢',
+  gender: '性別',
+  qualifications: '資格',
+  education: '学歴',
+  work: '勤務形態',
+  station: '最寄り駅',
+  specialties: '得意分野',
+  expertise: '得意業務',
+};
+
+/**
+ * meta を「既知キー（PROFILE_META_LABELS の宣言順）→ それ以外のキー（オブジェクトの
+ * 挿入順）」の順に並べ、値が空の項目を除いて返す。ビューアと markdown/PDF 変換の
+ * どちらも同じ並び順になるよう、順序決定をこの1箇所に集約する。
+ */
+export function orderedProfileMetaEntries(meta: ProfileMeta | undefined): [string, string][] {
+  if (!meta) return [];
+  const knownKeys = Object.keys(PROFILE_META_LABELS);
+  const entries = Object.entries(meta).filter((e): e is [string, string] => !!e[1] && e[1].trim().length > 0);
+  const known = knownKeys
+    .map((k) => entries.find(([key]) => key === k))
+    .filter((e): e is [string, string] => e !== undefined);
+  const rest = entries.filter(([key]) => !knownKeys.includes(key));
+  return [...known, ...rest];
 }
 
 /** プロフィールブロックの構造化データ。 */
@@ -535,18 +576,13 @@ export function profileBlockToMarkdown(data: ProfileBlockData): string {
     lines.push('\n**強み**');
     for (const s of data.strengths) lines.push(`- ${s}`);
   }
-  const meta = data.meta;
   const metaItems: string[] = [];
   // 所属会社はビューア（トップバー/kicker）で表示するため、markdown/PDF でも欠落させない（表示パリティ）。
   if (data.company?.trim()) metaItems.push(`| 所属会社 | ${escapeCell(data.company.trim())} |`);
-  if (meta.age) metaItems.push(`| 年齢 | ${escapeCell(meta.age)} |`);
-  if (meta.gender) metaItems.push(`| 性別 | ${escapeCell(meta.gender)} |`);
-  if (meta.qualifications) metaItems.push(`| 資格 | ${escapeCell(meta.qualifications)} |`);
-  if (meta.education) metaItems.push(`| 学歴 | ${escapeCell(meta.education)} |`);
-  if (meta.work) metaItems.push(`| 勤務形態 | ${escapeCell(meta.work)} |`);
-  if (meta.station) metaItems.push(`| 最寄り駅 | ${escapeCell(meta.station)} |`);
-  if (meta.specialties) metaItems.push(`| 得意分野 | ${escapeCell(meta.specialties)} |`);
-  if (meta.expertise) metaItems.push(`| 得意業務 | ${escapeCell(meta.expertise)} |`);
+  // 既知8項目に限らず、編集画面で追加した任意の項目も同じ並び順で出す（Issue #193）。
+  for (const [key, value] of orderedProfileMetaEntries(data.meta)) {
+    metaItems.push(`| ${escapeCell(PROFILE_META_LABELS[key] ?? key)} | ${escapeCell(value)} |`);
+  }
   if (metaItems.length > 0) {
     lines.push('\n| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
