@@ -133,31 +133,41 @@ describe('sheet.builderState', () => {
 });
 
 describe('sheet.byId', () => {
+  // sheetIdInputSchema が z.uuid() を要求する（Issue #196）ため、ここから先は
+  // 実在有無に関わらず UUID の形式を満たす値を使う。
+  const VALID_ID = '11111111-1111-4111-8111-111111111111';
+
   it('viewer でない場合は UNAUTHORIZED を返す', async () => {
     const caller = callerAs(null, false);
-    await expect(caller.sheet.byId({ id: 's1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.sheet.byId({ id: VALID_ID })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(getCachedDbSheetByIdMock).not.toHaveBeenCalled();
   });
 
   it('SkillSheetNotFoundError は NOT_FOUND に変換する', async () => {
-    getCachedDbSheetByIdMock.mockRejectedValue(new SkillSheetNotFoundError('missing'));
+    getCachedDbSheetByIdMock.mockRejectedValue(new SkillSheetNotFoundError(VALID_ID));
     const caller = callerAs(null, true);
-    await expect(caller.sheet.byId({ id: 'missing' })).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(caller.sheet.byId({ id: VALID_ID })).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('未知のエラーはそのまま伝播する', async () => {
     getCachedDbSheetByIdMock.mockRejectedValue(new Error('db down'));
     const caller = callerAs(null, true);
-    await expect(caller.sheet.byId({ id: 's1' })).rejects.not.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(caller.sheet.byId({ id: VALID_ID })).rejects.not.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('viewer は指定 id のシートを返す', async () => {
-    const sheet = { id: 's1', title: 'T1', blocks: [MD] };
+    const sheet = { id: VALID_ID, title: 'T1', blocks: [MD] };
     getCachedDbSheetByIdMock.mockResolvedValue(sheet as never);
     const caller = callerAs(null, true);
-    const result = await caller.sheet.byId({ id: 's1' });
+    const result = await caller.sheet.byId({ id: VALID_ID });
     expect(result).toEqual(sheet);
-    expect(getCachedDbSheetByIdMock).toHaveBeenCalledWith('s1');
+    expect(getCachedDbSheetByIdMock).toHaveBeenCalledWith(VALID_ID);
+  });
+
+  it('UUID の形式でない id は BAD_REQUEST を返し、DB へは問い合わせない（Issue #196）', async () => {
+    const caller = callerAs(null, true);
+    await expect(caller.sheet.byId({ id: 'not-a-uuid' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(getCachedDbSheetByIdMock).not.toHaveBeenCalled();
   });
 });
 

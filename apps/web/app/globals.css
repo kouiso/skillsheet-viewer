@@ -382,8 +382,10 @@ body {
   color: var(--accent-text);
 }
 .chip.on {
-  background-color: var(--primary);
-  border-color: var(--primary);
+  /* --primary は on-accent と組むとライトテーマで3.74と WCAG AA 未達（Issue #198）。
+     --primary-dark は両テーマで4.5以上を確保できる。 */
+  background-color: var(--primary-dark);
+  border-color: var(--primary-dark);
   color: var(--on-accent);
 }
 
@@ -400,7 +402,8 @@ body {
   color: var(--chip-text);
 }
 .techtag.hit {
-  background-color: var(--primary);
+  /* .chip.on と同じ理由で --primary-dark を使う（Issue #198）。 */
+  background-color: var(--primary-dark);
   color: var(--on-accent);
 }
 

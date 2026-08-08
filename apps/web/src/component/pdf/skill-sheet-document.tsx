@@ -64,6 +64,13 @@ const NUM = {
   // 「1つの表が単独で大きすぎて footprint を圧迫する」経路の安全マージンを稼ぐための
   // 対症療法であり、根本原因の追跡は #172 に委ねる。
   CARD_MAX_ROWS: 10,
+  // 見出し+表+後続段落（会社概要文/業務内容/習得スキル・実績）をまとめて1ページに収める
+  // 見込みかどうかの目安の合計文字数。ROW_UNBREAKABLE_CHAR_LIMIT と同じ「文字数概算」の
+  // 考え方を、表だけでなくカード全体（見出し直後に続く段落群まで）に広げたもの。
+  // 実データ32件のカードで実測して調整している（Issue #194: 見出し+表だけを結合対象に
+  // していたため、後続の会社概要文・業務内容・習得スキル・実績が独立した分割単位のまま
+  // 残り、ページ境界でカードが分断されていた）。
+  CARD_TOTAL_CHAR_LIMIT: 1400,
 } as const;
 
 const styles = StyleSheet.create({
@@ -379,31 +386,57 @@ function renderTable(node: MdNode, key: number): ReactNode {
   );
 }
 
-// 表全体が1ページに収まる見込みかどうかの目安判定。renderTable が行単位で使う
-// rowTextLength / ROW_UNBREAKABLE_CHAR_LIMIT をそのまま再利用しつつ、行数が多い
-// 表（1行1行は短くても合計すると1ページに収まらないケース）を CARD_MAX_ROWS で
-// 足切りする。新しい閾値ロジックを重複実装せず、renderTable と同じ考え方を踏襲する。
-function isTableLikelyToFitOnePage(node: MdNode): boolean {
-  const rows = node.children ?? [];
+// 見出し+表+表直後の段落群を、外側の View ごと wrap={false}（分割不可）にしてよいかの
+// 目安判定。renderTable が行単位で使う rowTextLength / ROW_UNBREAKABLE_CHAR_LIMIT と
+// 同じ「文字数概算」の考え方を、カード全体（表＋後続段落）に広げたもの。
+//
+// 行ごとの上限チェック（rows.every(...)）は外せない: 外側 View が wrap={false} だと、
+// renderTable が個々の行に付ける wrap={true}（1ページに収まらない行を複数ページへ
+// 逃がす仕組み、#147/#172 で入れた）が外側の非分割指定に埋もれて効かなくなる。
+// 合計文字数がカード全体の上限内でも、そのうち1行だけが極端に長ければ、その行は
+// どのページにも収まらず内容が消失する（#147/#172 の再発）。行数（CARD_MAX_ROWS）と
+// 行ごとの文字数（ROW_UNBREAKABLE_CHAR_LIMIT）は据え置いたうえで、カード全体の合計
+// 文字数（表＋後続段落）にも CARD_TOTAL_CHAR_LIMIT を課す（Issue #194）。
+function isCardLikelyToFitOnePage(tableNode: MdNode, trailingParagraphs: MdNode[]): boolean {
+  const rows = tableNode.children ?? [];
   if (rows.length > NUM.CARD_MAX_ROWS) return false;
-  return rows.every((row) => rowTextLength(row) <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT);
+  if (!rows.every((row) => rowTextLength(row) <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT)) return false;
+  const tableCharCount = rows.reduce((sum, row) => sum + rowTextLength(row), 0);
+  const trailingCharCount = trailingParagraphs.reduce((sum, p) => sum + nodeText(p).length, 0);
+  return tableCharCount + trailingCharCount <= NUM.CARD_TOTAL_CHAR_LIMIT;
 }
 
 // 見出し直後に表が続くケース（案件カードの見出し+項目表、スキルカテゴリ見出し+
-// スキル表）を1つの View にまとめて描画する。
-// - 表が1ページに収まる見込みなら wrap={false} で丸ごと分割不可にし、見出しだけが
-//   前ページに取り残されたり、見出し直後で表が分断されたりするのを防ぐ。
-// - 収まらない見込みなら wrap={true} にして renderTable 内の行単位wrap制御に委ね、
-//   内容が強制的に1ページへ押し込まれてクリップされるのを防ぐ
+// スキル表）を1つの View にまとめて描画する。案件カードは表の直後に会社概要文・
+// 業務内容・習得スキル・実績の段落が続くことがあり（projectBlockToMarkdown 参照）、
+// これらも見出し・表と同じ分割制御単位に含める（Issue #194）。
+// - 全体が1ページに収まる見込みなら wrap={false} で丸ごと分割不可にし、見出しだけが
+//   前ページに取り残されたり、カードの途中でページが割れたりするのを防ぐ。
+// - 収まらない見込みなら wrap={true} にして renderTable 内の行単位wrap制御・各段落の
+//   通常描画に委ね、内容が強制的に1ページへ押し込まれてクリップされるのを防ぐ
 //   （renderTable が採用している閾値方式をそのまま踏襲）。
 // - どちらの場合も minPresenceAhead を設定し、見出し単独がページ末尾に残るのを防ぐ
-//   （表が収まらず wrap=true になるケースのフォールバック保護でもある）。
-function renderHeadingWithTable(headingNode: MdNode, tableNode: MdNode, key: number): ReactNode {
-  const fitsOnePage = isTableLikelyToFitOnePage(tableNode);
+//   （収まらず wrap=true になるケースのフォールバック保護でもある）。
+function renderHeadingWithTable(
+  headingNode: MdNode,
+  tableNode: MdNode,
+  trailingParagraphs: MdNode[],
+  key: number,
+): ReactNode {
+  const fitsOnePage = isCardLikelyToFitOnePage(tableNode, trailingParagraphs);
+  // children を1つの配列としてまとめて渡す（JSX の子要素を個別の式スロットで並べると、
+  // trailingParagraphs が空でも props.children にその分の要素が残ってしまい、
+  // 「見出し+表の2要素だけの場合」の構造検証テストと形が食い違うため）。
+  const children: ReactNode[] = [
+    <View key="heading" style={styles.headingWrap}>
+      {renderHeadingText(headingNode)}
+    </View>,
+    renderTable(tableNode, key),
+    ...trailingParagraphs.map((p, i) => renderParagraph(p, key * 1000 + i + 1)),
+  ];
   return (
     <View key={key} wrap={!fitsOnePage} minPresenceAhead={NUM.MIN_PRESENCE_PROJECT}>
-      <View style={styles.headingWrap}>{renderHeadingText(headingNode)}</View>
-      {renderTable(tableNode, key)}
+      {children}
     </View>
   );
 }
@@ -465,9 +498,22 @@ export function renderBlocks(nodes: MdNode[] | undefined): ReactNode {
     const next = nodes[i + 1];
     // 見出しの直後に表が続く場合は1つの分割制御単位にまとめる（案件カード/
     // スキルカテゴリ表のページ境界分断対策）。表は結合済みとしてスキップする。
+    // 表の直後に続く連続した paragraph（案件カードの会社概要文・業務内容・
+    // 習得スキル・実績）も同じ単位に含める（Issue #194）。paragraph 以外の型
+    // （次の見出し・表・リスト等）に当たった時点で打ち切る。ブロック同士は
+    // 空行だけで連結される（blocksToMarkdown）ため、この案件カードの直後に
+    // 見出しを持たない markdown ブロック（素の段落）が続く稀なケースでは、
+    // その段落もこのカードの一部として扱われる（表示上は連続するため実害は
+    // 小さいが、意図しない分割制御を受ける可能性がある既知の制約）。
     if (node.type === 'heading' && next?.type === 'table') {
-      out.push(renderHeadingWithTable(node, next, i));
-      i += 1;
+      let j = i + 2;
+      const trailing: MdNode[] = [];
+      while (j < nodes.length && nodes[j].type === 'paragraph') {
+        trailing.push(nodes[j]);
+        j += 1;
+      }
+      out.push(renderHeadingWithTable(node, next, trailing, i));
+      i = j - 1;
       continue;
     }
     const renderer = BLOCK_RENDERERS.get(node.type);
