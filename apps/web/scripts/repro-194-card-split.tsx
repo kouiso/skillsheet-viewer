@@ -140,12 +140,11 @@ async function main() {
   const fullText = pages.join('').replace(/\s+/g, '');
   let missing = 0;
   for (const { heading } of headingMatches) {
-    const [company, title] = heading.split(' — ');
+    const title = heading.split(' — ')[1];
     if (!fullText.includes((title ?? '').replace(/\s+/g, ''))) {
       console.log(`[repro-194] 警告: 案件「${heading}」のタイトルがPDFに見つからない（内容消失の疑い）`);
       missing += 1;
     }
-    void company;
   }
   console.log(`[repro-194] タイトルが見つからない案件数 = ${missing}`);
 

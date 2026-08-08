@@ -557,8 +557,13 @@ interface CustomMetaRow {
   value: string;
 }
 
+// 既知8項目の表示ラベル（「年齢」等）。任意項目のラベルにこれと同じ文字列を使われると、
+// 内部キーは別（例: 既知の `age` と任意項目の `年齢`）でも画面・PDF上は同じラベルで
+// 2行表示され紛らわしい（CodeRabbit レビュー指摘）。内部キーと合わせて予約する。
+const RESERVED_PROFILE_META_LABELS = new Set(Object.values(PROFILE_META_LABELS));
+
 /**
- * ラベルが既知8項目のキー、または他の行のラベルと衝突している行の id を返す。
+ * ラベルが既知8項目のキー・表示ラベル、または他の行のラベルと衝突している行の id を返す。
  * 衝突したまま meta へ詰めると `meta[label] = value` の代入が先勝ちの値を無警告で
  * 上書きし、保存後にリロードすると片方が消えたように見える（Codex レビュー指摘）。
  * 最初に出現した行だけを有効とし、以降の同名行は衝突として保存対象から除外する。
@@ -569,7 +574,11 @@ const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
   for (const row of rows) {
     const label = row.label.trim();
     if (!label) continue;
-    if (KNOWN_PROFILE_META_KEYS.has(label as keyof ProfileMeta) || seenLabels.has(label)) {
+    if (
+      KNOWN_PROFILE_META_KEYS.has(label as keyof ProfileMeta) ||
+      RESERVED_PROFILE_META_LABELS.has(label) ||
+      seenLabels.has(label)
+    ) {
       conflicts.add(row.id);
     } else {
       seenLabels.add(label);
@@ -616,21 +625,37 @@ const ProfileBlockEditor = ({
       .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value })),
   );
   const conflictingRowIds = useMemo(() => findConflictingRowIds(customRows), [customRows]);
-  // アンマウント時（ブロック削除）にも false を報告し、ブロックした保存を解除する。
+  // ラベルが一時的に空（リネーム中の一瞬等）で、かつ値が既にある行。このまま親へ
+  // コミットすると値ごと消える（Codex レビュー指摘）ため、確定した状態になるまで
+  // commitCustomRows は親へ伝播しない。
+  const hasEmptyLabelWithValue = useMemo(
+    () => customRows.some((row) => row.label.trim() === '' && row.value.trim() !== ''),
+    [customRows],
+  );
+  const isBlocked = conflictingRowIds.size > 0 || hasEmptyLabelWithValue;
+  // アンマウント時（タブ切替・ブロック削除）にも false を報告し、ブロックした保存を解除する。
+  // commitCustomRows がブロック中は親へ伝播しないため（下記）、アンマウントで local な
+  // customRows が失われても親の data.meta は最後に確定した状態のままで、消えるのは
+  // 未確定の編集内容だけ（Codex レビュー指摘: 以前は衝突行を除外した meta を確定として
+  // 親へ渡していたため、タブ切替でこのブロックが再マウントすると衝突が解消したかのように
+  // 見え、除外済みの内容がそのまま自動保存されてしまっていた）。
   // onValidityChange は親（builder-client 本体）の useCallback（安定参照）をそのまま渡して
   // もらう前提（SortableBlock 側でインライン矢印にラップしない）。ラップすると毎レンダーで
-  // 参照が変わり、conflictingRowIds が変わっていなくてもこの effect が再実行され、
+  // 参照が変わり、isBlocked が変わっていなくてもこの effect が再実行され、
   // cleanup の false 報告が直後の true 報告と競合するため。
   useEffect(() => {
-    onValidityChange(id, conflictingRowIds.size > 0);
+    onValidityChange(id, isBlocked);
     return () => onValidityChange(id, false);
-  }, [id, conflictingRowIds, onValidityChange]);
+  }, [id, isBlocked, onValidityChange]);
 
   // customRows（ローカル state）が変わるたびに、既知キーと合わせて meta 全体を作り直す。
-  // ラベルが衝突している行は保存対象から除外する（画面上は残し、エラー表示で気付けるようにする）。
+  // ただし未確定の行（ラベル衝突・ラベル空で値あり）が1つでもあれば親へは伝播しない
+  // （画面上は customRows のまま残り、エラー表示で気付ける）。親の data.meta を
+  // 「最後に確定した安全な状態」のまま保つことで、タブ切替等での消失を防ぐ。
   const commitCustomRows = (rows: CustomMetaRow[]) => {
     setCustomRows(rows);
     const conflicts = findConflictingRowIds(rows);
+    if (conflicts.size > 0 || rows.some((row) => row.label.trim() === '' && row.value.trim() !== '')) return;
     const meta: ProfileMeta = {};
     for (const key of KNOWN_PROFILE_META_KEYS) {
       const v = data.meta?.[key];
@@ -638,7 +663,7 @@ const ProfileBlockEditor = ({
     }
     for (const row of rows) {
       const label = row.label.trim();
-      if (label && !conflicts.has(row.id)) meta[label] = row.value;
+      if (label) meta[label] = row.value;
     }
     onChange({ ...data, meta });
   };

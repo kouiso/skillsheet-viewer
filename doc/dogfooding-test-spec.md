@@ -72,8 +72,14 @@ Neon Postgres (skill_sheets / blocks) ← 正本（アプリが読み、編集�
 スキル件数 39 件 vs 46 件、案件タイトルの `scope` 分離。どちらも DB 側から機械的に
 `skillsheet.md` を検索すると全件の痕跡が見つかり、情報の欠落ではなかった。#199）。
 
-画面系のケース（B 章）のデータ突合は **正本 DB → 画面** の 2 点で行う。
-`skillsheet.md` との差分は FAIL 理由にせず、気付いた場合は参考情報として記録するに留める。
+画面系のケース（B 章）のうち、**DB 正本経路**（`/view`・`/view/db`・`/view/db/:id`）の
+データ突合は **正本 DB → 画面** の 2 点で行う。`skillsheet.md` との差分は FAIL 理由にせず、
+気付いた場合は参考情報として記録するに留める。
+
+一方、**GitHub 経路**（`/view/[path]`。B-10b・B-13b-2・B-15a・B-15b が該当）は DB を経由せず
+GitHub 上の `skillsheet.md` を直接取得して描画するため、上記の「正本 DB」基準は適用されない。
+これらのケースは **GitHub 上の取得結果 → 画面** の2点で突合し、DB とは突き合わせない
+（CodeRabbit レビュー指摘: 経路ごとに正本が異なる点が明示されていなかった）。
 
 **PDF の内容突合（D-2）は正本 DB → 画面 → PDF の 3 点**で行う。画面と PDF はどちらも同じ
 `blocksToMarkdown` / 構造化ブロックを源にしているため、2 点だけを突き合わせても「両方から
@@ -124,7 +130,7 @@ PASS は次を全て満たしたときのみ。
 |---|---|---|
 | B-1 | `/view` 一覧 | シート枚数・タイトル・更新日時が DB と一致。**3 つの分岐（検索 0 件 / シート 0 件 / 取得失敗）の文言をそれぞれ確認する**。空・取得失敗の分岐を測るときは **`apps/web/.next` を丸ごと消してから単独起動する**（`.next/cache` だけでは前回の正常結果の控えが残る。Issue #199 / #204 で判明） — `getCachedDbSheets()` は引数なしの `unstable_cache`（固定キー）なので、一度正常な一覧を開いた後に `SKILLSHEET_OWNER_ID` / `DATABASE_URL` だけ変えて再起動しても、キャッシュ済みの正常結果が返り続けて**分岐に入っていないのに PASS 証跡が作れてしまう** |
 | B-2 | `/view/db/:id` 初期表示 | トップバーに profile の**氏名と所属会社**が出る（会社名は `ProfileBlockData.company` 由来。取り込みが値を入れていないと `viewer-topbar.tsx` の `{company && …}` で黙って消えるので、DB の profile ブロックに `company` があるかまで見る）。4 ビュー全 ON。**閲覧者コンテキスト**（閲覧コードのみで認証）で、**一覧へ戻る導線があること**と**編集導線の表示可否**も確認する（U-3 / U-4 = #149 の回帰確認。会社名や横スクロールだけ直った後にここを素通りさせない） |
-| B-3 | profile 突合 | 氏名・肩書き・自己PR・強み・年齢・勤務形態・最寄り駅・学歴に加え、**所属会社・性別・保有資格・得意分野・得意業務**を**正本 DB** の profile ブロック（`meta` を含む）と 1 項目ずつ突合。`skillsheet.md` との差は FAIL 理由にしない（#193 で自由キー方式に変更済み。DB 側で編集画面から追加・削除された項目を欠落扱いにしない）。修正後の回帰でここを素通りさせない |
+| B-3 | profile 突合 | 氏名・肩書き・自己PR・強みに加え、**正本 DB の `profile.meta` に存在する全キー**（年齢・勤務形態・最寄り駅・学歴・所属会社・性別・保有資格・得意分野・得意業務の既知8項目に限らず、編集画面で追加された任意キーを含む）を、DB 側のキー集合と画面表示側のキー集合・各値の両方で全件突合する。**キー集合が一致しない、またはいずれかの値が異なれば FAIL**（既知項目だけの部分確認で PASS にしない）。`skillsheet.md` との差は FAIL 理由にしない（#193 で自由キー方式に変更済み。DB 側で編集画面から追加・削除された項目を欠落扱いにしない）。修正後の回帰でここを素通りさせない |
 | B-4 | stats 突合 | 4 枠の数値と単位が**正本 DB** の記述と矛盾しない |
 | B-5 | skills 突合 | 全カテゴリ × 全スキルの「名称・年数・習熟度」を**正本 DB** のスキル一覧と全件突合。件数も一致させる。`skillsheet.md` の技術スタック表から人が数え直した値との差（表記ゆれ・DB側での追加等）は FAIL 理由にしない（39 件 vs 46 件のような差を誤って欠落扱いにした事例が #199 にある） |
 | B-6 | 案件件数突合 | 画面の会社数・案件数を数え、**正本 DB** と突合する。件数だけでなく**タイトル文字列も全件突合**する（#160 のように件数一致のまま中身が短くなる欠落があるため）。案件タイトルの括弧書きが DB では `scope`（規模・スコープ）に分けて保存され、画面ではタイトル直下に別行で出ることがあるが、情報は保持されているため欠落ではない（#199） |
@@ -187,7 +193,7 @@ PASS は次を全て満たしたときのみ。
 | E-3 | キーボード操作 | Tab でフォーカスが見え、主要操作に到達できる。**画面ごとに記録する**（`/login` / `/viewer-auth` / `/view` / `/view/db/:id` / `/builder` / `/builder/preview`）。ビューア 1 画面の結果で他画面を代表させない。測り方は「実キーボードの Tab で当て、ブラーも再フォーカスもせずに `:focus-visible` 時の `outline` / `box-shadow` を読む」。**`outline: auto` を「リング無し」と数えない**（Chromium の既定リングはこの値で出る）。フォーカス時とブラー時の計算値の差分、および要素だけを切り取った画素比較は、それぞれ transition の途中値・ボーダーボックス外のリングで誤判定するので使わない |
 | E-4 | コンソール | 全画面で `console.error` ゼロ。HTTP 404 応答そのものに由来するものは除外し、それ以外は理由を記録する。**E-1 で撮った全ルートの件数をルートごとに書く**（`/view` / `/view/db` / `/view/db/:id` / `/view/db/<存在しない UUID>` / `/builder` / `/builder/preview` / `/login` / `/viewer-auth` / `/view/[path]` / 404）。一部のルートだけ挙げて残りを省略しない（省略した画面で後から `console.error` が出ても緑のままになるため） |
 | E-5a | エラー画面（`error.tsx` / 404） | 意味のある文言で出る |
-| E-5b | DB 取得失敗フォールバック | **env は present のまま接続先を到達不能にして**（`DATABASE_URL` / `SKILLSHEET_OWNER_ID` を外すと `app/layout.tsx` の `assertServerEnv()` が先に落ちてページ内の `try/catch` に届かない）、**`apps/web/.next` を丸ごと消した**単独起動で開く（`.next/cache` だけでは前回取得した内容の控えが残り、DB 到達不能でも 200 のまま古い内容が返り続けて 500 を再現できない。Issue #199 / #204 で判明）。**3 経路とも見る** — `/view`（一覧 / `getCachedDbSheets()`）、`/view/db`（デフォルトシート本文 / `getCachedDbSheet()`）、**`/view/db/:id`（実在する詳細 URL / `getCachedDbSheetById()`）**。ログ行も別で、それぞれ `Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`。失敗の原因を 2 種類に分けて検証する。**(a) 設定不備**：`DATABASE_URL` / `SKILLSHEET_OWNER_ID` を未設定または未マイグレーション（`42P01` 等）にした場合、いずれの経路も `isConfigError()` 判定で `ConfigErrorNotice` を返して **200** になる（原因と対処が分かる文言がブラウザに出る）。**(b) 接続断**：env は present のまま接続先を到達不能にして `apps/web/.next` を丸ごと消した単独起動で開く。設定不備ではなく一時的な接続障害は 3 経路すべてで `console.error`（`Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`）を出した上で `throw err` し、`error.tsx` へ委ねて **500** になる。3 経路でこの 2 種類の応答が食い違っていたら FAIL。**ブラウザとサーバーのログを分けて記録する**（両ページとも catch で `console.error` を必ず出すため、ブラウザ 0 件だけを書くと系全体が無音だったように読める） |
+| E-5b | DB 取得失敗フォールバック | **`apps/web/.next` を丸ごと消した**単独起動で開く（`.next/cache` だけでは前回取得した内容の控えが残り、DB 到達不能でも 200 のまま古い内容が返り続けて 500 を再現できない。Issue #199 / #204 で判明）。**3 経路とも見る** — `/view`（一覧 / `getCachedDbSheets()`）、`/view/db`（デフォルトシート本文 / `getCachedDbSheet()`）、**`/view/db/:id`（実在する詳細 URL / `getCachedDbSheetById()`）**。ログ行も別で、それぞれ `Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`。失敗の原因を分けて検証する。**(a) route-level の設定不備**：`DATABASE_URL` の書式ミス・未マイグレーション（`42P01` 等）にした場合（`SKILLSHEET_OWNER_ID` は含めない。理由は次項）、いずれの経路も `isConfigError()` 判定で `ConfigErrorNotice` を返して **200** になる（原因と対処が分かる文言がブラウザに出る）。**(b) 接続断**：env は present のまま接続先を到達不能にする。設定不備ではなく一時的な接続障害は 3 経路すべてで `console.error`（`Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`）を出した上で `throw err` し、`error.tsx` へ委ねて **500** になる。3 経路でこの 2 種類の応答が食い違っていたら FAIL。**ブラウザとサーバーのログを分けて記録する**（両ページとも catch で `console.error` を必ず出すため、ブラウザ 0 件だけを書くと系全体が無音だったように読める）。**`SKILLSHEET_OWNER_ID` 未設定は本ケースの対象外**：環境変数表（46行目）のとおり `app/layout.tsx` の `assertServerEnv()` が起動直後に throw し、route-level の `try/catch`（`isConfigError()`）には一切到達しない（全ルートが即クラッシュし、200 の `ConfigErrorNotice` にはならない）。この起動時失敗は E-5b の3経路個別検証ではなく、アプリ起動そのものが失敗することを別途 1 回確認すれば足りる（CodeRabbit レビュー指摘: 同じ未設定に対し 46 行目と本行が矛盾する結果を記載していた） |
 
 ## 5. 記録フォーマット
 
@@ -197,7 +203,9 @@ PASS は次を全て満たしたときのみ。
 [ケースID] 結果: PASS / FAIL / BLOCKED
   スクリーンショット: <path>（開いて確認済み）
   観察: 画面上の要素列挙 + レイアウト記述
-  突合（画面系 B 章）: 正本 DB → 画面 の件数と中身 → どの段で差が出たか
+  突合元: DB（正本 DB 経路） / GitHub（/view/[path] 経路。B-10b・B-13b-2・B-15a・B-15b）
+  突合（画面系 B 章、突合元=DB）: 正本 DB → 画面 の件数と中身 → どの段で差が出たか
+  突合（画面系 B 章、突合元=GitHub）: GitHub の取得結果 → 画面 の件数と中身 → どの段で差が出たか
   突合（D-2 のみ）: 正本 DB → 画面 → PDF の件数と中身 → どの段で差が出たか
   逸脱: BUG / COSMETIC の分類（最終判断はレビュアー）
 ```

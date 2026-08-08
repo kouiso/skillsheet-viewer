@@ -27,5 +27,9 @@ describe('SyncBar', () => {
     render(<SyncBar state="standalone" lastUpdatedAt={null} onReconnect={vi.fn()} />);
     expect(screen.getByText(/表示できるプレビューがありません/)).toBeInTheDocument();
     expect(screen.queryByText(/閉じられました/)).not.toBeInTheDocument();
+    // #201: standalone にはフォーカス可能な導線が無く、ビルダーへ戻れなかった。
+    // 文言だけでなく /builder へのリンク自体を検証する（CodeRabbit レビュー指摘:
+    // 文言のみのアサートだとリンクの削除や href の変更を検知できない）。
+    expect(screen.getByRole('link', { name: 'ビルダー画面を開く' })).toHaveAttribute('href', '/builder');
   });
 });
