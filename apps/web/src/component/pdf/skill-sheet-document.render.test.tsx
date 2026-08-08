@@ -307,6 +307,48 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain('Kubernetes');
   });
 
+  // chatgpt-codex-connector レビュー指摘: primary の表だけに課していた行単位のチェック
+  // （CARD_MAX_ROWS / ROW_UNBREAKABLE_CHAR_LIMIT）が trailing 中の表・リストには
+  // 及んでおらず、短い項目/セルが多数並ぶケースでは合計文字数だけ閾値内に収まり
+  // 誤って wrap={false}（分割不可）になりクリップしうる欠陥があった。
+  it('trailing のリスト項目数が多い場合は合計文字数が閾値内でも wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
+    const manyShortItems = Array.from({ length: 8 }, (_, i) => `- 項目${i}`).join('\n');
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown('### 株式会社テスト — 項目多数案件', '会社概要文です。', manyShortItems, '短い実績。'),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    // 表4行 + リスト8項目 = 12行相当で CARD_MAX_ROWS(10) を超えるため、
+    // 合計文字数（十分に小さい）に関わらず分割を許容する。
+    expect(merged.props.wrap).toBe(true);
+
+    const text = flattenText(merged);
+    expect(text).toContain('項目0');
+    expect(text).toContain('項目7');
+    expect(text).toContain('短い実績。');
+  });
+
+  it('trailing の表に1行あたりの文字数が閾値を超える行がある場合は wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
+    const oversizedRow = `| 項目 | ${'あ'.repeat(650)} |`;
+    const trailingTable = ['| 項目 | 内容 |', '| :--- | :--- |', oversizedRow].join('\n');
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown('### 株式会社テスト — 長大セル案件', '会社概要文です。', trailingTable, '短い実績。'),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    // trailing の表の1行が ROW_UNBREAKABLE_CHAR_LIMIT を超えるため分割を許容する。
+    expect(merged.props.wrap).toBe(true);
+
+    const text = flattenText(merged);
+    expect(text).toContain('あ'.repeat(650));
+  });
+
   it('カード全体の合計文字数が大きすぎる場合は wrap={true} のままクリップを防ぐ（Issue #147/#172 の再発防止）', () => {
     const longParagraph = '長文段落です。'.repeat(200); // 十分に長い段落
     const nodes = parseMarkdown(
