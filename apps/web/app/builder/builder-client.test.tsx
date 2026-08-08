@@ -334,6 +334,32 @@ describe('BuilderClient', () => {
     expect(screen.queryByText(/項目名が他の項目と重複しているため/)).not.toBeInTheDocument();
     expect(screen.getByLabelText('項目名')).toHaveAttribute('aria-invalid', 'true');
   });
+
+  // CodeRabbit レビュー指摘: 通常の `{}` に `meta['__proto__'] = 値` を代入すると、値が
+  // 文字列（有効なプロトタイプ値ではない）のため代入が黙って無視され、own property が
+  // 作られずラベルごと保存結果から消えていた（実測で確認済み）。ラベルは編集者の自由
+  // 入力で `__proto__` を予約語として弾いていないため、通常の入力だけで再現する。
+  it('カスタム項目のラベルが __proto__ でも通常のプロパティとして保存される', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('項目名'), '__proto__');
+    await user.type(screen.getByPlaceholderText('値'), 'テスト値');
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    const profileData = mockSave.mock.calls[0][0].blocks[0].data;
+    expect(Object.hasOwn(profileData.meta, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(profileData.meta, '__proto__')?.value).toBe('テスト値');
+  });
 });
 
 describe('BuilderClient 自動保存', () => {

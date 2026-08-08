@@ -656,7 +656,13 @@ const ProfileBlockEditor = ({
     setCustomRows(rows);
     const conflicts = findConflictingRowIds(rows);
     if (conflicts.size > 0 || rows.some((row) => row.label.trim() === '' && row.value.trim() !== '')) return;
-    const meta: ProfileMeta = {};
+    // ラベルは編集者の自由入力であり `__proto__` も弾いていない。通常の `{}` に
+    // `meta['__proto__'] = row.value` を代入すると、値が文字列（有効なプロトタイプ値
+    // ではない）のため代入は黙って無視され、own property が作られずラベルごと消える
+    // （CodeRabbit レビュー指摘。実測で確認済み）。Object.create(null) は
+    // Object.prototype 自体を継承しないため、`__proto__`/`constructor`/`toString` 等の
+    // 予約語でも通常の own property として書き込める。
+    const meta = Object.create(null) as ProfileMeta;
     for (const key of KNOWN_PROFILE_META_KEYS) {
       const v = data.meta?.[key];
       if (v !== undefined) meta[key] = v;

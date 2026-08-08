@@ -82,10 +82,14 @@ async function main() {
   console.log(`[repro-194] 案件カード数 = ${headingMatches.length}`);
 
   // 抽出テキストは空白が詰まっていることがあるため、突合は空白除去して行う。
-  const findFirstPage = (needle: string): number => {
+  // fromPage 以降だけを検索する（既定は先頭から）。テンプレ由来の定型文等で末尾段落と
+  // 同じ文言が別カードにも存在すると、全ページ検索では見出しより前のページを誤検出し、
+  // 分割していないカードを「分割されている」と誤判定する（CodeRabbit レビュー指摘）。
+  const findFirstPage = (needle: string, fromPage = 0): number => {
     const normalized = needle.replace(/\s+/g, '');
     if (!normalized) return -1;
-    return pages.findIndex((text) => text.replace(/\s+/g, '').includes(normalized));
+    const offset = pages.slice(fromPage).findIndex((text) => text.replace(/\s+/g, '').includes(normalized));
+    return offset === -1 ? -1 : fromPage + offset;
   };
 
   // カード本文（見出し〜次の見出しの直前）の末尾にある、見出し・表以外の意味のある行
@@ -121,7 +125,8 @@ async function main() {
       console.log(`[repro-194] 警告: 「${heading}」の末尾段落を content から特定できず判定不能`);
       continue;
     }
-    const tailPage = findFirstPage(tailLine);
+    // 末尾段落は見出しより前のページには出ない。前方の同一文言との誤一致を避ける。
+    const tailPage = findFirstPage(tailLine, headingPage);
     if (tailPage === -1) {
       console.log(`[repro-194] 警告: 「${heading}」の末尾段落「${tailLine}」がPDF上に見つからない`);
       continue;
