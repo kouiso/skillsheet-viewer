@@ -79,12 +79,21 @@ describe('sheet.list', () => {
     expect(getCachedDbSheetsMock).not.toHaveBeenCalled();
   });
 
-  it('viewer は getCachedDbSheets の結果をそのまま返す', async () => {
+  it('viewer は getCachedDbSheets の結果を返す（fetchedAt は落とし stale に置き換える）', async () => {
     const summaries = [{ id: 's1', title: 'T1', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
-    getCachedDbSheetsMock.mockResolvedValue(summaries as never);
+    getCachedDbSheetsMock.mockResolvedValue({ sheets: summaries, fetchedAt: Date.now() } as never);
     const caller = callerAs(null, true);
     const result = await caller.sheet.list();
-    expect(result).toEqual(summaries);
+    expect(result).toEqual({ sheets: summaries, stale: false });
+  });
+
+  it('再検証間隔の3倍を超えて古い fetchedAt は stale: true になる', async () => {
+    const summaries = [{ id: 's1', title: 'T1', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
+    const staleFetchedAt = Date.now() - 61 * 60 * 1000; // 十分に古い（60秒revalidateの3倍=180秒を大幅に超える）
+    getCachedDbSheetsMock.mockResolvedValue({ sheets: summaries, fetchedAt: staleFetchedAt } as never);
+    const caller = callerAs(null, true);
+    const result = await caller.sheet.list();
+    expect(result).toMatchObject({ stale: true });
   });
 });
 
@@ -98,7 +107,7 @@ describe('sheet.builderState', () => {
   it('指定 sheetId が一覧にあればそのシートを返す', async () => {
     const sheets = [{ id: 's2', title: 'T2', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
     const sheet = { title: 'T2', blocks: [MD], fetchedAt: Date.now() };
-    getCachedDbSheetsMock.mockResolvedValue(sheets as never);
+    getCachedDbSheetsMock.mockResolvedValue({ sheets, fetchedAt: Date.now() } as never);
     getCachedDbSheetByIdMock.mockResolvedValue(sheet as never);
 
     const result = await callerAs('owner').sheet.builderState({ sheetId: 's2' });
@@ -112,7 +121,7 @@ describe('sheet.builderState', () => {
   it('sheetId 未指定なら一覧の先頭を active にしてデフォルトシートを返す', async () => {
     const sheets = [{ id: 's1', title: 'T1', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
     const sheet = { title: 'T1', blocks: [MD], fetchedAt: Date.now() };
-    getCachedDbSheetsMock.mockResolvedValue(sheets as never);
+    getCachedDbSheetsMock.mockResolvedValue({ sheets, fetchedAt: Date.now() } as never);
     getCachedDbSheetMock.mockResolvedValue(sheet as never);
 
     await expect(callerAs('owner').sheet.builderState({})).resolves.toEqual({
@@ -125,7 +134,7 @@ describe('sheet.builderState', () => {
   it('空一覧がキャッシュ済みでも seed 後の正本を一度だけ再取得する', async () => {
     const sheet = { title: 'Seeded', blocks: [MD], fetchedAt: Date.now() };
     const seededSheets = [{ id: 'seeded', title: 'Seeded', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
-    getCachedDbSheetsMock.mockResolvedValue([]);
+    getCachedDbSheetsMock.mockResolvedValue({ sheets: [], fetchedAt: Date.now() });
     getCachedDbSheetMock.mockResolvedValue(sheet as never);
     listSheetsMock.mockResolvedValue(seededSheets as never);
 

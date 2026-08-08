@@ -9,7 +9,13 @@ import {
 import { TRPCError } from '@trpc/server';
 import { revalidateTag } from 'next/cache';
 
-import { getCachedDbSheet, getCachedDbSheetById, getCachedDbSheets, toStaleSheet } from '@/server/sheets-cache';
+import {
+  getCachedDbSheet,
+  getCachedDbSheetById,
+  getCachedDbSheets,
+  toStaleSheet,
+  toStaleSheetList,
+} from '@/server/sheets-cache';
 
 import { getTemplate } from '../../../../app/builder/templates';
 import { editorProcedure, router, viewerProcedure } from '../init';
@@ -31,10 +37,12 @@ function invalidateDbSheetCache(): void {
 }
 
 export const sheetRouter = router({
-  list: viewerProcedure.query(() => getCachedDbSheets()),
+  // fetchedAt は内部実装詳細のため公開レスポンスに出さず、stale 判定結果だけを返す
+  // （toStaleSheet と同じ方針。toStaleSheetList 参照）。
+  list: viewerProcedure.query(async () => toStaleSheetList(await getCachedDbSheets())),
 
   builderState: editorProcedure.input(builderStateInputSchema).query(async ({ input }) => {
-    let sheets = await getCachedDbSheets();
+    let { sheets } = await getCachedDbSheets();
 
     if (input.sheetId && sheets.some((sheet) => sheet.id === input.sheetId)) {
       const sheet = await getCachedDbSheetById(input.sheetId);

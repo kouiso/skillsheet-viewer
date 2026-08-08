@@ -16,12 +16,13 @@ export default async function SheetsListPage() {
   await connection();
 
   let sheets: SheetSummary[] = [];
+  let stale = false;
   let errorKind: ConfigErrorKind | null = null;
   let canEdit = false;
   try {
     const caller = await createServerCaller();
     ({ canEdit } = await caller.auth.status());
-    sheets = await caller.sheet.list();
+    ({ sheets, stale } = await caller.sheet.list());
   } catch (err) {
     // #157: 待っても直らない設定不備（未設定・未マイグレーション・書式ミス等）は
     // 200 ＋ 原因と対処を返す。classifyConfigError() で種類まで判定し、他の DB 正本経路
@@ -38,5 +39,5 @@ export default async function SheetsListPage() {
     }
     errorKind = kind;
   }
-  return <DbSheetsListClient initialSheets={sheets} errorKind={errorKind} canEdit={canEdit} />;
+  return <DbSheetsListClient initialSheets={sheets} errorKind={errorKind} canEdit={canEdit} stale={stale} />;
 }

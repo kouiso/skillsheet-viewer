@@ -1001,10 +1001,14 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const utils = trpc.useUtils();
   // RSC が渡す initialSheets を initialData にして、作成/削除後は invalidate() で
   // react-query に再取得させる（手動での配列操作をやめ、正本を一箇所に保つ）。
-  const { data: sheets } = trpc.sheet.list.useQuery(undefined, {
-    initialData: initialSheets,
+  // sheet.list は一覧の鮮度（stale）も返すようになったが（Issue #204 の一覧版）、
+  // ビルダーのサイドバーは編集者自身の操作直後に invalidate() で追従させる前提のため
+  // 鮮度表示までは持たない。
+  const { data: sheetsList } = trpc.sheet.list.useQuery(undefined, {
+    initialData: { sheets: initialSheets, stale: false },
     staleTime: SHEET_LIST_STALE_TIME_MS,
   });
+  const sheets = sheetsList.sheets;
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
   // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。

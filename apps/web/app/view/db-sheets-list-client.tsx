@@ -14,9 +14,19 @@ interface DbSheetsListClientProps {
   errorKind?: ConfigErrorKind | null;
   /** 編集者ログイン済みか。false のときは編集導線を出さない。 */
   canEdit?: boolean;
+  /**
+   * true のとき、DB への再接続に失敗して古い一覧を表示している可能性があることを
+   * 画面上部に案内する（Issue #204 の一覧版。sheet-view-client.tsx と同じ文言・見た目）。
+   */
+  stale?: boolean;
 }
 
-const DbSheetsListClient = ({ initialSheets, errorKind = null, canEdit = false }: DbSheetsListClientProps) => {
+const DbSheetsListClient = ({
+  initialSheets,
+  errorKind = null,
+  canEdit = false,
+  stale = false,
+}: DbSheetsListClientProps) => {
   const router = useRouter();
   const [query, setQuery] = useState('');
 
@@ -34,6 +44,14 @@ const DbSheetsListClient = ({ initialSheets, errorKind = null, canEdit = false }
 
   return (
     <div>
+      {stale && (
+        <div
+          role="status"
+          className="border-b border-warn/40 bg-warn-soft px-4 py-2 text-center text-sm text-warn-strong"
+        >
+          表示中の内容はしばらく更新されていない可能性があります。最新の状態と異なる場合があります。
+        </div>
+      )}
       <Header title="スキルシート一覧" canEdit={canEdit} />
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
         <div className="mb-4 flex items-center gap-2">
