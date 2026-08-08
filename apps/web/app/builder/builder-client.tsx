@@ -297,7 +297,7 @@ const TableBlockEditor = ({
                     onChange={(e) => setLabel(ci, e.target.value)}
                     placeholder={`列${ci + 1}`}
                     aria-label={`列${ci + 1}の見出し`}
-                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                   <div className="flex items-center gap-1">
                     {ALIGN_OPTIONS.map(({ value, Icon, label }) => (
@@ -307,13 +307,13 @@ const TableBlockEditor = ({
                         onClick={() => setAlign(ci, value)}
                         aria-label={`列${ci + 1}を${label}`}
                         aria-pressed={col.align === value}
-                        className={`rounded p-1 ${
+                        className={`inline-flex h-11 w-11 items-center justify-center rounded ${
                           col.align === value
                             ? 'bg-primary text-primary-foreground'
                             : 'text-muted-foreground hover:bg-muted'
                         }`}
                       >
-                        <Icon className="size-3.5" />
+                        <Icon className="size-4" />
                       </button>
                     ))}
                     <button
@@ -321,9 +321,9 @@ const TableBlockEditor = ({
                       onClick={() => removeColumn(ci)}
                       disabled={columns.length <= 1}
                       aria-label={`列${ci + 1}を削除`}
-                      className="ml-auto rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                      className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-destructive disabled:opacity-30"
                     >
-                      <Trash2 className="size-3.5" />
+                      <Trash2 className="size-4" />
                     </button>
                   </div>
                 </div>
@@ -334,7 +334,7 @@ const TableBlockEditor = ({
                 type="button"
                 onClick={addColumn}
                 aria-label="列を追加"
-                className="rounded p-1 text-muted-foreground hover:text-foreground"
+                className="inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-foreground"
               >
                 <Plus className="size-4" />
               </button>
@@ -352,7 +352,7 @@ const TableBlockEditor = ({
                     value={row[ci] ?? ''}
                     onChange={(e) => setCell(ri, ci, e.target.value)}
                     aria-label={`${ri + 1}行${ci + 1}列`}
-                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
               ))}
@@ -361,9 +361,9 @@ const TableBlockEditor = ({
                   type="button"
                   onClick={() => removeRow(ri)}
                   aria-label={`${ri + 1}行目を削除`}
-                  className="rounded p-1 text-muted-foreground hover:text-destructive"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-destructive"
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 className="size-4" />
                 </button>
               </td>
             </tr>
@@ -373,9 +373,9 @@ const TableBlockEditor = ({
       <button
         type="button"
         onClick={addRow}
-        className="mt-1 flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        className="mt-1 inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
       >
-        <Plus className="size-3.5" />
+        <Plus className="size-4" />
         行を追加
       </button>
     </div>
@@ -410,7 +410,7 @@ const SkillsBlockEditor = ({
         value={category}
         onChange={(e) => setCategory(e.target.value)}
         placeholder="カテゴリ（例: プログラミング言語）"
-        className="w-full rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
       {/* w-full だけだと table-layout:auto がコンテナ幅に収めようと各列を圧縮し、320px では
           「経験年数」ヘッダーが1文字ずつ縦積みになっていた（#150）。min-w を与えてテーブル自体を
@@ -437,7 +437,7 @@ const SkillsBlockEditor = ({
                     onChange={(e) => setSkill(i, 'name', e.target.value)}
                     placeholder="スキル名（例: TypeScript）"
                     aria-label={`スキル${i + 1}の名称`}
-                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
                 <td className="border border-border p-1">
@@ -448,7 +448,7 @@ const SkillsBlockEditor = ({
                     value={s.years}
                     onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
                     aria-label={`スキル${i + 1}の経験年数`}
-                    className="w-full rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
                 <td className="border border-border p-1">
@@ -464,9 +464,9 @@ const SkillsBlockEditor = ({
                     type="button"
                     onClick={() => removeSkill(i)}
                     aria-label={`スキル${i + 1}を削除`}
-                    className="rounded p-1 text-muted-foreground hover:text-destructive"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-destructive"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4" />
                   </button>
                 </td>
               </tr>
@@ -477,9 +477,9 @@ const SkillsBlockEditor = ({
       <button
         type="button"
         onClick={addSkill}
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
       >
-        <Plus className="size-3.5" />
+        <Plus className="size-4" />
         スキルを追加
       </button>
     </div>
@@ -518,7 +518,7 @@ const ExperienceBlockEditor = ({
         onChange={(e) => set('role', e.target.value)}
         placeholder="職種（例: フロントエンドエンジニア）"
         aria-label="職種"
-        className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <textarea
         value={data.description}
@@ -526,7 +526,7 @@ const ExperienceBlockEditor = ({
         rows={4}
         placeholder="業務内容"
         aria-label="業務内容"
-        className="w-full resize-y rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
       />
     </div>
   );
@@ -562,14 +562,14 @@ const ProfileBlockEditor = ({
           onChange={(e) => set('name', e.target.value)}
           placeholder="名前（例: I・K）"
           aria-label="名前"
-          className="rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <input
           value={data.company ?? ''}
           onChange={(e) => set('company', e.target.value)}
           placeholder="所属会社（例: 株式会社 RITMO）"
           aria-label="所属会社"
-          className="rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       <input
@@ -577,7 +577,7 @@ const ProfileBlockEditor = ({
         onChange={(e) => set('title', e.target.value)}
         placeholder="肩書き（例: フルスタックエンジニア / EM）"
         aria-label="肩書き"
-        className="w-full rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <textarea
         value={data.pr}
@@ -585,7 +585,7 @@ const ProfileBlockEditor = ({
         rows={3}
         placeholder="自己PR"
         aria-label="自己PR"
-        className="w-full resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <div>
         <p className="mb-1 text-xs text-muted-foreground">強み（1行に1つ）</p>
@@ -595,7 +595,7 @@ const ProfileBlockEditor = ({
           rows={3}
           placeholder={'計測ベースのパフォーマンス改善\n開発基盤づくり'}
           aria-label="強み"
-          className="w-full resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       <div className="grid grid-cols-2 gap-2">
@@ -607,7 +607,7 @@ const ProfileBlockEditor = ({
               onChange={(e) => setMeta(key, e.target.value)}
               placeholder={placeholder}
               aria-label={label}
-              className="w-full rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+              className="w-full min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
         ))}
@@ -652,7 +652,7 @@ const SortableBlock = ({
     >
       <button
         type="button"
-        className="mt-1 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+        className="inline-flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground active:cursor-grabbing"
         aria-label="ブロックを並べ替え"
         {...attributes}
         {...listeners}
@@ -746,7 +746,7 @@ const PaletteChip = ({ blockType, label, icon }: (typeof PALETTE_ITEMS)[number])
       type="button"
       {...listeners}
       {...attributes}
-      className={`flex cursor-grab items-center gap-1 rounded border border-dashed border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary active:cursor-grabbing ${
+      className={`inline-flex h-11 cursor-grab items-center gap-1 rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary active:cursor-grabbing ${
         isDragging ? 'opacity-40' : ''
       }`}
     >
@@ -1351,7 +1351,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                     if (e.key === 'Enter') handleConfirmCreate();
                     if (e.key === 'Escape') setShowCreateDialog(false);
                   }}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full min-h-11 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
@@ -1362,7 +1362,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   id="new-sheet-template"
                   value={newSheetTemplateId}
                   onChange={(e) => setNewSheetTemplateId(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full min-h-11 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   {TEMPLATES.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -1421,7 +1421,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 ◧ {showProjectPreview ? 'プレビューを隠す' : 'プレビューを表示'}
               </button>
             )}
-            <Button variant="ghost" size="sm" onClick={handleOpenPreview} aria-label="プレビューを別ウィンドウで開く">
+            <Button
+              variant="ghost"
+              size="default"
+              className="h-11"
+              onClick={handleOpenPreview}
+              aria-label="プレビューを別ウィンドウで開く"
+            >
               <Eye className="size-4 sm:mr-1.5" />
               <span className="hidden sm:inline">プレビュー</span>
             </Button>
@@ -1438,7 +1444,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   <Button
                     variant="outline"
                     size="sm"
-                    className="ml-1 h-6 px-2 text-[11px]"
+                    className="ml-1 h-9 px-2 text-xs"
                     onClick={() => window.location.reload()}
                   >
                     再読み込み
@@ -1449,25 +1455,28 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="テーマ切り替え">
               {mode === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
-            <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={handleExport}>
+            <Button variant="outline" size="default" className="hidden h-11 sm:inline-flex" onClick={handleExport}>
               <Download className="mr-1.5 size-4" />
               バックアップ
             </Button>
-            <Link
-              href="/view"
-              className="hidden text-sm text-muted-foreground hover:text-foreground sm:inline"
-              onClick={(e) => {
-                // クライアント遷移では beforeunload が発火しないため、dirty 時はここで確認する
-                if (!confirmDiscardChanges()) e.preventDefault();
-              }}
-            >
-              閲覧へ
-            </Link>
+            <Button asChild variant="ghost" className="hidden h-11 px-3 sm:inline-flex">
+              <Link
+                href="/view"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  // クライアント遷移では beforeunload が発火しないため、dirty 時はここで確認する
+                  if (!confirmDiscardChanges()) e.preventDefault();
+                }}
+              >
+                閲覧へ
+              </Link>
+            </Button>
             {/* 自動保存の実行中も無効化し、同時保存（expectedUpdatedAt 取り違えの誤 Conflict）を防ぐ */}
             <Button
               onClick={handleSave}
               disabled={isSaving || autosaveStatus === 'saving'}
               aria-label={isSaving ? '保存中' : '保存'}
+              className="h-11"
             >
               <Save className="size-4 sm:mr-1.5" />
               <span className="hidden sm:inline">{isSaving ? '保存中...' : '保存'}</span>
@@ -1494,9 +1503,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   type="button"
                   onClick={handleCreateSheet}
                   disabled={isSheetOp}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  className="inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
                 >
-                  <Plus className="size-3.5" />
+                  <Plus className="size-4" />
                   新規シート
                 </button>
               </div>
@@ -1511,22 +1520,23 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                         if (!confirmDiscardChanges()) return;
                         router.push(`/builder?sheet=${sheet.id}`);
                       }}
-                      className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
+                      className={`flex min-h-11 min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
                         sheet.id === activeSheetId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                       }`}
                     >
-                      <FileText className="size-3.5 shrink-0" />
+                      <FileText className="size-4 shrink-0" />
                       <span className="truncate">{sheet.title}</span>
                     </button>
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleDeleteSheet(sheet.id, sheet.title)}
                       disabled={isSheetOp || sheets.length <= 1}
                       aria-label={`「${sheet.title}」を削除`}
-                      className="rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                      className="text-muted-foreground hover:text-destructive disabled:opacity-30"
                     >
-                      <Trash2 className="size-3.5" />
-                    </button>
+                      <Trash2 className="size-4" />
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -1541,7 +1551,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="スキルシートのタイトル"
-                className="w-full rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full min-h-11 rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -1550,7 +1560,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               <button
                 type="button"
                 onClick={() => setActiveTab('blocks')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'blocks'
                     ? 'border-b-2 border-primary text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -1561,7 +1571,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               <button
                 type="button"
                 onClick={() => setActiveTab('project')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'project'
                     ? 'border-b-2 border-primary text-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -1640,19 +1650,19 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             // flex-wrap: 4ボタンが flex-1 均等割りだと 375px 幅でラベルの最小幅を
             // 確保しきれず横スクロールの原因になっていた（実機確認）。折り返し可能にする。
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
+              <Button variant="outline" onClick={addMarkdownBlock} className="h-11 flex-1">
                 <Plus className="mr-1.5 size-4" />
                 テキスト
               </Button>
-              <Button variant="outline" onClick={addTableBlock} className="flex-1">
+              <Button variant="outline" onClick={addTableBlock} className="h-11 flex-1">
                 <Table className="mr-1.5 size-4" />
                 テーブル
               </Button>
-              <Button variant="outline" onClick={addSkillsBlock} className="flex-1">
+              <Button variant="outline" onClick={addSkillsBlock} className="h-11 flex-1">
                 <Plus className="mr-1.5 size-4" />
                 スキル一覧
               </Button>
-              <Button variant="outline" onClick={addExperienceBlock} className="flex-1">
+              <Button variant="outline" onClick={addExperienceBlock} className="h-11 flex-1">
                 <Plus className="mr-1.5 size-4" />
                 職務経歴
               </Button>
