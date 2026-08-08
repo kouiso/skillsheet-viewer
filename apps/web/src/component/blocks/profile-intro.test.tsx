@@ -1,5 +1,5 @@
 import type { ProfileBlockData } from '@skillsheet/db/blocks';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ProfileIntro } from './profile-intro';
@@ -105,5 +105,45 @@ describe('ProfileIntro', () => {
     // SP では line-clamp-4 が付くが、sm 以上では sm:line-clamp-none で必ず解除されること。
     expect(prEl.className).toContain('line-clamp-4');
     expect(prEl.className).toContain('sm:line-clamp-none');
+  });
+
+  it('メタ情報の値は min-w-0 + break-words で長い値でも折り返せる（レビュー指摘: 2列グリッドでの隣接列への重なり防止）', () => {
+    render(<ProfileIntro data={buildData({ meta: { qualifications: 'Very-Long-Unbroken-Certification-Name' } })} />);
+    const dd = screen.getByText('Very-Long-Unbroken-Certification-Name');
+    const row = dd.closest('div');
+    expect(dd.className).toContain('break-words');
+    expect(dd.className).toContain('min-w-0');
+    expect(row?.className).toContain('min-w-0');
+  });
+
+  it('Webフォント読み込み完了時（document.fonts.ready）に自己PRの切り詰め判定を再測定する（レビュー指摘: preload:false+display:swap によるフォント差し替え対策）', async () => {
+    scrollHeight = 100;
+    clientHeight = 100; // 初回はフォールバックフォントで4行に収まっている想定
+    let resolveFontsReady: () => void = () => {};
+    const fontsReadyPromise = new Promise<FontFaceSet>((resolve) => {
+      resolveFontsReady = () => resolve({} as FontFaceSet);
+    });
+    const originalFonts = document.fonts;
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { ready: fontsReadyPromise },
+    });
+
+    try {
+      const pr = 'あ'.repeat(200);
+      render(<ProfileIntro data={buildData({ pr })} />);
+      expect(screen.queryByRole('button', { name: /続きを読む/ })).toBeNull();
+
+      // Webフォントへの差し替えで折り返しが増え、4行に収まらなくなったことを再現する。
+      scrollHeight = 200;
+      await act(async () => {
+        resolveFontsReady();
+        await fontsReadyPromise;
+      });
+
+      expect(screen.getByRole('button', { name: /続きを読む/ })).toBeInTheDocument();
+    } finally {
+      Object.defineProperty(document, 'fonts', { configurable: true, value: originalFonts });
+    }
   });
 });

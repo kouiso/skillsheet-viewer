@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
+import useMediaQuery from '@/hooks/use-media-query';
 
 /** ビューアで表示ON/OFFを切り替えられるセクションのキー。 */
 export type ViewKey = 'skills' | 'process' | 'projects' | 'timeline';
@@ -50,6 +51,90 @@ export function ViewerTopbar({
   canEdit = true,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
+  // CSS order は視覚順のみで DOM順（キーボードのタブ順・スクリーンリーダーの読み上げ順）には
+  // 影響しない。ビュートグルとアイコン群は SP/sm 以上で視覚的な前後が入れ替わるため、
+  // order-* ではなく DOM 順自体を Tailwind の sm ブレークポイント(640px)に合わせて切り替える。
+  const isDesktop = useMediaQuery('(min-width: 640px)');
+
+  const viewToggleFieldset = (
+    <fieldset
+      key="view-toggles"
+      // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
+      // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
+      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
+    >
+      <legend className="sr-only">表示するビュー</legend>
+      {ALL_VIEWS.map((view) => {
+        const on = views.includes(view.id);
+        return (
+          <button
+            key={view.id}
+            type="button"
+            onClick={() => onToggleView(view.id)}
+            aria-pressed={on}
+            // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
+            // shrink-0 + whitespace-nowrap: SP の flex-nowrap + overflow-x-auto で
+            // 横スクロールさせる設計のため、ボタン自体が潰れて文字が折り返さないようにする。
+            className={`softbtn compact shrink-0 whitespace-nowrap ${on ? 'on' : ''}`}
+          >
+            <span aria-hidden className="sdot" />
+            {view.label}
+          </button>
+        );
+      })}
+    </fieldset>
+  );
+
+  const actionIcons = (
+    <div key="action-icons" className="flex items-center gap-2">
+      {canEdit && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
+              <Link href="/builder">
+                <PencilLine />
+              </Link>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>編集／ビルダー</TooltipContent>
+        </Tooltip>
+      )}
+
+      {onDownloadPdf && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void onDownloadPdf()}
+              disabled={pdfLoading}
+              aria-busy={pdfLoading}
+              aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
+              className="min-h-11 min-w-11"
+            >
+              {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
+        </Tooltip>
+      )}
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="テーマ切り替え"
+            className="min-h-11 min-w-11"
+          >
+            {mode === 'dark' ? <Sun /> : <Moon />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
 
   return (
     <motion.header
@@ -73,83 +158,19 @@ export function ViewerTopbar({
 
         <div className="min-w-4 flex-1" />
 
-        {/* SP の視覚順（アイコン群→ビュートグル）に DOM 順自体を合わせ、sm 以上だけ
-            sm:order-* で元の順（ビュートグル→アイコン群）に戻す。CSS order は視覚順のみで
-            DOM順（キーボード操作のタブ順・スクリーンリーダーの読み上げ順）には影響しないため。 */}
-        <div className="flex items-center gap-2 sm:order-4">
-          {canEdit && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
-                  <Link href="/builder">
-                    <PencilLine />
-                  </Link>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>編集／ビルダー</TooltipContent>
-            </Tooltip>
-          )}
-
-          {onDownloadPdf && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => void onDownloadPdf()}
-                  disabled={pdfLoading}
-                  aria-busy={pdfLoading}
-                  aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
-                  className="min-h-11 min-w-11"
-                >
-                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
-            </Tooltip>
-          )}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                aria-label="テーマ切り替え"
-                className="min-h-11 min-w-11"
-              >
-                {mode === 'dark' ? <Sun /> : <Moon />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
-          </Tooltip>
-        </div>
-
-        <fieldset
-          // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
-          // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
-          className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:order-3 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
-        >
-          <legend className="sr-only">表示するビュー</legend>
-          {ALL_VIEWS.map((view) => {
-            const on = views.includes(view.id);
-            return (
-              <button
-                key={view.id}
-                type="button"
-                onClick={() => onToggleView(view.id)}
-                aria-pressed={on}
-                // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
-                // shrink-0 + whitespace-nowrap: SP の flex-nowrap + overflow-x-auto で
-                // 横スクロールさせる設計のため、ボタン自体が潰れて文字が折り返さないようにする。
-                className={`softbtn compact shrink-0 whitespace-nowrap ${on ? 'on' : ''}`}
-              >
-                <span aria-hidden className="sdot" />
-                {view.label}
-              </button>
-            );
-          })}
-        </fieldset>
+        {/* デスクトップはビュートグル→アイコン群、SPはアイコン群→ビュートグルの順に
+            DOM自体を並べ替える（isDesktop の説明はコンポーネント冒頭のコメント参照）。 */}
+        {isDesktop ? (
+          <>
+            {viewToggleFieldset}
+            {actionIcons}
+          </>
+        ) : (
+          <>
+            {actionIcons}
+            {viewToggleFieldset}
+          </>
+        )}
       </div>
     </motion.header>
   );
