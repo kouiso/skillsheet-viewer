@@ -36,6 +36,14 @@ describe('getEditorUserId / isEditor', () => {
     expect(await isEditor()).toBe(true);
   });
 
+  it('HTTP Request headers が渡された場合は Next.js global より優先する', async () => {
+    const requestHeaders = new Headers({ cookie: 'better-auth.session_token=http-token' });
+    getSessionMock.mockResolvedValue({ user: { id: 'owner-1' } });
+
+    await expect(getEditorUserId(requestHeaders)).resolves.toBe('owner-1');
+    expect(getSessionMock).toHaveBeenCalledWith({ headers: requestHeaders });
+  });
+
   it('owner と一致しない id は null / false', async () => {
     getSessionMock.mockResolvedValue({ user: { id: 'someone-else' } });
     expect(await getEditorUserId()).toBeNull();
