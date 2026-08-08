@@ -397,13 +397,28 @@ function renderTable(node: MdNode, key: number): ReactNode {
 // どのページにも収まらず内容が消失する（#147/#172 の再発）。行数（CARD_MAX_ROWS）と
 // 行ごとの文字数（ROW_UNBREAKABLE_CHAR_LIMIT）は据え置いたうえで、カード全体の合計
 // 文字数（表＋後続段落）にも CARD_TOTAL_CHAR_LIMIT を課す（Issue #194）。
+// 表・リストは項目（行）ごとに固定の行間・パディングを持つため、合計文字数だけでは
+// 項目数が多い場合の実際の高さを過小評価する。primary の表が受けている行単位のチェック
+// （CARD_MAX_ROWS / ROW_UNBREAKABLE_CHAR_LIMIT）は、trailing 中に含まれる表・リスト
+// （duties/acquired 等の自由記述が GFM 表や箇条書きになったもの）には及んでおらず、
+// 短いセル/項目が多数並ぶケースで合計文字数だけは閾値内に収まり誤って wrap={false}
+// になりうる（chatgpt-codex-connector レビュー指摘）。tableNode と trailing 中の
+// 表・リストをまとめて「行相当」の単位に展開し、primary の表と同じ基準を適用する。
+function rowLikeLengths(node: MdNode): number[] {
+  if (node.type === 'table') return (node.children ?? []).map(rowTextLength);
+  if (node.type === 'list') return (node.children ?? []).map((item) => nodeText(item).length);
+  return [];
+}
+
 function isCardLikelyToFitOnePage(tableNode: MdNode, trailingParagraphs: MdNode[]): boolean {
-  const rows = tableNode.children ?? [];
-  if (rows.length > NUM.CARD_MAX_ROWS) return false;
-  if (!rows.every((row) => rowTextLength(row) <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT)) return false;
-  const tableCharCount = rows.reduce((sum, row) => sum + rowTextLength(row), 0);
-  const trailingCharCount = trailingParagraphs.reduce((sum, p) => sum + nodeText(p).length, 0);
-  return tableCharCount + trailingCharCount <= NUM.CARD_TOTAL_CHAR_LIMIT;
+  const rowLike = [tableNode, ...trailingParagraphs].flatMap(rowLikeLengths);
+  if (rowLike.length > NUM.CARD_MAX_ROWS) return false;
+  if (!rowLike.every((len) => len <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT)) return false;
+  const structuralCharCount = rowLike.reduce((sum, len) => sum + len, 0);
+  const proseCharCount = trailingParagraphs
+    .filter((p) => p.type !== 'table' && p.type !== 'list')
+    .reduce((sum, p) => sum + nodeText(p).length, 0);
+  return structuralCharCount + proseCharCount <= NUM.CARD_TOTAL_CHAR_LIMIT;
 }
 
 // 見出し直後に表が続くケース（案件カードの見出し+項目表、スキルカテゴリ見出し+

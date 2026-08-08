@@ -40,6 +40,15 @@ export function toStaleSheet<T extends { fetchedAt: number }>(sheet: T): Omit<T,
   return { ...rest, stale: isDbContentStale(fetchedAt) };
 }
 
+// getCachedDbSheets と対になる、一覧向けの toStaleSheet。/view のシート一覧は
+// getCachedDbSheetById/getCachedDbSheet と同じ unstable_cache の stale-while-revalidate
+// 経路を通るにもかかわらず、DB 到達不能時に古い一覧を無期限に返し続けても画面上は
+// 気付けなかった（chatgpt-codex-connector レビュー指摘: #204 修正が /view/db・
+// /view/db/[id] のみを対象にしており、一覧の主導線 /view には及んでいなかった）。
+export function toStaleSheetList<T>(list: { sheets: T; fetchedAt: number }): { sheets: T; stale: boolean } {
+  return { sheets: list.sheets, stale: isDbContentStale(list.fetchedAt) };
+}
+
 // GitHub legacy 経路（/view/[path] 等）。標準導線からは外れているが将来削除まで温存。
 export const getCachedSheets = unstable_cache(() => githubListSheets(), ['sheets-list'], {
   tags: ['sheets'],
@@ -54,10 +63,12 @@ export const getCachedSheet = unstable_cache((path: string) => fetchSheetFile(pa
 // --- DB 正本経路 ---
 
 // Neon DB のシート一覧（標準導線 /view が使う）。ビルダー保存後は 'db-sheet' タグで無効化。
-export const getCachedDbSheets = unstable_cache(() => dbListSheets(), ['db-sheets-list'], {
-  tags: ['db-sheet'],
-  revalidate: 60,
-});
+// fetchedAt を同梱する（Issue #204 の一覧版。chatgpt-codex-connector レビュー指摘）。
+export const getCachedDbSheets = unstable_cache(
+  async () => ({ sheets: await dbListSheets(), fetchedAt: Date.now() }),
+  ['db-sheets-list'],
+  { tags: ['db-sheet'], revalidate: 60 },
+);
 
 // 指定 ID のシートを読む（/view/db/[id] が使う）。fetchedAt を同梱する（Issue #204）。
 export const getCachedDbSheetById = unstable_cache(
