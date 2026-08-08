@@ -33,7 +33,7 @@ export function SelectOrCustom({ value, options, onChange, placeholder }: Select
       <select
         value={selectValue}
         onChange={handleSelectChange}
-        className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+        className="min-h-11 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <option value="">{placeholder ?? '選択してください'}</option>
         {options.map((opt) => (
@@ -49,7 +49,7 @@ export function SelectOrCustom({ value, options, onChange, placeholder }: Select
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="自由入力"
-          className="h-8 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          className="min-h-11 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />
       )}
     </div>
