@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileDown, Moon, PencilLine, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, Loader2, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -62,7 +62,7 @@ export function ViewerTopbar({
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
         <Link
           href="/view"
-          className="flex min-h-11 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent"
+          className="order-1 flex min-h-11 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent"
           aria-label="シート一覧へ戻る"
         >
           <ArrowLeft className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -71,9 +71,13 @@ export function ViewerTopbar({
           {company && <span className="font-mono text-[11.5px] text-faint">{company}</span>}
         </Link>
 
-        <div className="min-w-4 flex-1" />
+        <div className="order-2 min-w-4 flex-1" />
 
-        <fieldset className="m-0 flex flex-wrap items-center gap-1.5 border-0 p-0">
+        <fieldset
+          // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
+          // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
+          className="order-4 m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:order-3 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
+        >
           <legend className="sr-only">表示するビュー</legend>
           {ALL_VIEWS.map((view) => {
             const on = views.includes(view.id);
@@ -84,7 +88,9 @@ export function ViewerTopbar({
                 onClick={() => onToggleView(view.id)}
                 aria-pressed={on}
                 // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
-                className={`softbtn compact ${on ? 'on' : ''}`}
+                // shrink-0 + whitespace-nowrap: SP の flex-nowrap + overflow-x-auto で
+                // 横スクロールさせる設計のため、ボタン自体が潰れて文字が折り返さないようにする。
+                className={`softbtn compact shrink-0 whitespace-nowrap ${on ? 'on' : ''}`}
               >
                 <span aria-hidden className="sdot" />
                 {view.label}
@@ -93,7 +99,7 @@ export function ViewerTopbar({
           })}
         </fieldset>
 
-        <div className="flex items-center gap-1">
+        <div className="order-3 flex items-center gap-2 sm:order-4">
           {canEdit && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -115,13 +121,14 @@ export function ViewerTopbar({
                   size="icon"
                   onClick={() => void onDownloadPdf()}
                   disabled={pdfLoading}
-                  aria-label="PDFダウンロード"
+                  aria-busy={pdfLoading}
+                  aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
                   className="min-h-11 min-w-11"
                 >
-                  <FileDown />
+                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>PDFをダウンロード</TooltipContent>
+              <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
             </Tooltip>
           )}
 
