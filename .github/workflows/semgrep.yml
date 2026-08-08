@@ -1,0 +1,39 @@
+name: Semgrep
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.js"
+      - "**/*.mjs"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Code Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep@sha256:2b33f46ba66cf8cc2ad59ccfa7d22951fd00c632c38f1339e84ec8e6e641a942
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # 依存脆弱性は security-scan.yml の pnpm audit と security-audit.yml の audit-ci が
+      # 見ているため、ここは SAST に専念する。
+      # --config auto はメトリクス送信が必須で無効化できず、private 化した際に
+      # リポジトリのメタデータが外部へ出る。明示的なルールパックなら送信なしで動く。
+      - run: semgrep scan --config p/default --metrics=off
