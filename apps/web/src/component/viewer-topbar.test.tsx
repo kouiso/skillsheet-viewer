@@ -57,4 +57,22 @@ describe('ViewerTopbar', () => {
     renderTopbar({ canEdit: false });
     expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
   });
+
+  it('DOM順は SP の視覚順（戻るリンク→アイコン群→ビュートグル）に一致する（レビュー指摘: キーボード/スクリーンリーダーの操作順対策）', () => {
+    renderTopbar();
+    const backLink = screen.getByLabelText('シート一覧へ戻る');
+    const themeButton = screen.getByLabelText('テーマ切り替え');
+    const firstViewToggle = screen.getByRole('button', { name: ALL_VIEW_KEYS.length > 0 ? 'スキルマトリクス' : '' });
+
+    expect(backLink.compareDocumentPosition(themeButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(themeButton.compareDocumentPosition(firstViewToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('sm 以上はビュートグルがアイコン群より前に戻る（sm:order-3 / sm:order-4）', () => {
+    renderTopbar();
+    const fieldset = screen.getByRole('group', { name: '表示するビュー' });
+    const themeButton = screen.getByLabelText('テーマ切り替え');
+    expect(fieldset.className).toContain('sm:order-3');
+    expect(themeButton.closest('div')?.className).toContain('sm:order-4');
+  });
 });
