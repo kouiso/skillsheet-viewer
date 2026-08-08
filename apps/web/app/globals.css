@@ -10,11 +10,13 @@
   ティール単色 / radius 4px(lg 6px) / 影なしヘアライン / IBM Plex Sans JP。
   ライト: bg #f6f8f8, surface #fff, surface2 #f0f3f3, text #10171a, muted #4a565c,
           border #dce3e4, accent #0d9488, accentSoft #ecfaf8.
-  ダーク: bg #0a0d0f, surface #0f1316, surface2 #141a1e, text #e6edf0, muted #8b969d,
+  ダーク: bg #0a0d0f, surface #0f1316, surface2 #141a1e, text #e6edf0, muted #98a3aa,
           border #1d262b, accent #14b8a6, accentSoft #0c2320.
   WCAG AA:
     muted-text/bg 7.1:1 ✅  primary-dark(link)/bg 5.8:1 ✅  accent-dark/dark-surface 7.8:1 ✅
     primary(btn)/white-text 3.7:1 ⚠ ボタン大テキスト用許容 (large-text 3:1 OK)
+    dark muted-text/bg 7.57:1 ✅  dark muted-text/card 7.25:1 ✅（2026-08-08、旧 #8b969d の
+    card 6.18:1・track 5.35:1 から明度を上げてライトと同水準へ）
 */
 :root {
   --background: #f6f8f8;
@@ -66,8 +68,10 @@
   /* 旧 design 値 #8a969c は背景 #f6f8f8 に対し 2.85:1 で、この色を使う 12px 以下の文字が
      読めなかった。「主役でない情報を引っ込ませる」意図を保ちつつ AA(4.5:1) を満たす最も薄い値へ
      寄せてある（bg 4.55:1 / card 4.85:1）。2026-07-26 に claude design 側もこの値へ更新済みで、
-     いまはデザインと実装が一致している。 */
-  --faint: #69737a;
+     いまはデザインと実装が一致している。
+     2026-08-08: bg 4.55:1 は AA ギリギリのため、余裕を持たせるため bg 5.20:1 / card 5.55:1 へ
+     再調整（--muted-foreground とのコントラスト差を保ちつつ視認性を上げる）。 */
+  --faint: #5f6a71;
   --track: #e6ecec;
   --chip-bg: #eef3f3;
   --chip-text: #34424a;
@@ -103,7 +107,7 @@
   --secondary-dark: #0d9488;
   --secondary-foreground: #0a0d0f;
   --muted: #141a1e;
-  --muted-foreground: #8b969d;
+  --muted-foreground: #98a3aa;
   --accent: #0c2320;
   --accent-foreground: #2dd4bf;
   --destructive: #ef4444;
@@ -117,9 +121,10 @@
   /* ハンドオフ redesign2（console.dark）のトークン語彙。 */
   --surface2: #141a1e;
   --surface3: #182025;
-  /* 旧 design 値 #5a656c は card #0f1316 に対し 3.12:1。bg 4.77:1 / card 4.57:1 へ寄せた。
-     light と同様、2026-07-26 に claude design 側もこの値へ更新済み。 */
-  --faint: #757f87;
+  /* 旧 design 値 #5a656c は card #0f1316 に対し 3.12:1。bg 4.77:1 / card 4.57:1 へ寄せた（2026-07-26）。
+     card 4.57:1 は AA ギリギリのため、2026-08-08 に色相を保ったまま明度のみ +16 して
+     bg 5.92:1 / card 5.66:1 へ再調整。 */
+  --faint: #858f97;
   --track: #192227;
   --chip-bg: #141b1f;
   --chip-text: #aeb9bf;
@@ -485,5 +490,8 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .barFill {
     transition: none;
+  }
+  .animate-spin {
+    animation: none;
   }
 }

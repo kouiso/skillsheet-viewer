@@ -299,7 +299,7 @@ const TableBlockEditor = ({
                     aria-label={`列${ci + 1}の見出し`}
                     className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
                   />
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
                     {ALIGN_OPTIONS.map(({ value, Icon, label }) => (
                       <button
                         key={value}
@@ -1403,7 +1403,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               </span>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {activeTab === 'project' && (
               <button type="button" onClick={() => setHistoryOpen(true)} className="btn sm">
                 ↺ 履歴
@@ -1511,7 +1511,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               </div>
               <ul className="space-y-1">
                 {sheets.map((sheet) => (
-                  <li key={sheet.id} className="flex items-center gap-1">
+                  <li key={sheet.id} className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {

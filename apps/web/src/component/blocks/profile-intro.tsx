@@ -1,6 +1,7 @@
 'use client';
 
 import type { ProfileBlockData } from '@skillsheet/db/blocks';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
@@ -18,29 +19,95 @@ const META_LABELS: Record<string, string> = {
 };
 
 export const ProfileIntro = ({ data }: ProfileIntroProps) => {
+  const [expanded, setExpanded] = useState(false);
+  // 文字数ではなく実測（line-clamp 適用時に scrollHeight > clientHeight か）で判定する。
+  // 改行区切りの短い自己PR（whitespace-pre-line で改行を保持）は文字数が少なくても
+  // 4行を超えて隠れることがあるため、文字数しきい値では検出できない。
+  const [isPrTruncated, setIsPrTruncated] = useState(false);
+  const prRef = useRef<HTMLParagraphElement>(null);
   const metaEntries = (Object.entries(data.meta) as [string, string | undefined][]).filter(
     ([, v]) => v && v.trim().length > 0,
   );
 
+  const measurePrTruncation = useCallback(() => {
+    const el = prRef.current;
+    // 展開中は line-clamp を外しているため常に非切り詰め判定になり、
+    // トグルを隠す方向に誤爆する。展開中は直前の判定を維持する。
+    if (!el || expanded) return;
+    setIsPrTruncated(el.scrollHeight > el.clientHeight + 1);
+  }, [expanded]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: data.pr 変更時の再測定に必要
+  useEffect(() => {
+    measurePrTruncation();
+  }, [measurePrTruncation, data.pr]);
+
+  // 幅が変わる（ウィンドウリサイズ・回転）と1行あたりの文字数が変わり、
+  // 切り詰め有無も変わるため、幅の変化を ResizeObserver で拾って再測定する。
+  useEffect(() => {
+    const el = prRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measurePrTruncation);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [measurePrTruncation]);
+
+  // IBM Plex Sans JP は preload:false + display:swap（layout.tsx）のため、初回表示では
+  // フォールバックフォントで折り返しが確定した後にWebフォントへ差し替わることがある。
+  // line-clamp は要素自身の高さを4行分に固定するため、この置き換えによる行数の変化は
+  // ResizeObserver（要素の外形サイズの変化）だけでは検知できない。フォント読み込み完了時に
+  // 明示的に再測定する。
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.fonts?.ready) return;
+    let cancelled = false;
+    document.fonts.ready.then(() => {
+      if (!cancelled) measurePrTruncation();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [measurePrTruncation]);
+
   return (
     // design は区切り線を持たず、親の 48px 間隔だけで次のセクションと分ける。
-    <section>
-      <div className="flex flex-col gap-1">
+    // SP はメタ→強み→自己PRの順に並べ替えるため、DOM順自体を SP の視覚順に合わせ、
+    // sm 以上だけ order-* で元の順（氏名→自己PR→強み→メタ）へ戻す
+    // （CSS order は視覚順のみでDOM順=スクリーンリーダーの読み上げ順は変わらないため）。
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1 sm:order-1">
         {/* kicker: 「SKILL SHEET · 会社名」。会社名未設定時は「SKILL SHEET」のみ。 */}
         <p className="kicker mb-1.5">{data.company ? `SKILL SHEET · ${data.company}` : 'SKILL SHEET'}</p>
         {data.name && (
-          <h1 className="text-[34px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground">{data.name}</h1>
+          <h1 className="text-[26px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[34px]">
+            {data.name}
+          </h1>
         )}
         {data.title && <p className="font-mono text-[14.5px] text-accent-text">{data.title}</p>}
       </div>
 
-      {/* 自己PR は段落を改行で区切って保存されるため、pre-line で改行を保持する */}
-      {data.pr && (
-        <p className="mt-4 max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80">{data.pr}</p>
+      {metaEntries.length > 0 && (
+        // design は「年齢 28歳 · 勤務形態 フルリモート · …」の1行。2段組の定義リストはやめる。
+        // SP は2列グリッド、sm 以上は1行フレックスに戻す。
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs text-faint sm:order-4 sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px]">
+          {metaEntries.map(([key, value], i) => (
+            // min-w-0: grid-cols-2 は各トラックを minmax(0,1fr) にするが、内側の flex 行自体は
+            // 既定 min-width:auto のままだと、区切りの無い長い値（英字の資格名など）で
+            // セルからはみ出し隣の列に重なる。break-words で折り返し可能にする。
+            <div key={key} className="flex min-w-0 items-baseline gap-1.5">
+              {i > 0 && (
+                <span aria-hidden className="hidden sm:inline">
+                  ·
+                </span>
+              )}
+              <dt className="shrink-0">{META_LABELS[key] ?? key}</dt>
+              <dd className="min-w-0 break-words text-foreground">{value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
 
       {data.strengths.length > 0 && (
-        <ul className="mt-4 flex flex-wrap gap-2">
+        <ul className="flex flex-wrap gap-2 sm:order-3">
           {data.strengths.map((s, i) => (
             // 押せない紹介ラベルなので .techtag。
             // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
@@ -51,17 +118,28 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
         </ul>
       )}
 
-      {metaEntries.length > 0 && (
-        // design は「年齢 28歳 · 勤務形態 フルリモート · …」の1行。2段組の定義リストはやめる。
-        <dl className="mt-[18px] flex flex-wrap items-baseline gap-x-[18px] gap-y-1 font-mono text-xs text-faint">
-          {metaEntries.map(([key, value], i) => (
-            <div key={key} className="flex items-baseline gap-1.5">
-              {i > 0 && <span aria-hidden>·</span>}
-              <dt>{META_LABELS[key] ?? key}</dt>
-              <dd className="text-foreground">{value}</dd>
-            </div>
-          ))}
-        </dl>
+      {/* 自己PR は段落を改行で区切って保存されるため、pre-line で改行を保持する */}
+      {data.pr && (
+        <>
+          <p
+            ref={prRef}
+            // line-clamp は SP 専用（sm 以上は続きを読むボタンを出さないため、常に全文表示に戻す）。
+            className={`max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80 sm:order-2 sm:line-clamp-none ${
+              !expanded ? 'line-clamp-4' : ''
+            }`}
+          >
+            {data.pr}
+          </p>
+          {isPrTruncated && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="-mt-2 self-start text-xs font-medium text-accent-text sm:hidden"
+            >
+              {expanded ? '折りたたむ' : '続きを読む'}
+            </button>
+          )}
+        </>
       )}
     </section>
   );

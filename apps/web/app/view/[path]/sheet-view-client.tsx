@@ -36,6 +36,7 @@ const SheetViewClient = ({ title, content, blocks, canEdit = false }: SheetViewC
   };
 
   const handleDownloadPdf = async () => {
+    const toastId = toast.loading('PDFを生成中…');
     try {
       setPdfLoading(true);
 
@@ -57,10 +58,10 @@ const SheetViewClient = ({ title, content, blocks, canEdit = false }: SheetViewC
         URL.revokeObjectURL(url);
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
-      toast.success('PDFをダウンロードしました');
+      toast.success('PDFをダウンロードしました', { id: toastId });
     } catch (err) {
       console.error('Error generating PDF:', err);
-      toast.error('PDFの生成に失敗しました');
+      toast.error('PDFの生成に失敗しました', { id: toastId });
     } finally {
       setPdfLoading(false);
     }
