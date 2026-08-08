@@ -406,8 +406,25 @@ function renderTable(node: MdNode, key: number): ReactNode {
 // 表・リストをまとめて「行相当」の単位に展開し、primary の表と同じ基準を適用する。
 function rowLikeLengths(node: MdNode): number[] {
   if (node.type === 'table') return (node.children ?? []).map(rowTextLength);
-  if (node.type === 'list') return (node.children ?? []).map((item) => nodeText(item).length);
+  if (node.type === 'list') return (node.children ?? []).flatMap(listItemRowLikeLengths);
   return [];
+}
+
+// リスト項目1つを「行相当」の単位に展開する。トップレベルの項目数だけを数えると、
+// 1項目の中にネストした箇条書き（子の list）が多数ぶら下がっているケース
+// （見た目は1項目でも renderList は再帰的に全ネスト項目を描画するため、実際は
+// 多くの行を消費する）で行数チェックをすり抜け、合計文字数も閾値内に収まって
+// 誤って wrap={false} になりうる（chatgpt-codex-connector レビュー指摘）。
+// 項目自身のテキスト（ネストした list を除く）と、ネストした list の各項目とを、
+// それぞれ独立した「行」として再帰的に数える。
+function listItemRowLikeLengths(item: MdNode): number[] {
+  const children = item.children ?? [];
+  const nestedLists = children.filter((child) => child.type === 'list');
+  const ownText = children
+    .filter((child) => child.type !== 'list')
+    .map(nodeText)
+    .join('');
+  return [ownText.length, ...nestedLists.flatMap((list) => (list.children ?? []).flatMap(listItemRowLikeLengths))];
 }
 
 function isCardLikelyToFitOnePage(tableNode: MdNode, trailingParagraphs: MdNode[]): boolean {

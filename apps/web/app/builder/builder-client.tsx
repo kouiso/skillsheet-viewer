@@ -742,6 +742,13 @@ const ProfileBlockEditor = ({
           <p className="text-xs text-muted-foreground">その他の項目</p>
           {customRows.map((row) => {
             const isConflicting = conflictingRowIds.has(row.id);
+            // ラベルが空で値だけある行。isBlocked（親への保存ブロック）はこれも見ているが、
+            // 従来はラベル衝突（isConflicting）だけを見て aria-invalid・エラー文言を出していた
+            // ため、このケースは「保存できません」という全体表示だけが出て、原因の行には
+            // 何の印も付かず「重複」という誤った診断になっていた（chatgpt-codex-connector
+            // レビュー指摘）。行単位でも実際のブロック理由を出す。
+            const isEmptyLabelWithValue = row.label.trim() === '' && row.value.trim() !== '';
+            const hasRowError = isConflicting || isEmptyLabelWithValue;
             return (
               <div key={row.id} className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -750,9 +757,9 @@ const ProfileBlockEditor = ({
                     onChange={(e) => updateCustomRow(row.id, { label: e.target.value })}
                     placeholder="項目名（例: 得意分野）"
                     aria-label="項目名"
-                    aria-invalid={isConflicting}
+                    aria-invalid={hasRowError}
                     className={`w-28 shrink-0 min-h-11 rounded border bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring ${
-                      isConflicting ? 'border-destructive' : 'border-input'
+                      hasRowError ? 'border-destructive' : 'border-input'
                     }`}
                   />
                   <input
@@ -774,6 +781,11 @@ const ProfileBlockEditor = ({
                 {isConflicting && (
                   <p className="text-xs text-destructive">
                     項目名が他の項目と重複しているため、この項目は保存されません。項目名を変更してください。
+                  </p>
+                )}
+                {!isConflicting && isEmptyLabelWithValue && (
+                  <p className="text-xs text-destructive">
+                    項目名が未入力のため、この項目は保存されません。項目名を入力してください。
                   </p>
                 )}
               </div>
@@ -1460,7 +1472,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       return;
     }
     if (blockedItemIds.size > 0) {
-      toast.error('プロフィールの項目名が重複しています。解消してから保存してください。');
+      // blockedItemIds は項目名の重複・未入力のどちらでもブロックする（isBlocked 参照）。
+      // ここで「重複」と断定すると、原因が未入力の場合に誤った診断になる
+      // （chatgpt-codex-connector レビュー指摘）。行単位のエラー表示（ProfileBlockEditor）
+      // が実際の原因を示すので、ここでは理由を特定しない案内にとどめる。
+      toast.error(
+        'プロフィールの項目名を確認してください（重複または未入力があります）。解消してから保存してください。',
+      );
       return;
     }
     // データ消失ガード: 全ブロックが空（type 別判定）なら、保存で全内容が消える。
@@ -1536,7 +1554,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       ? { label: '競合 — 再読み込みが必要', dotClass: 'bg-destructive', textClass: 'text-destructive' }
       : blockedItemIds.size > 0
         ? {
-            label: '項目名の重複を解消してください — 保存できません',
+            // 重複・未入力のどちらでもブロックされるため「重複」と断定しない
+            // （chatgpt-codex-connector レビュー指摘）。実際の原因は行単位のエラー表示で示す。
+            label: '項目名を確認してください（重複/未入力）— 保存できません',
             dotClass: 'bg-destructive',
             textClass: 'text-destructive',
           }

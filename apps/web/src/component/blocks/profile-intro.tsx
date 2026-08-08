@@ -1,6 +1,6 @@
 'use client';
 
-import { orderedProfileMetaEntries, PROFILE_META_LABELS, type ProfileBlockData } from '@skillsheet/db/blocks';
+import { orderedProfileMetaEntries, type ProfileBlockData, resolveProfileMetaLabel } from '@skillsheet/db/blocks';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
@@ -46,7 +46,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
           {metaEntries.map(([key, value], i) => (
             <div key={key} className="flex items-baseline gap-1.5">
               {i > 0 && <span aria-hidden>·</span>}
-              <dt>{PROFILE_META_LABELS[key] ?? key}</dt>
+              <dt>{resolveProfileMetaLabel(key)}</dt>
               <dd className="text-foreground">{value}</dd>
             </div>
           ))}
