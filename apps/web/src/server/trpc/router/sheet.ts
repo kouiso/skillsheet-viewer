@@ -9,7 +9,7 @@ import {
 import { TRPCError } from '@trpc/server';
 import { revalidateTag } from 'next/cache';
 
-import { getCachedDbSheet, getCachedDbSheetById, getCachedDbSheets } from '@/server/sheets-cache';
+import { getCachedDbSheet, getCachedDbSheetById, getCachedDbSheets, toStaleSheet } from '@/server/sheets-cache';
 
 import { getTemplate } from '../../../../app/builder/templates';
 import { editorProcedure, router, viewerProcedure } from '../init';
@@ -38,7 +38,7 @@ export const sheetRouter = router({
 
     if (input.sheetId && sheets.some((sheet) => sheet.id === input.sheetId)) {
       const sheet = await getCachedDbSheetById(input.sheetId);
-      return { sheet, sheets, activeSheetId: input.sheetId };
+      return { sheet: toStaleSheet(sheet), sheets, activeSheetId: input.sheetId };
     }
 
     const sheet = await getCachedDbSheet();
@@ -49,7 +49,7 @@ export const sheetRouter = router({
       // 一覧キャッシュは従来どおり最大 60 秒で自然更新させる。
       sheets = await listDbSheets();
     }
-    return { sheet, sheets, activeSheetId: sheets[0]?.id ?? '' };
+    return { sheet: toStaleSheet(sheet), sheets, activeSheetId: sheets[0]?.id ?? '' };
   }),
 
   // tRPC procedure は throw された値を無条件で TRPCError にラップする（server caller 経由でも
@@ -57,7 +57,9 @@ export const sheetRouter = router({
   // NOT_FOUND コードへ明示的にマップし、呼び出し元は TRPCError の code で判定する。
   byId: viewerProcedure.input(sheetIdInputSchema).query(async ({ input }) => {
     try {
-      return await getCachedDbSheetById(input.id);
+      // fetchedAt は内部実装詳細（unstable_cache の再検証判定用）で、公開レスポンスに
+      // 生のタイムスタンプとして出す意図はない。stale 判定結果だけを返す（レビュー指摘）。
+      return toStaleSheet(await getCachedDbSheetById(input.id));
     } catch (err) {
       if (err instanceof SkillSheetNotFoundError) {
         throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -66,7 +68,7 @@ export const sheetRouter = router({
     }
   }),
 
-  getDefault: viewerProcedure.query(() => getCachedDbSheet()),
+  getDefault: viewerProcedure.query(async () => toStaleSheet(await getCachedDbSheet())),
 
   save: editorProcedure.input(saveSheetInputSchema).mutation(async ({ input }) => {
     try {

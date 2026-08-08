@@ -432,7 +432,12 @@ function renderHeadingWithTable(
       {renderHeadingText(headingNode)}
     </View>,
     renderTable(tableNode, key),
-    ...trailingParagraphs.map((p, i) => renderParagraph(p, key * 1000 + i + 1)),
+    // trailingParagraphs は paragraph に限らない（duties/acquired 等の自由記述が
+    // list になりうるため）。型ごとの描画は renderBlocks と同じ BLOCK_RENDERERS を使う。
+    ...trailingParagraphs.map((p, i) => {
+      const renderer = BLOCK_RENDERERS.get(p.type);
+      return renderer ? renderer(p, key * 1000 + i + 1) : null;
+    }),
   ];
   return (
     <View key={key} wrap={!fitsOnePage} minPresenceAhead={NUM.MIN_PRESENCE_PROJECT}>
@@ -498,17 +503,20 @@ export function renderBlocks(nodes: MdNode[] | undefined): ReactNode {
     const next = nodes[i + 1];
     // 見出しの直後に表が続く場合は1つの分割制御単位にまとめる（案件カード/
     // スキルカテゴリ表のページ境界分断対策）。表は結合済みとしてスキップする。
-    // 表の直後に続く連続した paragraph（案件カードの会社概要文・業務内容・
-    // 習得スキル・実績）も同じ単位に含める（Issue #194）。paragraph 以外の型
-    // （次の見出し・表・リスト等）に当たった時点で打ち切る。ブロック同士は
-    // 空行だけで連結される（blocksToMarkdown）ため、この案件カードの直後に
-    // 見出しを持たない markdown ブロック（素の段落）が続く稀なケースでは、
-    // その段落もこのカードの一部として扱われる（表示上は連続するため実害は
-    // 小さいが、意図しない分割制御を受ける可能性がある既知の制約）。
+    // 表の直後に続く内容（案件カードの会社概要文・業務内容・習得スキル・実績）も
+    // 同じ単位に含める（Issue #194）。次の**見出しまたは表**に当たった時点で
+    // 打ち切り、それ以外の型（paragraph・list・blockquote 等）は全て取り込む。
+    // duties/acquired 等はユーザーの自由記述で、箇条書き（list）になることが
+    // あるため、paragraph だけに限定するとその段落が別の分割単位に外れ、
+    // 見出し+表だけが1ページ目・内容が次ページに漏れる（#194 の再発。レビュー指摘）。
+    // ブロック同士は空行だけで連結される（blocksToMarkdown）ため、この案件カード
+    // の直後に見出しを持たない markdown ブロックが続く稀なケースでは、その内容も
+    // このカードの一部として扱われる（表示上は連続するため実害は小さいが、
+    // 意図しない分割制御を受ける可能性がある既知の制約）。
     if (node.type === 'heading' && next?.type === 'table') {
       let j = i + 2;
       const trailing: MdNode[] = [];
-      while (j < nodes.length && nodes[j].type === 'paragraph') {
+      while (j < nodes.length && nodes[j].type !== 'heading' && nodes[j].type !== 'table') {
         trailing.push(nodes[j]);
         j += 1;
       }

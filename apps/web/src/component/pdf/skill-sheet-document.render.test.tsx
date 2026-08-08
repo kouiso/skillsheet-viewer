@@ -274,6 +274,39 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain('習得スキルの本文。');
   });
 
+  it('業務内容・習得スキルが箇条書き（list）でも同じ分割制御単位にまとめる（chatgpt-codex-connector レビュー指摘: paragraph 限定だとリストで途切れていた）', () => {
+    // duties/acquired はユーザーの自由記述で、Markdown の箇条書き（- item）になりうる。
+    // mdast 上では paragraph ではなく list ノードになるため、paragraph だけを集める旧実装
+    // では表直後の会社概要文までしか収まらず、箇条書きの本体（業務内容・習得スキル）が
+    // 別の分割単位に外れて見出し+表とは別ページに漏れうる。
+    const nodes = parseMarkdown(
+      buildProjectCardMarkdown(
+        '### 株式会社テスト — 箇条書き案件',
+        '会社概要文です。',
+        '- 要件定義\n- 設計\n- 実装',
+        '- Docker\n- Kubernetes',
+      ),
+    );
+    const rendered = renderBlocks(nodes) as unknown[];
+
+    // 見出し+表+後続内容（段落・見出しラベル・リスト2つ）が1つの要素にまとまる。
+    expect(rendered).toHaveLength(1);
+    const merged = rendered[0] as {
+      type: unknown;
+      props: { wrap?: boolean; minPresenceAhead?: number; children: unknown[] };
+    };
+    expect(merged.type).toBe(View);
+    expect(merged.props.wrap).toBe(false);
+    // 見出し+表(2) + 会社概要文(1) + 「業務内容」見出し(1) + list(1) +
+    // 「習得スキル・実績」見出し(1) + list(1) = 7要素。
+    expect(merged.props.children).toHaveLength(7);
+
+    const text = flattenText(merged);
+    expect(text).toContain('会社概要文です。');
+    expect(text).toContain('要件定義');
+    expect(text).toContain('Kubernetes');
+  });
+
   it('カード全体の合計文字数が大きすぎる場合は wrap={true} のままクリップを防ぐ（Issue #147/#172 の再発防止）', () => {
     const longParagraph = '長文段落です。'.repeat(200); // 十分に長い段落
     const nodes = parseMarkdown(

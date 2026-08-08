@@ -78,7 +78,7 @@ const SheetViewClient = ({ title, content, blocks, canEdit = false, stale = fals
           role="status"
           className="border-b border-warn/40 bg-warn-soft px-4 py-2 text-center text-sm text-warn-strong"
         >
-          最新の内容の取得に失敗している可能性があります。表示中の内容は最新でない場合があります。
+          表示中の内容はしばらく更新されていない可能性があります。最新の状態と異なる場合があります。
         </div>
       )}
       {isDashboard ? (
