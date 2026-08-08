@@ -3,13 +3,9 @@ name: CI Failure Slack Notify
 on:
   workflow_run:
     workflows:
-      - "Blacksmith Probe (temporary diagnostic - safe to delete)"
       - "CI"
-      - "Dependency Review"
       - "Merge Quality Gate"
-      - "PR Label"
       - "PR Labeler"
-      - "PR Setting"
       - "Security Audit"
       - "Security Scan"
       - "Semgrep"
