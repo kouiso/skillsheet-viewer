@@ -52,11 +52,13 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
       )}
 
       {metaEntries.length > 0 && (
-        // design は「年齢 28歳 · 勤務形態 フルリモート · …」の1行。2段組の定義リストはやめる。
-        <dl className="mt-[18px] flex flex-wrap items-baseline gap-x-[18px] gap-y-1 font-mono text-xs text-faint">
+        // SP では 2 列グリッドで折り返しを抑え、sm 以上で 1 行のラベルリストに戻す。
+        <dl className="mt-[18px] grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-xs text-faint sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px] sm:gap-y-1">
           {metaEntries.map(([key, value], i) => (
-            <div key={key} className="flex items-baseline gap-1.5">
-              {i > 0 && <span aria-hidden>·</span>}
+            <div key={key} className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:gap-1.5">
+              <span className="hidden sm:inline" aria-hidden={i === 0}>
+                {i > 0 && <span aria-hidden>·</span>}
+              </span>
               <dt>{META_LABELS[key] ?? key}</dt>
               <dd className="text-foreground">{value}</dd>
             </div>

@@ -43,4 +43,35 @@ describe('isConfigError', () => {
     expect(isConfigError(null)).toBe(false);
     expect(isConfigError(undefined)).toBe(false);
   });
+
+  it('tRPC → Drizzle → PostgreSQL の 3 段 cause から 42P01 を検出する', () => {
+    const pg = new Error('relation "skill_sheets" does not exist');
+    (pg as { code?: string }).code = '42P01';
+    const drizzle = new Error('Failed query: select ... from "skill_sheets"');
+    (drizzle as { cause?: unknown }).cause = pg;
+    const trpc = new Error('INTERNAL_SERVER_ERROR');
+    (trpc as { cause?: unknown }).cause = drizzle;
+    expect(isConfigError(trpc)).toBe(true);
+  });
+
+  it('tRPC cause 内の DATABASE_URL 未設定を検出する', () => {
+    const inner = new Error('DATABASE_URL is not set');
+    const outer = new Error('Failed query');
+    (outer as { cause?: unknown }).cause = inner;
+    expect(isConfigError(outer)).toBe(true);
+  });
+
+  it(' cause 連鎖内の Invalid URL を検出する', () => {
+    const inner = new Error('Invalid URL');
+    const outer = new Error('Failed to connect');
+    (outer as { cause?: unknown }).cause = inner;
+    expect(isConfigError(outer)).toBe(true);
+  });
+
+  it('cause 連鎖内の GitHub 401 を「トークン不正」として検出する', () => {
+    const inner = new Error('GitHub API error fetching file: 401');
+    const outer = new Error('Failed query');
+    (outer as { cause?: unknown }).cause = inner;
+    expect(isConfigError(outer)).toBe(true);
+  });
 });

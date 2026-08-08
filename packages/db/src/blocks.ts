@@ -8,7 +8,7 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
-import { flattenTech, formatMonthToken, formatPeriodDisplay } from './process';
+import { flattenTech, formatMonthToken, formatPeriodDisplay, formatProcessForDisplay } from './process';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -600,7 +600,8 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
     const techParts = flattenTech(item.tech);
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
-    if (item.process.length > 0) lines.push(`| 担当工程 | ${escapeCell(item.process.join(', '))} |`);
+    const processDisplay = formatProcessForDisplay(item.process);
+    if (processDisplay.length > 0) lines.push(`| 担当工程 | ${escapeCell(processDisplay)} |`);
     // 会社概要文（CompanyInfo.note）。従来 PDF・バックアップのどちらにも出力先が無く、
     // 案件単体では伝わらない「どういう立ち位置でその会社に入っていたか」が欠落していた（#139）。
     // 見出しと表の間に挟むと、PDF側の「見出し直後が表なら1ブロックとして分割禁止にする」

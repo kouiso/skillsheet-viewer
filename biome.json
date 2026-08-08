@@ -54,7 +54,10 @@
       "!**/.turbo",
       "!pnpm-lock.yaml",
       "!**/*.css",
-      "!doc/dogfooding-evidence"
+      "!doc/dogfooding-evidence",
+      "!**/playwright/.auth",
+      "!**/test-results",
+      "!**/playwright-report"
     ]
   }
 }

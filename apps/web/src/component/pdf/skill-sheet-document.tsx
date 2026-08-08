@@ -383,9 +383,15 @@ function renderTable(node: MdNode, key: number): ReactNode {
 // rowTextLength / ROW_UNBREAKABLE_CHAR_LIMIT をそのまま再利用しつつ、行数が多い
 // 表（1行1行は短くても合計すると1ページに収まらないケース）を CARD_MAX_ROWS で
 // 足切りする。新しい閾値ロジックを重複実装せず、renderTable と同じ考え方を踏襲する。
-function isTableLikelyToFitOnePage(node: MdNode): boolean {
-  const rows = node.children ?? [];
+//
+// 案件カード（見出しが「■」で始まる）の表は行数が少なく、1つのセルが長い（技術
+// スタック等）場合でもページ内で折り返して収まる見込みが高い。行単位の文字数制限で
+// wrap=true になると、見出し+表がページ境界で分断されてしまうため、案件カードでは
+// 行数だけで判定する（#194）。
+function isTableLikelyToFitOnePage(headingNode: MdNode, tableNode: MdNode): boolean {
+  const rows = tableNode.children ?? [];
   if (rows.length > NUM.CARD_MAX_ROWS) return false;
+  if (isProjectHeading(headingNode)) return true;
   return rows.every((row) => rowTextLength(row) <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT);
 }
 
@@ -399,7 +405,7 @@ function isTableLikelyToFitOnePage(node: MdNode): boolean {
 // - どちらの場合も minPresenceAhead を設定し、見出し単独がページ末尾に残るのを防ぐ
 //   （表が収まらず wrap=true になるケースのフォールバック保護でもある）。
 function renderHeadingWithTable(headingNode: MdNode, tableNode: MdNode, key: number): ReactNode {
-  const fitsOnePage = isTableLikelyToFitOnePage(tableNode);
+  const fitsOnePage = isTableLikelyToFitOnePage(headingNode, tableNode);
   return (
     <View key={key} wrap={!fitsOnePage} minPresenceAhead={NUM.MIN_PRESENCE_PROJECT}>
       <View style={styles.headingWrap}>{renderHeadingText(headingNode)}</View>

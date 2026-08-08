@@ -91,7 +91,11 @@ function LoginForm() {
       </Button>
       <p className="text-center text-sm text-muted-foreground">
         閲覧のみの場合は{' '}
-        <Link href="/viewer-auth" className="text-primary underline underline-offset-2">
+        <Link
+          href="/viewer-auth"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded px-2 text-primary underline underline-offset-2"
+          aria-label="閲覧コード認証へ"
+        >
           閲覧コード認証
         </Link>
       </p>

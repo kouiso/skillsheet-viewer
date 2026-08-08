@@ -19,6 +19,17 @@ export const PROCESS_LABELS = [
   '保守・運用',
 ] as const;
 
+/** 担当工程ラベルを、ビューアの ProcessStepper と同じ並びの表示用文字列に変換する。 */
+export function formatProcessForDisplay(labels: string[] = []): string {
+  const { done, other } = normalizeProcess(labels);
+  const out: string[] = [];
+  for (const [i, label] of PROCESS_LABELS.entries()) {
+    if (done[i]) out.push(label);
+  }
+  out.push(...other);
+  return out.join(', ');
+}
+
 // builder の実際の語彙（PROCESS_OPTIONS）からの完全一致対応表。
 // fuzzy/部分一致/語順推測は一切行わない — 未知の文字列は全て other に落ちる。
 // どの段か一意に決まる語彙だけを載せる。曖昧な語（素の「テスト」＝結合/総合のどちらか不明）は

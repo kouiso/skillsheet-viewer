@@ -8,17 +8,13 @@ import {
   type DragStartEvent,
   KeyboardSensor,
   PointerSensor,
+  type UniqueIdentifier,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 // tableBlockToMarkdown 等の純関数/型はサーバ専用モジュール（neon ドライバ等）を
 // client バンドルに巻き込まないため、root の @skillsheet/db ではなく純粋サブエクスポート
@@ -532,12 +528,16 @@ const ExperienceBlockEditor = ({
   );
 };
 
-/** メタ情報（年齢/勤務形態/最寄り駅/学歴）の入力定義。 */
+/** メタ情報（年齢/性別/資格/学歴/勤務形態/最寄り駅/得意分野/得意業務）の入力定義。 */
 const PROFILE_META_FIELDS: { key: keyof ProfileMeta; label: string; placeholder: string }[] = [
   { key: 'age', label: '年齢', placeholder: '例: 30代前半' },
+  { key: 'gender', label: '性別', placeholder: '例: 男性' },
+  { key: 'qualifications', label: '資格', placeholder: '例: 基本情報技術者' },
+  { key: 'education', label: '学歴', placeholder: '例: ○○大学卒' },
   { key: 'work', label: '勤務形態', placeholder: '例: フルリモート' },
   { key: 'station', label: '最寄り駅', placeholder: '例: 守山駅' },
-  { key: 'education', label: '学歴', placeholder: '例: ○○大学卒' },
+  { key: 'specialties', label: '得意分野', placeholder: '例: Web フロントエンド' },
+  { key: 'expertise', label: '得意業務', placeholder: '例: パフォーマンス改善' },
 ];
 
 /** プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。 */
@@ -644,11 +644,12 @@ const SortableBlock = ({
   return (
     <div
       ref={setNodeRef}
+      data-sortable-id={item.id}
       style={style}
       // items-start 欠落で align-items:stretch（既定）になり、ドラッグハンドルが行の
       // 全高に引き伸ばされて中身のアイコンが垂直中央に見えていた（削除ボタンは shadcn
       // Button の内部 flex で自己完結して上端寄りに見えるため非対称だった）（#152 S-5）。
-      className="flex items-start gap-2 rounded-lg border border-border bg-card p-3 shadow-sm"
+      className="flex items-start gap-3 rounded-lg border border-border bg-card p-3 shadow-sm"
     >
       <button
         type="button"
@@ -719,7 +720,7 @@ const SortableBlock = ({
         size="icon"
         onClick={() => onDelete(item.id)}
         aria-label="ブロックを削除"
-        className="mt-0.5 shrink-0 text-muted-foreground hover:text-destructive"
+        className="mt-0.5 size-11 shrink-0 text-muted-foreground hover:text-destructive"
       >
         <Trash2 className="size-4" />
       </Button>
@@ -881,9 +882,37 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     titleRef.current = title;
   }, [items, title]);
 
+  const keyboardCoordinateGetter = useCallback(
+    (event: KeyboardEvent, { active }: { active: UniqueIdentifier }) => {
+      const activeId = String(active);
+      const activeIndex = items.findIndex((item) => item.id === activeId);
+      if (activeIndex === -1) return;
+
+      let targetIndex = -1;
+      if (event.code === 'ArrowDown' || event.code === 'ArrowRight') targetIndex = activeIndex + 1;
+      else if (event.code === 'ArrowUp' || event.code === 'ArrowLeft') targetIndex = activeIndex - 1;
+      if (targetIndex < 0 || targetIndex >= items.length) return;
+
+      const targetId = items[targetIndex].id;
+      const target = Array.from(document.querySelectorAll<HTMLElement>('[data-sortable-id]')).find(
+        (el) => el.getAttribute('data-sortable-id') === targetId,
+      );
+      if (!target) return;
+
+      const rect = target.getBoundingClientRect();
+      const scrollX = window.scrollX || document.documentElement.scrollLeft;
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      return {
+        x: rect.left + scrollX + rect.width / 2,
+        y: rect.top + scrollY + rect.height / 2,
+      };
+    },
+    [items],
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinateGetter }),
   );
 
   // プレビューは重い（Markdown パース＋ハイライト）ため、入力のたびではなく

@@ -36,7 +36,14 @@ export const sheetRouter = router({
   builderState: editorProcedure.input(builderStateInputSchema).query(async ({ input }) => {
     let sheets = await getCachedDbSheets();
 
-    if (input.sheetId && sheets.some((sheet) => sheet.id === input.sheetId)) {
+    if (input.sheetId) {
+      // 一覧キャッシュが陳腐化（外部から直接 createSheet 等）していると、
+      // 指定されたシートが含まれていない場合がある。そのままデフォルトシートに
+      // フォールバックすると別シートを誤って編集するため、指定 ID のシートは
+      // 常に直接取得し、一覧に含まれなければ正本を再読み込みする。
+      if (!sheets.some((sheet) => sheet.id === input.sheetId)) {
+        sheets = await listDbSheets();
+      }
       const sheet = await getCachedDbSheetById(input.sheetId);
       return { sheet, sheets, activeSheetId: input.sheetId };
     }

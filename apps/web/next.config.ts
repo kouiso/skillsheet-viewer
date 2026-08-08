@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['@react-pdf/renderer'],
   // pnpm dev -p 3210 で 127.0.0.1 からアクセスしたときに HMR WebSocket が
   // クロスオリジンでブロックされて画面が真っ白になるのを防ぐ
-  allowedDevOrigins: ['127.0.0.1', 'localhost'],
+  allowedDevOrigins: ['127.0.0.1', 'localhost', '172.16.13.2'],
 };
 
 export default withBundleAnalyzer(nextConfig);

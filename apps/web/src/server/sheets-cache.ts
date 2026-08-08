@@ -16,20 +16,11 @@ export const getCachedSheet = unstable_cache((path: string) => fetchSheetFile(pa
 
 // --- DB 正本経路 ---
 
-// Neon DB のシート一覧（標準導線 /view が使う）。ビルダー保存後は 'db-sheet' タグで無効化。
-export const getCachedDbSheets = unstable_cache(() => dbListSheets(), ['db-sheets-list'], {
-  tags: ['db-sheet'],
-  revalidate: 60,
-});
+// #204: unstable_cache は DB ダウン時も永続キャッシュ（.next/cache）から陳腐な 200 を
+// 返し続ける。デモ規模では DB 直接読みで十分なため、クロスリクエストキャッシュを解除し、
+// DB 障害を素早く検知・表示する。
+export const getCachedDbSheets = () => dbListSheets();
 
-// 指定 ID のシートを読む（/view/db/[id] が使う）。
-export const getCachedDbSheetById = unstable_cache((id: string) => getSkillSheetById(id), ['db-sheet-by-id'], {
-  tags: ['db-sheet'],
-  revalidate: 60,
-});
+export const getCachedDbSheetById = (id: string) => getSkillSheetById(id);
 
-// デフォルトシート（後方互換 /view/db 単体表示）。
-export const getCachedDbSheet = unstable_cache(() => getSkillSheet(), ['db-sheet'], {
-  tags: ['db-sheet'],
-  revalidate: 60,
-});
+export const getCachedDbSheet = () => getSkillSheet();

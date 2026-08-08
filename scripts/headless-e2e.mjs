@@ -177,9 +177,10 @@ await writeFile(
   evidencePath,
   `${JSON.stringify({ recordedAt: new Date().toISOString(), status: 'running', results: [] }, null, 2)}\n`,
 );
-const server = start('pnpm', ['start', '-p', String(appPort)], {
+const server = start('pnpm', ['start'], {
   env: {
     ...process.env,
+    PORT: String(appPort),
     DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://e2e.invalid/e2e',
     SESSION_SECRET: process.env.SESSION_SECRET ?? 'e2e-session-secret-at-least-32-characters',
     VIEWER_CODE: process.env.VIEWER_CODE ?? 'e2e-viewer-code',
