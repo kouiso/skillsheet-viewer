@@ -62,7 +62,7 @@ export function ViewerTopbar({
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
         <Link
           href="/view"
-          className="order-1 flex min-h-11 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent"
+          className="flex min-h-11 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent"
           aria-label="シート一覧へ戻る"
         >
           <ArrowLeft className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -71,35 +71,12 @@ export function ViewerTopbar({
           {company && <span className="font-mono text-[11.5px] text-faint">{company}</span>}
         </Link>
 
-        <div className="order-2 min-w-4 flex-1" />
+        <div className="min-w-4 flex-1" />
 
-        <fieldset
-          // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
-          // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
-          className="order-4 m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:order-3 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
-        >
-          <legend className="sr-only">表示するビュー</legend>
-          {ALL_VIEWS.map((view) => {
-            const on = views.includes(view.id);
-            return (
-              <button
-                key={view.id}
-                type="button"
-                onClick={() => onToggleView(view.id)}
-                aria-pressed={on}
-                // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
-                // shrink-0 + whitespace-nowrap: SP の flex-nowrap + overflow-x-auto で
-                // 横スクロールさせる設計のため、ボタン自体が潰れて文字が折り返さないようにする。
-                className={`softbtn compact shrink-0 whitespace-nowrap ${on ? 'on' : ''}`}
-              >
-                <span aria-hidden className="sdot" />
-                {view.label}
-              </button>
-            );
-          })}
-        </fieldset>
-
-        <div className="order-3 flex items-center gap-2 sm:order-4">
+        {/* SP の視覚順（アイコン群→ビュートグル）に DOM 順自体を合わせ、sm 以上だけ
+            sm:order-* で元の順（ビュートグル→アイコン群）に戻す。CSS order は視覚順のみで
+            DOM順（キーボード操作のタブ順・スクリーンリーダーの読み上げ順）には影響しないため。 */}
+        <div className="flex items-center gap-2 sm:order-4">
           {canEdit && (
             <Tooltip>
               <TooltipTrigger asChild>
@@ -147,6 +124,32 @@ export function ViewerTopbar({
             <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
           </Tooltip>
         </div>
+
+        <fieldset
+          // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
+          // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
+          className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:order-3 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
+        >
+          <legend className="sr-only">表示するビュー</legend>
+          {ALL_VIEWS.map((view) => {
+            const on = views.includes(view.id);
+            return (
+              <button
+                key={view.id}
+                type="button"
+                onClick={() => onToggleView(view.id)}
+                aria-pressed={on}
+                // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
+                // shrink-0 + whitespace-nowrap: SP の flex-nowrap + overflow-x-auto で
+                // 横スクロールさせる設計のため、ボタン自体が潰れて文字が折り返さないようにする。
+                className={`softbtn compact shrink-0 whitespace-nowrap ${on ? 'on' : ''}`}
+              >
+                <span aria-hidden className="sdot" />
+                {view.label}
+              </button>
+            );
+          })}
+        </fieldset>
       </div>
     </motion.header>
   );
