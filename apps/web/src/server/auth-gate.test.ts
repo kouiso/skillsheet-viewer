@@ -88,51 +88,49 @@ describe('getEditorUserId の RSC 経路メモ化配線（cache() が契約ど�
     vi.resetModules();
   });
 
-  it('引数なし呼び出しを何度重ねても getSession は1回だけ（cache() を経由するのは無引数呼び出しだけ）', async () => {
+  // 素のフェイクを差し替えるだけでは「何らかのメモ化が起きた」ことしか固定できず、
+  // auth-gate.ts がモジュールスコープ変数で自前メモ化するよう書き換えられても
+  // （＝ React の request scope 保証を失い、別リクエスト間でユーザーの編集者判定が
+  // 漏れる cross-user leak になっても）このテストは気付かず通ってしまう。
+  // cacheSpy で「実際に react の cache() を経由したか」まで固定する。
+  function mockCacheAndImport() {
+    const cacheSpy = vi.fn(<T extends (...args: never[]) => unknown>(fn: T): T => {
+      let hasCached = false;
+      let cached: ReturnType<T>;
+      return ((...args: Parameters<T>) => {
+        if (!hasCached) {
+          hasCached = true;
+          cached = fn(...args) as ReturnType<T>;
+        }
+        return cached;
+      }) as T;
+    });
     vi.doMock('react', async (importOriginal) => {
       const actual = await importOriginal<typeof import('react')>();
-      const memoize = <T extends (...args: never[]) => unknown>(fn: T): T => {
-        let hasCached = false;
-        let cached: ReturnType<T>;
-        return ((...args: Parameters<T>) => {
-          if (!hasCached) {
-            hasCached = true;
-            cached = fn(...args) as ReturnType<T>;
-          }
-          return cached;
-        }) as T;
-      };
-      return { ...actual, cache: memoize };
+      return { ...actual, cache: cacheSpy };
     });
     vi.resetModules();
+    return { cacheSpy, importFresh: () => import('./auth-gate') };
+  }
+
+  it('引数なし呼び出しを何度重ねても getSession は1回だけ、かつ react の cache() を実際に経由する', async () => {
+    const { cacheSpy, importFresh } = mockCacheAndImport();
     getSessionMock.mockResolvedValue({ user: { id: 'owner-1' } });
 
-    const { getEditorUserId: freshGetEditorUserId } = await import('./auth-gate');
+    const { getEditorUserId: freshGetEditorUserId } = await importFresh();
     await Promise.all([freshGetEditorUserId(), freshGetEditorUserId(), freshGetEditorUserId()]);
 
     expect(getSessionMock).toHaveBeenCalledTimes(1);
+    // モジュールスコープ変数などの自前メモ化に退行していないことの固定。
+    // これが無いと request scope を失う退行（別リクエスト間のセッション漏れ）を検知できない。
+    expect(cacheSpy).toHaveBeenCalled();
   });
 
   it('requestHeaders を渡す HTTP 経路は cache() を経由しないため、毎回 getSession を呼ぶ', async () => {
-    vi.doMock('react', async (importOriginal) => {
-      const actual = await importOriginal<typeof import('react')>();
-      const memoize = <T extends (...args: never[]) => unknown>(fn: T): T => {
-        let hasCached = false;
-        let cached: ReturnType<T>;
-        return ((...args: Parameters<T>) => {
-          if (!hasCached) {
-            hasCached = true;
-            cached = fn(...args) as ReturnType<T>;
-          }
-          return cached;
-        }) as T;
-      };
-      return { ...actual, cache: memoize };
-    });
-    vi.resetModules();
+    const { importFresh } = mockCacheAndImport();
     getSessionMock.mockResolvedValue({ user: { id: 'owner-1' } });
 
-    const { getEditorUserId: freshGetEditorUserId } = await import('./auth-gate');
+    const { getEditorUserId: freshGetEditorUserId } = await importFresh();
     const h = new Headers({ cookie: 'better-auth.session_token=http-token' });
     await Promise.all([freshGetEditorUserId(h), freshGetEditorUserId(h)]);
 
