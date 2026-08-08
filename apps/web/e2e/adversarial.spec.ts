@@ -9,8 +9,8 @@ import { login } from './auth';
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const revalidateSecret = process.env.REVALIDATE_SECRET ?? 'revalidate-local';
 const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
-const reportDir = '/home/ubuntu/dogfood-report/adversarial-screenshots';
-const tmpDir = '/home/ubuntu/dogfood-report/adversarial-tmp';
+const reportDir = path.join(process.cwd(), 'test-results', 'adversarial', 'screenshots');
+const tmpDir = path.join(process.cwd(), 'test-results', 'adversarial', 'tmp');
 
 const viewports = [
   { name: 'sp-narrow', width: 320, height: 812 },

@@ -97,6 +97,7 @@ jobs:
           SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
           E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
         run: |
           pnpm run test:e2e
           pnpm run test:e2e:playwright
