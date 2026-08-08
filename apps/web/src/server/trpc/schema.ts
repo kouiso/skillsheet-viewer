@@ -25,3 +25,7 @@ export const createSheetInputSchema = z.object({
 export const deleteSheetInputSchema = z.object({ sheetId: z.string() });
 
 export const githubSheetPathInputSchema = z.object({ path: z.string() });
+
+export const builderStateInputSchema = z.object({ sheetId: z.string().optional() });
+
+export const viewerLoginInputSchema = z.object({ code: z.string() });

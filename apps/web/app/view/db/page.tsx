@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
 import { ConfigErrorNotice, DB_CONFIG_NOTICE } from '@/component/config-error-notice';
-import { isEditor } from '@/server/auth-gate';
 import { createServerCaller } from '@/server/trpc/caller';
 import { isConfigError } from '@/util/is-config-error';
 
@@ -22,10 +21,9 @@ export default async function DbSheetPage() {
   // 生の 500 を出さず、対処手順を案内するフォールバック UI を表示する。
   try {
     const caller = await createServerCaller();
+    const { canEdit } = await caller.auth.status();
     const sheet = await caller.sheet.getDefault();
-    return (
-      <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={await isEditor()} />
-    );
+    return <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={canEdit} />;
   } catch (err) {
     // #157: 待っても直らない設定不備（未設定・未マイグレーション）は 200 ＋ 原因と対処を返す。
     if (isConfigError(err)) {

@@ -1,55 +1,49 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
-
+import { TRPCError } from '@trpc/server';
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { createSessionToken, getSessionCookieOptions } from '@/server/session';
+import { createTRPCContext } from '@/server/trpc/context';
+import { createCallerFactory } from '@/server/trpc/init';
+import { shouldLogTRPCError } from '@/server/trpc/log-error';
+import { appRouter } from '@/server/trpc/router';
+
+const createCaller = createCallerFactory(appRouter);
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-function isSameOrigin(req: NextRequest): boolean {
-  const origin = req.headers.get('origin');
-  const host = req.headers.get('host');
-  if (!origin || !host) return true;
-
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
-}
-
+/**
+ * 既存クライアント向けの互換アダプタ。
+ * 新しい画面は auth.login procedure を直接使い、認証ロジックは tRPC 側だけが持つ。
+ */
 export async function POST(req: NextRequest) {
-  if (!isSameOrigin(req)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const viewerCode = process.env.VIEWER_CODE ?? process.env.VITE_VIEWER_CODE;
-  if (!viewerCode) {
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-  }
-
-  let code: unknown;
+  let input: unknown;
   try {
-    const body = (await req.json()) as { code?: unknown };
-    code = body.code;
-  } catch {
+    input = await req.json();
+  } catch (err) {
+    console.error('POST /api/auth: failed to parse request body:', err);
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (typeof code !== 'string') {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+  const responseHeaders = new Headers();
+  const caller = createCaller(createTRPCContext({ req, resHeaders: responseHeaders }));
+  try {
+    const result = await caller.auth.login(input as { code: string });
+    return NextResponse.json(result, { headers: responseHeaders });
+  } catch (error) {
+    if (error instanceof TRPCError) {
+      if (error.code === 'FORBIDDEN') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      if (error.code === 'BAD_REQUEST') {
+        return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+      }
+      if (error.code === 'UNAUTHORIZED') {
+        return NextResponse.json({ error: 'Invalid code' }, { status: 401 });
+      }
+    }
+    if (!(error instanceof TRPCError) || shouldLogTRPCError(error.code)) {
+      console.error('POST /api/auth: unexpected error:', error);
+    }
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
   }
-
-  const codeHash = createHash('sha256').update(code, 'utf-8').digest();
-  const validHash = createHash('sha256').update(viewerCode, 'utf-8').digest();
-
-  if (!timingSafeEqual(codeHash, validHash)) {
-    return NextResponse.json({ error: 'Invalid code' }, { status: 401 });
-  }
-
-  const res = NextResponse.json({ ok: true });
-  const { name, ...options } = getSessionCookieOptions();
-  res.cookies.set(name, createSessionToken(), options);
-  return res;
 }

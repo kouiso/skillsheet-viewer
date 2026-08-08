@@ -93,11 +93,11 @@ Next.js App Router では `apps/web/app` 配下のディレクトリ構造がそ
 | `/builder` | `app/builder/page.tsx` | Server → Client | 編集者向けブロックビルダー |
 | `/login` | `app/login/page.tsx` | Client | 編集者ログイン（Better Auth） |
 | `/viewer-auth` | `app/viewer-auth/page.tsx` | Client | 閲覧コード認証（HMAC） |
-| `/api/auth` | `app/api/auth/route.ts` | Route Handler | 閲覧コード検証＋ cookie 発行 |
+| `/api/auth` | `app/api/auth/route.ts` | 互換 Route Handler | `auth.login` procedure への旧クライアント用アダプタ |
 | `/api/auth/[...all]` | `app/api/auth/[...all]/route.ts` | Route Handler | Better Auth の全エンドポイント |
-| `/api/logout` | `app/api/logout/route.ts` | Route Handler | 閲覧 cookie の失効 |
-| `/api/revalidate` | `app/api/revalidate/route.ts` | Route Handler | GitHub 読み経路のキャッシュ失効 |
-| `/api/trpc/[trpc]` | `app/api/trpc/[trpc]/route.ts` | Route Handler | tRPC の HTTP エンドポイント（`fetchRequestHandler`）。クライアントコンポーネントの `@trpc/react-query` フックのみが叩く |
+| `/api/logout` | `app/api/logout/route.ts` | 互換 Route Handler | `auth.logout` procedure への旧クライアント用アダプタ |
+| `/api/revalidate` | `app/api/revalidate/route.ts` | 互換 Route Handler | `maintenance.revalidate` procedure への運用用アダプタ |
+| `/api/trpc/[trpc]` | `app/api/trpc/[trpc]/route.ts` | Route Handler | tRPC の HTTP エンドポイント（`fetchRequestHandler`）。画面の読み書き・閲覧認証・権限状態を集約 |
 
 `[path]` や `[id]` は動的セグメントで、`params` は `Promise` として渡る（`const { id } = await params`）。
 
