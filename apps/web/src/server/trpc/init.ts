@@ -15,17 +15,19 @@ export const createCallerFactory = t.createCallerFactory;
 export const publicProcedure = t.procedure;
 
 /** 閲覧可（HMAC 閲覧 cookie または編集者セッション）のみ通す。 */
-export const viewerProcedure = t.procedure.use(({ ctx, next }) => {
-  if (!ctx.isViewer) {
+export const viewerProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const isViewer = await ctx.getIsViewer();
+  if (!isViewer) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'viewer authentication required' });
   }
-  return next({ ctx });
+  return next({ ctx: { ...ctx, isViewer } });
 });
 
 /** 編集者（Better Auth セッション + SKILLSHEET_OWNER_ID 一致）のみ通す。 */
-export const editorProcedure = t.procedure.use(({ ctx, next }) => {
-  if (!ctx.editorUserId) {
+export const editorProcedure = t.procedure.use(async ({ ctx, next }) => {
+  const editorUserId = await ctx.getEditorUserId();
+  if (!editorUserId) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'editor authentication required' });
   }
-  return next({ ctx: { ...ctx, editorUserId: ctx.editorUserId } });
+  return next({ ctx: { ...ctx, editorUserId } });
 });

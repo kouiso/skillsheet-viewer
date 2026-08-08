@@ -14,6 +14,7 @@ vi.mock('@skillsheet/db', async (importOriginal) => {
     saveSkillSheetBlocks: vi.fn(),
     createSheet: vi.fn(),
     deleteSheet: vi.fn(),
+    listSheets: vi.fn(),
   };
 });
 
@@ -27,28 +28,39 @@ vi.mock('@/server/sheets-cache', () => ({
   getCachedDbSheet: vi.fn(),
 }));
 
-import { ConflictError, createSheet, deleteSheet, SkillSheetNotFoundError, saveSkillSheetBlocks } from '@skillsheet/db';
+import {
+  ConflictError,
+  createSheet,
+  deleteSheet,
+  listSheets,
+  SkillSheetNotFoundError,
+  saveSkillSheetBlocks,
+} from '@skillsheet/db';
 import { revalidateTag } from 'next/cache';
 
 import { getCachedDbSheet, getCachedDbSheetById, getCachedDbSheets } from '@/server/sheets-cache';
 
 import { createCallerFactory } from '../init';
+import { createTestContext } from '../test-context';
 import { appRouter } from './index';
 
 const createCaller = createCallerFactory(appRouter);
 const saveMock = vi.mocked(saveSkillSheetBlocks);
 const createSheetMock = vi.mocked(createSheet);
 const deleteSheetMock = vi.mocked(deleteSheet);
+const listSheetsMock = vi.mocked(listSheets);
 const getCachedDbSheetsMock = vi.mocked(getCachedDbSheets);
 const getCachedDbSheetByIdMock = vi.mocked(getCachedDbSheetById);
 const getCachedDbSheetMock = vi.mocked(getCachedDbSheet);
 const revalidateTagMock = vi.mocked(revalidateTag);
 const MD = { type: 'markdown' as const, data: { markdown: 'x' } };
 
-// editorProcedure は ctx.editorUserId のみで判定するため、createTRPCContext()（cookies/headers 読み取り）
-// を経由せずコンテキストを直接組み立てられる。auth-gate/viewer-gate のモックが不要になる。
+// editorProcedure/viewerProcedure は middleware が ctx.getEditorUserId() / ctx.getIsViewer() を
+// 解決するだけなので、createTRPCContext()（cookies/headers 読み取り）を経由せず
+// createTestContext() で既知の値をコンテキストへ直接組み立てられる。
+// auth-gate/viewer-gate のモックが不要になる。
 function callerAs(editorUserId: string | null, isViewer = editorUserId !== null) {
-  return createCaller({ editorUserId, isViewer });
+  return createCaller(createTestContext({ editorUserId, isViewer, request: null, responseHeaders: null }));
 }
 
 beforeEach(() => {
@@ -68,6 +80,55 @@ describe('sheet.list', () => {
     const caller = callerAs(null, true);
     const result = await caller.sheet.list();
     expect(result).toEqual(summaries);
+  });
+});
+
+describe('sheet.builderState', () => {
+  it('非編集者は UNAUTHORIZED を返す', async () => {
+    const caller = callerAs(null, true);
+    await expect(caller.sheet.builderState({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(getCachedDbSheetsMock).not.toHaveBeenCalled();
+  });
+
+  it('指定 sheetId が一覧にあればそのシートを返す', async () => {
+    const sheets = [{ id: 's2', title: 'T2', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
+    const sheet = { title: 'T2', blocks: [MD] };
+    getCachedDbSheetsMock.mockResolvedValue(sheets as never);
+    getCachedDbSheetByIdMock.mockResolvedValue(sheet as never);
+
+    const result = await callerAs('owner').sheet.builderState({ sheetId: 's2' });
+    expect(result).toEqual({ sheet, sheets, activeSheetId: 's2' });
+    expect(getCachedDbSheetByIdMock).toHaveBeenCalledWith('s2');
+    expect(getCachedDbSheetMock).not.toHaveBeenCalled();
+  });
+
+  it('sheetId 未指定なら一覧の先頭を active にしてデフォルトシートを返す', async () => {
+    const sheets = [{ id: 's1', title: 'T1', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
+    const sheet = { title: 'T1', blocks: [MD] };
+    getCachedDbSheetsMock.mockResolvedValue(sheets as never);
+    getCachedDbSheetMock.mockResolvedValue(sheet as never);
+
+    await expect(callerAs('owner').sheet.builderState({})).resolves.toEqual({
+      sheet,
+      sheets,
+      activeSheetId: 's1',
+    });
+  });
+
+  it('空一覧がキャッシュ済みでも seed 後の正本を一度だけ再取得する', async () => {
+    const sheet = { title: 'Seeded', blocks: [MD] };
+    const seededSheets = [{ id: 'seeded', title: 'Seeded', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
+    getCachedDbSheetsMock.mockResolvedValue([]);
+    getCachedDbSheetMock.mockResolvedValue(sheet as never);
+    listSheetsMock.mockResolvedValue(seededSheets as never);
+
+    await expect(callerAs('owner').sheet.builderState({})).resolves.toEqual({
+      sheet,
+      sheets: seededSheets,
+      activeSheetId: 'seeded',
+    });
+    expect(listSheetsMock).toHaveBeenCalledOnce();
+    expect(revalidateTagMock).not.toHaveBeenCalled();
   });
 });
 

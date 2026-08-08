@@ -19,7 +19,7 @@ vi.mock('@/server/session', () => ({
 }));
 vi.mock('@/server/auth-gate', () => ({ isEditor: () => isEditorMock() }));
 
-import { isViewer, requireViewer } from './viewer-gate';
+import { hasViewerSession, isViewer, requireViewer } from './viewer-gate';
 
 beforeEach(() => {
   cookiesGet.mockReset();
@@ -51,6 +51,17 @@ describe('isViewer', () => {
     isEditorMock.mockResolvedValue(false);
     await expect(isViewer()).resolves.toBe(false);
     expect(redirectMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('hasViewerSession', () => {
+  it('HTTP Request headers の cookie から session を検証する', async () => {
+    verifyMock.mockReturnValue(true);
+    const requestHeaders = new Headers({ cookie: 'other=x; session=http-token; theme=dark' });
+
+    await expect(hasViewerSession(requestHeaders)).resolves.toBe(true);
+    expect(verifyMock).toHaveBeenCalledWith('http-token');
+    expect(cookiesGet).not.toHaveBeenCalled();
   });
 });
 

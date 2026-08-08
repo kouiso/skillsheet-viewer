@@ -1,5 +1,6 @@
 import { cookies, headers } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { cache } from 'react';
 
 import { isEditor } from '@/server/auth-gate';
 import { SESSION_COOKIE_NAME, verifySessionToken } from '@/server/session';
@@ -25,12 +26,46 @@ const INTERNAL_ORIGIN = 'http://skillsheet-viewer.internal';
  * （tRPC の実行コンテキストには Server Action/RSC 専用の redirect() 例外制御が無い）。
  */
 export async function isViewer(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (verifySessionToken(token)) {
+  if (await hasViewerSession()) {
     return true;
   }
   return isEditor();
+}
+
+function cookieValue(cookieHeader: string, name: string): string | undefined {
+  for (const part of cookieHeader.split(';')) {
+    const [key, ...valueParts] = part.trim().split('=');
+    if (key === name) return valueParts.join('=');
+  }
+  return undefined;
+}
+
+/**
+ * 閲覧 cookie だけを検証する。tRPC context は編集者判定を先に一度だけ行い、
+ * 非編集者の場合にこの関数を呼ぶことで Better Auth の二重参照を避ける。
+ */
+async function resolveHasViewerSession(requestHeaders?: Headers): Promise<boolean> {
+  const token = requestHeaders
+    ? cookieValue(requestHeaders.get('cookie') ?? '', SESSION_COOKIE_NAME)
+    : (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (verifySessionToken(token)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * RSC 経路（引数なし呼び出し）専用のメモ化ラッパー。auth-gate.ts の
+ * resolveEditorUserIdForRSC と同じパターン。requestHeaders を明示的に渡す
+ * HTTP 経路は RSC レンダー外なので対象外。
+ */
+const resolveHasViewerSessionForRSC = cache((): Promise<boolean> => resolveHasViewerSession());
+
+export async function hasViewerSession(requestHeaders?: Headers): Promise<boolean> {
+  if (requestHeaders) {
+    return resolveHasViewerSession(requestHeaders);
+  }
+  return resolveHasViewerSessionForRSC();
 }
 
 /**

@@ -2,7 +2,6 @@ import type { SheetSummary } from '@skillsheet/db';
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
-import { isEditor } from '@/server/auth-gate';
 import { createServerCaller } from '@/server/trpc/caller';
 import { isConfigError } from '@/util/is-config-error';
 
@@ -18,8 +17,10 @@ export default async function SheetsListPage() {
 
   let sheets: SheetSummary[] = [];
   let hasError = false;
+  let canEdit = false;
   try {
     const caller = await createServerCaller();
+    ({ canEdit } = await caller.auth.status());
     sheets = await caller.sheet.list();
   } catch (err) {
     // #157: 待っても直らない設定不備（未設定・未マイグレーション）は 200 ＋ 原因と対処を返す。
@@ -32,5 +33,5 @@ export default async function SheetsListPage() {
     }
     hasError = true;
   }
-  return <DbSheetsListClient initialSheets={sheets} hasError={hasError} canEdit={await isEditor()} />;
+  return <DbSheetsListClient initialSheets={sheets} hasError={hasError} canEdit={canEdit} />;
 }

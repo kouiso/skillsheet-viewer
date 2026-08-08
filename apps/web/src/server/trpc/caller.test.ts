@@ -15,6 +15,7 @@ vi.mock('@skillsheet/db', async (importOriginal) => {
 });
 
 import { createServerCaller } from './caller';
+import { createTestContext } from './test-context';
 
 beforeEach(() => {
   createTRPCContextMock.mockReset();
@@ -26,7 +27,9 @@ beforeEach(() => {
 // （メモ化そのものは Next.js の RSC レンダー内でのみ成立する挙動で、単体テストの対象外）。
 describe('createServerCaller', () => {
   it('createTRPCContext の結果を使って appRouter の caller を組み立てる', async () => {
-    createTRPCContextMock.mockResolvedValue({ editorUserId: null, isViewer: true });
+    createTRPCContextMock.mockResolvedValue(
+      createTestContext({ editorUserId: null, isViewer: true, request: null, responseHeaders: null }),
+    );
     const caller = await createServerCaller();
     expect(typeof caller.sheet.list).toBe('function');
     expect(typeof caller.githubSheet.byPath).toBe('function');
@@ -34,13 +37,17 @@ describe('createServerCaller', () => {
   });
 
   it('editorUserId を持つ context なら editorProcedure を通過できる', async () => {
-    createTRPCContextMock.mockResolvedValue({ editorUserId: 'owner', isViewer: true });
+    createTRPCContextMock.mockResolvedValue(
+      createTestContext({ editorUserId: 'owner', isViewer: true, request: null, responseHeaders: null }),
+    );
     const caller = await createServerCaller();
     await expect(caller.sheet.delete({ sheetId: 's1' })).resolves.toEqual({ ok: true });
   });
 
   it('editorUserId が無い context では editorProcedure が UNAUTHORIZED になる', async () => {
-    createTRPCContextMock.mockResolvedValue({ editorUserId: null, isViewer: true });
+    createTRPCContextMock.mockResolvedValue(
+      createTestContext({ editorUserId: null, isViewer: true, request: null, responseHeaders: null }),
+    );
     const caller = await createServerCaller();
     await expect(caller.sheet.delete({ sheetId: 's1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });

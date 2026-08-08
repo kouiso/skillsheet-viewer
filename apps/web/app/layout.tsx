@@ -30,7 +30,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 // URL に Basic 認証情報が埋まってるトンネルなどで document.baseURI から認証情報を外す。
-// さもないと fetch('/api/...') が「URL に認証情報を含む」として拒否される。
+// さもないと tRPC の同一オリジン fetch が「URL に認証情報を含む」として拒否される。
 const baseInitScript = `(function(){try{var b=document.querySelector('base');if(!b){b=document.createElement('base');document.head.prepend(b)}b.href=window.location.origin+'/';}catch(e){}})()`;
 
 // FOUC 防止: ハイドレーション前に localStorage → .dark クラスを適用する
