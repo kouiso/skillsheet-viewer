@@ -21,8 +21,8 @@ export default async function DbSheetPage() {
   // 生の 500 を出さず、対処手順を案内するフォールバック UI を表示する。
   try {
     const caller = await createServerCaller();
-    const { canEdit } = await caller.auth.status();
-    const sheet = await caller.sheet.getDefault();
+    // auth.status() はシート取得の入力に使わないため、直列待機せず並列で開始する。
+    const [{ canEdit }, sheet] = await Promise.all([caller.auth.status(), caller.sheet.getDefault()]);
     return <SheetViewClient title={sheet.title} content={sheet.content} blocks={sheet.blocks} canEdit={canEdit} />;
   } catch (err) {
     // #157: 待っても直らない設定不備（未設定・未マイグレーション）は 200 ＋ 原因と対処を返す。
