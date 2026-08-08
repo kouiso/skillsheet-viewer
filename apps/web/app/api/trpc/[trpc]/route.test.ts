@@ -5,14 +5,20 @@ import { POST, shouldLogTRPCError } from './route';
 describe('shouldLogTRPCError', () => {
   it.each([
     'UNAUTHORIZED',
-    'FORBIDDEN',
     'NOT_FOUND',
     'CONFLICT',
   ])('%s は procedure 側で意図的に投げる想定内の分岐のためログしない', (code) => {
     expect(shouldLogTRPCError(code)).toBe(false);
   });
 
-  it.each(['BAD_REQUEST', 'INTERNAL_SERVER_ERROR', 'TIMEOUT'])('%s は想定外のエラーのためログする', (code) => {
+  // FORBIDDEN（requireHttpMutationContext の cross-origin 拒否）は CSRF 試行の唯一の
+  // サーバー側シグナルなので、想定内扱いにして握り潰さない。
+  it.each([
+    'BAD_REQUEST',
+    'FORBIDDEN',
+    'INTERNAL_SERVER_ERROR',
+    'TIMEOUT',
+  ])('%s は想定外のエラーのためログする', (code) => {
     expect(shouldLogTRPCError(code)).toBe(true);
   });
 });
@@ -83,6 +89,27 @@ describe('POST /api/trpc', () => {
     const res = await POST(req);
 
     expect(res.status).toBe(400);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.login'), expect.anything());
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('FORBIDDEN（cross-origin 拒否）は CSRF 試行の唯一のサーバー側シグナルなので console.error を呼ぶ', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubEnv('SESSION_SECRET', 'test-session-secret');
+    vi.stubEnv('VIEWER_CODE', 'correct-code');
+    const req = new Request('http://localhost:3000/api/trpc/auth.login?batch=1', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'https://evil.example',
+        host: 'localhost:3000',
+      },
+      body: JSON.stringify({ 0: { json: { code: 'correct-code' } } }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
     expect(consoleErrorSpy).toHaveBeenCalledWith(expect.stringContaining('auth.login'), expect.anything());
     consoleErrorSpy.mockRestore();
   });
