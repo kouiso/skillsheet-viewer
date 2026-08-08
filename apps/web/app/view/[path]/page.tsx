@@ -3,7 +3,6 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { ConfigErrorNotice, GITHUB_CONFIG_NOTICE } from '@/component/config-error-notice';
-import { isEditor } from '@/server/auth-gate';
 import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/github-sheets';
 import { createServerCaller } from '@/server/trpc/caller';
 import { isConfigError } from '@/util/is-config-error';
@@ -36,9 +35,13 @@ export default async function SheetViewPage({ params }: PageProps) {
   if (!isValidSheetPath(path) || !isSheetFileName(path)) notFound();
 
   let sheet: SheetContent;
+  let canEdit = false;
   try {
     const caller = await createServerCaller();
-    sheet = await caller.githubSheet.byPath({ path });
+    // auth.status() はシート取得の入力に使わないため、直列待機せず並列で開始する。
+    const [authStatus, loadedSheet] = await Promise.all([caller.auth.status(), caller.githubSheet.byPath({ path })]);
+    canEdit = authStatus.canEdit;
+    sheet = loadedSheet;
   } catch (err) {
     // tRPC procedure は throw を無条件で TRPCError にラップするため、元の SheetNotFoundError
     // ではなく code: 'NOT_FOUND' で判定する（githubSheet.byPath 側のコメント参照）。
@@ -57,5 +60,5 @@ export default async function SheetViewPage({ params }: PageProps) {
 
   // key={path}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー
   // ON/OFF トグルの state（初回マウント時に決まる）を新しいシートへ持ち越さない。
-  return <SheetViewClient key={path} title={sheet.title} content={sheet.content} canEdit={await isEditor()} />;
+  return <SheetViewClient key={path} title={sheet.title} content={sheet.content} canEdit={canEdit} />;
 }

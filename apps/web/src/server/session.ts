@@ -67,4 +67,23 @@ export function getSessionCookieOptions() {
   };
 }
 
+/** tRPC の Fetch adapter が返す Headers へ閲覧セッション cookie を追加する。 */
+export function appendSessionCookie(headers: Headers): void {
+  const { name, ...options } = getSessionCookieOptions();
+  const parts = [
+    `${name}=${createSessionToken()}`,
+    `Max-Age=${options.maxAge}`,
+    `Path=${options.path}`,
+    'HttpOnly',
+    'SameSite=Strict',
+  ];
+  if (options.secure) parts.push('Secure');
+  headers.append('set-cookie', parts.join('; '));
+}
+
+/** 閲覧セッション cookie を同じ Path で失効させる。 */
+export function appendExpiredSessionCookie(headers: Headers): void {
+  headers.append('set-cookie', `${SESSION_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict`);
+}
+
 export { SESSION_COOKIE_NAME };

@@ -1,5 +1,6 @@
 'use client';
 
+import { TRPCClientError } from '@trpc/client';
 import { motion } from 'framer-motion';
 import { LockKeyhole } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -8,44 +9,31 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { trpc } from '@/lib/trpc-client';
 import { resolveNextPath } from '@/util/resolve-next-path';
 
 const ViewerAuthPage = () => {
   const router = useRouter();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
-  const [isVerifying, setIsVerifying] = useState(false);
+  const loginMutation = trpc.auth.login.useMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsVerifying(true);
 
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ code }),
-      });
-
-      if (res.ok) {
-        // 認証後の遷移先。?next= が内部パスのときのみ許可（オープンリダイレクト防止）。
-        const next = new URLSearchParams(window.location.search).get('next');
-        const dest = resolveNextPath(next, '/view', window.location.origin);
-        router.push(dest);
-        return;
-      }
-
-      if (res.status === 401) {
+      await loginMutation.mutateAsync({ code });
+      // 認証後の遷移先。?next= が内部パスのときのみ許可（オープンリダイレクト防止）。
+      const next = new URLSearchParams(window.location.search).get('next');
+      const dest = resolveNextPath(next, '/view', window.location.origin);
+      router.push(dest);
+    } catch (err) {
+      if (err instanceof TRPCClientError && err.data?.code === 'UNAUTHORIZED') {
         setError('認証コードが正しくありません');
       } else {
         setError('認証に失敗しました。もう一度お試しください。');
       }
-    } catch {
-      setError('認証に失敗しました。もう一度お試しください。');
-    } finally {
-      setIsVerifying(false);
     }
   };
 
@@ -138,8 +126,8 @@ const ViewerAuthPage = () => {
                   autoComplete="off"
                 />
               </div>
-              <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={isVerifying}>
-                {isVerifying ? '認証中...' : '認証'}
+              <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={loginMutation.isPending}>
+                {loginMutation.isPending ? '認証中...' : '認証'}
               </Button>
             </motion.form>
           </CardContent>

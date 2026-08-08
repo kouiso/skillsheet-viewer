@@ -70,7 +70,7 @@ cp .env.example .env
 | `GITHUB_FILE_PATH` / `GITHUB_BRANCH` | シード元ファイル・ブランチ（既定 `skillsheet.md` / `main`） |
 | `BETTER_AUTH_URL` | デプロイ先 URL（省略時はリクエスト origin から推定） |
 | `APP_ENV` | 非 Vercel 環境での cookie Secure 判定補助（`production` / `preview` で Secure 付与。Vercel では `VERCEL_ENV` を優先） |
-| `REVALIDATE_SECRET` | GitHub 読み経路のキャッシュを `/api/revalidate` から手動失効させるためのシークレット |
+| `REVALIDATE_SECRET` | tRPC の `maintenance.revalidate` でキャッシュを手動失効させるためのシークレット |
 
 > DB 接続文字列は、実行時はプール用（`-pooler` ホスト）、マイグレーションは非プール文字列を使うと安定します。
 
@@ -97,9 +97,9 @@ pnpm dev
 
 ### 1. 閲覧コード（HMAC / `VIEWER_CODE`）
 
-- `/viewer-auth` で共有コードを入力 → `POST /api/auth` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`apps/web/src/server/session.ts`）
+- `/viewer-auth` で共有コードを入力 → tRPC の `auth.login` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`apps/web/src/server/session.ts`）
 - `/view` 配下の閲覧のみ許可。**編集はできない**（判定は `apps/web/src/server/viewer-gate.ts`）
-- ログアウトは `POST /api/logout`
+- ログアウトは tRPC の `auth.logout`。旧クライアント向けの `POST /api/logout` も同じ procedure へ委譲
 
 ### 2. 編集者ログイン（Better Auth）
 
@@ -152,7 +152,7 @@ pnpm dev
 
 ### 認証コードが通らない
 
-- 入力コードと `.env` の `VIEWER_CODE` が一致するか確認（`POST /api/auth` が 401 を返す場合は不一致）
+- 入力コードと `.env` の `VIEWER_CODE` が一致するか確認（`auth.login` が `UNAUTHORIZED` を返す場合は不一致）
 
 ### ビルド・依存エラー
 

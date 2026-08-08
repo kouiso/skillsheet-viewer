@@ -16,6 +16,7 @@ vi.mock('@/server/sheets-cache', () => ({
 import { getCachedSheet, getCachedSheets } from '@/server/sheets-cache';
 
 import { createCallerFactory } from '../init';
+import { createTestContext } from '../test-context';
 import { appRouter } from './index';
 
 const createCaller = createCallerFactory(appRouter);
@@ -23,11 +24,11 @@ const getCachedSheetMock = vi.mocked(getCachedSheet);
 const getCachedSheetsMock = vi.mocked(getCachedSheets);
 
 function callerAsViewer() {
-  return createCaller({ editorUserId: null, isViewer: true });
+  return createCaller(createTestContext({ editorUserId: null, isViewer: true, request: null, responseHeaders: null }));
 }
 
 function callerAsNonViewer() {
-  return createCaller({ editorUserId: null, isViewer: false });
+  return createCaller(createTestContext({ editorUserId: null, isViewer: false, request: null, responseHeaders: null }));
 }
 
 beforeEach(() => {
@@ -67,7 +68,7 @@ describe('githubSheet.byPath', () => {
       code: 'NOT_FOUND',
     });
   });
-  // /view/[path] と /compare は isValidSheetPath / isSheetFileName で notFound() にしていたが、
+  // /view/[path] は isValidSheetPath / isSheetFileName で notFound() にしていたが、
   // これは元々ページ側だけの防御だった。/api/trpc は URL を直叩きできるため、router 側でも
   // 同じ検証を通さないと .. トラバーサルや CLAUDE.md 等の AI 指示系ファイルが
   // GitHub API へそのまま渡ってしまう（Codex レビュー指摘）。
