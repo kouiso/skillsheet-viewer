@@ -83,7 +83,7 @@ describe('Header', () => {
 
     it('pdfLoading 中はボタンが無効化されること', () => {
       renderHeader({ onDownloadPdf: vi.fn(), pdfLoading: true });
-      expect(screen.getByLabelText('PDFダウンロード')).toBeDisabled();
+      expect(screen.getByLabelText('PDFを生成中')).toBeDisabled();
     });
 
     it('pdfLoading でない場合はボタンが有効であること', () => {

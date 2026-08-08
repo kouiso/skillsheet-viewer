@@ -491,4 +491,7 @@ body {
   .barFill {
     transition: none;
   }
+  .animate-spin {
+    animation: none;
+  }
 }
