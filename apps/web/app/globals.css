@@ -83,6 +83,9 @@
   --danger-soft: #fbf0ef;
   --warn: #d4a017;
   --warn-soft: #fdf6e6;
+  /* text-warn(#d4a017) は bg-warn-soft(#fdf6e6) 上で 2.21:1 しかなく AA(4.5:1) 未達
+     （鮮度バナー #204 で発覚、Codex レビュー指摘）。本文用に濃くした値（7.95:1）。 */
+  --warn-strong: #6b4400;
   /* Console は影なしだが、浮くもの（サジェスト・プレビューカード）だけ例外的に持つ。 */
   --shadow-editor: 0 10px 30px -16px rgba(16, 23, 26, 0.18);
 }
@@ -132,6 +135,7 @@
   --danger-soft: #2a1715;
   --warn: #e0b53a; /* #d4a017 は暗背景でくすむため明度を上げる */
   --warn-soft: #241d0d;
+  --warn-strong: #e0b53a; /* ダークは --warn が既に 8.63:1 で AA を満たすため同値 */
   --shadow-editor: 0 10px 30px -16px rgba(0, 0, 0, 0.6);
 }
 
@@ -176,6 +180,7 @@
   --color-danger-soft: var(--danger-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-warn-strong: var(--warn-strong);
 
   --radius-sm: 2px;
   --radius-md: 4px;

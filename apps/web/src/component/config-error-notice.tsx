@@ -85,6 +85,10 @@ export const DB_MALFORMED_URL_NOTICE = {
 };
 
 // GitHub 連携経路（/view/[path]）で、環境変数自体が未設定の場合の案内文。
+// github-sheets.ts が実際に読むのは GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO の3つのみ
+// （必須。欠けるとここでエラーになる）。GITHUB_BRANCH は任意で未設定なら 'main' に
+// フォールバックする。GITHUB_FILE_PATH はそもそも参照されていない（Codex レビュー指摘:
+// 未使用の変数を必須であるかのように案内し、実際に必要な変数と紛らわしかった）。
 export const GITHUB_MISSING_ENV_NOTICE = {
   title: '表示できません',
   message: 'GitHub 連携が未設定のため表示できません。以下の環境変数を設定してください。',
@@ -94,8 +98,15 @@ export const GITHUB_MISSING_ENV_NOTICE = {
       content: (
         <>
           <code className="font-mono">GITHUB_TOKEN</code> / <code className="font-mono">GITHUB_OWNER</code> /{' '}
-          <code className="font-mono">GITHUB_REPO</code> / <code className="font-mono">GITHUB_FILE_PATH</code> /{' '}
-          <code className="font-mono">GITHUB_BRANCH</code>
+          <code className="font-mono">GITHUB_REPO</code>（必須）
+        </>
+      ),
+    },
+    {
+      key: 'branch',
+      content: (
+        <>
+          <code className="font-mono">GITHUB_BRANCH</code>（任意。未設定時は <code className="font-mono">main</code>）
         </>
       ),
     },

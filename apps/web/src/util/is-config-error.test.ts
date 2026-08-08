@@ -73,4 +73,19 @@ describe('classifyConfigError', () => {
   it('設定不備でないエラーは null を返す', () => {
     expect(classifyConfigError(new Error('connect ECONNREFUSED'))).toBeNull();
   });
+
+  it('tRPC が TRPCError でラップした ERR_INVALID_URL も cause を辿って検出する（Codex レビュー指摘: /view 経由では元の .code が隠れて検出できていなかった）', () => {
+    const innerErr = new TypeError('Invalid URL');
+    (innerErr as { code?: string }).code = 'ERR_INVALID_URL';
+    // TRPCError は message を cause.message で上書きし、code は自身の 'INTERNAL_SERVER_ERROR' になる。
+    const wrapped = new Error(innerErr.message, { cause: innerErr });
+    (wrapped as { code?: string }).code = 'INTERNAL_SERVER_ERROR';
+    expect(classifyConfigError(wrapped)).toBe('db-malformed-url');
+  });
+
+  it('cause チェーンのどこにも .code が無ければ null を返す（無限ループしない）', () => {
+    const inner = new Error('boom');
+    const wrapped = new Error('wrapped', { cause: inner });
+    expect(classifyConfigError(wrapped)).toBeNull();
+  });
 });

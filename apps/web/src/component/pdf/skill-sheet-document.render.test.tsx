@@ -35,19 +35,38 @@ const RENDER_TIMEOUT_MS = 30_000;
 // PDF バッファからテキストを抽出する。Issue #172 の回帰防止で、生成された PDF に
 // 期待した日本語テキストが実際に含まれているかを検証するため使う。
 async function extractPdfText(buffer: Buffer): Promise<string> {
+  const pages = await extractPdfTextByPage(buffer);
+  return pages.join('');
+}
+
+// ページ境界を保持したままテキストを抽出する。extractPdfText() は全ページを1本の
+// 文字列に結合するため、あるカードの見出しが N ページ末尾・末尾段落が N+1 ページ先頭に
+// 分かれて描画されても、結合後の文字列では単に隣接して見えてしまい「同一カード内で
+// 分断されていないか」を検証できない（Issue #194 の実際の症状はページ分割そのものであり、
+// codex レビューでこの盲点を指摘された）。ページ境界をまたいでいないかを検証したい
+// 呼び出し元は、この配列上でどのページ番号に現れるかを直接比較すること。
+async function extractPdfTextByPage(buffer: Buffer): Promise<string[]> {
   const data = new Uint8Array(buffer);
   const doc = await getDocument({ data }).promise;
-  let text = '';
+  const pages: string[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const page = await doc.getPage(i);
     const content = await page.getTextContent();
+    let text = '';
     for (const item of content.items) {
       if ('str' in item && typeof item.str === 'string') {
         text += item.str;
       }
     }
+    pages.push(text);
   }
-  return text;
+  return pages;
+}
+
+// normalizeExtractedText 済みの needle が最初に現れるページ番号（0始まり）。見つからなければ -1。
+function findPageIndexOf(pages: string[], needle: string): number {
+  const target = normalizeExtractedText(needle);
+  return pages.findIndex((page) => normalizeExtractedText(page).includes(target));
 }
 
 // splitForHyphenation は CJK 文字境界に ZWNBSP（表示幅ゼロ）を挟んで改行点を作るため、
@@ -290,12 +309,10 @@ describe('renderBlocks（案件カード実バイト描画・Issue #194）', () 
     const content = ['## 職務経歴', '', cards].join('\n');
 
     const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
-    const rawText = await extractPdfText(buffer);
+    const pages = await extractPdfTextByPage(buffer);
+    const rawText = pages.join('');
     const text = normalizeExtractedText(rawText);
 
-    // 各カードの見出しと、そのカード末尾の「習得スキル」本文が同一カード内の連続テキストとして
-    // 現れること（=分断されていないこと）を確認する。分断されていれば、間に別カードの
-    // 見出しが割り込んで隣接しなくなる。
     for (let i = 0; i < 20; i++) {
       const heading = `会社${i}—案件${i}の開発`;
       const acquired = `案件${i}で得た習得スキルの本文です。`;
@@ -308,6 +325,16 @@ describe('renderBlocks（案件カード実バイト描画・Issue #194）', () 
       const between = text.slice(headingIndex, acquiredIndex);
       const headingsInBetween = between.match(/会社\d+—案件\d+の開発/g) ?? [];
       expect(headingsInBetween).toEqual([heading]);
+
+      // 上記の連結テキストでの隣接チェックだけでは、見出しがページ末尾・習得スキル本文が
+      // 次ページ先頭に分かれて描画されるケース（#194 の実際の症状そのもの）を見逃す。
+      // 結合前の pages 配列上で、見出しと習得スキル本文が同一ページに乗っているかを直接見る
+      // （chatgpt-codex-connector レビュー指摘: 旧実装は全ページ結合後の文字列しか見ておらず
+      // ページ分割そのものを検知できなかった）。
+      const headingPage = findPageIndexOf(pages, heading);
+      const acquiredPage = findPageIndexOf(pages, acquired);
+      expect(headingPage).toBeGreaterThanOrEqual(0);
+      expect(acquiredPage).toBe(headingPage);
     }
   });
 });
