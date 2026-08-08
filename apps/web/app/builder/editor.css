@@ -351,6 +351,7 @@
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   cursor: pointer;
   font-size: 13px;
@@ -362,6 +363,8 @@
   color: var(--foreground);
   transition: all 0.14s ease;
   white-space: nowrap;
+  min-height: 44px;
+  min-width: 44px;
 }
 .btn:hover {
   border-color: var(--primary);
@@ -397,6 +400,8 @@
 .btn.sm {
   padding: 5px 10px;
   font-size: 12px;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 /* ── フォーム ────────────────────────────── */
@@ -677,6 +682,8 @@
   line-height: 1;
   padding: 0 3px;
   border-radius: 4px;
+  min-width: 44px;
+  min-height: 44px;
 }
 .tag button:hover {
   color: var(--danger);
@@ -1084,10 +1091,10 @@
 
 /* ── 集中モード（レールナビ）───────────── */
 .shell.rail {
-  grid-template-columns: 58px minmax(0, 1fr) 396px;
+  grid-template-columns: 64px minmax(0, 1fr) 396px;
 }
 .shell.rail.no-preview {
-  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
 }
 .shell.rail .form-inner {
   max-width: 880px;
@@ -1102,8 +1109,8 @@
   flex: 1;
 }
 .rail-btn {
-  width: 36px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   border: 1px solid var(--border);
   background: var(--surface2);
   border-radius: var(--radius);
@@ -1132,8 +1139,8 @@
   opacity: 0.4;
 }
 .rail-pj {
-  width: 36px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   font-family: var(--font-mono);
@@ -1291,7 +1298,7 @@
   }
   .shell.rail,
   .shell.rail.no-preview {
-    grid-template-columns: 58px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr);
   }
   .preview-col {
     display: none;
@@ -1333,7 +1340,7 @@
   }
   .shell.rail,
   .shell.rail.no-preview {
-    grid-template-columns: 58px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr);
   }
   .list-head {
     padding: 16px 16px 12px;
