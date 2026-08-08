@@ -328,48 +328,55 @@ describe('renderBlocks（案件カード実バイト描画・Issue #194）', () 
     registerNodeFonts();
   });
 
-  it('案件カード3件が実際にページ境界をまたがず1ページに収まる（実データで確認した Issue #194 の症状の回帰防止）', async () => {
-    // Issue #194 で報告された3件のカード（M社/B社/P社）と同じ「見出し+短い表+3段落」の
-    // 形を複数積んで、ページ境界付近に配置されたカードが分割されないことを確認する。
-    const cards = Array.from({ length: 20 }, (_, i) =>
-      buildProjectCardMarkdown(
-        `### 会社${i} — 案件${i}の開発`,
-        `会社${i}の概要文です。`,
-        `案件${i}の業務内容の本文です。要件定義から運用まで担当しました。`,
-        `案件${i}で得た習得スキルの本文です。`,
-      ),
-    ).join('\n');
-    const content = ['## 職務経歴', '', cards].join('\n');
+  it(
+    '案件カード3件が実際にページ境界をまたがず1ページに収まる（実データで確認した Issue #194 の症状の回帰防止）',
+    async () => {
+      // Issue #194 で報告された3件のカード（M社/B社/P社）と同じ「見出し+短い表+3段落」の
+      // 形を複数積んで、ページ境界付近に配置されたカードが分割されないことを確認する。
+      // 20件分のフル描画+全ページ抽出は既定の5秒タイムアウトを超えうる（他の実バイト描画
+      // テストと同じ RENDER_TIMEOUT_MS を明示しないと、CI の並列実行下でフレーキーになる。
+      // CodeRabbit レビュー指摘）。
+      const cards = Array.from({ length: 20 }, (_, i) =>
+        buildProjectCardMarkdown(
+          `### 会社${i} — 案件${i}の開発`,
+          `会社${i}の概要文です。`,
+          `案件${i}の業務内容の本文です。要件定義から運用まで担当しました。`,
+          `案件${i}で得た習得スキルの本文です。`,
+        ),
+      ).join('\n');
+      const content = ['## 職務経歴', '', cards].join('\n');
 
-    const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
-    const pages = await extractPdfTextByPage(buffer);
-    const rawText = pages.join('');
-    const text = normalizeExtractedText(rawText);
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const pages = await extractPdfTextByPage(buffer);
+      const rawText = pages.join('');
+      const text = normalizeExtractedText(rawText);
 
-    for (let i = 0; i < 20; i++) {
-      const heading = `会社${i}—案件${i}の開発`;
-      const acquired = `案件${i}で得た習得スキルの本文です。`;
-      const headingIndex = text.indexOf(heading);
-      const acquiredIndex = text.indexOf(acquired);
-      expect(headingIndex).toBeGreaterThanOrEqual(0);
-      expect(acquiredIndex).toBeGreaterThan(headingIndex);
-      // 見出しから習得スキル本文までの間に含まれる「会社N—案件Nの開発」形の見出しは
-      // 自分自身の1件だけであること（＝別カードの見出しが割り込んでいない＝分断されていない）。
-      const between = text.slice(headingIndex, acquiredIndex);
-      const headingsInBetween = between.match(/会社\d+—案件\d+の開発/g) ?? [];
-      expect(headingsInBetween).toEqual([heading]);
+      for (let i = 0; i < 20; i++) {
+        const heading = `会社${i}—案件${i}の開発`;
+        const acquired = `案件${i}で得た習得スキルの本文です。`;
+        const headingIndex = text.indexOf(heading);
+        const acquiredIndex = text.indexOf(acquired);
+        expect(headingIndex).toBeGreaterThanOrEqual(0);
+        expect(acquiredIndex).toBeGreaterThan(headingIndex);
+        // 見出しから習得スキル本文までの間に含まれる「会社N—案件Nの開発」形の見出しは
+        // 自分自身の1件だけであること（＝別カードの見出しが割り込んでいない＝分断されていない）。
+        const between = text.slice(headingIndex, acquiredIndex);
+        const headingsInBetween = between.match(/会社\d+—案件\d+の開発/g) ?? [];
+        expect(headingsInBetween).toEqual([heading]);
 
-      // 上記の連結テキストでの隣接チェックだけでは、見出しがページ末尾・習得スキル本文が
-      // 次ページ先頭に分かれて描画されるケース（#194 の実際の症状そのもの）を見逃す。
-      // 結合前の pages 配列上で、見出しと習得スキル本文が同一ページに乗っているかを直接見る
-      // （chatgpt-codex-connector レビュー指摘: 旧実装は全ページ結合後の文字列しか見ておらず
-      // ページ分割そのものを検知できなかった）。
-      const headingPage = findPageIndexOf(pages, heading);
-      const acquiredPage = findPageIndexOf(pages, acquired);
-      expect(headingPage).toBeGreaterThanOrEqual(0);
-      expect(acquiredPage).toBe(headingPage);
-    }
-  });
+        // 上記の連結テキストでの隣接チェックだけでは、見出しがページ末尾・習得スキル本文が
+        // 次ページ先頭に分かれて描画されるケース（#194 の実際の症状そのもの）を見逃す。
+        // 結合前の pages 配列上で、見出しと習得スキル本文が同一ページに乗っているかを直接見る
+        // （chatgpt-codex-connector レビュー指摘: 旧実装は全ページ結合後の文字列しか見ておらず
+        // ページ分割そのものを検知できなかった）。
+        const headingPage = findPageIndexOf(pages, heading);
+        const acquiredPage = findPageIndexOf(pages, acquired);
+        expect(headingPage).toBeGreaterThanOrEqual(0);
+        expect(acquiredPage).toBe(headingPage);
+      }
+    },
+    RENDER_TIMEOUT_MS,
+  );
 });
 
 describe('SkillSheetDocument（実バイト描画）', () => {
