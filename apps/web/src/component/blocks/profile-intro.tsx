@@ -52,6 +52,22 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
     return () => observer.disconnect();
   }, [measurePrTruncation]);
 
+  // IBM Plex Sans JP は preload:false + display:swap（layout.tsx）のため、初回表示では
+  // フォールバックフォントで折り返しが確定した後にWebフォントへ差し替わることがある。
+  // line-clamp は要素自身の高さを4行分に固定するため、この置き換えによる行数の変化は
+  // ResizeObserver（要素の外形サイズの変化）だけでは検知できない。フォント読み込み完了時に
+  // 明示的に再測定する。
+  useEffect(() => {
+    if (typeof document === 'undefined' || !document.fonts?.ready) return;
+    let cancelled = false;
+    document.fonts.ready.then(() => {
+      if (!cancelled) measurePrTruncation();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [measurePrTruncation]);
+
   return (
     // design は区切り線を持たず、親の 48px 間隔だけで次のセクションと分ける。
     // SP はメタ→強み→自己PRの順に並べ替えるため、DOM順自体を SP の視覚順に合わせ、
@@ -74,14 +90,17 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
         // SP は2列グリッド、sm 以上は1行フレックスに戻す。
         <dl className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs text-faint sm:order-4 sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px]">
           {metaEntries.map(([key, value], i) => (
-            <div key={key} className="flex items-baseline gap-1.5">
+            // min-w-0: grid-cols-2 は各トラックを minmax(0,1fr) にするが、内側の flex 行自体は
+            // 既定 min-width:auto のままだと、区切りの無い長い値（英字の資格名など）で
+            // セルからはみ出し隣の列に重なる。break-words で折り返し可能にする。
+            <div key={key} className="flex min-w-0 items-baseline gap-1.5">
               {i > 0 && (
                 <span aria-hidden className="hidden sm:inline">
                   ·
                 </span>
               )}
-              <dt>{META_LABELS[key] ?? key}</dt>
-              <dd className="text-foreground">{value}</dd>
+              <dt className="shrink-0">{META_LABELS[key] ?? key}</dt>
+              <dd className="min-w-0 break-words text-foreground">{value}</dd>
             </div>
           ))}
         </dl>
