@@ -62,7 +62,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DateTokenPicker } from '@/components/date-token-picker';
 import { SelectOrCustom } from '@/components/select-or-custom';
@@ -558,6 +558,27 @@ interface CustomMetaRow {
 }
 
 /**
+ * ラベルが既知8項目のキー、または他の行のラベルと衝突している行の id を返す。
+ * 衝突したまま meta へ詰めると `meta[label] = value` の代入が先勝ちの値を無警告で
+ * 上書きし、保存後にリロードすると片方が消えたように見える（Codex レビュー指摘）。
+ * 最初に出現した行だけを有効とし、以降の同名行は衝突として保存対象から除外する。
+ */
+const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
+  const conflicts = new Set<string>();
+  const seenLabels = new Set<string>();
+  for (const row of rows) {
+    const label = row.label.trim();
+    if (!label) continue;
+    if (KNOWN_PROFILE_META_KEYS.has(label as keyof ProfileMeta) || seenLabels.has(label)) {
+      conflicts.add(row.id);
+    } else {
+      seenLabels.add(label);
+    }
+  }
+  return conflicts;
+};
+
+/**
  * プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。
  *
  * meta の既知8項目（年齢・性別・資格・学歴・勤務形態・最寄り駅・得意分野・得意業務）は
@@ -588,17 +609,21 @@ const ProfileBlockEditor = ({
       .filter((e): e is [string, string] => !KNOWN_PROFILE_META_KEYS.has(e[0]) && e[1] !== undefined)
       .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value })),
   );
+  const conflictingRowIds = useMemo(() => findConflictingRowIds(customRows), [customRows]);
 
   // customRows（ローカル state）が変わるたびに、既知キーと合わせて meta 全体を作り直す。
+  // ラベルが衝突している行は保存対象から除外する（画面上は残し、エラー表示で気付けるようにする）。
   const commitCustomRows = (rows: CustomMetaRow[]) => {
     setCustomRows(rows);
+    const conflicts = findConflictingRowIds(rows);
     const meta: ProfileMeta = {};
     for (const key of KNOWN_PROFILE_META_KEYS) {
       const v = data.meta?.[key];
       if (v !== undefined) meta[key] = v;
     }
     for (const row of rows) {
-      if (row.label.trim()) meta[row.label] = row.value;
+      const label = row.label.trim();
+      if (label && !conflicts.has(row.id)) meta[label] = row.value;
     }
     onChange({ ...data, meta });
   };
@@ -675,32 +700,45 @@ const ProfileBlockEditor = ({
       {customRows.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">その他の項目</p>
-          {customRows.map((row) => (
-            <div key={row.id} className="flex items-center gap-2">
-              <input
-                value={row.label}
-                onChange={(e) => updateCustomRow(row.id, { label: e.target.value })}
-                placeholder="項目名（例: 得意分野）"
-                aria-label="項目名"
-                className="w-28 shrink-0 min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <input
-                value={row.value}
-                onChange={(e) => updateCustomRow(row.id, { value: e.target.value })}
-                placeholder="値"
-                aria-label={row.label || '値'}
-                className="min-w-0 flex-1 min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              <button
-                type="button"
-                onClick={() => removeCustomRow(row.id)}
-                aria-label="この項目を削除"
-                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </div>
-          ))}
+          {customRows.map((row) => {
+            const isConflicting = conflictingRowIds.has(row.id);
+            return (
+              <div key={row.id} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={row.label}
+                    onChange={(e) => updateCustomRow(row.id, { label: e.target.value })}
+                    placeholder="項目名（例: 得意分野）"
+                    aria-label="項目名"
+                    aria-invalid={isConflicting}
+                    className={`w-28 shrink-0 min-h-11 rounded border bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring ${
+                      isConflicting ? 'border-destructive' : 'border-input'
+                    }`}
+                  />
+                  <input
+                    value={row.value}
+                    onChange={(e) => updateCustomRow(row.id, { value: e.target.value })}
+                    placeholder="値"
+                    aria-label={row.label || '値'}
+                    className="min-w-0 flex-1 min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCustomRow(row.id)}
+                    aria-label="この項目を削除"
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+                {isConflicting && (
+                  <p className="text-xs text-destructive">
+                    項目名が他の項目と重複しているため、この項目は保存されません。項目名を変更してください。
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
       <button

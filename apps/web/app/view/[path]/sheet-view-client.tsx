@@ -74,7 +74,10 @@ const SheetViewClient = ({ title, content, blocks, canEdit = false, stale = fals
   return (
     <div>
       {stale && (
-        <div role="status" className="border-b border-warn/40 bg-warn-soft px-4 py-2 text-center text-sm text-warn">
+        <div
+          role="status"
+          className="border-b border-warn/40 bg-warn-soft px-4 py-2 text-center text-sm text-warn-strong"
+        >
           最新の内容の取得に失敗している可能性があります。表示中の内容は最新でない場合があります。
         </div>
       )}

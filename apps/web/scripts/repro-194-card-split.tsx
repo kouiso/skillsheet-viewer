@@ -74,40 +74,64 @@ async function main() {
   const pages = await extractPerPageText(buffer);
   console.log(`[repro-194] page count = ${pages.length}`);
 
-  // 案件見出し「会社名 — タイトル」を content の生 markdown から抽出する。
-  const headingMatches = [...sheet.content.matchAll(/^### (.+? — .+)$/gm)].map((m) => m[1]);
+  // 案件見出し「会社名 — タイトル」を content の生 markdown から、出現位置(index)付きで抽出する。
+  const headingMatches = [...sheet.content.matchAll(/^### (.+? — .+)$/gm)].map((m) => ({
+    heading: m[1],
+    index: m.index ?? 0,
+  }));
   console.log(`[repro-194] 案件カード数 = ${headingMatches.length}`);
 
-  const split: string[] = [];
-  for (const heading of headingMatches) {
-    // 抽出テキストは空白が詰まっていることがあるため、突合は空白除去して行う。
-    const normalizedHeading = heading.replace(/\s+/g, '');
-    const pageIndices = pages
-      .map((text, idx) => (text.replace(/\s+/g, '').includes(normalizedHeading) ? idx + 1 : -1))
-      .filter((idx) => idx !== -1);
-    // 見出し自体が同じページに複数回現れることはないはずなので pageIndices は1件のはず。
-    // 「分割」を検出したいのは見出しの直後の内容がその次のページに漏れているケースなので、
-    // 見出しが出現したページと、そのカードの末尾らしき内容が出現するページを比較する。
-    if (pageIndices.length === 0) {
-      console.log(`[repro-194] 警告: 見出し「${heading}」がどのページにも見つからない`);
-    }
-  }
+  // 抽出テキストは空白が詰まっていることがあるため、突合は空白除去して行う。
+  const findFirstPage = (needle: string): number => {
+    const normalized = needle.replace(/\s+/g, '');
+    if (!normalized) return -1;
+    return pages.findIndex((text) => text.replace(/\s+/g, '').includes(normalized));
+  };
 
-  // より直接的に：各案件カードの「区切り」を報告済みの3件で確認する。
-  const KNOWN_BAD_CARDS = [
-    { needle: '雑誌などの販売システム', label: 'M社 雑誌などの販売システム' },
-    { needle: 'PatentStart', label: 'B社 PatentStart' },
-    { needle: 'Jewels', label: 'P社 Jewels' },
-  ];
-  for (const { needle, label } of KNOWN_BAD_CARDS) {
-    const pagesContaining = pages
-      .map((text, idx) => (text.includes(needle) ? idx + 1 : -1))
-      .filter((idx) => idx !== -1);
-    const spansMultiplePages = pagesContaining.length > 1;
-    console.log(
-      `[repro-194] ${label}: 出現ページ = [${pagesContaining.join(', ')}]${spansMultiplePages ? '  ← まだ複数ページにまたがっている' : '  OK'}`,
-    );
-    if (spansMultiplePages) split.push(label);
+  // カード本文（見出し〜次の見出しの直前）の末尾にある、見出し・表以外の意味のある行
+  // （会社概要文/業務内容/習得スキル等の段落）を1行取り出す。これが見出しと別ページに
+  // 出ていれば、そのカードはページ境界で分割されている。
+  const lastMeaningfulLine = (cardBody: string): string | null => {
+    const lines = cardBody.split('\n').map((l) => l.trim());
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const l = lines[i];
+      if (!l || l.startsWith('#') || l.startsWith('|') || /^:?-+:?$/.test(l)) continue;
+      if (l.length < 8) continue; // 短すぎる行は他ページとの偶然一致リスクが高いので避ける
+      return l;
+    }
+    return null;
+  };
+
+  // 見出しが出現したページと、そのカードの末尾らしき内容が出現するページを比較する
+  // （旧実装は見出し文字列自体が複数ページにまたがるかしか見ておらず、#194 の実際の症状
+  // 「見出し+表は1ページ目・末尾の段落だけ次ページに漏れる」を検出できていなかった。
+  // chatgpt-codex-connector レビュー指摘）。
+  const split: string[] = [];
+  for (let i = 0; i < headingMatches.length; i++) {
+    const { heading, index } = headingMatches[i];
+    const nextIndex = headingMatches[i + 1]?.index ?? sheet.content.length;
+    const cardBody = sheet.content.slice(index, nextIndex);
+    const headingPage = findFirstPage(heading);
+    if (headingPage === -1) {
+      console.log(`[repro-194] 警告: 見出し「${heading}」がどのページにも見つからない`);
+      continue;
+    }
+    const tailLine = lastMeaningfulLine(cardBody);
+    if (!tailLine) {
+      console.log(`[repro-194] 警告: 「${heading}」の末尾段落を content から特定できず判定不能`);
+      continue;
+    }
+    const tailPage = findFirstPage(tailLine);
+    if (tailPage === -1) {
+      console.log(`[repro-194] 警告: 「${heading}」の末尾段落「${tailLine}」がPDF上に見つからない`);
+      continue;
+    }
+    if (tailPage !== headingPage) {
+      console.log(
+        `[repro-194] ${heading}: 見出し=${headingPage + 1}ページ / 末尾段落=${tailPage + 1}ページ  ← ページ境界で分割されている`,
+      );
+      split.push(heading);
+    }
   }
 
   console.log(`[repro-194] 分割が残っているカード数 = ${split.length}`);
@@ -115,7 +139,7 @@ async function main() {
   // クリップ（内容消失）が起きていないかも確認する（#172 の再発が無いこと）。
   const fullText = pages.join('').replace(/\s+/g, '');
   let missing = 0;
-  for (const heading of headingMatches) {
+  for (const { heading } of headingMatches) {
     const [company, title] = heading.split(' — ');
     if (!fullText.includes((title ?? '').replace(/\s+/g, ''))) {
       console.log(`[repro-194] 警告: 案件「${heading}」のタイトルがPDFに見つからない（内容消失の疑い）`);

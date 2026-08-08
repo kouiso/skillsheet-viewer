@@ -30,6 +30,27 @@ export type ConfigErrorKind =
   | 'github-missing-env'
   | 'github-auth-failed';
 
+// tRPC の procedure は throw を無条件で TRPCError（code: 'INTERNAL_SERVER_ERROR'）に
+// ラップし、元のエラーは .cause に retain する。.message は cause.message を引き継ぐため
+// メッセージ文字列での判定は素通しできるが、.code は TRPCError 自身の code
+// （'INTERNAL_SERVER_ERROR'）で上書きされる。TRPCError は必ず .code を持つため、
+// 「最初に見つかった非undefinedの.codeを使う」実装では外側の 'INTERNAL_SERVER_ERROR'
+// で止まってしまい、cause 側の元エラーの .code（SQLSTATE や ERR_INVALID_URL）まで
+// 辿り着けない。チェーン全体の .code を集めて含まれるかで判定する
+// （Codex レビュー指摘: db-malformed-url が /view 経由では検出できていなかった）。
+function collectErrorCodes(err: Error): unknown[] {
+  const codes: unknown[] = [];
+  const seen = new Set<unknown>();
+  let current: unknown = err;
+  while (current instanceof Error && !seen.has(current)) {
+    seen.add(current);
+    const code = (current as { code?: unknown }).code;
+    if (code !== undefined) codes.push(code);
+    current = (current as { cause?: unknown }).cause;
+  }
+  return codes;
+}
+
 /** エラーが「待っても直らない設定不備」に該当するかを判定し、原因の種類まで返す。 */
 export function classifyConfigError(err: unknown): ConfigErrorKind | null {
   if (!(err instanceof Error)) return null;
@@ -38,11 +59,11 @@ export function classifyConfigError(err: unknown): ConfigErrorKind | null {
   if (err.message.includes('DATABASE_URL is not set') || err.message.includes('SKILLSHEET_OWNER_ID is not set')) {
     return 'db-missing-env';
   }
-  const code = (err as { code?: unknown }).code;
-  if (code === UNDEFINED_TABLE_SQLSTATE || /relation .* does not exist/.test(err.message)) {
+  const codes = collectErrorCodes(err);
+  if (codes.includes(UNDEFINED_TABLE_SQLSTATE) || /relation .* does not exist/.test(err.message)) {
     return 'db-table-missing';
   }
-  if (code === INVALID_URL_CODE) return 'db-malformed-url';
+  if (codes.includes(INVALID_URL_CODE)) return 'db-malformed-url';
   return null;
 }
 
