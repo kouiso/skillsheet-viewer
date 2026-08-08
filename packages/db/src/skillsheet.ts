@@ -368,8 +368,8 @@ export async function saveSkillSheetBlocks(
         .where(eq(skillSheets.id, resolvedSheetId))
         .for('update')
         .limit(1);
-      // Server Actions 経由のシリアライズで Date が string 化される可能性に備え、
-      // 比較前に必ず Date へ正規化してから getTime() で比較する。
+      // tRPC + superjson 経由なら Date のまま渡るが、呼び出し元を問わず安全に
+      // 比較できるよう、比較前に必ず Date へ正規化してから getTime() で比較する。
       const expectedTime = new Date(expectedUpdatedAt).getTime();
       if (current && current.updatedAt.getTime() > expectedTime) {
         throw new ConflictError();

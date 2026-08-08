@@ -176,7 +176,7 @@ GitHub 系の環境変数は任意扱いで、`assertServerEnv()` は欠けて�
 
 - `sheet.save` / `create` / `delete` の各 tRPC mutation は保存/作成/削除後に `revalidateTag('db-sheet', { expire: 0 })` を呼び、`db-sheet` タグを即時失効させる。
   - **`next/cache` の `updateTag` は使えない**: `updateTag` は Server Action 専用の API で Route Handler から呼ぶと実行時エラーになる（Next.js 16 公式ドキュメント）。tRPC の mutation は必ず Route Handler（`/api/trpc/[trpc]`）経由で実行されるため、代わりに `revalidateTag(tag, { expire: 0 })` で即時失効させる。空の `{}` は expire 未指定＝即時失効の保証が無いため、明示的に `{ expire: 0 }` を指定する（`app/api/revalidate/route.ts` が先に解決していた同じ問題のパターンを踏襲）。
-- GitHub 読み経路（`sheets` タグ）は `POST /api/revalidate`（`app/api/revalidate/route.ts`）で手動失効できる。`REVALIDATE_SECRET` を `Authorization: Bearer` か `?secret=` で照合し、`timingSafeEqual` で比較する。
+- GitHub 読み経路（`sheets` タグ）は tRPC の `maintenance.revalidate` で手動失効できる。`REVALIDATE_SECRET` を `Authorization: Bearer` か `?secret=` で照合し、`timingSafeEqual` で比較する。既存の webhook や運用スクリプト向けに `POST /api/revalidate` を互換アダプタとして残している。
 
 ---
 
