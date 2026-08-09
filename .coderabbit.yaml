@@ -7,6 +7,11 @@ reviews:
   auto_review:
     enabled: true
     drafts: false
+  # リポジトリはインラインコメント方針で統一しており、JSDoc/docstring を全関数に付ける文化ではない。
+  # 80% 閾値は CodeRabbit 既定値だが、このプロジェクトの実態と合わないため docstring カバレッジは off にする。
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
   path_instructions:
     - path: "packages/db/**/*.ts"
       instructions: |
