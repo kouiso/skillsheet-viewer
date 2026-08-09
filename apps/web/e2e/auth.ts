@@ -1,14 +1,16 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import type { Page } from '@playwright/test';
 
-export const authFile = path.resolve('playwright', '.auth', 'user.json');
+const authDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'playwright', '.auth');
+export const authFile = path.join(authDir, 'user.json');
 
 // Playwright の storageState はファイルが存在しないと起動時に失敗する。
 // 最初のテストがログインするまで空の状態を置いておき、ログイン成功後に上書きする。
-if (!existsSync(path.dirname(authFile))) {
-  mkdirSync(path.dirname(authFile), { recursive: true });
+if (!existsSync(authDir)) {
+  mkdirSync(authDir, { recursive: true });
 }
 if (!existsSync(authFile)) {
   writeFileSync(authFile, JSON.stringify({ cookies: [], origins: [] }), 'utf-8');
