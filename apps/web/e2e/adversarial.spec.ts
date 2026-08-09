@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
 import { createRealVolumeDemoSheet, deleteSheet, getSkillSheetById, listSheets } from '@skillsheet/db';
-import { login } from './auth';
+import { authFile, login } from './auth';
+
+test.use({ storageState: authFile });
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const revalidateSecret = process.env.REVALIDATE_SECRET ?? 'revalidate-local';
@@ -223,7 +225,7 @@ test('B. extreme input edge cases', async ({ page }) => {
 });
 
 test('C. viewport sweep builder and viewer', async ({ browser }) => {
-  const editorContext = await browser.newContext();
+  const editorContext = await browser.newContext({ storageState: authFile });
   const editorPage = await editorContext.newPage();
   const { errors: eErrors, warnings: eWarnings, off: eOff } = collectErrors(editorPage);
   await login(editorPage);

@@ -1,6 +1,7 @@
 'use client';
 
 import type { SkillsBlockData } from '@skillsheet/db/blocks';
+import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface SkillMatrixProps {
   data: SkillsBlockData;
@@ -48,8 +49,8 @@ export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
           // 折り返しが発生しない限り単一行時の見た目に影響しない（行高＝内容高のため）。
           // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
           <div key={i} className="grid grid-cols-[1fr_44px_84px_28px] items-start gap-3">
-            <span className="min-w-0 break-words text-sm text-foreground" title={skill.name}>
-              {skill.name}
+            <span className="min-w-0 break-words text-sm text-foreground" title={sanitizeHtml(skill.name)}>
+              {sanitizeHtml(skill.name)}
             </span>
             <span className="truncate text-center text-xs text-foreground" title={skill.level}>
               {skill.level}
