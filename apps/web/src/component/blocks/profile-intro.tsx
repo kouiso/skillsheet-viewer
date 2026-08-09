@@ -2,6 +2,7 @@
 
 import { orderedProfileMetaEntries, type ProfileBlockData, resolveProfileMetaLabel } from '@skillsheet/db/blocks';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
@@ -67,13 +68,13 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-1 sm:order-1">
         {/* kicker: 「SKILL SHEET · 会社名」。会社名未設定時は「SKILL SHEET」のみ。 */}
-        <p className="kicker mb-1.5">{data.company ? `SKILL SHEET · ${data.company}` : 'SKILL SHEET'}</p>
+        <p className="kicker mb-1.5">{data.company ? `SKILL SHEET · ${sanitizeHtml(data.company)}` : 'SKILL SHEET'}</p>
         {data.name && (
           <h1 className="text-[26px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground sm:text-[34px]">
-            {data.name}
+            {sanitizeHtml(data.name)}
           </h1>
         )}
-        {data.title && <p className="font-mono text-[14.5px] text-accent-text">{data.title}</p>}
+        {data.title && <p className="font-mono text-[14.5px] text-accent-text">{sanitizeHtml(data.title)}</p>}
       </div>
 
       {metaEntries.length > 0 && (
@@ -96,7 +97,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
                   max-w は flex の基準サイズをクランプするので、shrink-0 を保ったまま
                   「短いラベルは絶対に折り返さない／長いラベルだけ半分で折り返す」を両立できる。 */}
               <dt className="max-w-[50%] shrink-0 break-words">{resolveProfileMetaLabel(key)}</dt>
-              <dd className="min-w-0 break-words text-foreground">{value}</dd>
+              <dd className="min-w-0 break-words text-foreground">{sanitizeHtml(value)}</dd>
             </div>
           ))}
         </dl>
@@ -108,7 +109,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
             // 押せない紹介ラベルなので .techtag。
             // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
             <li key={i} className="techtag">
-              {s}
+              {sanitizeHtml(s)}
             </li>
           ))}
         </ul>
@@ -129,7 +130,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
               !expanded ? 'line-clamp-6' : ''
             }`}
           >
-            {data.pr}
+            {sanitizeHtml(data.pr)}
           </p>
           {isPrTruncated && (
             <button

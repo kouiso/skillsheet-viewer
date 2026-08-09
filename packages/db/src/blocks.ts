@@ -9,6 +9,7 @@
  */
 
 import { flattenTech, formatMonthToken, formatPeriodDisplay } from './process';
+import { sanitizeMarkdown, sanitizeScriptAndStyle } from './sanitize-html';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -505,7 +506,8 @@ const ALIGN_MARKER: Record<TableAlign, string> = {
  * 生 HTML として再解釈されずに見た目どおりの文字が残る。
  */
 function escapeCell(value: string): string {
-  const single = value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const sanitized = sanitizeScriptAndStyle(value);
+  const single = sanitized.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return single.length > 0 ? single : ' ';
 }
 
@@ -514,8 +516,9 @@ function escapeCell(value: string): string {
 // project-preview.tsx）は company.note を素のテキストとして描画しており、生成する markdown でも
 // 同じ「構造を持たない文章」として扱う必要がある。
 function escapeMarkdownParagraph(value: string): string {
+  const sanitized = sanitizeScriptAndStyle(value);
   return (
-    value
+    sanitized
       .split('\n')
       // 元の文章に既にバックスラッシュが含まれる場合（例:「\<img ...>」という文字列を
       // 意図した入力）、先にこれをエスケープしておかないと、後続のメタ文字エスケープが
@@ -563,7 +566,8 @@ export function tableBlockToMarkdown(data: TableBlockData): string {
 
 /** スキル一覧ブロックを GFM markdown 表へ変換する。 */
 export function skillsBlockToMarkdown(data: SkillsBlockData): string {
-  const header = data.category.trim().length > 0 ? `### ${data.category}\n\n` : '';
+  const category = escapeCell(data.category);
+  const header = data.category.trim().length > 0 ? `### ${category}\n\n` : '';
   if (data.skills.length === 0) return `${header}| スキル | 経験年数 | 習熟度 |\n| :--- | :---: | :--- |`;
   const headerLine = '| スキル | 経験年数 | 習熟度 |';
   const alignLine = '| :--- | :---: | :--- |';
@@ -577,15 +581,16 @@ export function skillsBlockToMarkdown(data: SkillsBlockData): string {
 export function experienceBlockToMarkdown(data: ExperienceBlockData): string {
   const { company, startDate, endDate, role, description } = data;
   const period = [formatMonthToken(startDate), formatMonthToken(endDate) || '現在'].filter(Boolean).join('〜');
-  const heading = company.trim().length > 0 ? `### ${company}（${period}）` : `### （${period}）`;
+  const companyEscaped = escapeCell(company.trim());
+  const heading = company.trim().length > 0 ? `### ${companyEscaped}（${period}）` : `### （${period}）`;
   const lines: string[] = [heading, ''];
   lines.push('| 項目 | 内容 |');
   lines.push('| :--- | :--- |');
   lines.push(`| 期間 | ${period} |`);
-  if (role.trim().length > 0) lines.push(`| 職種 | ${escapeCell(role)} |`);
+  if (role.trim().length > 0) lines.push(`| 職種 | ${escapeCell(role.trim())} |`);
   if (description.trim().length > 0) {
     lines.push('');
-    lines.push(description.trim());
+    lines.push(escapeMarkdownParagraph(description.trim()));
   }
   return lines.join('\n');
 }
@@ -593,12 +598,12 @@ export function experienceBlockToMarkdown(data: ExperienceBlockData): string {
 /** プロフィールブロックを markdown へ変換する。 */
 export function profileBlockToMarkdown(data: ProfileBlockData): string {
   const lines: string[] = [];
-  if (data.name.trim()) lines.push(`# ${data.name}`);
-  if (data.title.trim()) lines.push(`\n**${data.title}**`);
-  if (data.pr.trim()) lines.push(`\n${data.pr}`);
+  if (data.name.trim()) lines.push(`# ${escapeCell(data.name.trim())}`);
+  if (data.title.trim()) lines.push(`\n**${escapeCell(data.title.trim())}**`);
+  if (data.pr.trim()) lines.push(`\n${escapeMarkdownParagraph(data.pr.trim())}`);
   if (data.strengths.length > 0) {
     lines.push('\n**強み**');
-    for (const s of data.strengths) lines.push(`- ${s}`);
+    for (const s of data.strengths) lines.push(`- ${escapeMarkdownParagraph(s.trim())}`);
   }
   const metaItems: string[] = [];
   // 所属会社はビューア（トップバー/kicker）で表示するため、markdown/PDF でも欠落させない（表示パリティ）。
@@ -648,8 +653,9 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
   const lines: string[] = [];
   for (const item of visible.items) {
     const company = companyMap.get(item.companyId);
-    const companyName = company?.name ?? '(不明な会社)';
-    lines.push(`### ${companyName} — ${item.title}`);
+    const companyName = company?.name?.trim() ? escapeCell(company.name.trim()) : '(不明な会社)';
+    const title = item.title.trim() ? escapeCell(item.title.trim()) : '(タイトル未入力)';
+    lines.push(`### ${companyName} — ${title}`);
     lines.push('');
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
@@ -676,13 +682,13 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
       lines.push('');
       lines.push('**業務内容**');
       lines.push('');
-      lines.push(item.duties.trim());
+      lines.push(escapeMarkdownParagraph(item.duties.trim()));
     }
     if (item.acquired.trim()) {
       lines.push('');
       lines.push('**習得スキル・実績**');
       lines.push('');
-      lines.push(item.acquired.trim());
+      lines.push(escapeMarkdownParagraph(item.acquired.trim()));
     }
     lines.push('');
   }
@@ -690,7 +696,7 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
 }
 
 function blockToMarkdown(block: Block): string {
-  if (block.type === 'markdown') return block.data.markdown;
+  if (block.type === 'markdown') return sanitizeMarkdown(block.data.markdown);
   if (block.type === 'table') return tableBlockToMarkdown(block.data);
   if (block.type === 'skills') return skillsBlockToMarkdown(block.data);
   if (block.type === 'experience') return experienceBlockToMarkdown(block.data);

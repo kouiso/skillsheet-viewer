@@ -44,6 +44,7 @@ import {
   type TableColumn,
   tableBlockToMarkdown,
 } from '@skillsheet/db/blocks';
+import { sanitizeMarkdown } from '@skillsheet/db/sanitize-html';
 import { TRPCClientError } from '@trpc/client';
 import {
   AlignCenter,
@@ -179,7 +180,7 @@ const itemToBlockInput = (item: EditorItem): BlockInput => {
 const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolean }): string => {
   switch (item.type) {
     case 'markdown':
-      return item.markdown;
+      return sanitizeMarkdown(item.markdown);
     case 'table':
       return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
     case 'skills':
