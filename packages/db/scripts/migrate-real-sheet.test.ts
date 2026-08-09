@@ -203,10 +203,6 @@ describe('parseCareerMarkdown', () => {
     const { dropped } = parseCareerMarkdown(careerMarkdown());
 
     expect(dropped).toEqual([]);
-    expect(isTableSeparatorRow('|---|---|')).toBe(true);
-    expect(isTableSeparatorRow('| :--- | ---: |')).toBe(true);
-    expect(isTableSeparatorRow('| 期間 | 2021年 |')).toBe(false);
-    expect(isTableSeparatorRow('ふつうの文')).toBe(false);
   });
 
   it('会社見出しより前の想定外の見出しを検出する（Codexレビュー）', () => {
@@ -227,6 +223,46 @@ describe('parseCareerMarkdown', () => {
 
     expect(dropped.map((d) => d.line).join()).toContain('性能検証: ○');
   });
+
+  it('既知の工程列の解釈できないマーカーを検出する（Codexレビュー）', () => {
+    // 「要件定義: 担当」は process に変換されないまま失われる。
+    const md = careerMarkdown().replace('| 経験 | ● |  | ● | ● |  |  |  |', '| 経験 | 担当 |  |  |  |  |  |  |');
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    expect(items[0].process).toEqual([]);
+    expect(dropped.map((d) => d.line)).toContain('要件定義: 担当');
+    expect(dropped[0].where).toContain('解釈できないマーカー');
+  });
+
+  it('「経験なし」記号は解釈できないマーカーとして報告しない（誤検知しない）', () => {
+    const md = careerMarkdown().replace('| 経験 | ● |  | ● | ● |  |  |  |', '| 経験 | ● | - | ● | ● | × | ー | なし |');
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    expect(items[0].process).toEqual(['要件定義', '詳細設計', '実装']);
+    expect(dropped).toEqual([]);
+  });
+
+  it('ヘッダより列数が多いデータ行の余剰セルを検出する（CodeRabbitレビュー）', () => {
+    const md = careerMarkdown().replace(
+      '| 経験 | ● |  | ● | ● |  |  |  |',
+      '| 経験 | ● |  | ● | ● |  |  |  | 補足あり |',
+    );
+    const { dropped } = parseCareerMarkdown(md);
+
+    expect(dropped.map((d) => d.line)).toContain('補足あり');
+    expect(dropped[0].where).toContain('ヘッダに対応する列が無い');
+  });
+});
+
+describe('isTableSeparatorRow', () => {
+  it.each([
+    ['|---|---|', true],
+    ['| :--- | ---: |', true],
+    ['| 期間 | 2021年 |', false],
+    ['ふつうの文', false],
+  ])('%s → %s', (line, expected) => {
+    expect(isTableSeparatorRow(line)).toBe(expected);
+  });
 });
 
 // --- プロフィール／スキル ------------------------------------------------------------------
@@ -245,6 +281,7 @@ const PROFILE_MD = [
 
 const SKILLS_MD = [
   '<details>',
+  '<summary><h2>スキル・経験年数</h2></summary>',
   '',
   '| 技術分類 | 技術名 | 経験年数 |',
   '|---|---|---|',
@@ -284,6 +321,19 @@ describe('parseProfileMarkdown', () => {
 
     expect(dropped.map((d) => d.line)).toContain('備考: この行は取り込まれません。');
   });
+
+  it('同じ項目が重複したとき、上書きで失われる先行値を検出する（Codexレビュー）', () => {
+    const dropped: DroppedLine[] = [];
+    const profile = parseProfileMarkdown(
+      PROFILE_MD.replace('| 年齢 | 30歳 |', '| 年齢 | 30歳 |\n| 年齢 | 40歳 |'),
+      dropped,
+    );
+
+    // 後勝ちで上書きされる挙動自体は変えていない。
+    expect(profile?.meta.age).toBe('40歳');
+    expect(dropped.map((d) => d.line)).toContain('年齢: 30歳');
+    expect(dropped[0].where).toContain('重複した項目の上書き');
+  });
 });
 
 describe('parseSkillsMarkdown', () => {
@@ -305,6 +355,43 @@ describe('parseSkillsMarkdown', () => {
 
     expect(dropped.map((d) => d.line)).toContain('注記: 一部は独学です。');
     expect(dropped[0].where).toContain('スキル・経験年数');
+  });
+
+  it('列が3つ未満の行を検出する（CodeRabbitレビュー）', () => {
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', '| 言語 | TypeScript |'), dropped);
+
+    expect(dropped.map((d) => d.line)).toContain('| 言語 | TypeScript |');
+    expect(dropped[0].where).toContain('列が3つ未満');
+  });
+
+  it('技術分類も技術名も無く経験年数だけの行を検出する（CodeRabbitレビュー）', () => {
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(SKILLS_MD.replace('|  | Go | 2年 |', '|  |  | 2年 |'), dropped);
+
+    expect(dropped.some((d) => d.where.includes('技術名が無い'))).toBe(true);
+  });
+
+  it('技術分類が未確定のまま現れたスキル行を検出する（Codexレビュー P1）', () => {
+    // 先頭データ行に分類が無いと currentCategory が空のままで、flushCategory が
+    // ブロックを出さず次の分類行で消える。
+    const dropped: DroppedLine[] = [];
+    const skills = parseSkillsMarkdown(
+      SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', '|  | TypeScript | 5年 |'),
+      dropped,
+    );
+
+    expect(skills.flatMap((s) => s.skills.map((x) => x.name))).not.toContain('TypeScript');
+    expect(dropped.some((d) => d.where.includes('技術分類が未確定'))).toBe(true);
+    expect(dropped.map((d) => d.line).join()).toContain('TypeScript');
+  });
+
+  it('<summary> などの構造行は捨てた行として報告しない（Codexレビュー P2）', () => {
+    // 実シートと同じ <details><summary><h2>…</h2></summary> 形式でも誤検知しないこと。
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(SKILLS_MD, dropped);
+
+    expect(dropped).toEqual([]);
   });
 
   it('<details> が無い場合でも、次の ## 見出し以降を捨てた行として報告しない', () => {
