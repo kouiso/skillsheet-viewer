@@ -53,7 +53,11 @@ export function InlineMarkdown({ content, className, linksTabbable = true }: Inl
             <a
               {...props}
               tabIndex={linksTabbable ? undefined : -1}
-              className="text-primary underline underline-offset-2 hover:text-primary/80"
+              // text-primary は背景に対しライトテーマで3.74と WCAG AA 未達（Issue #198:
+              // 「案件内のURLリンク」）。hover の /80（80%不透明度）はカード背景へブレンドし、
+              // ライト4.35:1・ダーク3.59:1 まで下がり AA を割り込んでいた（Codex レビュー指摘）。
+              // 不透明な --primary-hover に差し替える（button.tsx と同じトークン）。
+              className="text-primary-dark underline underline-offset-2 hover:text-primary-hover"
             >
               {children}
             </a>

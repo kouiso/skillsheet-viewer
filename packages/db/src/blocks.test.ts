@@ -559,6 +559,71 @@ describe('profileBlockToMarkdown', () => {
     expect(profileBlockToMarkdown(PROFILE)).not.toContain('所属会社');
     expect(profileBlockToMarkdown({ ...PROFILE, company: '  ' })).not.toContain('所属会社');
   });
+
+  it('性別・資格・得意分野・得意業務（既知だが従来UI未対応だった4項目）も表に出力する（Issue #193）', () => {
+    const md = profileBlockToMarkdown({
+      ...PROFILE,
+      meta: {
+        ...PROFILE.meta,
+        gender: '男',
+        qualifications: '自動車普通車免許',
+        specialties: 'フロントエンド',
+        expertise: 'チーム運営',
+      },
+    });
+    expect(md).toContain('| 性別 | 男 |');
+    expect(md).toContain('| 資格 | 自動車普通車免許 |');
+    expect(md).toContain('| 得意分野 | フロントエンド |');
+    expect(md).toContain('| 得意業務 | チーム運営 |');
+  });
+
+  it('既知8項目に無い任意のキーも、キー名をラベルとして表に出力する（Issue #193 の自由項目）', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, 血液型: 'A型' } });
+    expect(md).toContain('| 血液型 | A型 |');
+  });
+
+  it('既知項目 → 任意項目の順で並ぶ', () => {
+    const md = profileBlockToMarkdown({
+      ...PROFILE,
+      meta: { 血液型: 'A型', age: '30歳', work: 'フルリモート' },
+    });
+    const ageIndex = md.indexOf('| 年齢 |');
+    const workIndex = md.indexOf('| 勤務形態 |');
+    const customIndex = md.indexOf('| 血液型 |');
+    expect(ageIndex).toBeGreaterThan(-1);
+    expect(ageIndex).toBeLessThan(workIndex);
+    expect(workIndex).toBeLessThan(customIndex);
+  });
+
+  it('値が空文字/空白のみの項目は表に出さない', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, gender: '', qualifications: '  ' } });
+    expect(md).not.toContain('| 性別 |');
+    expect(md).not.toContain('| 資格 |');
+  });
+
+  // chatgpt-codex-connector レビュー指摘: PROFILE_META_LABELS[key] のブラケットアクセスは
+  // key が Object.prototype のプロパティ名と一致すると継承メンバ（関数）を返し、
+  // escapeCell が文字列以外を渡されて例外になっていた。ユーザーがエディタで
+  // 自由に入力できるラベルだけで再現するため、通常の入力として扱い例外にしない。
+  it('任意キーが constructor/toString 等の Object.prototype 予約語と一致してもクラッシュせず、キー名をラベルとして出力する', () => {
+    expect(() =>
+      profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, constructor: '値1', toString: '値2' } }),
+    ).not.toThrow();
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, constructor: '値1', toString: '値2' } });
+    expect(md).toContain('| constructor | 値1 |');
+    expect(md).toContain('| toString | 値2 |');
+  });
+
+  // chatgpt-codex-connector レビュー指摘: escapeCell が `<` `>` を素通ししていたため、
+  // 自由入力に "Reference <URL>" のような文字列があると remark がインラインHTMLと
+  // 誤認し、PDF描画（skill-sheet-document.tsx の INLINE_LEAF）がその部分を丸ごと
+  // 落としていた（PDF/viewer間の表示不一致・内容欠落）。生成した markdown 自体に
+  // 実体参照として残ることを確認する（デコード後にPDFへ literal な `<`/`>` が残る）。
+  it('任意キーの値に < > を含んでも実体参照へエスケープし、生 HTML として解釈されない形で出力する', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, 参考: 'Reference <URL> here' } });
+    expect(md).toContain('Reference &lt;URL&gt; here');
+    expect(md).not.toContain('Reference <URL> here');
+  });
 });
 
 describe('statsBlockToMarkdown', () => {
