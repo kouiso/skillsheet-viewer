@@ -16,7 +16,7 @@ function buildData(overrides: Partial<ProfileBlockData>): ProfileBlockData {
 }
 
 // jsdom はレイアウトを持たないため、自己PR段落の scrollHeight/clientHeight を
-// 差し替えて「4行を超えて隠れている/いない」を再現する（grow-textarea.test.tsx と同じ手法）。
+// 差し替えて「表示行数を超えて隠れている/いない」を再現する（grow-textarea.test.tsx と同じ手法）。
 let scrollHeight = 100;
 let clientHeight = 100;
 
@@ -64,14 +64,14 @@ describe('ProfileIntro', () => {
     expect(meta?.className).toContain('sm:order-4');
   });
 
-  it('自己PRが実際に4行に収まっているときは「続きを読む」ボタンが出ない', () => {
+  it('自己PRが実際に表示行数に収まっているときは「続きを読む」ボタンが出ない', () => {
     scrollHeight = 100;
     clientHeight = 100; // scrollHeight === clientHeight ＝ 切り詰められていない
     render(<ProfileIntro data={buildData({})} />);
     expect(screen.queryByRole('button', { name: /続きを読む/ })).toBeNull();
   });
 
-  it('自己PRが4行を超えて隠れているときはボタンが出て、クリックで展開される', () => {
+  it('自己PRが表示行数を超えて隠れているときはボタンが出て、クリックで展開される', () => {
     scrollHeight = 200;
     clientHeight = 100; // scrollHeight > clientHeight ＝ line-clamp で切り詰められている
     const pr = 'あ'.repeat(200);
@@ -81,11 +81,11 @@ describe('ProfileIntro', () => {
     expect(button).toBeInTheDocument();
 
     const prEl = screen.getByText(pr);
-    expect(prEl.className).toContain('line-clamp-4');
+    expect(prEl.className).toContain('line-clamp-6');
 
     fireEvent.click(button);
     expect(screen.getByRole('button', { name: /折りたたむ/ })).toBeInTheDocument();
-    expect(prEl.className).not.toContain('line-clamp-4');
+    expect(prEl.className).not.toContain('line-clamp-6');
   });
 
   it('トグルは aria-expanded / aria-controls で開閉状態と対象を伝え、44px のタップ領域を持つ（レビュー指摘）', () => {
@@ -107,7 +107,7 @@ describe('ProfileIntro', () => {
     expect(screen.getByRole('button', { name: /折りたたむ/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('文字数が少なくても改行区切りで4行を超えていればボタンが出る（レビュー指摘: 文字数しきい値では検出できない回帰の防止）', () => {
+  it('文字数が少なくても改行区切りで表示行数を超えていればボタンが出る（レビュー指摘: 文字数しきい値では検出できない回帰の防止）', () => {
     scrollHeight = 200;
     clientHeight = 100; // 短文でも実測で切り詰め有りと判定される状況を再現
     const shortMultilinePr = 'あ\nい\nう\nえ\nお'; // 9文字・5行
@@ -121,8 +121,8 @@ describe('ProfileIntro', () => {
     const pr = 'あ'.repeat(200);
     render(<ProfileIntro data={buildData({ pr })} />);
     const prEl = screen.getByText(pr);
-    // SP では line-clamp-4 が付くが、sm 以上では sm:line-clamp-none で必ず解除されること。
-    expect(prEl.className).toContain('line-clamp-4');
+    // SP では line-clamp-6 が付くが、sm 以上では sm:line-clamp-none で必ず解除されること。
+    expect(prEl.className).toContain('line-clamp-6');
     expect(prEl.className).toContain('sm:line-clamp-none');
   });
 
@@ -148,7 +148,7 @@ describe('ProfileIntro', () => {
 
   it('Webフォント読み込み完了時（document.fonts.ready）に自己PRの切り詰め判定を再測定する（レビュー指摘: preload:false+display:swap によるフォント差し替え対策）', async () => {
     scrollHeight = 100;
-    clientHeight = 100; // 初回はフォールバックフォントで4行に収まっている想定
+    clientHeight = 100; // 初回はフォールバックフォントで表示行数に収まっている想定
     let resolveFontsReady: () => void = () => {};
     const fontsReadyPromise = new Promise<FontFaceSet>((resolve) => {
       resolveFontsReady = () => resolve({} as FontFaceSet);
@@ -164,7 +164,7 @@ describe('ProfileIntro', () => {
       render(<ProfileIntro data={buildData({ pr })} />);
       expect(screen.queryByRole('button', { name: /続きを読む/ })).toBeNull();
 
-      // Webフォントへの差し替えで折り返しが増え、4行に収まらなくなったことを再現する。
+      // Webフォントへの差し替えで折り返しが増え、表示行数に収まらなくなったことを再現する。
       scrollHeight = 200;
       await act(async () => {
         resolveFontsReady();

@@ -11,7 +11,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
   const [expanded, setExpanded] = useState(false);
   // 文字数ではなく実測（line-clamp 適用時に scrollHeight > clientHeight か）で判定する。
   // 改行区切りの短い自己PR（whitespace-pre-line で改行を保持）は文字数が少なくても
-  // 4行を超えて隠れることがあるため、文字数しきい値では検出できない。
+  // 表示行数を超えて隠れることがあるため、文字数しきい値では検出できない。
   const [isPrTruncated, setIsPrTruncated] = useState(false);
   const prRef = useRef<HTMLParagraphElement>(null);
   // 開閉ボタンから自己PR段落を aria-controls で指すための id。
@@ -45,7 +45,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
 
   // IBM Plex Sans JP は preload:false + display:swap（layout.tsx）のため、初回表示では
   // フォールバックフォントで折り返しが確定した後にWebフォントへ差し替わることがある。
-  // line-clamp は要素自身の高さを4行分に固定するため、この置き換えによる行数の変化は
+  // line-clamp は要素自身の高さを既定行数に固定するため、この置き換えによる行数の変化は
   // ResizeObserver（要素の外形サイズの変化）だけでは検知できない。フォント読み込み完了時に
   // 明示的に再測定する。
   useEffect(() => {
@@ -121,8 +121,12 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
             ref={prRef}
             id={prId}
             // line-clamp は SP 専用（sm 以上は続きを読むボタンを出さないため、常に全文表示に戻す）。
+            // 行数を 6 にしているのは、自己PRが段落を空行で区切って保存され whitespace-pre-line で
+            // その空行を保持するため。4行だと「本文2行＋空行1行＋本文1行」となり、fold 内の
+            // 1/4 を区切りの空白に費やしたうえ2段落目が1行で切れて要旨が掴めなかった
+            // （375px の実機で確認）。6行なら空行込みでも本文が5行残り、2段落目の要旨まで届く。
             className={`max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80 sm:order-2 sm:line-clamp-none ${
-              !expanded ? 'line-clamp-4' : ''
+              !expanded ? 'line-clamp-6' : ''
             }`}
           >
             {data.pr}
