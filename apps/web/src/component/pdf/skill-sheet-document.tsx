@@ -36,8 +36,10 @@ const COLOR = {
   codeBg: DESIGN_TOKENS_LIGHT.muted,
 } as const;
 
-// ロジック中で使う数値（マジックナンバー回避のため定数化）
-const NUM = {
+// ロジック中で使う数値（マジックナンバー回避のため定数化）。テストから閾値を直接
+// 参照できるよう export する（CodeRabbit レビュー指摘: 回帰テストが閾値をハードコード
+// すると、実装側で閾値を変更してもテストが追従せず静かに意味を失う）。
+export const NUM = {
   HEADING_H1: 1,
   HEADING_H2: 2,
   HEADING_H3: 3,
@@ -64,6 +66,13 @@ const NUM = {
   // 「1つの表が単独で大きすぎて footprint を圧迫する」経路の安全マージンを稼ぐための
   // 対症療法であり、根本原因の追跡は #172 に委ねる。
   CARD_MAX_ROWS: 10,
+  // 見出し+表+後続段落（会社概要文/業務内容/習得スキル・実績）をまとめて1ページに収める
+  // 見込みかどうかの目安の合計文字数。ROW_UNBREAKABLE_CHAR_LIMIT と同じ「文字数概算」の
+  // 考え方を、表だけでなくカード全体（見出し直後に続く段落群まで）に広げたもの。
+  // 実データ32件のカードで実測して調整している（Issue #194: 見出し+表だけを結合対象に
+  // していたため、後続の会社概要文・業務内容・習得スキル・実績が独立した分割単位のまま
+  // 残り、ページ境界でカードが分断されていた）。
+  CARD_TOTAL_CHAR_LIMIT: 1400,
 } as const;
 
 const styles = StyleSheet.create({
@@ -379,31 +388,101 @@ function renderTable(node: MdNode, key: number): ReactNode {
   );
 }
 
-// 表全体が1ページに収まる見込みかどうかの目安判定。renderTable が行単位で使う
-// rowTextLength / ROW_UNBREAKABLE_CHAR_LIMIT をそのまま再利用しつつ、行数が多い
-// 表（1行1行は短くても合計すると1ページに収まらないケース）を CARD_MAX_ROWS で
-// 足切りする。新しい閾値ロジックを重複実装せず、renderTable と同じ考え方を踏襲する。
-function isTableLikelyToFitOnePage(node: MdNode): boolean {
-  const rows = node.children ?? [];
-  if (rows.length > NUM.CARD_MAX_ROWS) return false;
-  return rows.every((row) => rowTextLength(row) <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT);
+// 見出し+表+表直後の段落群を、外側の View ごと wrap={false}（分割不可）にしてよいかの
+// 目安判定。renderTable が行単位で使う rowTextLength / ROW_UNBREAKABLE_CHAR_LIMIT と
+// 同じ「文字数概算」の考え方を、カード全体（表＋後続段落）に広げたもの。
+//
+// 行ごとの上限チェック（rows.every(...)）は外せない: 外側 View が wrap={false} だと、
+// renderTable が個々の行に付ける wrap={true}（1ページに収まらない行を複数ページへ
+// 逃がす仕組み、#147/#172 で入れた）が外側の非分割指定に埋もれて効かなくなる。
+// 合計文字数がカード全体の上限内でも、そのうち1行だけが極端に長ければ、その行は
+// どのページにも収まらず内容が消失する（#147/#172 の再発）。行数（CARD_MAX_ROWS）と
+// 行ごとの文字数（ROW_UNBREAKABLE_CHAR_LIMIT）は据え置いたうえで、カード全体の合計
+// 文字数（表＋後続段落）にも CARD_TOTAL_CHAR_LIMIT を課す（Issue #194）。
+// 表・リストは項目（行）ごとに固定の行間・パディングを持つため、合計文字数だけでは
+// 項目数が多い場合の実際の高さを過小評価する。primary の表が受けている行単位のチェック
+// （CARD_MAX_ROWS / ROW_UNBREAKABLE_CHAR_LIMIT）は、trailing 中に含まれる表・リスト
+// （duties/acquired 等の自由記述が GFM 表や箇条書きになったもの）には及んでおらず、
+// 短いセル/項目が多数並ぶケースで合計文字数だけは閾値内に収まり誤って wrap={false}
+// になりうる（chatgpt-codex-connector レビュー指摘）。tableNode と trailing 中の
+// 表・リストをまとめて「行相当」の単位に展開し、primary の表と同じ基準を適用する。
+function rowLikeLengths(node: MdNode): number[] {
+  if (node.type === 'table') return (node.children ?? []).map(rowTextLength);
+  if (node.type === 'list') return (node.children ?? []).flatMap(listItemRowLikeLengths);
+  // blockquote 等のコンテナに表・リストが入れ子になっているケースを取りこぼさないよう
+  // 再帰的に展開する（CodeRabbit レビュー指摘）。この結果は下記 proseCharCount の
+  // 除外対象に含めていないため、blockquote 配下の表・リスト文字数は構造チェック側
+  // （行数・行文字数）とプロース側の両方で数えられるが、二重計上は総文字数を実際より
+  // 大きく見積もる方向にしか働かず、安全側（wrap={true} になりやすい）に倒れるだけで
+  // クリップのリスクは生まない。
+  if (node.type === 'blockquote') return (node.children ?? []).flatMap(rowLikeLengths);
+  return [];
+}
+
+// リスト項目1つを「行相当」の単位に展開する。トップレベルの項目数だけを数えると、
+// 1項目の中にネストした箇条書き（子の list）が多数ぶら下がっているケース
+// （見た目は1項目でも renderList は再帰的に全ネスト項目を描画するため、実際は
+// 多くの行を消費する）で行数チェックをすり抜け、合計文字数も閾値内に収まって
+// 誤って wrap={false} になりうる（chatgpt-codex-connector レビュー指摘）。
+// 項目自身のテキスト（ネストした list を除く）と、ネストした list の各項目とを、
+// それぞれ独立した「行」として再帰的に数える。
+function listItemRowLikeLengths(item: MdNode): number[] {
+  const children = item.children ?? [];
+  const nestedLists = children.filter((child) => child.type === 'list');
+  const ownText = children
+    .filter((child) => child.type !== 'list')
+    .map(nodeText)
+    .join('');
+  return [ownText.length, ...nestedLists.flatMap((list) => (list.children ?? []).flatMap(listItemRowLikeLengths))];
+}
+
+function isCardLikelyToFitOnePage(tableNode: MdNode, trailingBlocks: MdNode[]): boolean {
+  const rowLike = [tableNode, ...trailingBlocks].flatMap(rowLikeLengths);
+  if (rowLike.length > NUM.CARD_MAX_ROWS) return false;
+  if (!rowLike.every((len) => len <= NUM.ROW_UNBREAKABLE_CHAR_LIMIT)) return false;
+  const structuralCharCount = rowLike.reduce((sum, len) => sum + len, 0);
+  const proseCharCount = trailingBlocks
+    .filter((block) => block.type !== 'table' && block.type !== 'list')
+    .reduce((sum, block) => sum + nodeText(block).length, 0);
+  return structuralCharCount + proseCharCount <= NUM.CARD_TOTAL_CHAR_LIMIT;
 }
 
 // 見出し直後に表が続くケース（案件カードの見出し+項目表、スキルカテゴリ見出し+
-// スキル表）を1つの View にまとめて描画する。
-// - 表が1ページに収まる見込みなら wrap={false} で丸ごと分割不可にし、見出しだけが
-//   前ページに取り残されたり、見出し直後で表が分断されたりするのを防ぐ。
-// - 収まらない見込みなら wrap={true} にして renderTable 内の行単位wrap制御に委ね、
-//   内容が強制的に1ページへ押し込まれてクリップされるのを防ぐ
+// スキル表）を1つの View にまとめて描画する。案件カードは表の直後に会社概要文・
+// 業務内容・習得スキル・実績の段落が続くことがあり（projectBlockToMarkdown 参照）、
+// これらも見出し・表と同じ分割制御単位に含める（Issue #194）。
+// - 全体が1ページに収まる見込みなら wrap={false} で丸ごと分割不可にし、見出しだけが
+//   前ページに取り残されたり、カードの途中でページが割れたりするのを防ぐ。
+// - 収まらない見込みなら wrap={true} にして renderTable 内の行単位wrap制御・各段落の
+//   通常描画に委ね、内容が強制的に1ページへ押し込まれてクリップされるのを防ぐ
 //   （renderTable が採用している閾値方式をそのまま踏襲）。
 // - どちらの場合も minPresenceAhead を設定し、見出し単独がページ末尾に残るのを防ぐ
-//   （表が収まらず wrap=true になるケースのフォールバック保護でもある）。
-function renderHeadingWithTable(headingNode: MdNode, tableNode: MdNode, key: number): ReactNode {
-  const fitsOnePage = isTableLikelyToFitOnePage(tableNode);
+//   （収まらず wrap=true になるケースのフォールバック保護でもある）。
+function renderHeadingWithTable(
+  headingNode: MdNode,
+  tableNode: MdNode,
+  trailingBlocks: MdNode[],
+  key: number,
+): ReactNode {
+  const fitsOnePage = isCardLikelyToFitOnePage(tableNode, trailingBlocks);
+  // children を1つの配列としてまとめて渡す（JSX の子要素を個別の式スロットで並べると、
+  // trailingBlocks が空でも props.children にその分の要素が残ってしまい、
+  // 「見出し+表の2要素だけの場合」の構造検証テストと形が食い違うため）。
+  const children: ReactNode[] = [
+    <View key="heading" style={styles.headingWrap}>
+      {renderHeadingText(headingNode)}
+    </View>,
+    renderTable(tableNode, key),
+    // trailingBlocks は paragraph に限らない（duties/acquired 等の自由記述が
+    // list になりうるため）。型ごとの描画は renderBlocks と同じ BLOCK_RENDERERS を使う。
+    ...trailingBlocks.map((p, i) => {
+      const renderer = BLOCK_RENDERERS.get(p.type);
+      return renderer ? renderer(p, key * 1000 + i + 1) : null;
+    }),
+  ];
   return (
     <View key={key} wrap={!fitsOnePage} minPresenceAhead={NUM.MIN_PRESENCE_PROJECT}>
-      <View style={styles.headingWrap}>{renderHeadingText(headingNode)}</View>
-      {renderTable(tableNode, key)}
+      {children}
     </View>
   );
 }
@@ -465,9 +544,30 @@ export function renderBlocks(nodes: MdNode[] | undefined): ReactNode {
     const next = nodes[i + 1];
     // 見出しの直後に表が続く場合は1つの分割制御単位にまとめる（案件カード/
     // スキルカテゴリ表のページ境界分断対策）。表は結合済みとしてスキップする。
+    // 表の直後に続く内容（案件カードの会社概要文・業務内容・習得スキル・実績）も
+    // 同じ単位に含める（Issue #194）。次の**見出し**に当たった時点で打ち切り、
+    // それ以外の型（paragraph・list・table・blockquote 等）は全て取り込む。
+    // duties/acquired 等はユーザーの自由記述で、箇条書き（list）や GFM 表になることが
+    // あるため、paragraph だけに限定するとその内容が別の分割単位に外れ、
+    // 見出し+表だけが1ページ目・内容が次ページに漏れる（#194 の再発。レビュー指摘）。
+    // 表も次の見出しが来るまでは打ち切らない: 新しいカードの表は必ずそのカード自身の
+    // 見出しの直後に現れる（heading+table のペアとしてこの外側ループが検出する）ため、
+    // trailing 走査中に「見出しを伴わない」表に出会った場合はそれ自体が別カードの
+    // 開始ではあり得ず、現在のカードの自由記述内の表と判断してよい
+    // （chatgpt-codex-connector レビュー指摘: table だけ除外していたのは非対称だった）。
+    // ブロック同士は空行だけで連結される（blocksToMarkdown）ため、この案件カード
+    // の直後に見出しを持たない markdown ブロックが続く稀なケースでは、その内容も
+    // このカードの一部として扱われる（表示上は連続するため実害は小さいが、
+    // 意図しない分割制御を受ける可能性がある既知の制約）。
     if (node.type === 'heading' && next?.type === 'table') {
-      out.push(renderHeadingWithTable(node, next, i));
-      i += 1;
+      let j = i + 2;
+      const trailing: MdNode[] = [];
+      while (j < nodes.length && nodes[j].type !== 'heading') {
+        trailing.push(nodes[j]);
+        j += 1;
+      }
+      out.push(renderHeadingWithTable(node, next, trailing, i));
+      i = j - 1;
       continue;
     }
     const renderer = BLOCK_RENDERERS.get(node.type);

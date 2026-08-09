@@ -1,22 +1,11 @@
 'use client';
 
-import type { ProfileBlockData } from '@skillsheet/db/blocks';
+import { orderedProfileMetaEntries, type ProfileBlockData, resolveProfileMetaLabel } from '@skillsheet/db/blocks';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
 }
-
-const META_LABELS: Record<string, string> = {
-  age: '年齢',
-  gender: '性別',
-  qualifications: '資格',
-  education: '学歴',
-  work: '勤務形態',
-  station: '最寄り駅',
-  specialties: '得意分野',
-  expertise: '得意業務',
-};
 
 export const ProfileIntro = ({ data }: ProfileIntroProps) => {
   const [expanded, setExpanded] = useState(false);
@@ -27,9 +16,9 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
   const prRef = useRef<HTMLParagraphElement>(null);
   // 開閉ボタンから自己PR段落を aria-controls で指すための id。
   const prId = useId();
-  const metaEntries = (Object.entries(data.meta) as [string, string | undefined][]).filter(
-    ([, v]) => v && v.trim().length > 0,
-  );
+  // 既知8項目 → それ以外の任意項目、の順で並べる（packages/db/src/blocks.ts と共有。
+  // markdown/PDF 変換の並び順ともここで揃う。Issue #193）。
+  const metaEntries = orderedProfileMetaEntries(data.meta);
 
   const measurePrTruncation = useCallback(() => {
     const el = prRef.current;
@@ -101,7 +90,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
                   ·
                 </span>
               )}
-              <dt className="shrink-0">{META_LABELS[key] ?? key}</dt>
+              <dt className="shrink-0">{resolveProfileMetaLabel(key)}</dt>
               <dd className="min-w-0 break-words text-foreground">{value}</dd>
             </div>
           ))}

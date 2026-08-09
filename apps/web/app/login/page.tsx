@@ -90,8 +90,8 @@ function LoginForm() {
         {loading ? 'ログイン中...' : 'ログイン'}
       </Button>
       <p className="text-center text-sm text-muted-foreground">
-        閲覧のみの場合は{' '}
-        <Link href="/viewer-auth" className="text-primary underline underline-offset-2">
+        閲覧のみの場合は {/* text-primary は背景に対しライトテーマで3.74と WCAG AA 未達（Issue #198）。 */}
+        <Link href="/viewer-auth" className="text-primary-dark underline underline-offset-2">
           閲覧コード認証
         </Link>
       </p>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isConfigError } from './is-config-error';
+import { classifyConfigError, isConfigError } from './is-config-error';
 
 describe('isConfigError', () => {
   it('GitHub 連携未設定のエラーを検出する', () => {
@@ -42,5 +42,50 @@ describe('isConfigError', () => {
     expect(isConfigError('DATABASE_URL is not set')).toBe(false);
     expect(isConfigError(null)).toBe(false);
     expect(isConfigError(undefined)).toBe(false);
+  });
+
+  it('DATABASE_URL の書式が壊れている（ERR_INVALID_URL）エラーを検出する（Issue #195）', () => {
+    const err = new TypeError('Invalid URL');
+    (err as { code?: string }).code = 'ERR_INVALID_URL';
+    expect(isConfigError(err)).toBe(true);
+  });
+});
+
+describe('classifyConfigError', () => {
+  it('GitHub 連携未設定と 401（トークン拒否）を別種として分類する（Issue #195）', () => {
+    expect(classifyConfigError(new Error('Missing required GitHub env vars: GITHUB_TOKEN'))).toBe('github-missing-env');
+    expect(classifyConfigError(new Error('GitHub API error fetching file: 401'))).toBe('github-auth-failed');
+  });
+
+  it('DB 未設定・未マイグレーション・書式ミスをそれぞれ別種として分類する', () => {
+    expect(classifyConfigError(new Error('DATABASE_URL is not set'))).toBe('db-missing-env');
+    expect(classifyConfigError(new Error('SKILLSHEET_OWNER_ID is not set'))).toBe('db-missing-env');
+
+    const tableErr = new Error('relation "blocks" does not exist');
+    (tableErr as { code?: string }).code = '42P01';
+    expect(classifyConfigError(tableErr)).toBe('db-table-missing');
+
+    const urlErr = new TypeError('Invalid URL');
+    (urlErr as { code?: string }).code = 'ERR_INVALID_URL';
+    expect(classifyConfigError(urlErr)).toBe('db-malformed-url');
+  });
+
+  it('設定不備でないエラーは null を返す', () => {
+    expect(classifyConfigError(new Error('connect ECONNREFUSED'))).toBeNull();
+  });
+
+  it('tRPC が TRPCError でラップした ERR_INVALID_URL も cause を辿って検出する（Codex レビュー指摘: /view 経由では元の .code が隠れて検出できていなかった）', () => {
+    const innerErr = new TypeError('Invalid URL');
+    (innerErr as { code?: string }).code = 'ERR_INVALID_URL';
+    // TRPCError は message を cause.message で上書きし、code は自身の 'INTERNAL_SERVER_ERROR' になる。
+    const wrapped = new Error(innerErr.message, { cause: innerErr });
+    (wrapped as { code?: string }).code = 'INTERNAL_SERVER_ERROR';
+    expect(classifyConfigError(wrapped)).toBe('db-malformed-url');
+  });
+
+  it('cause チェーンのどこにも .code が無ければ null を返す（無限ループしない）', () => {
+    const inner = new Error('boom');
+    const wrapped = new Error('wrapped', { cause: inner });
+    expect(classifyConfigError(wrapped)).toBeNull();
   });
 });
