@@ -9,7 +9,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type {
   BlockInput,
@@ -27,7 +27,9 @@ const SHEET_TITLE = 'エンジニアスキルシート';
 function loadWebEnvLocal(): void {
   const here = dirname(fileURLToPath(import.meta.url));
   const envPath = resolve(here, '../../../apps/web/.env.local');
-  if (!existsSync(envPath)) throw new Error(`apps/web/.env.local が見つかりません: ${envPath}`);
+  // テストからこのモジュールを import したときに throw しないよう、無ければ黙って返す。
+  // 実行に必要な環境変数が欠けている場合は main() 側で明示的に停止する。
+  if (!existsSync(envPath)) return;
   const content = readFileSync(envPath, 'utf-8');
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
@@ -66,6 +68,32 @@ function parseTableRow(line: string): [string, string] | null {
 function stripBold(s: string): string {
   return s.replace(/\*\*/g, '').trim();
 }
+
+// --- 取り込みで捨てられた行の検出 ----------------------------------------------------------
+// 元データに想定外の構造（見出しより前の自由文・未知のサブセクション等）があると、
+// パーサはその行をどのフィールドにも入れないまま黙って落とす。案件21の前置き一文が
+// DB から消えていた #151 D-7 が実例で、同じ構造の元データが他にもありうるため、
+// 捨てた行を集めて取り込み時に警告する。
+export type DroppedLine = { where: string; line: string };
+
+/** `|---|:---:|` のような表の区切り行。データではないため捨てても警告しない。 */
+export function isTableSeparatorRow(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return false;
+  const cells = trimmed.split('|').slice(1, -1);
+  return cells.length > 0 && cells.every((c) => /^:?-+:?$/.test(c.trim()));
+}
+
+/** 空行と表の区切り行を除いた「本来データだったはずの行」だけを記録する。 */
+function recordDropped(dropped: DroppedLine[], where: string, line: string): void {
+  if (!line.trim()) return;
+  if (isTableSeparatorRow(line)) return;
+  dropped.push({ where, line: line.trim() });
+}
+
+// parseProjectBlock が実際に読むサブセクション。これ以外の見出しは誰も参照しないため、
+// 中身が丸ごと失われる（例: `#### 備考`）。
+const KNOWN_SUBSECTIONS = ['プロジェクト概要', '技術スタック', '担当工程', 'コメント'];
 
 // 末尾の "(3 ヶ月間)" / "（継続中）" 等の注記を取り除く。
 function stripTrailingAnnotation(s: string): string {
@@ -231,8 +259,14 @@ function parseCompanyHeading(text: string): { name: string; period: string } {
 }
 
 // --- プロジェクト1件分（見出し行の次から次の ■ or ### まで）のパース -----------------------
-function parseProjectBlock(headingText: string, bodyLines: string[], companyId: string): ProjectItem {
+function parseProjectBlock(
+  headingText: string,
+  bodyLines: string[],
+  companyId: string,
+  dropped: DroppedLine[] = [],
+): ProjectItem {
   const { title, scope } = parseProjectHeading(headingText);
+  const where = `案件「${title}」`;
 
   // サブセクションごとに分割 (#### プロジェクト概要 / #### 技術スタック / #### 担当工程 / #### コメント)
   const sections: Record<string, string[]> = {};
@@ -245,6 +279,13 @@ function parseProjectBlock(headingText: string, bodyLines: string[], companyId: 
       continue;
     }
     if (current) sections[current].push(line);
+    // 最初のサブセクション見出しより前に書かれた行は、どのフィールドにも入らず捨てられる。
+    else recordDropped(dropped, `${where} の冒頭（サブセクション見出しより前）`, line);
+  }
+
+  for (const [name, sectionLines] of Object.entries(sections)) {
+    if (KNOWN_SUBSECTIONS.includes(name)) continue;
+    for (const line of sectionLines) recordDropped(dropped, `${where} の未知のサブセクション「${name}」`, line);
   }
 
   let period = '';
@@ -253,7 +294,10 @@ function parseProjectBlock(headingText: string, bodyLines: string[], companyId: 
   const overviewExtra: string[] = [];
   for (const line of sections.プロジェクト概要 ?? []) {
     const row = parseTableRow(line);
-    if (!row) continue;
+    if (!row) {
+      recordDropped(dropped, `${where} の「プロジェクト概要」（表の行として解釈できない）`, line);
+      continue;
+    }
     const [label, value] = row;
     if (label === '期間') period = normalizePeriod(value);
     else if (label === '役割') role = stripBold(value);
@@ -264,7 +308,10 @@ function parseProjectBlock(headingText: string, bodyLines: string[], companyId: 
   const tech = emptyTech();
   for (const line of sections.技術スタック ?? []) {
     const row = parseTableRow(line);
-    if (!row) continue;
+    if (!row) {
+      recordDropped(dropped, `${where} の「技術スタック」（表の行として解釈できない）`, line);
+      continue;
+    }
     const [label, value] = row;
     if (label === '項目') continue; // ヘッダ行
     const bucket = TECH_LABEL_MAP[label] ?? 'tools';
@@ -293,10 +340,15 @@ function parseProjectBlock(headingText: string, bodyLines: string[], companyId: 
 }
 
 // --- 全体パース：会社ごとに分割 → 各会社内のプロジェクトごとに分割 -------------------------
-function parseCareerMarkdown(markdown: string): { companies: CompanyInfo[]; items: ProjectItem[] } {
+export function parseCareerMarkdown(markdown: string): {
+  companies: CompanyInfo[];
+  items: ProjectItem[];
+  dropped: DroppedLine[];
+} {
   const lines = markdown.split('\n');
   const companies: CompanyInfo[] = [];
   const items: ProjectItem[] = [];
+  const dropped: DroppedLine[] = [];
 
   let currentCompanyId: string | null = null;
   let currentCompanyIntro: string[] = [];
@@ -305,7 +357,11 @@ function parseCareerMarkdown(markdown: string): { companies: CompanyInfo[]; item
 
   const flushProject = () => {
     if (currentProjectHeading !== null && currentCompanyId !== null) {
-      items.push(parseProjectBlock(currentProjectHeading, currentProjectBody, currentCompanyId));
+      items.push(parseProjectBlock(currentProjectHeading, currentProjectBody, currentCompanyId, dropped));
+    } else if (currentProjectHeading !== null) {
+      // 会社見出しより前に現れた案件はどの会社にも紐づけられず、見出しごと丸ごと捨てられる。
+      recordDropped(dropped, '会社見出しより前の案件', currentProjectHeading);
+      for (const line of currentProjectBody) recordDropped(dropped, '会社見出しより前の案件', line);
     }
     currentProjectHeading = null;
     currentProjectBody = [];
@@ -339,6 +395,11 @@ function parseCareerMarkdown(markdown: string): { companies: CompanyInfo[]; item
       currentProjectBody.push(line);
     } else if (currentCompanyId !== null) {
       currentCompanyIntro.push(line);
+    } else if (!/^#{1,6}\s/.test(line)) {
+      // 最初の会社見出し(###)より前の自由文は、会社にも案件にも属さないまま捨てられる。
+      // `## 経歴` のような見出し行は構造であってデータではないため対象外にする
+      // （含めると毎回必ず警告が出て、本当の取りこぼしが埋もれる）。
+      recordDropped(dropped, '最初の会社見出しより前', line);
     }
   }
   flushProject();
@@ -347,7 +408,7 @@ function parseCareerMarkdown(markdown: string): { companies: CompanyInfo[]; item
     if (prev) prev.note = currentCompanyIntro.join('\n').trim();
   }
 
-  return { companies, items };
+  return { companies, items, dropped };
 }
 
 // --- 技術者プロファイルパース --------------------------------------------------------------
@@ -495,6 +556,12 @@ function parseSkillsMarkdown(markdown: string): SkillsBlockData[] {
 async function main() {
   const write = process.argv.includes('--write');
 
+  // loadWebEnvLocal() は .env.local が無くても throw しない（テストからの import を許すため）。
+  // 実行時にここで明示的に止め、接続先不明のまま進まないようにする。
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL が未設定です。apps/web/.env.local を用意するか、環境変数で渡してください。');
+  }
+
   const { getDb } = await import('../src/client');
   const { blocks: blocksTable } = await import('../src/schema');
   const { eq, asc } = await import('drizzle-orm');
@@ -542,7 +609,7 @@ async function main() {
 
   const careerStart = fullMarkdown.search(/^##\s*経歴/im);
   const careerMarkdown = careerStart !== -1 ? fullMarkdown.slice(careerStart) : fullMarkdown;
-  const { companies, items } = parseCareerMarkdown(careerMarkdown);
+  const { companies, items, dropped } = parseCareerMarkdown(careerMarkdown);
 
   console.log('PARSED_PROFILE:', profile ? 'yes' : 'no');
   console.log(
@@ -553,6 +620,13 @@ async function main() {
   );
   console.log('PARSED_COMPANIES:', companies.length);
   console.log('PARSED_PROJECTS:', items.length);
+
+  // 捨てた行がある＝元データの一部が DB に入らないということなので、黙って進めない（#151 D-7）。
+  console.log('DROPPED_LINES:', dropped.length);
+  if (dropped.length > 0) {
+    console.warn('WARN: 以下の行はどのフィールドにも取り込まれていません。元データかパーサの見直しが必要です:');
+    for (const d of dropped) console.warn(`  - [${d.where}] ${d.line}`);
+  }
 
   const profileBlock: BlockInput | null = profile ? { type: 'profile', data: profile } : null;
   const skillsBlocks: BlockInput[] = skills.map((s) => ({ type: 'skills', data: s }));
@@ -578,7 +652,14 @@ async function main() {
   console.log('SAVED to sheetId', SHEET_ID);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+// import.meta.url を直接実行チェックに使う。テストからこのモジュールを import した
+// ときに main()（実DB接続・本番シートへの書き込み）が副作用として走らないようにする。
+// `file://${process.argv[1]}` の文字列連結は Windows のパス区切りやスペース等で
+// import.meta.url と一致しなくなるため、pathToFileURL で正規化を揃える
+// （bootstrap-owner.ts と同じ方式）。
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}
