@@ -1230,7 +1230,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       const result = await saveMutation.mutateAsync({
         title: currentTitle,
         blocks: currentItems.map(itemToBlockInput),
-        sheetId: activeSheetId,
+        sheetId: activeSheetId || undefined,
         expectedUpdatedAt: savedUpdatedAtRef.current,
       });
       savedRef.current = true;
@@ -1499,7 +1499,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     const payload = {
       title,
       blocks: items.map(itemToBlockInput),
-      sheetId: activeSheetId,
+      sheetId: activeSheetId || undefined,
       expectedUpdatedAt: savedUpdatedAtRef.current,
     };
     const savedSnapshot = snapshot(items, title);

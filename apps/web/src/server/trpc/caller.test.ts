@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const createTRPCContextMock = vi.fn();
+const SHEET_ID = '00000000-0000-4000-8000-000000000001';
 
 vi.mock('./context', () => ({ createTRPCContext: () => createTRPCContextMock() }));
 
@@ -41,7 +42,7 @@ describe('createServerCaller', () => {
       createTestContext({ editorUserId: 'owner', isViewer: true, request: null, responseHeaders: null }),
     );
     const caller = await createServerCaller();
-    await expect(caller.sheet.delete({ sheetId: 's1' })).resolves.toEqual({ ok: true });
+    await expect(caller.sheet.delete({ sheetId: SHEET_ID })).resolves.toEqual({ ok: true });
   });
 
   it('editorUserId が無い context では editorProcedure が UNAUTHORIZED になる', async () => {
@@ -49,6 +50,6 @@ describe('createServerCaller', () => {
       createTestContext({ editorUserId: null, isViewer: true, request: null, responseHeaders: null }),
     );
     const caller = await createServerCaller();
-    await expect(caller.sheet.delete({ sheetId: 's1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.sheet.delete({ sheetId: SHEET_ID })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 });

@@ -57,4 +57,15 @@ describe('ViewerTopbar', () => {
     renderTopbar({ canEdit: false });
     expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
   });
+
+  it('固定slotは閲覧者・編集者の両状態で44pxを維持する', () => {
+    const { unmount } = renderTopbar({ canEdit: false, reserveEditSlot: true });
+    expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
+    expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
+    unmount();
+
+    renderTopbar({ canEdit: true, reserveEditSlot: true });
+    expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
+    expect(screen.getByLabelText('編集／ビルダー')).toBeInTheDocument();
+  });
 });
