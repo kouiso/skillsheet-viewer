@@ -51,6 +51,18 @@ function distinctJapaneseCodePoints(text: string): Set<string> {
   return found;
 }
 
+async function revalidateCache() {
+  const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
+  const secret = process.env.REVALIDATE_SECRET ?? 'revalidate-local';
+  const res = await fetch(`${baseURL}/api/revalidate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  if (!res.ok) {
+    console.warn('revalidate failed:', res.status, await res.text());
+  }
+}
+
 async function authenticateViewer(page: Page) {
   await page.goto('/viewer-auth');
   await page.getByLabel('認証コード').fill(viewerCode);
@@ -72,6 +84,8 @@ test('本番経路のブラウザ toBlob PDF に日本語グリフが描画さ�
   const title = `${SHEET_PREFIX} ${Date.now()}`;
   const blocks = buildConsoleDemoBlocks();
   await createSheet(title, blocks);
+  // DB へ直接 insert したため /view の unstable_cache を即無効化する
+  await revalidateCache();
 
   const context = await browser.newContext({});
   const page = await context.newPage();
