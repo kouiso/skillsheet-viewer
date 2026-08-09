@@ -119,8 +119,9 @@ pnpm db:migrate      # マイグレーション適用
 export default async function SheetsListPage() {
   await connection(); // DATABASE_URL はランタイム専用。動的レンダリングを確保
   const caller = await createServerCaller();
-  const sheets = await caller.sheet.list();
-  return <DbSheetsListClient initialSheets={sheets} hasError={hasError} />;
+  const { canEdit } = await caller.auth.status();
+  const { sheets, stale } = await caller.sheet.list();
+  return <DbSheetsListClient initialSheets={sheets} errorKind={null} canEdit={canEdit} stale={stale} />;
 }
 ```
 

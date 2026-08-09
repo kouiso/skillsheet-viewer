@@ -13,6 +13,8 @@ interface SheetViewClientProps {
   blocks?: Block[];
   /** 編集者ログイン済みか。false（閲覧コードのみ等）のときは編集導線を出さない。 */
   canEdit?: boolean;
+  /** 編集者判定の前後で編集ボタン分の幅を固定し、レイアウトずれを防ぐ。 */
+  reserveEditSlot?: boolean;
   /**
    * true のとき、DB への再接続に失敗して古いキャッシュを表示している可能性があることを
    * 画面上部に案内する（Issue #204）。sheets-cache.ts の isDbContentStale() で判定する。
@@ -22,7 +24,14 @@ interface SheetViewClientProps {
 
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
-const SheetViewClient = ({ title, content, blocks, canEdit = false, stale = false }: SheetViewClientProps) => {
+const SheetViewClient = ({
+  title,
+  content,
+  blocks,
+  canEdit = false,
+  reserveEditSlot = false,
+  stale = false,
+}: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
   // 意図的に raw blocks（中身が空でも）で判定する — skill-sheet-viewer.tsx の isDashboard と
@@ -90,9 +99,16 @@ const SheetViewClient = ({ title, content, blocks, canEdit = false, stale = fals
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
           canEdit={canEdit}
+          reserveEditSlot={reserveEditSlot}
         />
       ) : (
-        <Header onDownloadPdf={handleDownloadPdf} pdfLoading={pdfLoading} canEdit={canEdit} backHref="/view" />
+        <Header
+          onDownloadPdf={handleDownloadPdf}
+          pdfLoading={pdfLoading}
+          canEdit={canEdit}
+          reserveEditSlot={reserveEditSlot}
+          backHref="/view"
+        />
       )}
       <SkillSheetViewer skillSheet={{ title, content }} blocks={blocks} views={isDashboard ? views : undefined} />
     </div>
