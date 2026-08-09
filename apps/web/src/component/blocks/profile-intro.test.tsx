@@ -135,6 +135,17 @@ describe('ProfileIntro', () => {
     expect(row?.className).toContain('min-w-0');
   });
 
+  it('任意ラベル（Issue #193）が長くてもラベル側が折り返せる（レビュー指摘: shrink-0 のままだと隣接列に重なる）', () => {
+    const longLabel = 'ProfessionalCertificationDetails';
+    render(<ProfileIntro data={buildData({ meta: { [longLabel]: '値' } })} />);
+    const dt = screen.getByText(longLabel);
+    // shrink-0 は短いラベルを潰さないために残すが、max-w で flex の基準サイズを
+    // クランプし break-words で折り返せるようにしないとセル幅を超える。
+    expect(dt.className).toContain('shrink-0');
+    expect(dt.className).toContain('max-w-[50%]');
+    expect(dt.className).toContain('break-words');
+  });
+
   it('Webフォント読み込み完了時（document.fonts.ready）に自己PRの切り詰め判定を再測定する（レビュー指摘: preload:false+display:swap によるフォント差し替え対策）', async () => {
     scrollHeight = 100;
     clientHeight = 100; // 初回はフォールバックフォントで4行に収まっている想定

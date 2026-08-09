@@ -90,7 +90,12 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
                   ·
                 </span>
               )}
-              <dt className="shrink-0">{resolveProfileMetaLabel(key)}</dt>
+              {/* shrink-0 でラベルを潰さないのが基本だが、Issue #193 で任意ラベルが
+                  許容されたため、長いラベル（`ProfessionalCertificationDetails` など）は
+                  flex-basis=max-content のままセル幅を超えて隣の列に重なる。
+                  max-w は flex の基準サイズをクランプするので、shrink-0 を保ったまま
+                  「短いラベルは絶対に折り返さない／長いラベルだけ半分で折り返す」を両立できる。 */}
+              <dt className="max-w-[50%] shrink-0 break-words">{resolveProfileMetaLabel(key)}</dt>
               <dd className="min-w-0 break-words text-foreground">{value}</dd>
             </div>
           ))}
