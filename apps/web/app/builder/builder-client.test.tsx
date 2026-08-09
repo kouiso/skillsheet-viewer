@@ -309,6 +309,57 @@ describe('BuilderClient', () => {
     await user.click(screen.getByRole('button', { name: /保存/ }));
     expect(mockInvalidate).not.toHaveBeenCalled();
   });
+
+  // chatgpt-codex-connector レビュー指摘: 項目名が空で値だけある行は、ラベル重複と同じ
+  // blockedItemIds にまとめられて保存をブロックするが、行単位の aria-invalid・エラー文言は
+  // ラベル重複（isConflicting）だけを見ており、この行には何の印も付かず「重複」という
+  // 誤った診断だけが画面全体に出ていた。行単位でも実際の理由（未入力）を示すことを確認する。
+  it('カスタム項目のラベルが空で値だけある行は、重複メッセージではなく未入力の専用メッセージを表示する', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('値'), 'A型');
+
+    expect(
+      screen.getByText('項目名が未入力のため、この項目は保存されません。項目名を入力してください。'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/項目名が他の項目と重複しているため/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('項目名')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  // CodeRabbit レビュー指摘: 通常の `{}` に `meta['__proto__'] = 値` を代入すると、値が
+  // 文字列（有効なプロトタイプ値ではない）のため代入が黙って無視され、own property が
+  // 作られずラベルごと保存結果から消えていた（実測で確認済み）。ラベルは編集者の自由
+  // 入力で `__proto__` を予約語として弾いていないため、通常の入力だけで再現する。
+  it('カスタム項目のラベルが __proto__ でも通常のプロパティとして保存される', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('項目名'), '__proto__');
+    await user.type(screen.getByPlaceholderText('値'), 'テスト値');
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    const profileData = mockSave.mock.calls[0][0].blocks[0].data;
+    expect(Object.hasOwn(profileData.meta, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(profileData.meta, '__proto__')?.value).toBe('テスト値');
+  });
 });
 
 describe('BuilderClient 自動保存', () => {

@@ -1,26 +1,15 @@
 'use client';
 
-import type { ProfileBlockData } from '@skillsheet/db/blocks';
+import { orderedProfileMetaEntries, type ProfileBlockData, resolveProfileMetaLabel } from '@skillsheet/db/blocks';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
 }
 
-const META_LABELS: Record<string, string> = {
-  age: '年齢',
-  gender: '性別',
-  qualifications: '資格',
-  education: '学歴',
-  work: '勤務形態',
-  station: '最寄り駅',
-  specialties: '得意分野',
-  expertise: '得意業務',
-};
-
 export const ProfileIntro = ({ data }: ProfileIntroProps) => {
-  const metaEntries = (Object.entries(data.meta) as [string, string | undefined][]).filter(
-    ([, v]) => v && v.trim().length > 0,
-  );
+  // 既知8項目 → それ以外の任意項目、の順で並べる（packages/db/src/blocks.ts と共有。
+  // markdown/PDF 変換の並び順ともここで揃う。Issue #193）。
+  const metaEntries = orderedProfileMetaEntries(data.meta);
 
   return (
     // design は区切り線を持たず、親の 48px 間隔だけで次のセクションと分ける。
@@ -57,7 +46,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
           {metaEntries.map(([key, value], i) => (
             <div key={key} className="flex items-baseline gap-1.5">
               {i > 0 && <span aria-hidden>·</span>}
-              <dt>{META_LABELS[key] ?? key}</dt>
+              <dt>{resolveProfileMetaLabel(key)}</dt>
               <dd className="text-foreground">{value}</dd>
             </div>
           ))}

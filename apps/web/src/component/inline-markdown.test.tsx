@@ -24,7 +24,7 @@ describe('InlineMarkdown', () => {
     render(<InlineMarkdown content="[公式サイト](https://example.com)を参照。" />);
     const link = screen.getByRole('link', { name: '公式サイト' });
     expect(link).toHaveClass('underline');
-    expect(link).toHaveClass('text-primary');
+    expect(link).toHaveClass('text-primary-dark');
   });
 
   it('既定（linksTabbable未指定）ではリンクは通常通りTabでフォーカス可能', () => {

@@ -55,7 +55,14 @@ export interface ExperienceBlockData {
   description: string;
 }
 
-/** プロフィールブロックのメタ情報。 */
+/**
+ * プロフィールブロックのメタ情報（年齢・勤務形態などの1行見出し+値の付随情報）。
+ *
+ * よく使う8項目には既知のキーでラベルを割り当てるが（PROFILE_META_LABELS）、
+ * それ以外の任意のラベルも自由に追加できる（Issue #193: 固定4項目のみ編集画面から
+ * 入力できず、性別・資格のように既知のキーでも入力欄が無いと編集画面から直せなかった。
+ * 固定リストへ1個ずつ足す設計は同じ問題を再生産するため、任意キーを許容する）。
+ */
 export interface ProfileMeta {
   age?: string;
   gender?: string;
@@ -65,6 +72,54 @@ export interface ProfileMeta {
   station?: string;
   specialties?: string;
   expertise?: string;
+  /** 上記以外の任意の項目。キーがそのまま表示ラベルになる。 */
+  [key: string]: string | undefined;
+}
+
+/**
+ * ProfileMeta の既知キー → 表示ラベル。既知キー以外は orderedProfileMetaEntries() が
+ * キー自体をラベルとして使う。ビューア（profile-intro.tsx）と markdown/PDF 変換
+ * （profileBlockToMarkdown）の両方がこの1つの定義を共有する。
+ */
+export const PROFILE_META_LABELS: Record<string, string> = {
+  age: '年齢',
+  gender: '性別',
+  qualifications: '資格',
+  education: '学歴',
+  work: '勤務形態',
+  station: '最寄り駅',
+  specialties: '得意分野',
+  expertise: '得意業務',
+};
+
+/**
+ * 任意項目のキー（ユーザーが自由入力するラベル文字列）から表示ラベルを解決する。
+ * `PROFILE_META_LABELS[key]` を直接ブラケットアクセスすると、key が
+ * `constructor` / `toString` / `hasOwnProperty` 等の Object.prototype のプロパティ名と
+ * 一致した場合、それらの継承メンバ（関数やオブジェクト）を返してしまい、呼び出し先
+ * （escapeCell は文字列以外を渡されると例外、React は関数/オブジェクトを子要素に
+ * 取れず例外）でクラッシュする（chatgpt-codex-connector レビュー指摘。エディタは
+ * ラベルをこれらの予約語として弾いていないため、ユーザー入力だけで再現する）。
+ * Object.hasOwn で自プロパティのみを見て、無ければ key 自体をラベルとして使う。
+ */
+export function resolveProfileMetaLabel(key: string): string {
+  return Object.hasOwn(PROFILE_META_LABELS, key) ? PROFILE_META_LABELS[key] : key;
+}
+
+/**
+ * meta を「既知キー（PROFILE_META_LABELS の宣言順）→ それ以外のキー（オブジェクトの
+ * 挿入順）」の順に並べ、値が空の項目を除いて返す。ビューアと markdown/PDF 変換の
+ * どちらも同じ並び順になるよう、順序決定をこの1箇所に集約する。
+ */
+export function orderedProfileMetaEntries(meta: ProfileMeta | undefined): [string, string][] {
+  if (!meta) return [];
+  const knownKeys = Object.keys(PROFILE_META_LABELS);
+  const entries = Object.entries(meta).filter((e): e is [string, string] => !!e[1] && e[1].trim().length > 0);
+  const known = knownKeys
+    .map((k) => entries.find(([key]) => key === k))
+    .filter((e): e is [string, string] => e !== undefined);
+  const rest = entries.filter(([key]) => !knownKeys.includes(key));
+  return [...known, ...rest];
 }
 
 /** プロフィールブロックの構造化データ。 */
@@ -437,10 +492,20 @@ const ALIGN_MARKER: Record<TableAlign, string> = {
  * セルを GFM 表で安全な単一行へ整える。
  * - セル内改行は半角スペースへ（複数行貼り付けで表が崩れるのを防止）
  * - `|` はエスケープ
+ * - `<` `>` は実体参照へ（下記参照）
  * - 空セルは半角スペース 1 つ（空文字だと GFM の表がずれる）
+ *
+ * `<` `>` を素通しすると、"Reference <URL>" のような自由入力が remark に生 HTML の
+ * インラインノードとして解釈される（`<URL>` が HTML タグらしいパターンに一致するため。
+ * HTML5 の既知タグかどうかは問われない）。構造化ビューアは値を素のテキストとして
+ * 表示するため見た目には影響しないが、PDF 側（skill-sheet-document.tsx の
+ * INLINE_LEAF）は html ノードを意図的に描画せず捨てるため、"Reference <URL>" の
+ * "<URL>" 部分だけが PDF から消える（chatgpt-codex-connector レビュー指摘）。
+ * `&lt;`/`&gt;` は CommonMark の実体参照としてテキストノードへ復元されるため、
+ * 生 HTML として再解釈されずに見た目どおりの文字が残る。
  */
 function escapeCell(value: string): string {
-  const single = value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+  const single = value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return single.length > 0 ? single : ' ';
 }
 
@@ -535,18 +600,13 @@ export function profileBlockToMarkdown(data: ProfileBlockData): string {
     lines.push('\n**強み**');
     for (const s of data.strengths) lines.push(`- ${s}`);
   }
-  const meta = data.meta;
   const metaItems: string[] = [];
   // 所属会社はビューア（トップバー/kicker）で表示するため、markdown/PDF でも欠落させない（表示パリティ）。
   if (data.company?.trim()) metaItems.push(`| 所属会社 | ${escapeCell(data.company.trim())} |`);
-  if (meta.age) metaItems.push(`| 年齢 | ${escapeCell(meta.age)} |`);
-  if (meta.gender) metaItems.push(`| 性別 | ${escapeCell(meta.gender)} |`);
-  if (meta.qualifications) metaItems.push(`| 資格 | ${escapeCell(meta.qualifications)} |`);
-  if (meta.education) metaItems.push(`| 学歴 | ${escapeCell(meta.education)} |`);
-  if (meta.work) metaItems.push(`| 勤務形態 | ${escapeCell(meta.work)} |`);
-  if (meta.station) metaItems.push(`| 最寄り駅 | ${escapeCell(meta.station)} |`);
-  if (meta.specialties) metaItems.push(`| 得意分野 | ${escapeCell(meta.specialties)} |`);
-  if (meta.expertise) metaItems.push(`| 得意業務 | ${escapeCell(meta.expertise)} |`);
+  // 既知8項目に限らず、編集画面で追加した任意の項目も同じ並び順で出す（Issue #193）。
+  for (const [key, value] of orderedProfileMetaEntries(data.meta)) {
+    metaItems.push(`| ${escapeCell(resolveProfileMetaLabel(key))} | ${escapeCell(value)} |`);
+  }
   if (metaItems.length > 0) {
     lines.push('\n| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
