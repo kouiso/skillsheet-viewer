@@ -27,6 +27,12 @@ function careerMarkdown(extra = '', subsections = ''): string {
     '|---|---|',
     '| 言語 | TypeScript, Go |',
     '',
+    '#### 担当工程',
+    '',
+    '| 工程 | 要件定義 | 基本設計 | 詳細設計 | 実装・単体 | 結合テスト | 総合テスト | 保守・運用 |',
+    '|---|---|---|---|---|---|---|---|',
+    '| 経験 | ● |  | ● | ● |  |  |  |',
+    '',
     '#### コメント',
     '',
     '≪担当業務≫',
@@ -111,6 +117,60 @@ describe('parseCareerMarkdown', () => {
     expect(items).toHaveLength(1);
     expect(dropped.map((d) => d.line)).toContain('■ 1. 迷子の案件');
     expect(dropped.map((d) => d.line)).toContain('本文が入っています。');
+  });
+
+  it('担当工程が正しく取り込まれ、その際に捨てた行は出ない', () => {
+    const { items, dropped } = parseCareerMarkdown(careerMarkdown());
+
+    expect(items[0].process).toEqual(['要件定義', '詳細設計', '実装']);
+    expect(dropped).toEqual([]);
+  });
+
+  it('担当工程の中の自由文を検出する（Codexレビュー P1）', () => {
+    const md = careerMarkdown().replace(
+      '| 経験 | ● |  | ● | ● |  |  |  |',
+      '補足: 一部は他社が担当。\n| 経験 | ● |  | ● | ● |  |  |  |',
+    );
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    // 表そのものは従来どおり読めている。
+    expect(items[0].process).toEqual(['要件定義', '詳細設計', '実装']);
+    expect(dropped.map((d) => d.line)).toContain('補足: 一部は他社が担当。');
+    expect(dropped[0].where).toContain('担当工程');
+  });
+
+  it('担当工程の3行目以降は解釈されないので検出する（Codexレビュー P1）', () => {
+    const md = careerMarkdown().replace(
+      '| 経験 | ● |  | ● | ● |  |  |  |',
+      '| 経験 | ● |  | ● | ● |  |  |  |\n| 補足 | ▲ |  |  |  |  |  |  |',
+    );
+    const { dropped } = parseCareerMarkdown(md);
+
+    expect(dropped).toHaveLength(1);
+    expect(dropped[0].line).toContain('補足');
+    expect(dropped[0].where).toContain('3行目以降');
+  });
+
+  it('担当工程の未知の工程名に●が立っていれば検出する（Codexレビュー P1）', () => {
+    const md = careerMarkdown().replace('| 総合テスト | 保守・運用 |', '| 総合テスト | 性能検証 |');
+    const { dropped } = parseCareerMarkdown(
+      md.replace('| 経験 | ● |  | ● | ● |  |  |  |', '| 経験 | ● |  | ● | ● |  |  | ● |'),
+    );
+
+    expect(dropped.map((d) => d.line).join()).toContain('性能検証');
+    expect(dropped[0].where).toContain('未知の工程名');
+  });
+
+  it('同名サブセクションが重複したとき、上書きで失われる先行内容を検出する（Codexレビュー P2）', () => {
+    const md = `${careerMarkdown()}\n\n#### コメント\n\n≪コメント≫\n後から書いた方だけが残ります。`;
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    // 後勝ちで上書きされる挙動自体は変えていない。
+    expect(items[0].comment).toContain('後から書いた方だけが残ります。');
+    expect(items[0].comment).not.toContain('チームで進めた。');
+    // 失われた先行内容が警告に出る。
+    expect(dropped.map((d) => d.line)).toContain('チームで進めた。');
+    expect(dropped.some((d) => d.where.includes('重複したサブセクション'))).toBe(true);
   });
 
   it('空行と表の区切り行は捨てた行として報告しない', () => {
