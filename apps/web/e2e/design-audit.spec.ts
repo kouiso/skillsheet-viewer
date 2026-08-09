@@ -156,6 +156,26 @@ test.describe('Claude Design 全画面監査', () => {
     }
   });
 
+  test('/view シート一覧', async ({ page }) => {
+    for (const viewport of viewports) {
+      for (const theme of ['light', 'dark'] as const) {
+        const result = await capturePage(page, '/view', viewport, theme, `view-list-${viewport.name}`);
+        expect(result.overflow.hasOverflow, `横スクロール: ${viewport.name} / ${theme}`).toBe(false);
+        expect(result.errors, `console.error: ${viewport.name} / ${theme}`).toEqual([]);
+      }
+    }
+  });
+
+  test('/ トップ（/view へリダイレクト）', async ({ page }) => {
+    for (const viewport of viewports) {
+      for (const theme of ['light', 'dark'] as const) {
+        const result = await capturePage(page, '/', viewport, theme, `top-${viewport.name}`);
+        expect(result.overflow.hasOverflow, `横スクロール: ${viewport.name} / ${theme}`).toBe(false);
+        expect(result.errors, `console.error: ${viewport.name} / ${theme}`).toEqual([]);
+      }
+    }
+  });
+
   test('builder /builder（編集画面）', async ({ page }) => {
     await login(page);
     for (const viewport of viewports) {

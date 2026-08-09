@@ -1,5 +1,17 @@
+diff --git a/lib/index.d.ts b/lib/index.d.ts
+index 2eaa79173d292c08dd8117a4af0e798f0c73dfb5..c19d5c830b2785b793c28dc65e3877936874772b 100644
+--- a/lib/index.d.ts
++++ b/lib/index.d.ts
+@@ -191,5 +191,6 @@ declare const layoutEngine: (engines: Engines) => (attributedString: AttributedS
+  * @returns Attributed string
+  */
+ declare const fromFragments: (fragments: Fragment[]) => AttributedString;
++declare const isSingleCjkSyllable: (s: string) => boolean;
+ 
+-export { type Attachment, type AttributedString, type Attributes, type Container, type Coordinate, type DecorationLine, type Fragment, type Glyph, type LayoutOptions, type Paragraph, type Position, type Rect, type Run, bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, justification, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
++export { type Attachment, type AttributedString, type Attributes, type Container, type Coordinate, type DecorationLine, type Fragment, type Glyph, type LayoutOptions, type Paragraph, type Position, type Rect, type Run, bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, isSingleCjkSyllable, justification, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
 diff --git a/lib/textkit.js b/lib/textkit.js
-index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..948bce8eba71f5c8e1958fcb33ee864b1c91d9c8 100644
+index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..aa2bbd870ef8ac914e814cd64a0b7cb0d610a31d 100644
 --- a/lib/textkit.js
 +++ b/lib/textkit.js
 @@ -2612,6 +2612,64 @@ const breakLines = (attributedString, nodes, breaks) => {
@@ -96,3 +108,9 @@ index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..948bce8eba71f5c8e1958fcb33ee864b
              const end = start + s.length;
              // Add box node. Box nodes are used to represent words.
              acc.push(linebreak.box(width, start, end, hyphenated));
+@@ -3106,4 +3184,4 @@ const fontSubstitution = () => ({ string, runs }) => {
+     return { string, runs: res };
+ };
+ 
+-export { bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, justification, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
++export { bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, justification, isSingleCjkSyllable, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
