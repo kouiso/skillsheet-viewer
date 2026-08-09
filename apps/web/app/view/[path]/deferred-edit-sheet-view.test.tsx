@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const useAuthStatusQuery = vi.fn();
+const useAuthStatusQuery = vi.hoisted(() => vi.fn());
 
 vi.mock('@/lib/trpc-client', () => ({
   trpc: { auth: { status: { useQuery: useAuthStatusQuery } } },
