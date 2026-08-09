@@ -299,6 +299,45 @@ describe('parseCareerMarkdown（列数のずれ）', () => {
   });
 });
 
+describe('parseCareerMarkdown（担当工程の取りこぼし）', () => {
+  it('●に付随する注記を検出する（Codexレビュー）', () => {
+    const md = careerMarkdown().replace(
+      '| 経験 | ● |  | ● | ● |  |  |  |',
+      '| 経験 | ●（一部担当） |  | ● | ● |  |  |  |',
+    );
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    // 工程そのものは従来どおり取り込む。
+    expect(items[0].process).toEqual(['要件定義', '詳細設計', '実装']);
+    expect(dropped.map((d) => d.line).join()).toContain('一部担当');
+    expect(dropped[0].where).toContain('●に付随する注記');
+  });
+
+  it('先頭セルに紛れた注記を検出する（Codexレビュー）', () => {
+    const md = careerMarkdown().replace('| 経験 | ● |', '| 経験（主担当） | ● |');
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    expect(items[0].process).toEqual(['要件定義', '詳細設計', '実装']);
+    expect(dropped.map((d) => d.line)).toContain('経験（主担当）');
+    expect(dropped[0].where).toContain('想定外の行ラベル');
+  });
+
+  it('区切り行に紛れた値を検出する（Codexレビュー）', () => {
+    const md = careerMarkdown().replace('|---|---|---|---|---|---|---|---|', '|---|---|重要注記|---|---|---|---|---|');
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    expect(items[0].process).toEqual(['要件定義', '詳細設計', '実装']);
+    expect(dropped.map((d) => d.line)).toContain('重要注記');
+    expect(dropped[0].where).toContain('区切り行に紛れた値');
+  });
+
+  it('標準的な 工程 / 経験 の先頭セルは報告しない（誤検知しない）', () => {
+    const { dropped } = parseCareerMarkdown(careerMarkdown());
+
+    expect(dropped).toEqual([]);
+  });
+});
+
 describe('isTableSeparatorRow', () => {
   it.each([
     ['|---|---|', true],
@@ -511,6 +550,30 @@ describe('parseSkillsMarkdown', () => {
     expect(skills.map((s) => s.category)).toEqual(['言語']);
     expect(dropped.some((d) => d.where.includes('スキルが1件も無い技術分類'))).toBe(true);
     expect(dropped.map((d) => d.line).join()).toContain('インフラ');
+  });
+
+  it('技術分類がある行でも技術名が無ければ経験年数を検出する（Codexレビュー）', () => {
+    // `| 言語 |  | 5年 |` の後にスキル行が続くと空分類検査も発火せず 5年 が消えていた。
+    const md = SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', '| 言語 |  | 5年 |\n| | TypeScript | 3年 |');
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(md, dropped);
+
+    expect(dropped.map((d) => d.line)).toContain('| 言語 |  | 5年 |');
+    expect(dropped[0].where).toContain('技術名が無い');
+  });
+
+  it('セクション名を含むだけの想定外見出しは構造行として除外しない（Codexレビュー）', () => {
+    // 部分一致だと「スキル・経験年数の注意事項」まで構造行と誤判定して見逃す。
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(
+      SKILLS_MD.replace(
+        '| 技術分類 | 技術名 | 経験年数 |',
+        '<h3>スキル・経験年数の注意事項</h3>\n| 技術分類 | 技術名 | 経験年数 |',
+      ),
+      dropped,
+    );
+
+    expect(dropped.map((d) => d.line)).toContain('<h3>スキル・経験年数の注意事項</h3>');
   });
 
   it('<summary> などの構造行は捨てた行として報告しない（Codexレビュー P2）', () => {
