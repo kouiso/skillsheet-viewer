@@ -50,4 +50,11 @@ describe('InlineMarkdown', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
     expect(container.querySelector('img')).not.toBeInTheDocument();
   });
+
+  it('生HTMLの<script>タグとその内容を取り除き、alert(1)等の文字列も画面に残さない', () => {
+    const { container } = render(<InlineMarkdown content={`${'A'.repeat(50)}<script>alert(1)</script>`} />);
+    expect(container.textContent ?? '').not.toContain('alert(1)');
+    expect(container.textContent ?? '').not.toContain('<script>');
+    expect(container.textContent ?? '').toContain('A'.repeat(50));
+  });
 });
