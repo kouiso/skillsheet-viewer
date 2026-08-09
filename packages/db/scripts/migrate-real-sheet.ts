@@ -98,8 +98,20 @@ const KNOWN_SUBSECTIONS = ['プロジェクト概要', '技術スタック', '�
 // main() が経歴セクションを切り出す起点。会社見出しより前に唯一存在してよい見出し。
 const CAREER_SECTION_HEADING = /^##\s*経歴/;
 
-// スキルセクションの <details>/<summary> 構造行。データではないため捨てても警告しない。
-const SKILLS_STRUCTURAL_LINE = /^\s*<\/?(?:details|summary|h[1-6])[\s/>]/i;
+const SKILLS_SECTION_TITLE = /スキル・経験年数/;
+const HTML_WRAPPER_TAG = /^<\/?(?:details|summary|h[1-6])[\s/>]/i;
+
+/**
+ * スキルセクションの `<details>` ラッパーと、セクション見出しを兼ねる `<summary>`/`<hN>` だけを
+ * 構造行とみなす。タグ名だけで一律に除外すると `<h3>補足</h3>` のような想定外の見出しまで
+ * 見逃すため、タグを剥がした中身が空かセクション見出しの場合に限る（Codexレビュー指摘）。
+ */
+function isSkillsStructuralLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!HTML_WRAPPER_TAG.test(trimmed)) return false;
+  const text = trimmed.replace(/<[^>]*>/g, '').trim();
+  return text === '' || SKILLS_SECTION_TITLE.test(text);
+}
 
 // 担当工程表で「経験なし」を表す記号。値が失われているわけではないため警告しない。
 const PROCESS_NEGATIVE_MARKERS = new Set(['-', '‐', '−', 'ー', '―', '×', '✕', '✗', '無', 'なし', 'N/A', 'n/a']);
@@ -340,6 +352,9 @@ function parseProjectBlock(
 
   for (const [name, sectionLines] of Object.entries(sections)) {
     if (KNOWN_SUBSECTIONS.includes(name)) continue;
+    // 見出し行自体もどの出力フィールドにも入らない。本文が空の場合は子行の記録だけでは
+    // 何も残らず、見出しが消えたことに気付けない（Codexレビュー指摘）。
+    recordDropped(dropped, `${where} の未知のサブセクション「${name}」`, `#### ${name}`);
     for (const line of sectionLines) recordDropped(dropped, `${where} の未知のサブセクション「${name}」`, line);
   }
 
@@ -354,10 +369,21 @@ function parseProjectBlock(
       continue;
     }
     const [label, value] = row;
-    if (label === '期間') period = normalizePeriod(value);
-    else if (label === '役割') role = stripBold(value);
-    else if (label === 'チーム規模' || label === 'チーム') team = stripBold(value);
-    else if (value) overviewExtra.push(`${label}: ${stripBold(value)}`);
+    // 単一値フィールドが二度現れると後勝ちで上書きされ、先の値が失われる（Codexレビュー指摘）。
+    const overwriteGuard = (previous: string) => {
+      if (previous)
+        recordDropped(dropped, `${where} の「プロジェクト概要」（重複した項目の上書き）`, `${label}: ${previous}`);
+    };
+    if (label === '期間') {
+      overwriteGuard(period);
+      period = normalizePeriod(value);
+    } else if (label === '役割') {
+      overwriteGuard(role);
+      role = stripBold(value);
+    } else if (label === 'チーム規模' || label === 'チーム') {
+      overwriteGuard(team);
+      team = stripBold(value);
+    } else if (value) overviewExtra.push(`${label}: ${stripBold(value)}`);
   }
 
   const tech = emptyTech();
@@ -577,11 +603,13 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
   const lines = markdown.split('\n');
   let startIdx = lines.findIndex((line) => /^<details[\s>]/.test(line));
   let endIdx = lines.length;
-  if (startIdx !== -1) {
+  // <details> で囲まれていれば終端が明示されているので、警告範囲を絞る必要はない。
+  const hasDetails = startIdx !== -1;
+  if (hasDetails) {
     endIdx = lines.findIndex((line) => /^<\/details>/.test(line), startIdx + 1);
     if (endIdx === -1) endIdx = lines.length;
   } else {
-    startIdx = lines.findIndex((line) => /スキル・経験年数/.test(line));
+    startIdx = lines.findIndex((line) => SKILLS_SECTION_TITLE.test(line));
     if (startIdx === -1) return [];
   }
   const section = lines.slice(startIdx + 1, endIdx);
@@ -589,17 +617,27 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
   // <details> が無い経路では endIdx が文末まで伸びる。そのまま警告対象にすると経歴セクション
   // 全体を「捨てた行」として報告してしまうため、パース対象は従来どおりにしたまま、警告の
   // 範囲だけ次の `## ` 見出しまでに絞る。
-  const nextHeadingIdx = section.findIndex((line) => /^##\s/.test(line));
+  // 打ち切るのはこのフォールバック経路だけにする。<details> がある場合にも適用すると、
+  // ブロック内の `## 補足` 以降が検査対象から外れて逆に取りこぼす（Codexレビュー指摘）。
+  const nextHeadingIdx = hasDetails ? -1 : section.findIndex((line) => /^##\s/.test(line));
   const scanEnd = nextHeadingIdx === -1 ? section.length : nextHeadingIdx;
 
   const blocks: SkillsBlockData[] = [];
   let currentCategory = '';
+  // スキルを1件も持たない分類は出力されず黙って消えるため、元行を控えて警告に回す。
+  let currentCategoryLine = '';
+  let currentCategoryReport = false;
   const currentSkills: SkillEntry[] = [];
 
   const flushCategory = () => {
-    if (currentCategory && currentSkills.length > 0) {
+    if (!currentCategory) return;
+    if (currentSkills.length > 0) {
       blocks.push({ category: currentCategory, skills: [...currentSkills] });
+      return;
     }
+    // 分類名だけの行が次の分類または表末尾まで続いた場合、その分類名はどこにも入らない
+    // （Codexレビュー指摘）。
+    if (currentCategoryReport) recordDropped(dropped, `${at}（スキルが1件も無い技術分類）`, currentCategoryLine);
   };
 
   for (const [i, line] of section.entries()) {
@@ -609,7 +647,7 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
       // ただし <summary><h2>スキル・経験年数</h2></summary> のような構造行はデータではない。
       // 除外しないと正常な実シートでも毎回 DROPPED_LINES が非ゼロになり、本当の
       // 取りこぼしが恒常的な誤検知に埋もれる（Codexレビュー指摘）。
-      if (report && !SKILLS_STRUCTURAL_LINE.test(line)) recordDropped(dropped, `${at}（表の行ではない）`, line);
+      if (report && !isSkillsStructuralLine(line)) recordDropped(dropped, `${at}（表の行ではない）`, line);
       continue;
     }
     const cells = line
@@ -625,9 +663,19 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
     const yearsRaw = stripBold(cells[2]);
     if (first === '技術分類' || skillName === '技術名' || /^:?-+:?$/.test(first)) continue;
 
+    // 読むのは先頭3セルだけなので、4列目以降の値はどのフィールドにも入らない
+    // （Codexレビュー指摘）。
+    if (report) {
+      for (const extra of cells.slice(3)) {
+        if (extra.trim()) recordDropped(dropped, `${at}（4列目以降は読まれない）`, extra);
+      }
+    }
+
     if (first) {
       flushCategory();
       currentCategory = first;
+      currentCategoryLine = line;
+      currentCategoryReport = report;
       currentSkills.length = 0;
     }
     if (!skillName) {
@@ -642,6 +690,11 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
       continue;
     }
     const yearsMatch = yearsRaw.match(/(\d+(?:\.\d+)?)\s*年/);
+    // `6ヶ月` `1年未満` `経験あり` のような表記は years: 0 に潰れ、元の値が残らない
+    // （Codexレビュー指摘）。
+    if (report && yearsRaw && !yearsMatch) {
+      recordDropped(dropped, `${at}（経験年数を解釈できない）`, `${skillName}: ${yearsRaw}`);
+    }
     const years = yearsMatch ? Number(yearsMatch[1]) : 0;
     currentSkills.push({ name: skillName, years, level: deriveSkillLevel(years) });
   }
