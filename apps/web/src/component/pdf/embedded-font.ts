@@ -80,17 +80,42 @@ function readLocaOffsets(font: Buffer, loca: TableRecord, indexToLocFormat: numb
   return offsets;
 }
 
+/** 間接オブジェクト 1 件。`bodyStart` は `N G obj` の直後のバイト位置。 */
+interface IndirectObject {
+  bodyStart: number;
+  body: string;
+}
+
+/**
+ * `N G obj … endobj` を 1 回の走査で索引化する。
+ * 参照のたびに全文を検索し直すと参照数×PDF 長で効いてくるうえ、オブジェクト番号を
+ * 埋め込んだ正規表現を都度組み立てることになるので、先に引ける形にしておく。
+ */
+function indexIndirectObjects(text: string): Map<string, IndirectObject> {
+  const objects = new Map<string, IndirectObject>();
+  for (const match of text.matchAll(/(?<![0-9])(\d+)\s+(\d+)\s+obj([\s\S]*?)endobj/g)) {
+    const key = `${Number(match[1])} ${Number(match[2])}`;
+    // 同じ番号が複数回現れる（インクリメンタル更新）場合は後勝ちが最新。
+    objects.set(key, {
+      bodyStart: match.index + match[0].length - END_OBJECT_KEYWORD.length - match[3].length,
+      body: match[3],
+    });
+  }
+  return objects;
+}
+
 /**
  * PDF のオブジェクト辞書から、宣言された /Length を読む。間接参照は解決する。
  * `/Length1` 等の別キーは `\s` を要求することで拾わない。
  */
-function readDeclaredLength(text: string, dictionary: string): number | null {
+function readDeclaredLength(objects: Map<string, IndirectObject>, dictionary: string): number | null {
   // 間接参照を先に見る。直接値のパターンで否定先読みを使うと、`/Length 1234 0 R` の
   // ときに (\d+) が "123" までバックトラックして先読みが成立し、誤った長さを返す。
-  const indirect = /\/Length\s+(\d+)\s+\d+\s+R/.exec(dictionary);
+  const indirect = /\/Length\s+(\d+)\s+(\d+)\s+R/.exec(dictionary);
   if (indirect) {
-    const target = new RegExp(`(?<![0-9])${indirect[1]}\\s+0\\s+obj\\s*(\\d+)`).exec(text);
-    return target ? Number(target[1]) : null;
+    const target = objects.get(`${Number(indirect[1])} ${Number(indirect[2])}`);
+    const value = target && /^\s*(\d+)/.exec(target.body);
+    return value ? Number(value[1]) : null;
   }
   const direct = /\/Length\s+(\d+)/.exec(dictionary);
   return direct ? Number(direct[1]) : null;
@@ -100,6 +125,26 @@ function readDeclaredLength(text: string, dictionary: string): number | null {
 // 逆算するのに使う。
 const END_OBJECT_KEYWORD = 'endobj';
 
+/** 埋め込みフォントプログラムの種別ごとの本数。 */
+export interface EmbeddedFontFileKinds {
+  /** /FontFile2 — TrueType（glyf/loca）。 */
+  trueType: number;
+  /** /FontFile3 — CFF / OpenType。 */
+  cff: number;
+  /** /FontFile — Type1。 */
+  type1: number;
+}
+
+/** PDF に埋め込まれたフォントプログラムを種別ごとに数える。 */
+export function countEmbeddedFontFiles(pdf: Buffer): EmbeddedFontFileKinds {
+  const text = pdf.toString('latin1');
+  return {
+    trueType: [...text.matchAll(/\/FontFile2\s+\d+\s+\d+\s+R/g)].length,
+    cff: [...text.matchAll(/\/FontFile3\s+\d+\s+\d+\s+R/g)].length,
+    type1: [...text.matchAll(/\/FontFile\s+\d+\s+\d+\s+R/g)].length,
+  };
+}
+
 /**
  * PDF バイト列から /FontFile2 で参照される TrueType サブセットを全て取り出す。
  * FlateDecode されている場合は展開する。
@@ -107,23 +152,22 @@ const END_OBJECT_KEYWORD = 'endobj';
 export function extractEmbeddedTrueTypeFonts(pdf: Buffer): Buffer[] {
   const fonts: Buffer[] = [];
   // latin1 はバイト値と符号点が 1:1 に対応するため、文字列の index をそのまま
-  // バイトオフセットとして使える。PDF 全体の変換は 1 回だけにする（参照ごとに
-  // 変換するとページ数に対して二乗で効いてくる）。
+  // バイトオフセットとして使える。PDF 全体の変換は 1 回だけにする。
   const text = pdf.toString('latin1');
-  for (const reference of text.matchAll(/\/FontFile2\s+(\d+)\s+\d+\s+R/g)) {
-    const object = new RegExp(`(?<![0-9])${reference[1]}\\s+0\\s+obj([\\s\\S]*?)endobj`).exec(text);
+  const objects = indexIndirectObjects(text);
+
+  for (const reference of text.matchAll(/\/FontFile2\s+(\d+)\s+(\d+)\s+R/g)) {
+    // 世代番号を捨てて 0 決め打ちにすると、非ゼロ世代の PDF でフォントを取り出せない。
+    const object = objects.get(`${Number(reference[1])} ${Number(reference[2])}`);
     if (!object) continue;
 
-    const streamKeyword = /stream\r?\n/.exec(object[1]);
+    const streamKeyword = /stream\r?\n/.exec(object.body);
     if (!streamKeyword) continue;
-    // 捕捉範囲は `endobj` の直前で終わるので、末尾から引けば開始位置が厳密に出る
-    // （`object[0].indexOf(object[1])` は本文が先頭側にも現れうる分だけ危うい）。
-    const captureStart = object.index + object[0].length - END_OBJECT_KEYWORD.length - object[1].length;
-    const bodyStart = captureStart + streamKeyword.index + streamKeyword[0].length;
+    const bodyStart = object.bodyStart + streamKeyword.index + streamKeyword[0].length;
 
     // 終端キーワードで切ると、圧縮データ末尾が 0x0D のときにその 1 バイトまで
     // 区切りとして食われて展開に失敗する。宣言された /Length で切る。
-    const declared = readDeclaredLength(text, object[1].slice(0, streamKeyword.index));
+    const declared = readDeclaredLength(objects, object.body.slice(0, streamKeyword.index));
     const bodyEnd =
       declared === null ? text.indexOf('\nendstream', bodyStart) : Math.min(bodyStart + declared, pdf.length);
     if (bodyEnd <= bodyStart) continue;
@@ -158,16 +202,34 @@ export function inspectEmbeddedFont(font: Buffer): EmbeddedFontReport {
     const tags = [...tables.keys()].map((tag) => tag.replace(/[^\x20-\x7e]/g, '.')).join(',');
     throw new Error(`埋め込みフォントに必須テーブルがない: ${tags}`);
   }
-  // ディレクトリごと壊れていると offset が範囲外を指す。RangeError という原因の
-  // 分からない例外にせず、テーブルディレクトリが壊れていると分かる形で落とす。
-  if (
-    head.offset + HEAD_INDEX_TO_LOC_FORMAT_OFFSET + 2 > font.length ||
-    maxp.offset + MAXP_NUM_GLYPHS_OFFSET + 2 > font.length
-  ) {
-    throw new Error('埋め込みフォントのテーブルディレクトリが壊れている（head / maxp がサブセットの範囲外）');
+  // ディレクトリごと壊れていると offset / length が範囲外を指す。RangeError という
+  // 原因の分からない例外にせず、どこが壊れているか分かる形で落とす。
+  for (const [name, table] of [
+    ['head', head],
+    ['maxp', maxp],
+    ['loca', loca],
+    ['glyf', glyf],
+  ] as const) {
+    if (table.offset > font.length || table.length > font.length - table.offset) {
+      throw new Error(`埋め込みフォントの ${name} テーブルがサブセットの範囲外を指している`);
+    }
+  }
+  if (head.length < HEAD_INDEX_TO_LOC_FORMAT_OFFSET + 2 || maxp.length < MAXP_NUM_GLYPHS_OFFSET + 2) {
+    throw new Error('埋め込みフォントの head / maxp が必要な長さに足りない');
   }
 
   const indexToLocFormat = font.readInt16BE(head.offset + HEAD_INDEX_TO_LOC_FORMAT_OFFSET);
+  // 仕様上 0（16bit）か 1（32bit）しかない。他の値だとエントリ幅が決まらず、
+  // 黙って 32bit として読むと壊れたオフセットを健全に見せかねない。
+  if (indexToLocFormat !== 0 && indexToLocFormat !== 1) {
+    throw new Error(`埋め込みフォントの indexToLocFormat が不正: ${indexToLocFormat}`);
+  }
+  const locaEntryBytes = indexToLocFormat === 0 ? 2 : 4;
+  // loca はエントリの並びそのものなので、テーブル長は必ずエントリ幅の倍数になる。
+  if (loca.length % locaEntryBytes !== 0) {
+    throw new Error(`埋め込みフォントの loca テーブル長がエントリ幅の倍数でない: ${loca.length} % ${locaEntryBytes}`);
+  }
+
   const numGlyphs = font.readUInt16BE(maxp.offset + MAXP_NUM_GLYPHS_OFFSET);
   const offsets = readLocaOffsets(font, loca, indexToLocFormat);
 
