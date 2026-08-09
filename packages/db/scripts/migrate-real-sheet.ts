@@ -95,6 +95,9 @@ function recordDropped(dropped: DroppedLine[], where: string, line: string): voi
 // 中身が丸ごと失われる（例: `#### 備考`）。
 const KNOWN_SUBSECTIONS = ['プロジェクト概要', '技術スタック', '担当工程', 'コメント'];
 
+// main() が経歴セクションを切り出す起点。会社見出しより前に唯一存在してよい見出し。
+const CAREER_SECTION_HEADING = /^##\s*経歴/;
+
 // 末尾の "(3 ヶ月間)" / "（継続中）" 等の注記を取り除く。
 function stripTrailingAnnotation(s: string): string {
   return s.replace(/[\s]*[（(][^）)]*[）)]\s*$/, '').trim();
@@ -209,9 +212,11 @@ function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where
     const label = header[i];
     const idx = PROCESS_HEADER_ORDER.indexOf(label);
     if (idx === -1) {
-      // PROCESS_HEADER_ORDER に無い工程名は、● が立っていてもどの工程にも対応づかず失われる。
-      if (label && (data[i] ?? '').includes('●'))
-        recordDropped(dropped, `${at}（未知の工程名）`, `${label}: ${data[i]}`);
+      // PROCESS_HEADER_ORDER に無い工程名の列は、どの工程にも対応づかないため値ごと失われる。
+      // ● 以外（○ / 担当 / 注記など）でも失われることに変わりはないので、非空なら
+      // マーカーの種類を問わず記録する（Codexレビュー指摘）。
+      const unknownCell = (data[i] ?? '').trim();
+      if (label && unknownCell) recordDropped(dropped, `${at}（未知の工程名）`, `${label}: ${unknownCell}`);
       continue;
     }
     const cell = data[i] ?? '';
@@ -423,10 +428,11 @@ export function parseCareerMarkdown(markdown: string): {
       currentProjectBody.push(line);
     } else if (currentCompanyId !== null) {
       currentCompanyIntro.push(line);
-    } else if (!/^#{1,6}\s/.test(line)) {
-      // 最初の会社見出し(###)より前の自由文は、会社にも案件にも属さないまま捨てられる。
-      // `## 経歴` のような見出し行は構造であってデータではないため対象外にする
-      // （含めると毎回必ず警告が出て、本当の取りこぼしが埋もれる）。
+    } else if (!CAREER_SECTION_HEADING.test(line)) {
+      // 最初の会社見出し(###)より前の行は、会社にも案件にも属さないまま捨てられる。
+      // 除外するのは `## 経歴`（main() がここを起点に切り出す想定済みの構造）だけにする。
+      // 見出し行を一律で除外すると `## 注意事項` のような想定外の見出しを見逃す
+      // （Codexレビュー指摘）。
       recordDropped(dropped, '最初の会社見出しより前', line);
     }
   }
@@ -446,14 +452,34 @@ function deriveSkillLevel(years: number): string {
   return '初級';
 }
 
+// 下の switch が受け付けるラベル。ここに無いラベルは ProfileMeta のどこにも入らないため、
+// 取りこぼしとして警告する。switch の case を増やすときはこちらも追加すること。
+const PROFILE_LABELS = new Set([
+  '技術者名',
+  '所属',
+  '所屬',
+  '年齢',
+  '性別',
+  '資格',
+  '学歴',
+  '学歷',
+  '稼働',
+  '勤務形態',
+  '最寄駅',
+  '最寄り駅',
+  '得意分野',
+  '得意業務',
+]);
+
 function normalizeProfileLabel(label: string): string {
   return label.replace(/\s+/g, '').replace(/\*/g, '').replace(/:/g, '').trim();
 }
 
-function parseProfileMarkdown(markdown: string): ProfileBlockData | null {
+export function parseProfileMarkdown(markdown: string, dropped: DroppedLine[] = []): ProfileBlockData | null {
   const lines = markdown.split('\n');
   const startIdx = lines.findIndex((line) => /^##\s*技術者プロファイル/.test(line));
   if (startIdx === -1) return null;
+  const at = '技術者プロファイル';
 
   let endIdx = lines.length;
   for (let i = startIdx + 1; i < lines.length; i++) {
@@ -466,16 +492,35 @@ function parseProfileMarkdown(markdown: string): ProfileBlockData | null {
   }
   const section = lines.slice(startIdx + 1, endIdx);
 
+  // 自己PR見出し以降は pr へそのまま取り込まれるため、取りこぼしの検査対象は見出しより前だけ。
+  const prHeadingIdx = section.findIndex((line) => /^###\s*自己\s*PR/.test(line));
+  const scanEnd = prHeadingIdx === -1 ? section.length : prHeadingIdx;
+
   const meta: ProfileMeta = {};
   let name = '';
   let company = '';
-  for (const line of section) {
-    if (!line.startsWith('|')) continue;
+  for (const [i, line] of section.entries()) {
+    const report = i < scanEnd;
+    if (!line.startsWith('|')) {
+      // 表でも自己PRでもない行は、どのフィールドにも入らない（Codexレビュー指摘）。
+      if (report) recordDropped(dropped, `${at}（表の行ではない）`, line);
+      continue;
+    }
     const row = parseTableRow(line);
-    if (!row) continue;
+    if (!row) {
+      if (report) recordDropped(dropped, `${at}（表の行として解釈できない）`, line);
+      continue;
+    }
     const [rawLabel, value] = row;
     const label = normalizeProfileLabel(rawLabel);
-    if (!value) continue;
+    if (label === '項目') continue; // ヘッダ行
+    if (!value) continue; // 値が空なら失うものが無い
+    if (report && !PROFILE_LABELS.has(label)) {
+      // switch のどの case にも当たらないラベルは ProfileMeta に入らず失われる
+      // （例: `| 居住地 | 東京 |`。Codexレビュー指摘）。
+      recordDropped(dropped, `${at}（対応する項目が無いラベル）`, `${rawLabel}: ${value}`);
+      continue;
+    }
     switch (label) {
       case '技術者名':
         name = value;
@@ -530,7 +575,7 @@ function parseProfileMarkdown(markdown: string): ProfileBlockData | null {
   return { name, title: '', pr, strengths: [], meta, company };
 }
 
-function parseSkillsMarkdown(markdown: string): SkillsBlockData[] {
+export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = []): SkillsBlockData[] {
   const lines = markdown.split('\n');
   let startIdx = lines.findIndex((line) => /^<details[\s>]/.test(line));
   let endIdx = lines.length;
@@ -542,6 +587,12 @@ function parseSkillsMarkdown(markdown: string): SkillsBlockData[] {
     if (startIdx === -1) return [];
   }
   const section = lines.slice(startIdx + 1, endIdx);
+  const at = 'スキル・経験年数';
+  // <details> が無い経路では endIdx が文末まで伸びる。そのまま警告対象にすると経歴セクション
+  // 全体を「捨てた行」として報告してしまうため、パース対象は従来どおりにしたまま、警告の
+  // 範囲だけ次の `## ` 見出しまでに絞る。
+  const nextHeadingIdx = section.findIndex((line) => /^##\s/.test(line));
+  const scanEnd = nextHeadingIdx === -1 ? section.length : nextHeadingIdx;
 
   const blocks: SkillsBlockData[] = [];
   let currentCategory = '';
@@ -553,13 +604,21 @@ function parseSkillsMarkdown(markdown: string): SkillsBlockData[] {
     }
   };
 
-  for (const line of section) {
-    if (!line.startsWith('|')) continue;
+  for (const [i, line] of section.entries()) {
+    const report = i < scanEnd;
+    if (!line.startsWith('|')) {
+      // 表の行でなければスキルとして取り込まれない（Codexレビュー指摘）。
+      if (report) recordDropped(dropped, `${at}（表の行ではない）`, line);
+      continue;
+    }
     const cells = line
       .split('|')
       .slice(1, -1)
       .map((c) => c.trim());
-    if (cells.length < 3) continue;
+    if (cells.length < 3) {
+      if (report) recordDropped(dropped, `${at}（列が3つ未満）`, line);
+      continue;
+    }
     const first = stripBold(cells[0]);
     const skillName = stripBold(cells[1]);
     const yearsRaw = stripBold(cells[2]);
@@ -570,7 +629,11 @@ function parseSkillsMarkdown(markdown: string): SkillsBlockData[] {
       currentCategory = first;
       currentSkills.length = 0;
     }
-    if (!skillName) continue;
+    if (!skillName) {
+      // 技術名が無い行はスキルにならない。分類名も無ければこの行の内容は丸ごと失われる。
+      if (report && !first && yearsRaw) recordDropped(dropped, `${at}（技術名が無い）`, line);
+      continue;
+    }
     const yearsMatch = yearsRaw.match(/(\d+(?:\.\d+)?)\s*年/);
     const years = yearsMatch ? Number(yearsMatch[1]) : 0;
     currentSkills.push({ name: skillName, years, level: deriveSkillLevel(years) });
@@ -632,12 +695,17 @@ async function main() {
             throw new Error('legacy markdown が DB にも /tmp/real_markdown.md にも見つかりません');
           })();
 
-  const profile = parseProfileMarkdown(fullMarkdown);
-  const skills = parseSkillsMarkdown(fullMarkdown);
+  // プロフィール・スキル・経歴の3パーサすべての取りこぼしを1つに集約する。経歴だけを
+  // 見ていると、プロフィールやスキルで行が失われていても DROPPED_LINES: 0 と表示され、
+  // --write が警告なしに legacy markdown を置き換えてしまう（Codexレビュー指摘）。
+  const dropped: DroppedLine[] = [];
+  const profile = parseProfileMarkdown(fullMarkdown, dropped);
+  const skills = parseSkillsMarkdown(fullMarkdown, dropped);
 
   const careerStart = fullMarkdown.search(/^##\s*経歴/im);
   const careerMarkdown = careerStart !== -1 ? fullMarkdown.slice(careerStart) : fullMarkdown;
-  const { companies, items, dropped } = parseCareerMarkdown(careerMarkdown);
+  const { companies, items, dropped: careerDropped } = parseCareerMarkdown(careerMarkdown);
+  dropped.push(...careerDropped);
 
   console.log('PARSED_PROFILE:', profile ? 'yes' : 'no');
   console.log(
