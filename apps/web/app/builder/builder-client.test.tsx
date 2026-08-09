@@ -85,6 +85,13 @@ describe('BuilderClient', () => {
     );
   });
 
+  it('DB 取得失敗後の空ビルダーは sheetId を省略して新規保存する', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" sheets={[]} activeSheetId="" />);
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ sheetId: undefined }));
+  });
+
   // headless E2E で再現した実バグの回帰テスト: unstable_cache のキャッシュ命中時は内部で
   // JSON.stringify/JSON.parse を通すため、RSC が渡す sheets[].updatedAt が Date ではなく
   // ISO 文字列になることがある（既存シートを開いて保存するたびに再現）。expectedUpdatedAt は
@@ -458,6 +465,15 @@ describe('BuilderClient 自動保存', () => {
       vi.advanceTimersByTime(5000);
     });
     expect(mockSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('空ビルダーの自動保存は sheetId を省略して新規保存する', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" sheets={[]} activeSheetId="" />);
+    typeMarkdown('## B');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ sheetId: undefined }));
   });
 
   // Codex 指摘の回帰テスト（手動保存側と同じ理由）。自動保存でタイトルが変わった場合も

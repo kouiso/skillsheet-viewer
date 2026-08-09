@@ -35,6 +35,8 @@ interface ViewerTopbarProps {
   pdfLoading?: boolean;
   /** 編集者ログイン済みか。false のときは編集導線（ビルダーリンク）を出さない。 */
   canEdit?: boolean;
+  /** 編集者判定の前後で編集ボタン分の幅を固定する。 */
+  reserveEditSlot?: boolean;
 }
 
 // ダッシュボードシート用の Console トップバー（redesign2 の topbar 変種）。
@@ -48,8 +50,22 @@ export function ViewerTopbar({
   onDownloadPdf,
   pdfLoading = false,
   canEdit = true,
+  reserveEditSlot = false,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
+
+  const editButton = canEdit ? (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
+          <Link href="/builder">
+            <PencilLine />
+          </Link>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>編集／ビルダー</TooltipContent>
+    </Tooltip>
+  ) : null;
 
   const viewToggleFieldset = (
     <fieldset
@@ -88,17 +104,12 @@ export function ViewerTopbar({
   // 両ブレークポイントの DOM順=視覚順を成立させられる出し分けを採る。
   const renderActionIcons = (className: string) => (
     <div className={className}>
-      {canEdit && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
-              <Link href="/builder">
-                <PencilLine />
-              </Link>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>編集／ビルダー</TooltipContent>
-        </Tooltip>
+      {reserveEditSlot ? (
+        <span data-testid="edit-slot" className="size-11 shrink-0">
+          {editButton}
+        </span>
+      ) : (
+        editButton
       )}
 
       {onDownloadPdf && (

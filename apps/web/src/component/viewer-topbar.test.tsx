@@ -39,7 +39,7 @@ const renderTopbar = (props = {}) =>
 /**
  * アイコン群は SP 用（sm:hidden）とデスクトップ用（hidden sm:flex）を DOM に両方出し、
  * 表示側を CSS で切り替えている。jsdom は CSS を適用しないため両方が取得できる。
- * 添字 0 が SP 用、1 がデスクトップ用。
+ * 添字 0 が SP 用、1 が デスクトップ用。
  */
 const getIconCopies = (label: string) => screen.getAllByLabelText(label);
 
@@ -63,6 +63,17 @@ describe('ViewerTopbar', () => {
   it('canEdit=false のとき編集ボタンが出ない（閲覧コードのみのユーザー向け、#149 U-4）', () => {
     renderTopbar({ canEdit: false });
     expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
+  });
+
+  it('固定slotは閲覧者・編集者の両状態で44pxを維持する', () => {
+    const { unmount } = renderTopbar({ canEdit: false, reserveEditSlot: true });
+    expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
+    expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
+    unmount();
+
+    renderTopbar({ canEdit: true, reserveEditSlot: true });
+    expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
+    expect(screen.getByLabelText('編集／ビルダー')).toBeInTheDocument();
   });
 
   describe('DOM順と視覚順の一致（レビュー指摘: キーボードのタブ順・読み上げ順の対策）', () => {
