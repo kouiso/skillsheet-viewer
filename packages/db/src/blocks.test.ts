@@ -646,6 +646,21 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('業務内容テスト');
   });
 
+  it('担当工程は画面と同じ7段モデルへ正規化し、対応表外の値は末尾に残す（#206）', () => {
+    const withProcess: ProjectBlockData = {
+      ...PROJECT,
+      items: [
+        {
+          ...PROJECT.items[0],
+          process: ['要件定義', '設計', '実装', '運用・保守'],
+        },
+      ],
+    };
+    const md = projectBlockToMarkdown(withProcess);
+    expect(md).toContain('| 担当工程 | 要件定義, 実装・単体, 保守・運用, 設計 |');
+    expect(md).not.toContain('| 担当工程 | 実装, 運用・保守');
+  });
+
   it('会社概要文（note）と会社区分（kind）を出力する（#139）', () => {
     const withNote: ProjectBlockData = {
       companies: [{ ...PROJECT.companies[0], note: '大手SIベンダーにて複数プロジェクトに参画。' }],
