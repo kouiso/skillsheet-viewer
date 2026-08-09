@@ -95,4 +95,26 @@ describe('saveSkillSheetBlocks', () => {
     const res = await saveSkillSheetBlocks('T', [MD], 'sheet-x', newer);
     expect(res.updatedAt).toBe(newer);
   });
+
+  it('DB ドライバーが updatedAt を ISO 文字列で返しても競合を正しく判定する', async () => {
+    const older = new Date('2026-01-01T00:00:00.000Z');
+    const newer = new Date('2026-02-01T00:00:00.000Z');
+    dbHolder = createFakeDb({
+      selectResults: [[{ id: 'sheet-x' }], [{ updatedAt: newer.toISOString() }]],
+      updateReturning: [],
+    }).db;
+    await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x', older)).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('DB ドライバーが更新後の updatedAt を ISO 文字列で返しても Date として返す', async () => {
+    const saved = new Date('2026-05-01T00:00:00.000Z');
+    const f = createFakeDb({
+      selectResults: [[{ id: 'sheet-x' }]],
+      updateReturning: [{ updatedAt: saved.toISOString() }],
+    });
+    dbHolder = f.db;
+    const res = await saveSkillSheetBlocks('T', [MD], 'sheet-x');
+    expect(res.updatedAt).toBeInstanceOf(Date);
+    expect(res.updatedAt.getTime()).toBe(saved.getTime());
+  });
 });

@@ -1,6 +1,7 @@
 'use client';
 
 import { orderedProfileMetaEntries, type ProfileBlockData, resolveProfileMetaLabel } from '@skillsheet/db/blocks';
+import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
@@ -16,16 +17,20 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
     <section>
       <div className="flex flex-col gap-1">
         {/* kicker: 「SKILL SHEET · 会社名」。会社名未設定時は「SKILL SHEET」のみ。 */}
-        <p className="kicker mb-1.5">{data.company ? `SKILL SHEET · ${data.company}` : 'SKILL SHEET'}</p>
+        <p className="kicker mb-1.5">{data.company ? `SKILL SHEET · ${sanitizeHtml(data.company)}` : 'SKILL SHEET'}</p>
         {data.name && (
-          <h1 className="text-[34px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground">{data.name}</h1>
+          <h1 className="text-[34px] font-bold leading-[1.1] tracking-[-0.02em] text-foreground">
+            {sanitizeHtml(data.name)}
+          </h1>
         )}
-        {data.title && <p className="font-mono text-[14.5px] text-accent-text">{data.title}</p>}
+        {data.title && <p className="font-mono text-[14.5px] text-accent-text">{sanitizeHtml(data.title)}</p>}
       </div>
 
       {/* 自己PR は段落を改行で区切って保存されるため、pre-line で改行を保持する */}
       {data.pr && (
-        <p className="mt-4 max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80">{data.pr}</p>
+        <p className="mt-4 max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80">
+          {sanitizeHtml(data.pr)}
+        </p>
       )}
 
       {data.strengths.length > 0 && (
@@ -34,7 +39,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
             // 押せない紹介ラベルなので .techtag。
             // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
             <li key={i} className="techtag">
-              {s}
+              {sanitizeHtml(s)}
             </li>
           ))}
         </ul>
@@ -47,7 +52,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
             <div key={key} className="flex items-baseline gap-1.5">
               {i > 0 && <span aria-hidden>·</span>}
               <dt>{resolveProfileMetaLabel(key)}</dt>
-              <dd className="text-foreground">{value}</dd>
+              <dd className="text-foreground">{sanitizeHtml(value)}</dd>
             </div>
           ))}
         </dl>

@@ -44,9 +44,17 @@ export const sheetRouter = router({
   builderState: editorProcedure.input(builderStateInputSchema).query(async ({ input }) => {
     let { sheets } = await getCachedDbSheets();
 
-    if (input.sheetId && sheets.some((sheet) => sheet.id === input.sheetId)) {
-      const sheet = await getCachedDbSheetById(input.sheetId);
-      return { sheet: toStaleSheet(sheet), sheets, activeSheetId: input.sheetId };
+    if (input.sheetId) {
+      try {
+        const sheet = await getCachedDbSheetById(input.sheetId);
+        return { sheet: toStaleSheet(sheet), sheets, activeSheetId: input.sheetId };
+      } catch (err) {
+        // 指定 ID のシートが存在しない場合はデフォルトシートにフォールバックする。
+        // 一覧キャッシュが古くて新規作成したシートを含んでいなくても、
+        // ID 指定なら直接取得して開く（autosave テストの sheetId 指定で
+        // キャッシュ外のシートが開けずにフォールバックしていた不具合の修正）。
+        if (!(err instanceof SkillSheetNotFoundError)) throw err;
+      }
     }
 
     const sheet = await getCachedDbSheet();
