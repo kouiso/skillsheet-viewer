@@ -287,7 +287,11 @@ function parseProjectBlock(
   const where = `案件「${title}」`;
 
   // サブセクションごとに分割 (#### プロジェクト概要 / #### 技術スタック / #### 担当工程 / #### コメント)
-  const sections: Record<string, string[]> = {};
+  // null プロトタイプで作る。通常のオブジェクトだと `#### constructor` や `#### toString`
+  // のような見出しに対して sections[current] が Object.prototype 由来の値（関数など）を
+  // 返し、初回にもかかわらず重複と誤判定した上、反復不能な値への for...of で移行全体が
+  // TypeError で停止する（Codexレビュー指摘）。
+  const sections: Record<string, string[]> = Object.create(null);
   let current: string | null = null;
   for (const line of bodyLines) {
     const m = line.match(/^####\s*(.+)$/);

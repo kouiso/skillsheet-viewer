@@ -173,6 +173,26 @@ describe('parseCareerMarkdown', () => {
     expect(dropped.some((d) => d.where.includes('重複したサブセクション'))).toBe(true);
   });
 
+  it.each([
+    'constructor',
+    'toString',
+    '__proto__',
+    'hasOwnProperty',
+  ])('サブセクション名が Object.prototype のプロパティ名(%s)でも停止せず検出できる（Codexレビュー P2）', (name) => {
+    const md = careerMarkdown('', ['', `#### ${name}`, '', '継承プロパティ名の見出しです。'].join('\n'));
+
+    // 通常のオブジェクトを使っていると、初回にもかかわらず重複と誤判定され
+    // 反復不能な値への for...of で TypeError となり移行全体が停止していた。
+    expect(() => parseCareerMarkdown(md)).not.toThrow();
+
+    const { items, dropped } = parseCareerMarkdown(md);
+    expect(items).toHaveLength(1);
+    expect(dropped.map((d) => d.line)).toContain('継承プロパティ名の見出しです。');
+    expect(dropped.some((d) => d.where.includes('未知のサブセクション'))).toBe(true);
+    // 初回なので「重複」としては報告しない。
+    expect(dropped.some((d) => d.where.includes('重複したサブセクション'))).toBe(false);
+  });
+
   it('空行と表の区切り行は捨てた行として報告しない', () => {
     const { dropped } = parseCareerMarkdown(careerMarkdown());
 
