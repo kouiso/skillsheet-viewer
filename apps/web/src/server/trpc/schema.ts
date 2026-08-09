@@ -10,8 +10,7 @@ const sheetIdSchema = z.uuid();
 // id は DB の uuid 列（packages/db/src/schema.ts）に対応する。形式が UUID でない値を
 // そのまま Drizzle/Postgres へ渡すと SQLSTATE 22P02（invalid input syntax for type uuid）が
 // throw され、is-config-error.ts の判定対象にも入っていないため 500 まで抜けてしまう
-// （Issue #196）。ここで弾いて sheet.byId 側の SkillSheetNotFoundError 経路（404）に
-// 合流させる。
+// （Issue #196）。ここで BAD_REQUEST として弾き、DB の SQLSTATE 22P02 / 500 を防ぐ。
 export const sheetIdInputSchema = z.object({ id: sheetIdSchema });
 
 export const saveSheetInputSchema = z.object({
