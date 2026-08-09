@@ -81,6 +81,8 @@ test.afterAll(async () => {
 });
 
 test('本番経路のブラウザ toBlob PDF に日本語グリフが描画されている', async ({ browser }: { browser: Browser }) => {
+  // 初回 dynamic import + toBlob のフォントロードが環境により遅延するため猶予を持たせる
+  test.setTimeout(120_000);
   const title = `${SHEET_PREFIX} ${Date.now()}`;
   const blocks = buildConsoleDemoBlocks();
   await createSheet(title, blocks);
@@ -100,7 +102,7 @@ test('本番経路のブラウザ toBlob PDF に日本語グリフが描画さ�
   await page.waitForURL(/\/view\/db\//);
 
   const [download] = await Promise.all([
-    page.waitForEvent('download'),
+    page.waitForEvent('download', { timeout: 100_000 }),
     page.getByRole('button', { name: 'PDFダウンロード' }).click(),
   ]);
 
@@ -118,5 +120,7 @@ test('本番経路のブラウザ toBlob PDF に日本語グリフが描画さ�
   const japanese = distinctJapaneseCodePoints(extracted);
 
   expect(japanese.size, 'PDF テキスト層にひらがな・カタカナ・漢字が含まれること').toBeGreaterThan(0);
-  expect(extracted).toContain('日本');
+  // プロフィールの役割タイトル「フルスタックエンジニア」が含まれることを確認（単に日本語の
+  // 文字があるだけではなく、実コンテンツのグリフが描画されていることを担保する）。
+  expect(extracted).toContain('フルスタック');
 });
