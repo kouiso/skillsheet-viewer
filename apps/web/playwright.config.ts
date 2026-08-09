@@ -39,9 +39,22 @@ export default defineConfig({
   },
   projects: [
     {
-      name: 'Desktop Chrome',
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
       use: {
         ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: ['--no-sandbox'],
+          ...(chromePath ? { executablePath: chromePath } : {}),
+        },
+      },
+    },
+    {
+      name: 'Desktop Chrome',
+      dependencies: ['setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        storageState: 'playwright/.auth/user.json',
         launchOptions: {
           args: ['--no-sandbox'],
           ...(chromePath ? { executablePath: chromePath } : {}),
