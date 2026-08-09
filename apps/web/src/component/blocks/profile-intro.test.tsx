@@ -1,5 +1,5 @@
 import type { ProfileBlockData } from '@skillsheet/db/blocks';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ProfileIntro } from './profile-intro';
@@ -40,12 +40,13 @@ afterEach(() => {
 });
 
 describe('ProfileIntro', () => {
-  it('DOM順は SP の視覚順（氏名→メタ→強み→自己PR）に一致する（スクリーンリーダーの読み上げ順対策）', () => {
+  it('SP では DOM順=視覚順が氏名→メタ→強み→自己PRに一致する（スクリーンリーダーの読み上げ順対策）', () => {
     render(<ProfileIntro data={buildData({})} />);
+    const sp = screen.getByTestId('profile-intro-sp');
     const name = screen.getByText('山田太郎');
-    const meta = screen.getByText('28歳').closest('dl') as HTMLElement;
-    const strengths = screen.getByText('React').closest('ul') as HTMLElement;
-    const pr = screen.getByText('自己PRです。');
+    const meta = within(sp).getByText('28歳').closest('dl') as HTMLElement;
+    const strengths = within(sp).getByText('React').closest('ul') as HTMLElement;
+    const pr = within(sp).getByText('自己PRです。');
 
     // Node.compareDocumentPosition で実際の DOM 出現順を検証する
     // (DOCUMENT_POSITION_FOLLOWING = 4: 第一引数が第二引数より後ろにある)
@@ -54,21 +55,25 @@ describe('ProfileIntro', () => {
     expect(strengths.compareDocumentPosition(pr) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('sm 以上の視覚順は氏名→自己PR→強み→メタに戻す（sm:order-*）', () => {
+  it('sm 以上では DOM順=視覚順が氏名→自己PR→強み→メタに一致する（Issue #221）', () => {
     render(<ProfileIntro data={buildData({})} />);
-    const meta = screen.getByText('28歳').closest('dl');
-    const pr = screen.getByText('自己PRです。');
-    const strengths = screen.getByText('React').closest('ul');
-    expect(pr.className).toContain('sm:order-2');
-    expect(strengths?.className).toContain('sm:order-3');
-    expect(meta?.className).toContain('sm:order-4');
+    const desktop = screen.getByTestId('profile-intro-desktop');
+    const name = screen.getByText('山田太郎');
+    const pr = within(desktop).getByText('自己PRです。');
+    const strengths = within(desktop).getByText('React').closest('ul') as HTMLElement;
+    const meta = within(desktop).getByText('28歳').closest('dl') as HTMLElement;
+
+    expect(name.compareDocumentPosition(pr) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pr.compareDocumentPosition(strengths) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(strengths.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('自己PRが実際に表示行数に収まっているときは「続きを読む」ボタンが出ない', () => {
     scrollHeight = 100;
     clientHeight = 100; // scrollHeight === clientHeight ＝ 切り詰められていない
     render(<ProfileIntro data={buildData({})} />);
-    expect(screen.queryByRole('button', { name: /続きを読む/ })).toBeNull();
+    const sp = screen.getByTestId('profile-intro-sp');
+    expect(within(sp).queryByRole('button', { name: /続きを読む/ })).toBeNull();
   });
 
   it('自己PRが表示行数を超えて隠れているときはボタンが出て、クリックで展開される', () => {
@@ -77,14 +82,15 @@ describe('ProfileIntro', () => {
     const pr = 'あ'.repeat(200);
     render(<ProfileIntro data={buildData({ pr })} />);
 
-    const button = screen.getByRole('button', { name: /続きを読む/ });
+    const sp = screen.getByTestId('profile-intro-sp');
+    const button = within(sp).getByRole('button', { name: /続きを読む/ });
     expect(button).toBeInTheDocument();
 
-    const prEl = screen.getByText(pr);
+    const prEl = within(sp).getByText(pr);
     expect(prEl.className).toContain('line-clamp-6');
 
     fireEvent.click(button);
-    expect(screen.getByRole('button', { name: /折りたたむ/ })).toBeInTheDocument();
+    expect(within(sp).getByRole('button', { name: /折りたたむ/ })).toBeInTheDocument();
     expect(prEl.className).not.toContain('line-clamp-6');
   });
 
@@ -94,8 +100,9 @@ describe('ProfileIntro', () => {
     const pr = 'あ'.repeat(200);
     render(<ProfileIntro data={buildData({ pr })} />);
 
-    const button = screen.getByRole('button', { name: /続きを読む/ });
-    const prEl = screen.getByText(pr);
+    const sp = screen.getByTestId('profile-intro-sp');
+    const button = within(sp).getByRole('button', { name: /続きを読む/ });
+    const prEl = within(sp).getByText(pr);
 
     expect(button).toHaveAttribute('aria-expanded', 'false');
     expect(button).toHaveAttribute('aria-controls', prEl.id);
@@ -104,7 +111,7 @@ describe('ProfileIntro', () => {
     expect(button.className).toContain('min-h-11');
 
     fireEvent.click(button);
-    expect(screen.getByRole('button', { name: /折りたたむ/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(within(sp).getByRole('button', { name: /折りたたむ/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('文字数が少なくても改行区切りで表示行数を超えていればボタンが出る（レビュー指摘: 文字数しきい値では検出できない回帰の防止）', () => {
@@ -112,7 +119,8 @@ describe('ProfileIntro', () => {
     clientHeight = 100; // 短文でも実測で切り詰め有りと判定される状況を再現
     const shortMultilinePr = 'あ\nい\nう\nえ\nお'; // 9文字・5行
     render(<ProfileIntro data={buildData({ pr: shortMultilinePr })} />);
-    expect(screen.getByRole('button', { name: /続きを読む/ })).toBeInTheDocument();
+    const sp = screen.getByTestId('profile-intro-sp');
+    expect(within(sp).getByRole('button', { name: /続きを読む/ })).toBeInTheDocument();
   });
 
   it('sm 以上では折りたたみボタンが無い代わりに line-clamp が常に解除される（#190 回帰: 長文PRがsm+で読めなくなる不具合の防止）', () => {
@@ -120,15 +128,29 @@ describe('ProfileIntro', () => {
     clientHeight = 100;
     const pr = 'あ'.repeat(200);
     render(<ProfileIntro data={buildData({ pr })} />);
-    const prEl = screen.getByText(pr);
-    // SP では line-clamp-6 が付くが、sm 以上では sm:line-clamp-none で必ず解除されること。
+    const desktop = screen.getByTestId('profile-intro-desktop');
+    const prEl = within(desktop).getByText(pr);
+    // デスクトップ版は常に全文表示。
+    expect(prEl.className).toContain('line-clamp-none');
+    // かつボタンは存在しない。
+    expect(within(desktop).queryByRole('button')).toBeNull();
+  });
+
+  it('SP の自己PRは line-clamp-6 を持ち、sm 以上では sm:line-clamp-none で解除される', () => {
+    scrollHeight = 200;
+    clientHeight = 100;
+    const pr = 'あ'.repeat(200);
+    render(<ProfileIntro data={buildData({ pr })} />);
+    const sp = screen.getByTestId('profile-intro-sp');
+    const prEl = within(sp).getByText(pr);
     expect(prEl.className).toContain('line-clamp-6');
     expect(prEl.className).toContain('sm:line-clamp-none');
   });
 
   it('メタ情報の値は min-w-0 + break-words で長い値でも折り返せる（レビュー指摘: 2列グリッドでの隣接列への重なり防止）', () => {
     render(<ProfileIntro data={buildData({ meta: { qualifications: 'Very-Long-Unbroken-Certification-Name' } })} />);
-    const dd = screen.getByText('Very-Long-Unbroken-Certification-Name');
+    const sp = screen.getByTestId('profile-intro-sp');
+    const dd = within(sp).getByText('Very-Long-Unbroken-Certification-Name');
     const row = dd.closest('div');
     expect(dd.className).toContain('break-words');
     expect(dd.className).toContain('min-w-0');
@@ -138,7 +160,8 @@ describe('ProfileIntro', () => {
   it('任意ラベル（Issue #193）が長くてもラベル側が折り返せる（レビュー指摘: shrink-0 のままだと隣接列に重なる）', () => {
     const longLabel = 'ProfessionalCertificationDetails';
     render(<ProfileIntro data={buildData({ meta: { [longLabel]: '値' } })} />);
-    const dt = screen.getByText(longLabel);
+    const sp = screen.getByTestId('profile-intro-sp');
+    const dt = within(sp).getByText(longLabel);
     // shrink-0 は短いラベルを潰さないために残すが、max-w で flex の基準サイズを
     // クランプし break-words で折り返せるようにしないとセル幅を超える。
     expect(dt.className).toContain('shrink-0');
@@ -162,7 +185,8 @@ describe('ProfileIntro', () => {
     try {
       const pr = 'あ'.repeat(200);
       render(<ProfileIntro data={buildData({ pr })} />);
-      expect(screen.queryByRole('button', { name: /続きを読む/ })).toBeNull();
+      const sp = screen.getByTestId('profile-intro-sp');
+      expect(within(sp).queryByRole('button', { name: /続きを読む/ })).toBeNull();
 
       // Webフォントへの差し替えで折り返しが増え、表示行数に収まらなくなったことを再現する。
       scrollHeight = 200;
@@ -171,7 +195,7 @@ describe('ProfileIntro', () => {
         await fontsReadyPromise;
       });
 
-      expect(screen.getByRole('button', { name: /続きを読む/ })).toBeInTheDocument();
+      expect(within(sp).getByRole('button', { name: /続きを読む/ })).toBeInTheDocument();
     } finally {
       Object.defineProperty(document, 'fonts', { configurable: true, value: originalFonts });
     }
