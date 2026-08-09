@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileDown, Moon, PencilLine, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, Loader2, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,7 @@ export function ViewerTopbar({
   reserveEditSlot = false,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
+
   const editButton = canEdit ? (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -66,6 +67,87 @@ export function ViewerTopbar({
     </Tooltip>
   ) : null;
 
+  const viewToggleFieldset = (
+    <fieldset
+      // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
+      // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
+      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
+    >
+      <legend className="sr-only">表示するビュー</legend>
+      {ALL_VIEWS.map((view) => {
+        const on = views.includes(view.id);
+        return (
+          <button
+            key={view.id}
+            type="button"
+            onClick={() => onToggleView(view.id)}
+            aria-pressed={on}
+            // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
+            // shrink-0 + whitespace-nowrap: SP の flex-nowrap + overflow-x-auto で
+            // 横スクロールさせる設計のため、ボタン自体が潰れて文字が折り返さないようにする。
+            className={`softbtn compact shrink-0 whitespace-nowrap ${on ? 'on' : ''}`}
+          >
+            <span aria-hidden className="sdot" />
+            {view.label}
+          </button>
+        );
+      })}
+    </fieldset>
+  );
+
+  // SP は「戻る＋アイコン群」／「ビュートグル」の2段、sm 以上は「戻る…ビュートグル→アイコン群」の1段で、
+  // ビュートグルとアイコン群の視覚的な前後がブレークポイントで入れ替わる。
+  // CSS order で入れ替えると DOM順（タブ順・読み上げ順）が視覚順とズレ、
+  // useMediaQuery で DOM 順を切り替えると SSR が常に SP 順を返すため hydration 後に
+  // デスクトップだけ並びが入れ替わって毎回レイアウトシフトが起きる。
+  // display:none はフォーカス順からも a11y ツリーからも外れるので、CSS だけで
+  // 両ブレークポイントの DOM順=視覚順を成立させられる出し分けを採る。
+  const renderActionIcons = (className: string) => (
+    <div className={className}>
+      {reserveEditSlot ? (
+        <span data-testid="edit-slot" className="size-11 shrink-0">
+          {editButton}
+        </span>
+      ) : (
+        editButton
+      )}
+
+      {onDownloadPdf && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void onDownloadPdf()}
+              disabled={pdfLoading}
+              aria-busy={pdfLoading}
+              aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
+              className="min-h-11 min-w-11"
+            >
+              {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
+        </Tooltip>
+      )}
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="テーマ切り替え"
+            className="min-h-11 min-w-11"
+          >
+            {mode === 'dark' ? <Sun /> : <Moon />}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
+      </Tooltip>
+    </div>
+  );
+
   return (
     <motion.header
       initial={{ y: -100 }}
@@ -75,81 +157,36 @@ export function ViewerTopbar({
       className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
     >
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
-        <Link
-          href="/view"
-          className="flex min-h-11 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent"
-          aria-label="シート一覧へ戻る"
-        >
-          <ArrowLeft className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span aria-hidden className="size-[9px] rounded-[2px] bg-primary" />
-          <span className="text-[15px] font-semibold text-foreground">{name || 'エンジニアスキルシート'}</span>
-          {company && <span className="font-mono text-[11.5px] text-faint">{company}</span>}
-        </Link>
-
-        <div className="min-w-4 flex-1" />
-
-        <fieldset className="m-0 flex flex-wrap items-center gap-1.5 border-0 p-0">
-          <legend className="sr-only">表示するビュー</legend>
-          {ALL_VIEWS.map((view) => {
-            const on = views.includes(view.id);
-            return (
-              <button
-                key={view.id}
-                type="button"
-                onClick={() => onToggleView(view.id)}
-                aria-pressed={on}
-                // 値を選ぶタグ(.chip)ではなく操作ボタン(.softbtn)。ドットの色は .softbtn .sdot 側で切り替わる。
-                className={`softbtn compact ${on ? 'on' : ''}`}
-              >
-                <span aria-hidden className="sdot" />
-                {view.label}
-              </button>
-            );
-          })}
-        </fieldset>
-
-        <div className="flex items-center gap-1">
-          {reserveEditSlot ? (
-            <span data-testid="edit-slot" className="size-11 shrink-0">
-              {editButton}
+        {/* 「戻るリンク＋SP用アイコン群」を折り返さない1つの行にまとめる。
+            親は flex-wrap だが、flexbox は「縮めてから折り返す」のではなく
+            「入らなければ折り返す」ため、リンクに min-w-0 を付けるだけでは足りない。
+            氏名が未入力のシートはフォールバックの「エンジニアスキルシート」が入って
+            リンクだけで約222px を占め、アイコン群が2段目・ビュートグルが3段目へ押し出されて
+            #190 で狙った「SPは2段」が崩れる（実機で3段=177px を確認）。
+            この内側コンテナは既定の flex-nowrap なので、リンクが縮んで省略記号に逃げる。
+            sm 以上では w-auto + flex-1 となり、従来のスペーサー（min-w-4 flex-1）と同じく
+            ビュートグルとアイコン群を右端へ寄せる役割を兼ねる。 */}
+        {/* flex-1 は sm 以上だけに付ける。SP で flex-1 を付けると flex-basis が 0% になり
+            w-full（100%）を打ち消して行を占有できず、ビュートグルが同じ行に載ってしまう。 */}
+        <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto sm:min-w-fit sm:flex-1">
+          <Link
+            href="/view"
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent sm:min-w-fit sm:flex-none"
+            aria-label="シート一覧へ戻る"
+          >
+            <ArrowLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span aria-hidden className="size-[9px] shrink-0 rounded-[2px] bg-primary" />
+            <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">
+              {name || 'エンジニアスキルシート'}
             </span>
-          ) : (
-            editButton
-          )}
+            {company && <span className="min-w-0 truncate font-mono text-[11.5px] text-faint">{company}</span>}
+          </Link>
 
-          {onDownloadPdf && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => void onDownloadPdf()}
-                  disabled={pdfLoading}
-                  aria-label="PDFダウンロード"
-                  className="min-h-11 min-w-11"
-                >
-                  <FileDown />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>PDFをダウンロード</TooltipContent>
-            </Tooltip>
-          )}
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleTheme}
-                aria-label="テーマ切り替え"
-                className="min-h-11 min-w-11"
-              >
-                {mode === 'dark' ? <Sun /> : <Moon />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
-          </Tooltip>
+          {renderActionIcons('flex shrink-0 items-center gap-2 sm:hidden')}
         </div>
+
+        {viewToggleFieldset}
+        {renderActionIcons('hidden shrink-0 items-center gap-2 sm:flex')}
       </div>
     </motion.header>
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileDown, FileText, Moon, PencilLine, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, FileText, Loader2, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -32,7 +32,7 @@ const Header = ({
   const editButton = canEdit ? (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー">
+        <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー" className="min-h-11 min-w-11">
           <Link href="/builder">
             <PencilLine />
           </Link>
@@ -84,9 +84,11 @@ const Header = ({
                   size="icon"
                   onClick={() => void onDownloadPdf()}
                   disabled={pdfLoading}
-                  aria-label="PDFダウンロード"
+                  aria-busy={pdfLoading}
+                  aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
+                  className="min-h-11 min-w-11"
                 >
-                  <FileDown />
+                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>PDFをダウンロード</TooltipContent>
@@ -95,7 +97,13 @@ const Header = ({
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="テーマ切り替え">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleTheme}
+                aria-label="テーマ切り替え"
+                className="min-h-11 min-w-11"
+              >
                 {mode === 'dark' ? <Sun /> : <Moon />}
               </Button>
             </TooltipTrigger>

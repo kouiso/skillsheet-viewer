@@ -306,10 +306,10 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
       >
         <div
           ref={contentRef}
-          className={isDashboard ? 'space-y-12' : 'rounded border border-border bg-card p-4 sm:p-6 md:p-8'}
+          className={isDashboard ? 'space-y-8 sm:space-y-12' : 'rounded border border-border bg-card p-4 sm:p-6 md:p-8'}
         >
           {blocks ? (
-            <div className={isDashboard ? 'space-y-12' : 'space-y-0'}>
+            <div className={isDashboard ? 'space-y-8 sm:space-y-12' : 'space-y-0'}>
               {groupedBlocks.map((group) => {
                 if (group.kind === 'skills') {
                   if (!showView('skills')) return null;

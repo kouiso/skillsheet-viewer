@@ -44,6 +44,7 @@ import {
   type TableColumn,
   tableBlockToMarkdown,
 } from '@skillsheet/db/blocks';
+import { sanitizeMarkdown } from '@skillsheet/db/sanitize-html';
 import { TRPCClientError } from '@trpc/client';
 import {
   AlignCenter,
@@ -179,7 +180,7 @@ const itemToBlockInput = (item: EditorItem): BlockInput => {
 const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolean }): string => {
   switch (item.type) {
     case 'markdown':
-      return item.markdown;
+      return sanitizeMarkdown(item.markdown);
     case 'table':
       return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
     case 'skills':
@@ -300,7 +301,7 @@ const TableBlockEditor = ({
                     aria-label={`列${ci + 1}の見出し`}
                     className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
                   />
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
                     {ALIGN_OPTIONS.map(({ value, Icon, label }) => (
                       <button
                         key={value}
@@ -1652,7 +1653,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               </span>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+          {/* SP では自動保存インジケータのラベルが長い（「自動保存に失敗 — 保存ボタンで再試行」で
+              210px）。shrink-0 + whitespace-nowrap のままだと操作群が画面外へ押し出され、
+              375px/320px で横スクロールが発生し、**メッセージが押せと言っている保存ボタン自体が
+              画面外に出て押せなくなる**（実機実測: 右端 394px > 幅 375px。gap-1 だった頃から続く既存不具合）。
+              SP だけ折り返しを許可し、インジケータが自分の行へ落ちるようにする。
+              sm 以上は従来どおり1行（flex-nowrap + shrink-0）。 */}
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:shrink-0 sm:flex-nowrap">
             {activeTab === 'project' && (
               <button type="button" onClick={() => setHistoryOpen(true)} className="btn sm">
                 ↺ 履歴
@@ -1760,7 +1767,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               </div>
               <ul className="space-y-1">
                 {sheets.map((sheet) => (
-                  <li key={sheet.id} className="flex items-center gap-1">
+                  <li key={sheet.id} className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {

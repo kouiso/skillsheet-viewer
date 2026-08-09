@@ -1,26 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { expect, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { deleteSheet, listSheets } from '@skillsheet/db';
+import { authFile, login } from './auth';
 
-const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
-const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
 const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
+
+test.use({ storageState: authFile });
 
 // 実行ごとに一意な prefix にする。固定 prefix だと、CI で別の PR/ブランチの実行が
 // 同じ共有 DB に対して同時に走った場合、beforeAll/afterAll の一括掃除が
 // 他の実行が作成中・編集中のシートを削除してしまう（CodeRabbit 指摘）。
 const REPRO_TITLE_PREFIX = `Repro Dashboard ${randomUUID().slice(0, 8)}`;
 let reproSheetId = '';
-
-async function login(page: Page) {
-  await page.goto('/login');
-  await page.getByLabel('メールアドレス').fill(email);
-  await page.getByLabel('パスワード').fill(password);
-  await page.getByRole('button', { name: 'ログイン' }).click();
-  await page.waitForURL('/builder');
-}
 
 async function cleanupSheetsByPrefix(prefix: string) {
   const sheets = await listSheets();
