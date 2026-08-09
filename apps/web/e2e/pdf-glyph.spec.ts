@@ -70,8 +70,10 @@ test('本番経路のブラウザ toBlob PDF に日本語グリフが描画さ�
 
   await login(page);
   await page.goto(`/builder?sheet=${sheetId}`, { waitUntil: 'networkidle' });
-  await page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click();
-  const [popup] = await Promise.all([page.waitForEvent('popup')]);
+  const [popup] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click(),
+  ]);
   await popup.waitForLoadState('networkidle');
 
   const [download] = await Promise.all([
