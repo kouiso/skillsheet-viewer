@@ -1,15 +1,34 @@
 import type { Block } from '@skillsheet/db/blocks';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { TRPCClientError } from '@trpc/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
 
-const mockSave = vi.fn().mockResolvedValue({ ok: true });
-vi.mock('./actions', () => ({
-  saveBlocksAction: (payload: { title: string; blocks: unknown[]; sheetId?: string }) => mockSave(payload),
-  createSheetAction: vi.fn().mockResolvedValue({ ok: true, sheetId: 'new-id' }),
-  deleteSheetAction: vi.fn().mockResolvedValue({ ok: true }),
+// TRPCClientError.data.code を実クラスで組み立てる（instanceof チェックを本物にするため）。
+function trpcClientError(code: string): TRPCClientError<never> {
+  return new TRPCClientError(code, { result: { error: { data: { code } } } } as never);
+}
+
+const mockSave = vi.fn().mockResolvedValue({ updatedAt: new Date() });
+const mockCreate = vi.fn().mockResolvedValue({ sheetId: 'new-id' });
+const mockDelete = vi.fn().mockResolvedValue({ ok: true });
+const mockInvalidate = vi.fn().mockResolvedValue(undefined);
+// builder-client.tsx は trpc.sheet.*.useMutation().mutateAsync(...) と
+// trpc.sheet.list.useQuery(undefined, { initialData }) / trpc.useUtils() を呼ぶため、
+// フックが最小限の形を返すようモックする。useQuery は initialData をそのまま返せば十分
+// （このテストでは一覧の再取得タイミングそのものは検証しない）。
+vi.mock('@/lib/trpc-client', () => ({
+  trpc: {
+    sheet: {
+      save: { useMutation: () => ({ mutateAsync: mockSave }) },
+      create: { useMutation: () => ({ mutateAsync: mockCreate }) },
+      delete: { useMutation: () => ({ mutateAsync: mockDelete }) },
+      list: { useQuery: (_input: unknown, opts: { initialData: unknown }) => ({ data: opts.initialData }) },
+    },
+    useUtils: () => ({ sheet: { list: { invalidate: mockInvalidate } } }),
+  },
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -53,7 +72,7 @@ describe('BuilderClient', () => {
     expect(areas[0].value).toBe('## B');
   });
 
-  it('保存ボタンで {title, blocks, sheetId} が saveBlocksAction に渡る', async () => {
+  it('保存ボタンで {title, blocks, sheetId} が保存 mutation に渡る', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /保存/ }));
@@ -64,6 +83,65 @@ describe('BuilderClient', () => {
         sheetId: 'sheet-1',
       }),
     );
+  });
+
+  // headless E2E で再現した実バグの回帰テスト: unstable_cache のキャッシュ命中時は内部で
+  // JSON.stringify/JSON.parse を通すため、RSC が渡す sheets[].updatedAt が Date ではなく
+  // ISO 文字列になることがある（既存シートを開いて保存するたびに再現）。expectedUpdatedAt は
+  // z.date() を要求するため、文字列のまま送ると保存 mutation が BAD_REQUEST で毎回失敗していた。
+  it('initialSheets の updatedAt が文字列（unstable_cache 由来）でも Date として保存 mutation に渡る', async () => {
+    const user = userEvent.setup();
+    const sheetsWithStringUpdatedAt = [
+      { id: 'sheet-1', title: 'テストシート', updatedAt: '2026-08-05T12:00:00.000Z' as unknown as Date },
+    ];
+    render(
+      <BuilderClient
+        initialBlocks={mdBlocks(['## A'])}
+        initialTitle="マイシート"
+        sheets={sheetsWithStringUpdatedAt}
+        activeSheetId="sheet-1"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockSave).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedUpdatedAt: new Date('2026-08-05T12:00:00.000Z') }),
+    );
+    const call = mockSave.mock.calls[0][0];
+    expect(call.expectedUpdatedAt).toBeInstanceOf(Date);
+  });
+
+  // 「新規シート」経由の router.push は key={activeSheetId} の再マウントで編集中 state を
+  // 破棄する（シート切替・閲覧へリンクと同じ SPA 内遷移）。CodeRabbit 指摘: 未保存ガードが
+  // 作成導線だけ抜けていた（Major/データ消失）ため、confirmDiscardChanges() 経由になったことを検証する。
+  it('未保存の変更がある状態で「新規シート」を押すと確認ダイアログを挟み、拒否時は作成ダイアログを開かない', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.queryByText('新規シートを作成')).not.toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it('未保存の変更があっても確認ダイアログを承諾すれば「新規シート」の作成ダイアログが開く', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it('未保存の変更が無ければ確認ダイアログを挟まず「新規シート」の作成ダイアログが開く', async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+    confirmSpy.mockRestore();
   });
 
   // プレビューは別ウィンドウに分離済み（builder-client 内には描画しない）ため、
@@ -211,6 +289,77 @@ describe('BuilderClient', () => {
       }),
     );
   });
+
+  // Codex 指摘の回帰テスト: sheet.list は staleTime: 60s の間 initialData を再利用するため、
+  // タイトルを変更して保存してもサイドバーは自動では気づかない。保存成功時にタイトルが
+  // 変わっていれば utils.sheet.list.invalidate() でサイドバー表示を追従させる。
+  it('タイトルを変更して保存すると sheet.list を invalidate する', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="旧" {...defaultProps} />);
+    const titleInput = screen.getByLabelText('タイトル');
+    await user.clear(titleInput);
+    await user.type(titleInput, '新タイトル');
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockInvalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('タイトルを変えずに保存しても sheet.list は invalidate しない', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="変わらないタイトル" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+
+  // chatgpt-codex-connector レビュー指摘: 項目名が空で値だけある行は、ラベル重複と同じ
+  // blockedItemIds にまとめられて保存をブロックするが、行単位の aria-invalid・エラー文言は
+  // ラベル重複（isConflicting）だけを見ており、この行には何の印も付かず「重複」という
+  // 誤った診断だけが画面全体に出ていた。行単位でも実際の理由（未入力）を示すことを確認する。
+  it('カスタム項目のラベルが空で値だけある行は、重複メッセージではなく未入力の専用メッセージを表示する', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('値'), 'A型');
+
+    expect(
+      screen.getByText('項目名が未入力のため、この項目は保存されません。項目名を入力してください。'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/項目名が他の項目と重複しているため/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('項目名')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  // CodeRabbit レビュー指摘: 通常の `{}` に `meta['__proto__'] = 値` を代入すると、値が
+  // 文字列（有効なプロトタイプ値ではない）のため代入が黙って無視され、own property が
+  // 作られずラベルごと保存結果から消えていた（実測で確認済み）。ラベルは編集者の自由
+  // 入力で `__proto__` を予約語として弾いていないため、通常の入力だけで再現する。
+  it('カスタム項目のラベルが __proto__ でも通常のプロパティとして保存される', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('項目名'), '__proto__');
+    await user.type(screen.getByPlaceholderText('値'), 'テスト値');
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    const profileData = mockSave.mock.calls[0][0].blocks[0].data;
+    expect(Object.hasOwn(profileData.meta, '__proto__')).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(profileData.meta, '__proto__')?.value).toBe('テスト値');
+  });
 });
 
 describe('BuilderClient 自動保存', () => {
@@ -262,8 +411,30 @@ describe('BuilderClient 自動保存', () => {
     expect(mockSave).toHaveBeenCalledTimes(1);
   });
 
+  // Codex 指摘の回帰テスト（手動保存側と同じ理由）。自動保存でタイトルが変わった場合も
+  // サイドバーの sheet.list を invalidate してタイトルの追従を保証する。
+  it('タイトル変更を含む自動保存は sheet.list を invalidate する', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="旧" {...defaultProps} />);
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '新タイトル（自動保存）' } });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockInvalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('内容のみの自動保存（タイトル不変）は sheet.list を invalidate しない', async () => {
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="変わらないタイトル" {...defaultProps} />);
+    typeMarkdown('## A 追記');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+
   it('保存の実行中に編集が入ると、完了後にちょうど 1 回だけ追撃保存する', async () => {
-    let resolveFirst!: (value: { ok: boolean }) => void;
+    let resolveFirst!: (value: { updatedAt: Date }) => void;
     mockSave.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -286,7 +457,7 @@ describe('BuilderClient 自動保存', () => {
     expect(mockSave).toHaveBeenCalledTimes(1);
     // 1 回目が完了すると追撃保存がちょうど 1 回走り、保存中の編集分が含まれる
     await act(async () => {
-      resolveFirst({ ok: true });
+      resolveFirst({ updatedAt: new Date() });
     });
     expect(mockSave).toHaveBeenCalledTimes(2);
     expect(mockSave).toHaveBeenLastCalledWith(
@@ -302,7 +473,7 @@ describe('BuilderClient 自動保存', () => {
   });
 
   it('競合の初回で自動保存を恒久停止し、ダイアログではなく競合バナーを表示する', async () => {
-    mockSave.mockResolvedValueOnce({ ok: false, error: 'conflict' });
+    mockSave.mockRejectedValueOnce(trpcClientError('CONFLICT'));
     const confirmSpy = vi.spyOn(window, 'confirm');
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     typeMarkdown('## Aa');
@@ -325,7 +496,7 @@ describe('BuilderClient 自動保存', () => {
   });
 
   it('自動保存の失敗（非競合）は同一内容で無限リトライせず、新しい編集で再試行する', async () => {
-    mockSave.mockResolvedValueOnce({ ok: false, error: 'unauthorized' });
+    mockSave.mockRejectedValueOnce(trpcClientError('UNAUTHORIZED'));
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     typeMarkdown('## Aa');
     await act(async () => {

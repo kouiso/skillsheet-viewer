@@ -90,14 +90,14 @@ Next.js App Router では `apps/web/app` 配下のディレクトリ構造がそ
 | `/view/db` | `app/view/db/page.tsx` | Server | デフォルトシート単体表示（後方互換） |
 | `/view/db/[id]` | `app/view/db/[id]/page.tsx` | Server | ID 指定のシート表示 |
 | `/view/[path]` | `app/view/[path]/page.tsx` | Server | GitHub 由来 `.md` の表示（レガシー経路） |
-| `/compare` | `app/compare/page.tsx` | Server | 2 シートの左右比較 |
 | `/builder` | `app/builder/page.tsx` | Server → Client | 編集者向けブロックビルダー |
 | `/login` | `app/login/page.tsx` | Client | 編集者ログイン（Better Auth） |
 | `/viewer-auth` | `app/viewer-auth/page.tsx` | Client | 閲覧コード認証（HMAC） |
-| `/api/auth` | `app/api/auth/route.ts` | Route Handler | 閲覧コード検証＋ cookie 発行 |
+| `/api/auth` | `app/api/auth/route.ts` | 互換 Route Handler | `auth.login` procedure への旧クライアント用アダプタ |
 | `/api/auth/[...all]` | `app/api/auth/[...all]/route.ts` | Route Handler | Better Auth の全エンドポイント |
-| `/api/logout` | `app/api/logout/route.ts` | Route Handler | 閲覧 cookie の失効 |
-| `/api/revalidate` | `app/api/revalidate/route.ts` | Route Handler | GitHub 読み経路のキャッシュ失効 |
+| `/api/logout` | `app/api/logout/route.ts` | 互換 Route Handler | `auth.logout` procedure への旧クライアント用アダプタ |
+| `/api/revalidate` | `app/api/revalidate/route.ts` | 互換 Route Handler | `maintenance.revalidate` procedure への運用用アダプタ |
+| `/api/trpc/[trpc]` | `app/api/trpc/[trpc]/route.ts` | Route Handler | tRPC の HTTP エンドポイント（`fetchRequestHandler`）。画面の読み書き・閲覧認証・権限状態を集約 |
 
 `[path]` や `[id]` は動的セグメントで、`params` は `Promise` として渡る（`const { id } = await params`）。
 
@@ -110,20 +110,21 @@ Next.js App Router では `apps/web/app` 配下のディレクトリ構造がそ
 - ハイドレーション前に `localStorage` のテーマ設定を `<html>` の `.dark` クラスへ反映するインラインスクリプトを注入（テーマの FOUC 防止）。
 - `Providers`（`app/providers.tsx`）で全体をラップ。
 
-### RSC とデータ取得
+### RSC とデータ取得（tRPC server caller）
 
-一覧・表示系のページはサーバー側で DB を読む Server Component である。DB 依存（`DATABASE_URL`）はランタイム専用のため、`next build` の静的解析で評価されないよう `connection()`（`next/server`）を先頭で呼び、そのコンポーネントを動的レンダリングに切り替えている。
+一覧・表示系のページはサーバー側で tRPC の server caller（`createServerCaller()`、`src/server/trpc/caller.ts`）経由でデータを読む Server Component である。`createCallerFactory` で作った caller は HTTP を経由せず procedure を直接呼び出すため、RSC からのデータ取得に往復コストが乗らない。DB 依存（`DATABASE_URL`）はランタイム専用のため、`next build` の静的解析で評価されないよう `connection()`（`next/server`）を先頭で呼び、そのコンポーネントを動的レンダリングに切り替えている。
 
 ```tsx
 // app/view/page.tsx（抜粋）
 export default async function SheetsListPage() {
   await connection(); // DATABASE_URL はランタイム専用。動的レンダリングを確保
-  const sheets = await getCachedDbSheets();
+  const caller = await createServerCaller();
+  const sheets = await caller.sheet.list();
   return <DbSheetsListClient initialSheets={sheets} hasError={hasError} />;
 }
 ```
 
-サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。
+サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。ビルダーのような書き込み系クライアントコンポーネントは `@trpc/react-query` の `trpc.sheet.*.useMutation()` / `useQuery()`（`src/lib/trpc-client.ts`、`app/providers.tsx` の `TRPCReactProvider`）を使い、HTTP 経由で `/api/trpc/[trpc]` を叩く。認可・入力検証（zod）・エラーコード（`TRPCError`）は procedure 側（`src/server/trpc/router/*.ts`）に集約されており、ページ側やクライアントコンポーネント側での再検証は行わない。
 
 ### /view 配下の閲覧ゲート（レイアウトによる保護）
 
@@ -139,7 +140,7 @@ export default async function ViewLayout({ children }: { children: React.ReactNo
 }
 ```
 
-`/viewer-auth` と `/login` はこのセグメントの外にあるため、ゲート対象外である。`/compare` は `view` セグメント外だが、ページ本体で明示的に `requireViewer()` を呼んで同じ保護をかけている。認証の詳細は [02 認証](02-authentication.md) を参照。
+`/viewer-auth` と `/login` はこのセグメントの外にあるため、ゲート対象外である。認証の詳細は [02 認証](02-authentication.md) を参照。
 
 ---
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { FileDown, FileText, Moon, PencilLine, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, FileText, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -12,9 +12,19 @@ interface HeaderProps {
   title?: string;
   onDownloadPdf?: () => void | Promise<void>;
   pdfLoading?: boolean;
+  /** 編集者ログイン済みか。false のときは編集導線（ビルダーリンク）を出さない。 */
+  canEdit?: boolean;
+  /** 指定時、タイトル左に一覧などへ戻るリンクを出す（例: "/view"）。 */
+  backHref?: string;
 }
 
-const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pdfLoading = false }: HeaderProps) => {
+const Header = ({
+  title = 'エンジニアスキルシート',
+  onDownloadPdf,
+  pdfLoading = false,
+  canEdit = true,
+  backHref,
+}: HeaderProps) => {
   const { mode, toggleTheme } = useThemeMode();
 
   return (
@@ -25,22 +35,36 @@ const Header = ({ title = 'エンジニアスキルシート', onDownloadPdf, pd
       className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md"
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <div className="flex items-center gap-2">
-          <FileText className="size-5 text-primary" />
-          <span className="font-mono text-sm font-semibold tracking-wider text-foreground">{title}</span>
-        </div>
+        {backHref ? (
+          <Link
+            href={backHref}
+            className="flex min-h-11 items-center gap-2 rounded-md -mx-2 px-2 transition-colors hover:bg-accent"
+            aria-label="シート一覧へ戻る"
+          >
+            <ArrowLeft className="size-4 text-muted-foreground" aria-hidden="true" />
+            <FileText className="size-5 text-primary" />
+            <span className="font-mono text-sm font-semibold tracking-wider text-foreground">{title}</span>
+          </Link>
+        ) : (
+          <div className="flex items-center gap-2">
+            <FileText className="size-5 text-primary" />
+            <span className="font-mono text-sm font-semibold tracking-wider text-foreground">{title}</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー">
-                <Link href="/builder">
-                  <PencilLine />
-                </Link>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>編集／ビルダー</TooltipContent>
-          </Tooltip>
+          {canEdit && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" asChild aria-label="編集／ビルダー">
+                  <Link href="/builder">
+                    <PencilLine />
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>編集／ビルダー</TooltipContent>
+            </Tooltip>
+          )}
 
           {onDownloadPdf && (
             <Tooltip>

@@ -30,6 +30,7 @@ import {
   type ExperienceBlockData,
   experienceBlockToMarkdown,
   isBlockInputEmpty,
+  PROFILE_META_LABELS,
   type ProfileBlockData,
   type ProfileMeta,
   type ProjectBlockData,
@@ -43,6 +44,7 @@ import {
   type TableColumn,
   tableBlockToMarkdown,
 } from '@skillsheet/db/blocks';
+import { TRPCClientError } from '@trpc/client';
 import {
   AlignCenter,
   AlignLeft,
@@ -60,14 +62,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DateTokenPicker } from '@/components/date-token-picker';
 import { SelectOrCustom } from '@/components/select-or-custom';
 import { Button } from '@/components/ui/button';
 import { useThemeMode } from '@/context/theme-context';
+import { trpc } from '@/lib/trpc-client';
 
-import { createSheetAction, deleteSheetAction, saveBlocksAction } from './actions';
 import { type HistoryEntry, loadHistory, pushHistory } from './history';
 import { HistoryDrawer } from './history-drawer';
 import { ProjectEditor, type ProjectEditorSelection } from './project-editor';
@@ -89,6 +91,11 @@ const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
 // design（editor/app.jsx）は 600ms。手を止めた瞬間に「保存済み」へ変わる体感を狙った値で、
 // 案件エディタは 1 フィールドずつ触る操作が多いため長い待ちだと保存状態が読み取れない。
 const AUTOSAVE_DEBOUNCE_MS = 600;
+
+/** シート一覧の鮮度保持時間。react-query の既定 staleTime: 0 だと RSC が渡した
+ * initialData が即座に stale 扱いになり、マウント直後に取得済みの一覧を HTTP で
+ * 二重取得してしまう。作成・削除後の更新は invalidate() が明示的に担う。 */
+const SHEET_LIST_STALE_TIME_MS = 60_000;
 
 // 自動保存の状態機械。idle（初期）→ saving → saved を巡回し、
 // conflict は終端（同一セッション中は自動保存を再開しない）。
@@ -291,7 +298,7 @@ const TableBlockEditor = ({
                     onChange={(e) => setLabel(ci, e.target.value)}
                     placeholder={`列${ci + 1}`}
                     aria-label={`列${ci + 1}の見出し`}
-                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                   <div className="flex items-center gap-1">
                     {ALIGN_OPTIONS.map(({ value, Icon, label }) => (
@@ -301,13 +308,13 @@ const TableBlockEditor = ({
                         onClick={() => setAlign(ci, value)}
                         aria-label={`列${ci + 1}を${label}`}
                         aria-pressed={col.align === value}
-                        className={`rounded p-1 ${
+                        className={`inline-flex h-11 w-11 items-center justify-center rounded ${
                           col.align === value
                             ? 'bg-primary text-primary-foreground'
                             : 'text-muted-foreground hover:bg-muted'
                         }`}
                       >
-                        <Icon className="size-3.5" />
+                        <Icon className="size-4" />
                       </button>
                     ))}
                     <button
@@ -315,9 +322,9 @@ const TableBlockEditor = ({
                       onClick={() => removeColumn(ci)}
                       disabled={columns.length <= 1}
                       aria-label={`列${ci + 1}を削除`}
-                      className="ml-auto rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                      className="ml-auto inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-destructive disabled:opacity-30"
                     >
-                      <Trash2 className="size-3.5" />
+                      <Trash2 className="size-4" />
                     </button>
                   </div>
                 </div>
@@ -328,7 +335,7 @@ const TableBlockEditor = ({
                 type="button"
                 onClick={addColumn}
                 aria-label="列を追加"
-                className="rounded p-1 text-muted-foreground hover:text-foreground"
+                className="inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-foreground"
               >
                 <Plus className="size-4" />
               </button>
@@ -346,7 +353,7 @@ const TableBlockEditor = ({
                     value={row[ci] ?? ''}
                     onChange={(e) => setCell(ri, ci, e.target.value)}
                     aria-label={`${ri + 1}行${ci + 1}列`}
-                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
               ))}
@@ -355,9 +362,9 @@ const TableBlockEditor = ({
                   type="button"
                   onClick={() => removeRow(ri)}
                   aria-label={`${ri + 1}行目を削除`}
-                  className="rounded p-1 text-muted-foreground hover:text-destructive"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-destructive"
                 >
-                  <Trash2 className="size-3.5" />
+                  <Trash2 className="size-4" />
                 </button>
               </td>
             </tr>
@@ -367,9 +374,9 @@ const TableBlockEditor = ({
       <button
         type="button"
         onClick={addRow}
-        className="mt-1 flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        className="mt-1 inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
       >
-        <Plus className="size-3.5" />
+        <Plus className="size-4" />
         行を追加
       </button>
     </div>
@@ -404,10 +411,13 @@ const SkillsBlockEditor = ({
         value={category}
         onChange={(e) => setCategory(e.target.value)}
         placeholder="カテゴリ（例: プログラミング言語）"
-        className="w-full rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
+      {/* w-full だけだと table-layout:auto がコンテナ幅に収めようと各列を圧縮し、320px では
+          「経験年数」ヘッダーが1文字ずつ縦積みになっていた（#150）。min-w を与えてテーブル自体を
+          コンテナよりワイドにし、overflow-x-auto の横スクロールを実際に発火させる。 */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full min-w-[480px] border-collapse text-sm">
           <thead>
             <tr>
               <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
@@ -428,7 +438,7 @@ const SkillsBlockEditor = ({
                     onChange={(e) => setSkill(i, 'name', e.target.value)}
                     placeholder="スキル名（例: TypeScript）"
                     aria-label={`スキル${i + 1}の名称`}
-                    className="w-full min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
                 <td className="border border-border p-1">
@@ -439,7 +449,7 @@ const SkillsBlockEditor = ({
                     value={s.years}
                     onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
                     aria-label={`スキル${i + 1}の経験年数`}
-                    className="w-full rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
                 <td className="border border-border p-1">
@@ -455,9 +465,9 @@ const SkillsBlockEditor = ({
                     type="button"
                     onClick={() => removeSkill(i)}
                     aria-label={`スキル${i + 1}を削除`}
-                    className="rounded p-1 text-muted-foreground hover:text-destructive"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-destructive"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Trash2 className="size-4" />
                   </button>
                 </td>
               </tr>
@@ -468,9 +478,9 @@ const SkillsBlockEditor = ({
       <button
         type="button"
         onClick={addSkill}
-        className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+        className="inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
       >
-        <Plus className="size-3.5" />
+        <Plus className="size-4" />
         スキルを追加
       </button>
     </div>
@@ -509,7 +519,7 @@ const ExperienceBlockEditor = ({
         onChange={(e) => set('role', e.target.value)}
         placeholder="職種（例: フロントエンドエンジニア）"
         aria-label="職種"
-        className="w-full rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <textarea
         value={data.description}
@@ -517,32 +527,162 @@ const ExperienceBlockEditor = ({
         rows={4}
         placeholder="業務内容"
         aria-label="業務内容"
-        className="w-full resize-y rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
       />
     </div>
   );
 };
 
-/** メタ情報（年齢/勤務形態/最寄り駅/学歴）の入力定義。 */
-const PROFILE_META_FIELDS: { key: keyof ProfileMeta; label: string; placeholder: string }[] = [
-  { key: 'age', label: '年齢', placeholder: '例: 30代前半' },
-  { key: 'work', label: '勤務形態', placeholder: '例: フルリモート' },
-  { key: 'station', label: '最寄り駅', placeholder: '例: 守山駅' },
-  { key: 'education', label: '学歴', placeholder: '例: ○○大学卒' },
+// よく使う既知8項目の入力欄（プレースホルダ）。PROFILE_META_LABELS（packages/db）と
+// キーを揃えること。並び順もここが基準になる。
+const KNOWN_PROFILE_META_FIELDS: { key: keyof ProfileMeta; placeholder: string }[] = [
+  { key: 'age', placeholder: '例: 30代前半' },
+  { key: 'gender', placeholder: '例: 男' },
+  { key: 'qualifications', placeholder: '例: 自動車普通車免許' },
+  { key: 'education', placeholder: '例: ○○大学卒' },
+  { key: 'work', placeholder: '例: フルリモート' },
+  { key: 'station', placeholder: '例: 守山駅' },
+  { key: 'specialties', placeholder: '例: フロントエンド設計' },
+  { key: 'expertise', placeholder: '例: チームマネジメント' },
 ];
+const KNOWN_PROFILE_META_KEYS = new Set(KNOWN_PROFILE_META_FIELDS.map((f) => f.key));
 
-/** プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。 */
+let customMetaRowSeq = 0;
+
+/** 既知8項目に無い任意のメタ項目の編集行。ラベル自体を data.meta のキーとして保存する。 */
+interface CustomMetaRow {
+  /** React の再レンダリング間でも安定させるためのローカル識別子（保存キーではない）。 */
+  id: string;
+  label: string;
+  value: string;
+}
+
+// 既知8項目の表示ラベル（「年齢」等）。任意項目のラベルにこれと同じ文字列を使われると、
+// 内部キーは別（例: 既知の `age` と任意項目の `年齢`）でも画面・PDF上は同じラベルで
+// 2行表示され紛らわしい（CodeRabbit レビュー指摘）。内部キーと合わせて予約する。
+const RESERVED_PROFILE_META_LABELS = new Set(Object.values(PROFILE_META_LABELS));
+
+/**
+ * ラベルが既知8項目のキー・表示ラベル、または他の行のラベルと衝突している行の id を返す。
+ * 衝突したまま meta へ詰めると `meta[label] = value` の代入が先勝ちの値を無警告で
+ * 上書きし、保存後にリロードすると片方が消えたように見える（Codex レビュー指摘）。
+ * 最初に出現した行だけを有効とし、以降の同名行は衝突として保存対象から除外する。
+ */
+const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
+  const conflicts = new Set<string>();
+  const seenLabels = new Set<string>();
+  for (const row of rows) {
+    const label = row.label.trim();
+    if (!label) continue;
+    if (
+      KNOWN_PROFILE_META_KEYS.has(label as keyof ProfileMeta) ||
+      RESERVED_PROFILE_META_LABELS.has(label) ||
+      seenLabels.has(label)
+    ) {
+      conflicts.add(row.id);
+    } else {
+      seenLabels.add(label);
+    }
+  }
+  return conflicts;
+};
+
+/**
+ * プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。
+ *
+ * meta の既知8項目（年齢・性別・資格・学歴・勤務形態・最寄り駅・得意分野・得意業務）は
+ * 固定の入力欄を出す。それ以外の任意項目は「項目を追加」で行を増やせる（Issue #193:
+ * 固定4項目のみで、値がある性別・資格を編集画面から直せなかった。固定リストへ1個ずつ
+ * 足す設計は同じ問題を再生産するため、任意キーを許容する設計にした）。
+ *
+ * 任意項目のラベル入力は data.meta のキーそのものを1文字ごとに書き換えると、
+ * オブジェクトキーの挿入順が変わって行の並びが跳ねたり、React の key 変化で
+ * 入力中にフォーカスが飛んだりする。そのため、ラベル編集中の行識別子はローカル
+ * state（CustomMetaRow.id）で持ち、変更のたびに data.meta 全体を組み立て直して
+ * 親へ渡す。
+ */
 const ProfileBlockEditor = ({
   data,
   onChange,
+  id,
+  onValidityChange,
 }: {
   data: ProfileBlockData;
   onChange: (data: ProfileBlockData) => void;
+  /** items 内でのブロック id。onValidityChange にそのまま渡すためだけに使う。 */
+  id: string;
+  /** ラベル重複の有無を親へ通知する。親はこれを見て保存（自動/手動）を止める。 */
+  onValidityChange: (id: string, hasConflict: boolean) => void;
 }) => {
   const set = <K extends keyof ProfileBlockData>(field: K, value: ProfileBlockData[K]) =>
     onChange({ ...data, [field]: value });
-  const setMeta = (key: keyof ProfileMeta, value: string) =>
+  const setKnownMeta = (key: keyof ProfileMeta, value: string) =>
     onChange({ ...data, meta: { ...(data.meta ?? {}), [key]: value } });
+
+  const [customRows, setCustomRows] = useState<CustomMetaRow[]>(() =>
+    Object.entries(data.meta ?? {})
+      .filter((e): e is [string, string] => !KNOWN_PROFILE_META_KEYS.has(e[0]) && e[1] !== undefined)
+      .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value })),
+  );
+  const conflictingRowIds = useMemo(() => findConflictingRowIds(customRows), [customRows]);
+  // ラベルが一時的に空（リネーム中の一瞬等）で、かつ値が既にある行。このまま親へ
+  // コミットすると値ごと消える（Codex レビュー指摘）ため、確定した状態になるまで
+  // commitCustomRows は親へ伝播しない。
+  const hasEmptyLabelWithValue = useMemo(
+    () => customRows.some((row) => row.label.trim() === '' && row.value.trim() !== ''),
+    [customRows],
+  );
+  const isBlocked = conflictingRowIds.size > 0 || hasEmptyLabelWithValue;
+  // アンマウント時（タブ切替・ブロック削除）にも false を報告し、ブロックした保存を解除する。
+  // commitCustomRows がブロック中は親へ伝播しないため（下記）、アンマウントで local な
+  // customRows が失われても親の data.meta は最後に確定した状態のままで、消えるのは
+  // 未確定の編集内容だけ（Codex レビュー指摘: 以前は衝突行を除外した meta を確定として
+  // 親へ渡していたため、タブ切替でこのブロックが再マウントすると衝突が解消したかのように
+  // 見え、除外済みの内容がそのまま自動保存されてしまっていた）。
+  // onValidityChange は親（builder-client 本体）の useCallback（安定参照）をそのまま渡して
+  // もらう前提（SortableBlock 側でインライン矢印にラップしない）。ラップすると毎レンダーで
+  // 参照が変わり、isBlocked が変わっていなくてもこの effect が再実行され、
+  // cleanup の false 報告が直後の true 報告と競合するため。
+  useEffect(() => {
+    onValidityChange(id, isBlocked);
+    return () => onValidityChange(id, false);
+  }, [id, isBlocked, onValidityChange]);
+
+  // customRows（ローカル state）が変わるたびに、既知キーと合わせて meta 全体を作り直す。
+  // ただし未確定の行（ラベル衝突・ラベル空で値あり）が1つでもあれば親へは伝播しない
+  // （画面上は customRows のまま残り、エラー表示で気付ける）。親の data.meta を
+  // 「最後に確定した安全な状態」のまま保つことで、タブ切替等での消失を防ぐ。
+  const commitCustomRows = (rows: CustomMetaRow[]) => {
+    setCustomRows(rows);
+    const conflicts = findConflictingRowIds(rows);
+    if (conflicts.size > 0 || rows.some((row) => row.label.trim() === '' && row.value.trim() !== '')) return;
+    // ラベルは編集者の自由入力であり `__proto__` も弾いていない。通常の `{}` に
+    // `meta['__proto__'] = row.value` を代入すると、値が文字列（有効なプロトタイプ値
+    // ではない）のため代入は黙って無視され、own property が作られずラベルごと消える
+    // （CodeRabbit レビュー指摘。実測で確認済み）。Object.create(null) は
+    // Object.prototype 自体を継承しないため、`__proto__`/`constructor`/`toString` 等の
+    // 予約語でも通常の own property として書き込める。
+    const meta = Object.create(null) as ProfileMeta;
+    for (const key of KNOWN_PROFILE_META_KEYS) {
+      const v = data.meta?.[key];
+      if (v !== undefined) meta[key] = v;
+    }
+    for (const row of rows) {
+      const label = row.label.trim();
+      if (label) meta[label] = row.value;
+    }
+    onChange({ ...data, meta });
+  };
+
+  const addCustomRow = () => {
+    commitCustomRows([...customRows, { id: `custom-${customMetaRowSeq++}`, label: '', value: '' }]);
+  };
+  const updateCustomRow = (id: string, patch: Partial<Pick<CustomMetaRow, 'label' | 'value'>>) => {
+    commitCustomRows(customRows.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  };
+  const removeCustomRow = (id: string) => {
+    commitCustomRows(customRows.filter((row) => row.id !== id));
+  };
 
   return (
     <div className="min-w-0 flex-1 space-y-2 text-sm">
@@ -553,14 +693,14 @@ const ProfileBlockEditor = ({
           onChange={(e) => set('name', e.target.value)}
           placeholder="名前（例: I・K）"
           aria-label="名前"
-          className="rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <input
           value={data.company ?? ''}
           onChange={(e) => set('company', e.target.value)}
           placeholder="所属会社（例: 株式会社 RITMO）"
           aria-label="所属会社"
-          className="rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       <input
@@ -568,7 +708,7 @@ const ProfileBlockEditor = ({
         onChange={(e) => set('title', e.target.value)}
         placeholder="肩書き（例: フルスタックエンジニア / EM）"
         aria-label="肩書き"
-        className="w-full rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <textarea
         value={data.pr}
@@ -576,7 +716,7 @@ const ProfileBlockEditor = ({
         rows={3}
         placeholder="自己PR"
         aria-label="自己PR"
-        className="w-full resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+        className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <div>
         <p className="mb-1 text-xs text-muted-foreground">強み（1行に1つ）</p>
@@ -586,23 +726,87 @@ const ProfileBlockEditor = ({
           rows={3}
           placeholder={'計測ベースのパフォーマンス改善\n開発基盤づくり'}
           aria-label="強み"
-          className="w-full resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+          className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {PROFILE_META_FIELDS.map(({ key, label, placeholder }) => (
+        {KNOWN_PROFILE_META_FIELDS.map(({ key, placeholder }) => (
           <div key={key}>
-            <p className="mb-1 text-xs text-muted-foreground">{label}</p>
+            <p className="mb-1 text-xs text-muted-foreground">{PROFILE_META_LABELS[key]}</p>
             <input
               value={data.meta?.[key] ?? ''}
-              onChange={(e) => setMeta(key, e.target.value)}
+              onChange={(e) => setKnownMeta(key, e.target.value)}
               placeholder={placeholder}
-              aria-label={label}
-              className="w-full rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+              aria-label={PROFILE_META_LABELS[key]}
+              className="w-full min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
         ))}
       </div>
+      {customRows.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">その他の項目</p>
+          {customRows.map((row) => {
+            const isConflicting = conflictingRowIds.has(row.id);
+            // ラベルが空で値だけある行。isBlocked（親への保存ブロック）はこれも見ているが、
+            // 従来はラベル衝突（isConflicting）だけを見て aria-invalid・エラー文言を出していた
+            // ため、このケースは「保存できません」という全体表示だけが出て、原因の行には
+            // 何の印も付かず「重複」という誤った診断になっていた（chatgpt-codex-connector
+            // レビュー指摘）。行単位でも実際のブロック理由を出す。
+            const isEmptyLabelWithValue = row.label.trim() === '' && row.value.trim() !== '';
+            const hasRowError = isConflicting || isEmptyLabelWithValue;
+            return (
+              <div key={row.id} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={row.label}
+                    onChange={(e) => updateCustomRow(row.id, { label: e.target.value })}
+                    placeholder="項目名（例: 得意分野）"
+                    aria-label="項目名"
+                    aria-invalid={hasRowError}
+                    className={`w-28 shrink-0 min-h-11 rounded border bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring ${
+                      hasRowError ? 'border-destructive' : 'border-input'
+                    }`}
+                  />
+                  <input
+                    value={row.value}
+                    onChange={(e) => updateCustomRow(row.id, { value: e.target.value })}
+                    placeholder="値"
+                    aria-label={row.label || '値'}
+                    className="min-w-0 flex-1 min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeCustomRow(row.id)}
+                    aria-label="この項目を削除"
+                    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+                {isConflicting && (
+                  <p className="text-xs text-destructive">
+                    項目名が他の項目と重複しているため、この項目は保存されません。項目名を変更してください。
+                  </p>
+                )}
+                {!isConflicting && isEmptyLabelWithValue && (
+                  <p className="text-xs text-destructive">
+                    項目名が未入力のため、この項目は保存されません。項目名を入力してください。
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={addCustomRow}
+        className="inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+      >
+        <Plus className="size-4" />
+        項目を追加
+      </button>
     </div>
   );
 };
@@ -614,6 +818,7 @@ const SortableBlock = ({
   onSkillsChange,
   onExperienceChange,
   onProfileChange,
+  onProfileValidityChange,
   onDelete,
 }: {
   item: EditorItem;
@@ -622,6 +827,7 @@ const SortableBlock = ({
   onSkillsChange: (id: string, category: string, skills: SkillEntry[]) => void;
   onExperienceChange: (id: string, data: ExperienceBlockData) => void;
   onProfileChange: (id: string, data: ProfileBlockData) => void;
+  onProfileValidityChange: (id: string, hasConflict: boolean) => void;
   onDelete: (id: string) => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -633,10 +839,17 @@ const SortableBlock = ({
   };
 
   return (
-    <div ref={setNodeRef} style={style} className="flex gap-2 rounded-lg border border-border bg-card p-3 shadow-sm">
+    <div
+      ref={setNodeRef}
+      style={style}
+      // items-start 欠落で align-items:stretch（既定）になり、ドラッグハンドルが行の
+      // 全高に引き伸ばされて中身のアイコンが垂直中央に見えていた（削除ボタンは shadcn
+      // Button の内部 flex で自己完結して上端寄りに見えるため非対称だった）（#152 S-5）。
+      className="flex items-start gap-2 rounded-lg border border-border bg-card p-3 shadow-sm"
+    >
       <button
         type="button"
-        className="mt-1 cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+        className="inline-flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground active:cursor-grabbing"
         aria-label="ブロックを並べ替え"
         {...attributes}
         {...listeners}
@@ -679,6 +892,8 @@ const SortableBlock = ({
             company: item.company,
           }}
           onChange={(data) => onProfileChange(item.id, data)}
+          id={item.id}
+          onValidityChange={onProfileValidityChange}
         />
       ) : item.type === 'stats' ? (
         <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
@@ -730,7 +945,7 @@ const PaletteChip = ({ blockType, label, icon }: (typeof PALETTE_ITEMS)[number])
       type="button"
       {...listeners}
       {...attributes}
-      className={`flex cursor-grab items-center gap-1 rounded border border-dashed border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary active:cursor-grabbing ${
+      className={`inline-flex h-11 cursor-grab items-center gap-1 rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary active:cursor-grabbing ${
         isDragging ? 'opacity-40' : ''
       }`}
     >
@@ -796,14 +1011,45 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const [title, setTitle] = useState(initialTitle);
   const [isSaving, startSaving] = useTransition();
   const [isSheetOp, startSheetOp] = useTransition();
-  const [sheets, setSheets] = useState<SheetSummary[]>(initialSheets);
+  // 認可・入力検証・エラーコードを tRPC procedure 側に集約したので、ここでは
+  // mutateAsync を素の非同期関数として呼び、既存の直列化ロジック（saveInFlightRef 等）は変えない。
+  const saveMutation = trpc.sheet.save.useMutation();
+  const createMutation = trpc.sheet.create.useMutation();
+  const deleteMutation = trpc.sheet.delete.useMutation();
+  const utils = trpc.useUtils();
+  // RSC が渡す initialSheets を initialData にして、作成/削除後は invalidate() で
+  // react-query に再取得させる（手動での配列操作をやめ、正本を一箇所に保つ）。
+  // sheet.list は一覧の鮮度（stale）も返すようになったが（Issue #204 の一覧版）、
+  // ビルダーのサイドバーは編集者自身の操作直後に invalidate() で追従させる前提のため
+  // 鮮度表示までは持たない。
+  const { data: sheetsList } = trpc.sheet.list.useQuery(undefined, {
+    initialData: { sheets: initialSheets, stale: false },
+    staleTime: SHEET_LIST_STALE_TIME_MS,
+  });
+  const sheets = sheetsList.sheets;
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
   // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
   // 保存成功時は new Date() で更新し、次回保存時の基準にする。
-  const savedUpdatedAtRef = useRef<Date | undefined>(initialSheets.find((s) => s.id === activeSheetId)?.updatedAt);
+  // RSC からのプロップ（initialSheets）は unstable_cache のキャッシュ命中時に Date が
+  // ISO 文字列へ壊れることがある（unstable_cache は内部で JSON.stringify/JSON.parse を
+  // 通すため。next/dist/server/web/spec-extension/unstable-cache.js の cacheNewResult
+  // 参照）。expectedUpdatedAt は z.date() で厳密に Date のみを受けるため、ここで明示的に
+  // Date へ正規化しておかないと、既存シートを開いて保存するたびに autosave/手動保存が
+  // BAD_REQUEST として恒常的に失敗する（headless E2E の autosave.spec.ts で再現・確認済み。
+  // 新規作成直後のシートは expectedUpdatedAt が undefined のためこの経路を通らず、
+  // 症状が「既存シートを開いた場合のみ」に見えていた）。
+  const initialSavedUpdatedAt = initialSheets.find((s) => s.id === activeSheetId)?.updatedAt;
+  const savedUpdatedAtRef = useRef<Date | undefined>(
+    initialSavedUpdatedAt ? new Date(initialSavedUpdatedAt) : undefined,
+  );
   const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
   const savedRef = useRef(false);
+  // サイドバーの sheet.list は staleTime: 60s の間 initialData を再利用し続けるため、
+  // タイトルを変更して保存しても react-query 側は自動では気づかない。保存成功時に
+  // タイトルが変わっていた場合だけ invalidate してサイドバー表示を追従させる
+  // （毎回 invalidate すると自動保存のたびに一覧を再取得してしまい staleTime の意味が薄れる）。
+  const savedTitleRef = useRef(initialTitle);
   const [activePaletteType, setActivePaletteType] = useState<PaletteBlockType | null>(null);
   const [activeTab, setActiveTab] = useState<'blocks' | 'project'>('blocks');
 
@@ -837,6 +1083,28 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     itemsRef.current = items;
     titleRef.current = title;
   }, [items, title]);
+
+  // プロフィールブロックの自由項目でラベルが重複している間は保存をブロックする。
+  // ProfileBlockEditor 側は衝突した行を data.meta から除外して onChange するため
+  // （#193）、除外後の meta だけを見る自動保存はこの重複自体を検知できない。
+  // ブロックごとに衝突有無を報告してもらい、1件でもあれば自動保存・手動保存の
+  // どちらも止める（除外＝保存を止めないと、600ms のデバウンス満了で消えた値が
+  // そのまま自動保存されてしまう。Codex レビュー指摘）。
+  const [blockedItemIds, setBlockedItemIds] = useState<Set<string>>(new Set());
+  const blockedItemIdsRef = useRef(blockedItemIds);
+  useEffect(() => {
+    blockedItemIdsRef.current = blockedItemIds;
+  }, [blockedItemIds]);
+  const handleProfileValidityChange = useCallback((id: string, hasConflict: boolean) => {
+    setBlockedItemIds((prev) => {
+      const has = prev.has(id);
+      if (hasConflict === has) return prev;
+      const next = new Set(prev);
+      if (hasConflict) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -940,6 +1208,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   // 保存が既に実行中なら追撃を予約して戻り、完了後にちょうど 1 回だけ再実行する。
   const runAutosave = useCallback(async () => {
     if (autosaveStoppedRef.current) return;
+    // プロフィールの自由項目にラベル重複がある間は、除外後の meta を自動保存しない。
+    if (blockedItemIdsRef.current.size > 0) return;
     if (saveInFlightRef.current) {
       followUpRef.current = true;
       return;
@@ -956,38 +1226,39 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     saveInFlightRef.current = true;
     setAutosaveStatus('saving');
     try {
-      const res = await saveBlocksAction({
+      const result = await saveMutation.mutateAsync({
         title: currentTitle,
         blocks: currentItems.map(itemToBlockInput),
         sheetId: activeSheetId,
         expectedUpdatedAt: savedUpdatedAtRef.current,
       });
-      if (res.ok) {
-        savedRef.current = true;
-        // Server Actions のシリアライズ境界を越えると Date が文字列化されうるため、
-        // new Date() で必ず Date オブジェクトへ正規化する（.getTime() 比較の破綻防止）。
-        savedUpdatedAtRef.current = res.savedUpdatedAt ? new Date(res.savedUpdatedAt) : new Date();
-        lastSavedSnapshotRef.current = savedSnapshot;
-        failedSnapshotRef.current = null;
-        // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
-        setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
-        setAutosaveStatus('saved');
-      } else if (res.error === 'conflict') {
+      savedRef.current = true;
+      // superjson transformer が Date を server caller / HTTP の両経路で保つため型どおり
+      // Date が返るが、念のため new Date() で正規化する（.getTime() 比較の破綻防止）。
+      savedUpdatedAtRef.current = new Date(result.updatedAt);
+      if (savedTitleRef.current !== currentTitle) {
+        savedTitleRef.current = currentTitle;
+        void utils.sheet.list.invalidate();
+      }
+      lastSavedSnapshotRef.current = savedSnapshot;
+      failedSnapshotRef.current = null;
+      // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
+      setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
+      setAutosaveStatus('saved');
+    } catch (err) {
+      if (err instanceof TRPCClientError && err.data?.code === 'CONFLICT') {
         // 競合は最初の 1 回で自動保存を恒久停止する（ダイアログは出さず、
         // トップバーのインジケータ＋再読み込みボタンで通知する）。
         autosaveStoppedRef.current = true;
         followUpRef.current = false;
         setAutosaveStatus('conflict');
       } else {
-        // 失敗（unauthorized 等）は dirty のまま error にする。失敗したスナップショットを
-        // 記録し、同一内容での自動リトライは行わない（新しい編集が入ったときだけ再試行）。
+        // 失敗（unauthorized・ネットワークエラー等）は dirty のまま error にする。失敗した
+        // スナップショットを記録し、同一内容での自動リトライは行わない
+        // （新しい編集が入ったときだけ再試行）。
         failedSnapshotRef.current = savedSnapshot;
         setAutosaveStatus('error');
       }
-    } catch {
-      // ネットワークエラー等の未捕捉例外。'saving' のまま固まらないよう error へ遷移する。
-      failedSnapshotRef.current = savedSnapshot;
-      setAutosaveStatus('error');
     } finally {
       saveInFlightRef.current = false;
     }
@@ -995,12 +1266,16 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       followUpRef.current = false;
       void runAutosave();
     }
-  }, [activeSheetId]);
+    // saveMutation.mutateAsync / utils.sheet.list.invalidate は @tanstack/react-query・tRPC が
+    // 安定参照として返すため、依存配列に加えても再レンダーごとの再生成は起きない
+    // （utils オブジェクト自体ではなく末端の関数を指定する — utils は毎レンダー新しい
+    // オブジェクトを返す実装があり得るが、内部の関数参照は安定している）。
+  }, [activeSheetId, saveMutation.mutateAsync, utils.sheet.list.invalidate]);
 
   // dirty になってから AUTOSAVE_DEBOUNCE_MS 編集が止んだら自動保存する
   // （items/title が変わるたびにタイマーを引き直す＝デバウンス）。
   useEffect(() => {
-    if (!isDirty || autosaveStatus === 'conflict') return;
+    if (!isDirty || autosaveStatus === 'conflict' || blockedItemIds.size > 0) return;
     // 失敗直後の status 遷移（saving → error）だけでタイマーを再armしない。
     // 失敗時と同一内容のままなら再試行せず、新しい編集で snapshot が変わったときだけ再デバウンスする。
     if (autosaveStatus === 'error' && snapshot(items, title) === failedSnapshotRef.current) return;
@@ -1008,7 +1283,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       void runAutosave();
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [items, title, isDirty, autosaveStatus, runAutosave]);
+  }, [items, title, isDirty, autosaveStatus, runAutosave, blockedItemIds]);
 
   const handleDragStart = (event: DragStartEvent) => {
     const blockType = event.active.data.current?.blockType as PaletteBlockType | undefined;
@@ -1122,6 +1397,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   };
 
   const handleCreateSheet = () => {
+    // 作成後の router.push は key={activeSheetId} の再マウントで編集中 state を破棄する。
+    // SPA 内遷移では beforeunload が発火しないため、シート切替・閲覧へ導線と同じくここで確認を取る。
+    if (!confirmDiscardChanges()) return;
     setNewSheetTitle('新しいスキルシート');
     setNewSheetTemplateId(TEMPLATES[0].id);
     setShowCreateDialog(true);
@@ -1132,10 +1410,11 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     if (!title) return;
     setShowCreateDialog(false);
     startSheetOp(async () => {
-      const res = await createSheetAction(title, newSheetTemplateId);
-      if (res.ok) {
+      try {
+        const res = await createMutation.mutateAsync({ title, templateId: newSheetTemplateId });
+        await utils.sheet.list.invalidate();
         router.push(`/builder?sheet=${res.sheetId}`);
-      } else {
+      } catch {
         toast.error('シートの作成に失敗しました');
       }
     });
@@ -1148,17 +1427,19 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     }
     if (!window.confirm(`「${sheetTitle}」を削除しますか？この操作は元に戻せません。`)) return;
     startSheetOp(async () => {
-      const res = await deleteSheetAction(sheetId);
-      if (res.ok) {
+      try {
+        await deleteMutation.mutateAsync({ sheetId });
+        // 遷移先の決定は削除直前の一覧から即座に算出する（invalidate の再取得完了を待たない）。
+        // 一覧の表示自体は invalidate() が引き起こす再取得で追従する。
         const remaining = sheets.filter((s) => s.id !== sheetId);
-        setSheets(remaining);
+        await utils.sheet.list.invalidate();
         if (sheetId === activeSheetId) {
           router.push(`/builder?sheet=${remaining[0]?.id ?? ''}`);
         } else {
           router.refresh();
         }
         toast.success('シートを削除しました');
-      } else {
+      } catch {
         toast.error('シートの削除に失敗しました');
       }
     });
@@ -1196,6 +1477,16 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       followUpRef.current = true;
       return;
     }
+    if (blockedItemIds.size > 0) {
+      // blockedItemIds は項目名の重複・未入力のどちらでもブロックする（isBlocked 参照）。
+      // ここで「重複」と断定すると、原因が未入力の場合に誤った診断になる
+      // （chatgpt-codex-connector レビュー指摘）。行単位のエラー表示（ProfileBlockEditor）
+      // が実際の原因を示すので、ここでは理由を特定しない案内にとどめる。
+      toast.error(
+        'プロフィールの項目名を確認してください（重複または未入力があります）。解消してから保存してください。',
+      );
+      return;
+    }
     // データ消失ガード: 全ブロックが空（type 別判定）なら、保存で全内容が消える。
     // 明示的な確認が取れた場合のみ続行する。
     const isAllEmpty = items.every((item) => isBlockInputEmpty(itemToBlockInput(item)));
@@ -1217,24 +1508,25 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
       // 取り違えによる誤 Conflict）を防ぐ。実行中の編集分は追撃自動保存が拾う。
       saveInFlightRef.current = true;
       try {
-        const res = await saveBlocksAction(payload);
-        if (res.ok) {
-          savedRef.current = true;
-          // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
-          // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。返却が無い
-          // 古い経路のみ new Date() にフォールバックする。
-          // Server Actions のシリアライズ境界を越えると Date が文字列化されうるため、
-          // new Date() で必ず Date オブジェクトへ正規化する（.getTime() 比較の破綻防止）。
-          savedUpdatedAtRef.current = res.savedUpdatedAt ? new Date(res.savedUpdatedAt) : new Date();
-          // 保存成功した内容をスナップショットとして記録し、dirty を解除する
-          // （保存中に編集が入っていた場合は dirty のままにする）。
-          lastSavedSnapshotRef.current = savedSnapshot;
-          setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
-          setAutosaveStatus('idle');
-          toast.success('保存しました');
-        } else if (res.error === 'unauthorized') {
+        const result = await saveMutation.mutateAsync(payload);
+        savedRef.current = true;
+        // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
+        // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。
+        savedUpdatedAtRef.current = new Date(result.updatedAt);
+        if (savedTitleRef.current !== payload.title) {
+          savedTitleRef.current = payload.title;
+          void utils.sheet.list.invalidate();
+        }
+        // 保存成功した内容をスナップショットとして記録し、dirty を解除する
+        // （保存中に編集が入っていた場合は dirty のままにする）。
+        lastSavedSnapshotRef.current = savedSnapshot;
+        setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
+        setAutosaveStatus('idle');
+        toast.success('保存しました');
+      } catch (err) {
+        if (err instanceof TRPCClientError && err.data?.code === 'UNAUTHORIZED') {
           toast.error('セッションが切れました。再度認証してください。');
-        } else if (res.error === 'conflict') {
+        } else if (err instanceof TRPCClientError && err.data?.code === 'CONFLICT') {
           // 手動保存で競合を検出した場合も自動保存を恒久停止する
           // （直後の自動保存が同じ競合を繰り返し踏むのを防ぐ）。
           autosaveStoppedRef.current = true;
@@ -1250,8 +1542,6 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
         } else {
           toast.error('保存に失敗しました');
         }
-      } catch {
-        toast.error('保存に失敗しました');
       } finally {
         saveInFlightRef.current = false;
       }
@@ -1268,15 +1558,27 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const autosaveIndicator =
     autosaveStatus === 'conflict'
       ? { label: '競合 — 再読み込みが必要', dotClass: 'bg-destructive', textClass: 'text-destructive' }
-      : isSaving || autosaveStatus === 'saving'
-        ? { label: '保存中…', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
-        : autosaveStatus === 'error'
-          ? { label: '自動保存に失敗 — 保存ボタンで再試行', dotClass: 'bg-destructive', textClass: 'text-destructive' }
-          : isDirty
-            ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
-            : autosaveStatus === 'saved'
-              ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
-              : null;
+      : blockedItemIds.size > 0
+        ? {
+            // 重複・未入力のどちらでもブロックされるため「重複」と断定しない
+            // （chatgpt-codex-connector レビュー指摘）。実際の原因は行単位のエラー表示で示す。
+            label: '項目名を確認してください（重複/未入力）— 保存できません',
+            dotClass: 'bg-destructive',
+            textClass: 'text-destructive',
+          }
+        : isSaving || autosaveStatus === 'saving'
+          ? { label: '保存中…', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
+          : autosaveStatus === 'error'
+            ? {
+                label: '自動保存に失敗 — 保存ボタンで再試行',
+                dotClass: 'bg-destructive',
+                textClass: 'text-destructive',
+              }
+            : isDirty
+              ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
+              : autosaveStatus === 'saved'
+                ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
+                : null;
 
   return (
     <div className="min-h-screen">
@@ -1298,7 +1600,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                     if (e.key === 'Enter') handleConfirmCreate();
                     if (e.key === 'Escape') setShowCreateDialog(false);
                   }}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full min-h-11 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 />
               </div>
               <div>
@@ -1309,7 +1611,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   id="new-sheet-template"
                   value={newSheetTemplateId}
                   onChange={(e) => setNewSheetTemplateId(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                  className="w-full min-h-11 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                 >
                   {TEMPLATES.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -1363,10 +1665,18 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 aria-pressed={showProjectPreview}
                 className="pv-toggle btn sm"
               >
-                ◧ {showProjectPreview ? 'プレビューを隠す' : 'プレビュー'}
+                {/* ペイン非表示時に「プレビュー」だけだと、隣の別窓起動ボタン（同じく
+                    「プレビュー」表記）と可視ラベルが完全一致して判別できなかった（#152 S-5）。 */}
+                ◧ {showProjectPreview ? 'プレビューを隠す' : 'プレビューを表示'}
               </button>
             )}
-            <Button variant="ghost" size="sm" onClick={handleOpenPreview} aria-label="プレビューを別ウィンドウで開く">
+            <Button
+              variant="ghost"
+              size="default"
+              className="h-11"
+              onClick={handleOpenPreview}
+              aria-label="プレビューを別ウィンドウで開く"
+            >
               <Eye className="size-4 sm:mr-1.5" />
               <span className="hidden sm:inline">プレビュー</span>
             </Button>
@@ -1383,7 +1693,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   <Button
                     variant="outline"
                     size="sm"
-                    className="ml-1 h-6 px-2 text-[11px]"
+                    className="ml-1 h-9 px-2 text-xs"
                     onClick={() => window.location.reload()}
                   >
                     再読み込み
@@ -1394,25 +1704,28 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="テーマ切り替え">
               {mode === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
-            <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={handleExport}>
+            <Button variant="outline" size="default" className="hidden h-11 sm:inline-flex" onClick={handleExport}>
               <Download className="mr-1.5 size-4" />
               バックアップ
             </Button>
-            <Link
-              href="/view"
-              className="hidden text-sm text-muted-foreground hover:text-foreground sm:inline"
-              onClick={(e) => {
-                // クライアント遷移では beforeunload が発火しないため、dirty 時はここで確認する
-                if (!confirmDiscardChanges()) e.preventDefault();
-              }}
-            >
-              閲覧へ
-            </Link>
+            <Button asChild variant="ghost" className="hidden h-11 px-3 sm:inline-flex">
+              <Link
+                href="/view"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  // クライアント遷移では beforeunload が発火しないため、dirty 時はここで確認する
+                  if (!confirmDiscardChanges()) e.preventDefault();
+                }}
+              >
+                閲覧へ
+              </Link>
+            </Button>
             {/* 自動保存の実行中も無効化し、同時保存（expectedUpdatedAt 取り違えの誤 Conflict）を防ぐ */}
             <Button
               onClick={handleSave}
               disabled={isSaving || autosaveStatus === 'saving'}
               aria-label={isSaving ? '保存中' : '保存'}
+              className="h-11"
             >
               <Save className="size-4 sm:mr-1.5" />
               <span className="hidden sm:inline">{isSaving ? '保存中...' : '保存'}</span>
@@ -1439,9 +1752,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                   type="button"
                   onClick={handleCreateSheet}
                   disabled={isSheetOp}
-                  className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  className="inline-flex h-11 items-center gap-1 rounded px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
                 >
-                  <Plus className="size-3.5" />
+                  <Plus className="size-4" />
                   新規シート
                 </button>
               </div>
@@ -1456,22 +1769,23 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                         if (!confirmDiscardChanges()) return;
                         router.push(`/builder?sheet=${sheet.id}`);
                       }}
-                      className={`flex min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
+                      className={`flex min-h-11 min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
                         sheet.id === activeSheetId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                       }`}
                     >
-                      <FileText className="size-3.5 shrink-0" />
+                      <FileText className="size-4 shrink-0" />
                       <span className="truncate">{sheet.title}</span>
                     </button>
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       onClick={() => handleDeleteSheet(sheet.id, sheet.title)}
                       disabled={isSheetOp || sheets.length <= 1}
                       aria-label={`「${sheet.title}」を削除`}
-                      className="rounded p-1 text-muted-foreground hover:text-destructive disabled:opacity-30"
+                      className="text-muted-foreground hover:text-destructive disabled:opacity-30"
                     >
-                      <Trash2 className="size-3.5" />
-                    </button>
+                      <Trash2 className="size-4" />
+                    </Button>
                   </li>
                 ))}
               </ul>
@@ -1486,7 +1800,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="スキルシートのタイトル"
-                className="w-full rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full min-h-11 rounded-md border border-input bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -1495,9 +1809,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               <button
                 type="button"
                 onClick={() => setActiveTab('blocks')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'blocks'
-                    ? 'border-b-2 border-primary text-primary'
+                    ? 'border-b-2 border-primary text-primary-dark'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -1506,9 +1820,9 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               <button
                 type="button"
                 onClick={() => setActiveTab('project')}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${
+                className={`min-h-11 px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === 'project'
-                    ? 'border-b-2 border-primary text-primary'
+                    ? 'border-b-2 border-primary text-primary-dark'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -1564,6 +1878,7 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                         onSkillsChange={updateSkills}
                         onExperienceChange={updateExperience}
                         onProfileChange={updateProfile}
+                        onProfileValidityChange={handleProfileValidityChange}
                         onDelete={deleteBlock}
                       />
                     ))}
@@ -1585,19 +1900,19 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
             // flex-wrap: 4ボタンが flex-1 均等割りだと 375px 幅でラベルの最小幅を
             // 確保しきれず横スクロールの原因になっていた（実機確認）。折り返し可能にする。
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={addMarkdownBlock} className="flex-1">
+              <Button variant="outline" onClick={addMarkdownBlock} className="h-11 flex-1">
                 <Plus className="mr-1.5 size-4" />
                 テキスト
               </Button>
-              <Button variant="outline" onClick={addTableBlock} className="flex-1">
+              <Button variant="outline" onClick={addTableBlock} className="h-11 flex-1">
                 <Table className="mr-1.5 size-4" />
                 テーブル
               </Button>
-              <Button variant="outline" onClick={addSkillsBlock} className="flex-1">
+              <Button variant="outline" onClick={addSkillsBlock} className="h-11 flex-1">
                 <Plus className="mr-1.5 size-4" />
                 スキル一覧
               </Button>
-              <Button variant="outline" onClick={addExperienceBlock} className="flex-1">
+              <Button variant="outline" onClick={addExperienceBlock} className="h-11 flex-1">
                 <Plus className="mr-1.5 size-4" />
                 職務経歴
               </Button>

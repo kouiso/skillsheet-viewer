@@ -559,6 +559,71 @@ describe('profileBlockToMarkdown', () => {
     expect(profileBlockToMarkdown(PROFILE)).not.toContain('所属会社');
     expect(profileBlockToMarkdown({ ...PROFILE, company: '  ' })).not.toContain('所属会社');
   });
+
+  it('性別・資格・得意分野・得意業務（既知だが従来UI未対応だった4項目）も表に出力する（Issue #193）', () => {
+    const md = profileBlockToMarkdown({
+      ...PROFILE,
+      meta: {
+        ...PROFILE.meta,
+        gender: '男',
+        qualifications: '自動車普通車免許',
+        specialties: 'フロントエンド',
+        expertise: 'チーム運営',
+      },
+    });
+    expect(md).toContain('| 性別 | 男 |');
+    expect(md).toContain('| 資格 | 自動車普通車免許 |');
+    expect(md).toContain('| 得意分野 | フロントエンド |');
+    expect(md).toContain('| 得意業務 | チーム運営 |');
+  });
+
+  it('既知8項目に無い任意のキーも、キー名をラベルとして表に出力する（Issue #193 の自由項目）', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, 血液型: 'A型' } });
+    expect(md).toContain('| 血液型 | A型 |');
+  });
+
+  it('既知項目 → 任意項目の順で並ぶ', () => {
+    const md = profileBlockToMarkdown({
+      ...PROFILE,
+      meta: { 血液型: 'A型', age: '30歳', work: 'フルリモート' },
+    });
+    const ageIndex = md.indexOf('| 年齢 |');
+    const workIndex = md.indexOf('| 勤務形態 |');
+    const customIndex = md.indexOf('| 血液型 |');
+    expect(ageIndex).toBeGreaterThan(-1);
+    expect(ageIndex).toBeLessThan(workIndex);
+    expect(workIndex).toBeLessThan(customIndex);
+  });
+
+  it('値が空文字/空白のみの項目は表に出さない', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, gender: '', qualifications: '  ' } });
+    expect(md).not.toContain('| 性別 |');
+    expect(md).not.toContain('| 資格 |');
+  });
+
+  // chatgpt-codex-connector レビュー指摘: PROFILE_META_LABELS[key] のブラケットアクセスは
+  // key が Object.prototype のプロパティ名と一致すると継承メンバ（関数）を返し、
+  // escapeCell が文字列以外を渡されて例外になっていた。ユーザーがエディタで
+  // 自由に入力できるラベルだけで再現するため、通常の入力として扱い例外にしない。
+  it('任意キーが constructor/toString 等の Object.prototype 予約語と一致してもクラッシュせず、キー名をラベルとして出力する', () => {
+    expect(() =>
+      profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, constructor: '値1', toString: '値2' } }),
+    ).not.toThrow();
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, constructor: '値1', toString: '値2' } });
+    expect(md).toContain('| constructor | 値1 |');
+    expect(md).toContain('| toString | 値2 |');
+  });
+
+  // chatgpt-codex-connector レビュー指摘: escapeCell が `<` `>` を素通ししていたため、
+  // 自由入力に "Reference <URL>" のような文字列があると remark がインラインHTMLと
+  // 誤認し、PDF描画（skill-sheet-document.tsx の INLINE_LEAF）がその部分を丸ごと
+  // 落としていた（PDF/viewer間の表示不一致・内容欠落）。生成した markdown 自体に
+  // 実体参照として残ることを確認する（デコード後にPDFへ literal な `<`/`>` が残る）。
+  it('任意キーの値に < > を含んでも実体参照へエスケープし、生 HTML として解釈されない形で出力する', () => {
+    const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, 参考: 'Reference <URL> here' } });
+    expect(md).toContain('Reference &lt;URL&gt; here');
+    expect(md).not.toContain('Reference <URL> here');
+  });
 });
 
 describe('statsBlockToMarkdown', () => {
@@ -579,6 +644,139 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('### 株式会社テスト — テストシステム開発');
     expect(md).toContain('TypeScript');
     expect(md).toContain('業務内容テスト');
+  });
+
+  it('会社概要文（note）と会社区分（kind）を出力する（#139）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '大手SIベンダーにて複数プロジェクトに参画。' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('大手SIベンダーにて複数プロジェクトに参画。');
+    expect(md).toContain('| 会社区分 | SIer |');
+  });
+
+  it('note は見出し直後ではなく表の後ろに置く（見出し+表の隣接を維持し、PDFの改ページ結合制御を壊さない）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '会社概要のテスト文。' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    const headingIndex = md.indexOf('### 株式会社テスト — テストシステム開発');
+    const tableStartIndex = md.indexOf('| 項目 | 内容 |');
+    const noteIndex = md.indexOf('会社概要のテスト文。');
+    expect(headingIndex).toBeGreaterThanOrEqual(0);
+    // 見出し直後〜表開始の間に note 由来の非空行が無い（見出し→表が隣接している）。
+    const betweenHeadingAndTable = md
+      .slice(headingIndex + '### 株式会社テスト — テストシステム開発'.length, tableStartIndex)
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    expect(betweenHeadingAndTable).toEqual([]);
+    expect(noteIndex).toBeGreaterThan(tableStartIndex);
+  });
+
+  it('note が "#" 等のブロック開始文字で始まっても独立した見出し等として解釈されないようエスケープする', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '# 偽の見出し\n- 偽のリスト' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('\\# 偽の見出し');
+    expect(md).toContain('\\- 偽のリスト');
+  });
+
+  it('note が Setext見出しの下線(=)・水平線/強調(_)・画像/リンク(![)で始まる行を含んでも構造化されないようエスケープする', () => {
+    const withNote: ProjectBlockData = {
+      companies: [
+        {
+          ...PROJECT.companies[0],
+          note: '会社概要\n===\n___\n![機密](https://example.com/x.png)\n[リンク](https://example.com)',
+        },
+      ],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('\\===');
+    expect(md.split('\n')).not.toContain('===');
+    // `_` は行頭のリスト等ではなく行中でも強調/水平線として解釈されうるインライン記号
+    // のため、行内の全出現を escape する（`___` の3文字すべてに `\` が付く）。
+    expect(md).toContain('\\_\\_\\_');
+    // `!` だけの escape だと直後の `[機密](...)` がリンクとして解釈されてしまうため、
+    // `!`・`[`・`]` を escape する（\!\[機密\]）。
+    expect(md).toContain('\\!\\[機密\\]');
+    expect(md).not.toContain('\\![機密]');
+    expect(md).toContain('\\[リンク\\]');
+  });
+
+  it('note に元からバックスラッシュを含む文字列（例: エスケープ済みHTMLタグを意図した記述）があっても、後続のメタ文字エスケープと組み合わさって二重エスケープが消費され生HTMLとして復元されないよう、既存のバックスラッシュを先にエスケープする（レビュー指摘）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [
+        {
+          ...PROJECT.companies[0],
+          note: '説明文\n\\<img src="https://example.com/x.png">',
+        },
+      ],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    // remark は `\\`（連続する2つのバックスラッシュ）を「エスケープされたバックスラッシュ1文字」
+    // として消費するため、既存のバックスラッシュを先にエスケープしていないと、後続で追加される
+    // `<` の前のバックスラッシュと合わせて `\\<` になり、`<img ...>` が未エスケープの生HTMLとして
+    // 復元されてしまう。既存のバックスラッシュを先に `\\` へエスケープしておくことで、
+    // 都合3連続のバックスラッシュ（元のバックスラッシュのエスケープ分 + `<` のエスケープ分）になり、
+    // remark 上でも「バックスラッシュ1文字 + エスケープされた `<`」として元の見た目を維持する。
+    expect(md).toContain(`${'\\'.repeat(3)}<img`);
+  });
+
+  it('note内の行中（行頭以外）に出現する画像/リンク/強調記法もエスケープする（レビュー指摘: 従来は行頭アンカーの正規表現のため行中は素通りしていた）', () => {
+    const withNote: ProjectBlockData = {
+      companies: [
+        {
+          ...PROJECT.companies[0],
+          note: '会社概要 ![機密](https://example.com/x.png) の説明。[リンク](https://example.com)も参照。*強調*は行中にもある。',
+        },
+      ],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).toContain('\\!\\[機密\\]');
+    expect(md).toContain('\\[リンク\\]');
+    expect(md).toContain('\\*強調\\*');
+  });
+
+  it('note の行頭が4文字以上のインデントでもコードブロック化されないよう3文字までに削る', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '通常の文\n    4スペースインデントの行' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).not.toContain('    4スペースインデントの行');
+    expect(md).toContain('   4スペースインデントの行');
+  });
+
+  it('note の行頭がタブ・タブ混在インデントでもコードブロック化されないよう3文字までに削る', () => {
+    const withNote: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '通常の文\n\tタブインデントの行\n \t混在インデントの行' }],
+      items: PROJECT.items,
+    };
+    const md = projectBlockToMarkdown(withNote);
+    expect(md).not.toContain('\tタブインデントの行');
+    expect(md).toContain('   タブインデントの行');
+    expect(md).not.toContain(' \t混在インデントの行');
+    expect(md).toContain('   混在インデントの行');
+  });
+
+  it('note が空文字のときは本文段落を出さない', () => {
+    // PROJECT.companies[0].note は '' なので、note 由来の段落行は現れないはず。
+    const md = projectBlockToMarkdown(PROJECT);
+    const headingIndex = md.indexOf('### 株式会社テスト — テストシステム開発');
+    const tableIndex = md.indexOf('| 項目 | 内容 |');
+    // 見出し直後〜表の直前に note 由来の非空行が無い（空行のみ）ことを確認する。
+    const between = md
+      .slice(headingIndex + '### 株式会社テスト — テストシステム開発'.length, tableIndex)
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    expect(between).toEqual([]);
   });
 });
 

@@ -1,7 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { buildConsoleDemoBlocks, createSheet, deleteSheet } from '@skillsheet/db';
+import { buildConsoleDemoBlocks, createSheet, deleteSheet, listSheets } from '@skillsheet/db';
 
 const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
 const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
@@ -54,19 +55,81 @@ let richSheetId = '';
 let richSheetTitle = '';
 let newSheetId = '';
 
+async function cleanupSheetsByPrefix(prefix: string) {
+  const sheets = await listSheets();
+  const matched = sheets.filter((s) => s.title.startsWith(prefix));
+  const failures: { id: string; error: unknown }[] = [];
+  await Promise.all(
+    matched.map(async (s) => {
+      try {
+        await deleteSheet(s.id);
+      } catch (err) {
+        failures.push({ id: s.id, error: err });
+      }
+    }),
+  );
+  if (failures.length > 0) {
+    console.warn('dogfood-core cleanup failed:', failures);
+    // 削除失敗を握りつぶすと afterAll が正常終了し、テスト用シートが共有 DB に
+    // 孤児として残り続けてしまう（CodeRabbit 指摘）。全削除を試みた後に throw して
+    // afterAll/beforeAll を失敗させ、CI で可視化する。
+    throw new Error(`sheet cleanup failed for ${failures.length} sheet(s): ${failures.map((f) => f.id).join(', ')}`);
+  }
+}
+
+// 実行ごとに一意な prefix にする。固定 prefix だと、CI で別の PR/ブランチの実行が
+// 同じ共有 DB に対して同時に走った場合、beforeAll の一括掃除が他の実行が
+// 作成中・編集中のシートを削除してしまう（CodeRabbit 指摘）。
+const RUN_ID = randomUUID().slice(0, 8);
+const CORE_SHEET_PREFIX = `Dogfood Core Sheet ${RUN_ID}`;
+const FULL_TEMPLATE_TITLE = `Dogfood フルスキルシート ${RUN_ID}`;
+
+async function revalidateCache() {
+  const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
+  const secret = process.env.REVALIDATE_SECRET ?? 'revalidate-local';
+  const res = await fetch(`${baseURL}/api/revalidate`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${secret}` },
+  });
+  if (!res.ok) {
+    console.warn('revalidate failed:', res.status, await res.text());
+  }
+}
+
 test.beforeAll(async () => {
   fs.mkdirSync(reportDir, { recursive: true });
-  richSheetTitle = `Dogfood Core Sheet ${Date.now()}`;
+  // 前回の実行が残した同prefixのシートを掃除する
+  await cleanupSheetsByPrefix(CORE_SHEET_PREFIX);
+  await cleanupSheetsByPrefix(FULL_TEMPLATE_TITLE);
+  richSheetTitle = `${CORE_SHEET_PREFIX} ${Date.now()}`;
   richSheetId = await createSheet(richSheetTitle, buildConsoleDemoBlocks());
+  // DB に直接 insert したため、/view の unstable_cache を即無効化する
+  await revalidateCache();
 });
 
 test.afterAll(async () => {
-  try {
-    if (newSheetId) await deleteSheet(newSheetId);
-  } catch {}
-  try {
-    if (richSheetId) await deleteSheet(richSheetId);
-  } catch {}
+  const failures: { target: string; error: unknown }[] = [];
+  if (newSheetId) {
+    try {
+      await deleteSheet(newSheetId);
+    } catch (err) {
+      failures.push({ target: `newSheetId(${newSheetId})`, error: err });
+    }
+  }
+  if (richSheetId) {
+    try {
+      await deleteSheet(richSheetId);
+    } catch (err) {
+      failures.push({ target: `richSheetId(${richSheetId})`, error: err });
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `afterAll cleanup failed: ${failures
+        .map((f) => `${f.target}: ${f.error instanceof Error ? f.error.message : String(f.error)}`)
+        .join(', ')}`,
+    );
+  }
 });
 
 test('editor: create new sheet from full template and edit blocks', async ({ page }) => {
@@ -76,7 +139,7 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   // 新規シート作成（フルスキルシート）
   await page.getByRole('button', { name: '新規シート' }).click();
   await expect(page.getByText('新規シートを作成')).toBeVisible();
-  await page.locator('#new-sheet-title').fill('Dogfood フルスキルシート');
+  await page.locator('#new-sheet-title').fill(FULL_TEMPLATE_TITLE);
   await page.locator('#new-sheet-template').selectOption('full');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
@@ -87,7 +150,7 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   await capture(page, 'A-editor-new-sheet-initial-light.png');
 
   // タイトル編集
-  await page.locator('#sheet-title').fill('Dogfood フルスキルシート 編集済');
+  await page.locator('#sheet-title').fill(`${FULL_TEMPLATE_TITLE} 編集済`);
 
   // スキルブロックに 1 行追加
   await page.getByRole('button', { name: 'スキルを追加' }).first().click();
@@ -115,7 +178,7 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   await previewPage.waitForLoadState('networkidle');
   await capture(previewPage, 'A-preview-light.png');
   const previewText = await previewPage.locator('body').innerText();
-  expect(previewText).toContain('Dogfood フルスキルシート 編集済');
+  expect(previewText).toContain(`${FULL_TEMPLATE_TITLE} 編集済`);
   expect(previewText).toContain('Playwright');
   await previewPage.close();
 

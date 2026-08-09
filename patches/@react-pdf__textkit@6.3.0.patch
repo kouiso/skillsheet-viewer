@@ -1,0 +1,98 @@
+diff --git a/lib/textkit.js b/lib/textkit.js
+index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..948bce8eba71f5c8e1958fcb33ee864b1c91d9c8 100644
+--- a/lib/textkit.js
++++ b/lib/textkit.js
+@@ -2612,6 +2612,64 @@ const breakLines = (attributedString, nodes, breaks) => {
+     lines.push(slice(start, attributedString.string.length, attributedString));
+     return lines;
+ };
++// apps/web/src/component/pdf/fonts.ts の isCjk() と同一の範囲（乖離させないこと）。
++const isCjkCodePoint = (code) => {
++    if (code >= 0x2e80 && code < 0x10000) return true;
++    return (
++        (code >= 0x20000 && code <= 0x2a6df) || // CJK統合漢字拡張B
++        (code >= 0x2a700 && code <= 0x2b73f) || // 拡張C
++        (code >= 0x2b740 && code <= 0x2b81f) || // 拡張D
++        (code >= 0x2b820 && code <= 0x2ceaf) || // 拡張E
++        (code >= 0x2ceb0 && code <= 0x2ebef) || // 拡張F
++        (code >= 0x2f800 && code <= 0x2fa1f) || // CJK互換漢字補助
++        (code >= 0x30000 && code <= 0x3134f) || // 拡張G
++        (code >= 0x31350 && code <= 0x323af) // 拡張H
++    );
++};
++// apps/web/src/component/pdf/fonts.ts の isCombiningOrVariationSelector() と同一の範囲
++// （乖離させないこと）。結合分音記号・かな結合濁点/半濁点・異体字セレクタ（IVS含む）。
++const isCombiningOrVariationSelectorCodePoint = (code) => (
++    (code >= 0x0300 && code <= 0x036f) ||
++    (code >= 0x1ab0 && code <= 0x1aff) ||
++    (code >= 0x1dc0 && code <= 0x1dff) ||
++    (code >= 0x20d0 && code <= 0x20ff) ||
++    (code >= 0x3099 && code <= 0x309a) ||
++    (code >= 0xfe00 && code <= 0xfe0f) ||
++    (code >= 0xfe20 && code <= 0xfe2f) ||
++    (code >= 0xe0100 && code <= 0xe01ef)
++);
++/**
++ * 単一の CJK 文字（skillsheet-viewer の splitForHyphenation が1文字ずつ push するシラブル）
++ * かどうかを判定する。
++ *
++ * 元々の hyphenated 判定は「次シラブルが空白扱いか」だけを見ていたが、この次シラブル
++ * （splitForHyphenation が挟む BREAK_MARKER）は、react-pdf 側のページ内改行・改ページ時の
++ * テキスト再分割（reflow）を経ると必ずしも隣に残っているとは限らない（Issue #203 で確認：
++ * 同じ syllables 配列内でも境界によってマーカーが失われている箇所とそうでない箇所が混在した）。
++ * 次シラブルの状態に依存せず、現在のシラブル自体が単一の CJK 文字なら常に非ハイフン化とすることで、
++ * reflow でマーカーが欠落しても和文にハイフンが出ないようにする。
++ *
++ * splitForHyphenation() は「か」+結合濁点(U+3099) や漢字+異体字セレクタ(IVS) のような
++ * NFD 正規化済みの書記素（grapheme）を、基底の CJK 文字1つに結合文字を追い足した
++ * 複数コードポイントの1シラブルとして返すことがある。単一コードポイント一致だけを見る
++ * 実装だとこれが非CJK扱いになり、reflow でマーカーが欠落した際にこの書記素の直後にも
++ * 人工ハイフンが出てしまう（chatgpt-codex-connector レビュー指摘）。先頭コードポイントが
++ * CJK で、それ以降が全て結合文字/異体字セレクタであれば単一CJKシラブルとして扱う。
++ *
++ * @param s - 判定対象のシラブル文字列
++ * @returns 単一の CJK 書記素（結合文字・異体字セレクタを含んでよい）であれば true
++ */
++const isSingleCjkSyllable = (s) => {
++    if (typeof s !== 'string' || s.length === 0) return false;
++    const codePoints = Array.from(s);
++    const baseCode = codePoints[0].codePointAt(0);
++    if (baseCode === undefined || !isCjkCodePoint(baseCode)) return false;
++    for (let i = 1; i < codePoints.length; i += 1) {
++        const code = codePoints[i].codePointAt(0);
++        if (code === undefined || !isCombiningOrVariationSelectorCodePoint(code)) return false;
++    }
++    return true;
++};
+ /**
+  * Return Knuth & Plass nodes based on line and previously calculated syllables
+  *
+@@ -2635,7 +2693,27 @@ const getNodes = (attributedString, { align }, options) => {
+             acc.push(linebreak.glue(width, start, end, stretch, shrink));
+         }
+         else {
+-            const hyphenated = syllables[index + 1] !== ' ';
++            // 元実装は次シラブルが厳密に半角スペース(' ')でなければ常に hyphenated:true を
++            // 立てる。ZWNBSP（trim()===''になる非表示の区切り文字）を挟んで改行点を作る
++            // 呼び出し側（skillsheet-viewer の splitForHyphenation）では、次シラブルが
++            // ' ' と一致しないためこの判定に該当してしまい、breakLines() が実際に選ばれた
++            // ブレークポイントへハイフン記号を挿入してしまう（アプリ側のIssue #171）。
++            // 次シラブルが「空白として扱われるべきもの」かどうかは trim()==='' で判定する
++            // のが本来の意図（このファイル上部の s.trim()==='' によるglue判定と同じ基準）
++            // であり、' ' 単体への厳密一致は本来のケース（半角スペース区切り）を含みつつ
++            // ZWNBSP 等の非表示区切りも正しく非ハイフン化対象にする。
++            //
++            // 追記（Issue #203）: 上記の「次シラブルを見る」判定だけでは不十分だった。
++            // 長文の和文段落がページ／行の境界で reflow されると、syllables 配列中の
++            // BREAK_MARKER が境界のどちら側にあるかによって生き残ったり消えたりし、
++            // 現在のシラブルの直後に「本物の」次の文字シラブルが来てしまうことがある
++            // （実データで実測・再現済み）。この場合 next 側だけを見ると和文の直後にも
++            // hyphenated:true が立ち、実際に行末へハイフンが描画されてしまう。
++            // 現在のシラブル自身が単一の CJK 文字であれば、reflow で next 側の状態が
++            // どうなっていようと常に非ハイフン化する（和文は本来ハイフンで区切らない）。
++            const nextSyllable = syllables[index + 1];
++            const hyphenated =
++                !isSingleCjkSyllable(s) && nextSyllable !== undefined && nextSyllable.trim() !== '';
+             const end = start + s.length;
+             // Add box node. Box nodes are used to represent words.
+             acc.push(linebreak.box(width, start, end, hyphenated));
