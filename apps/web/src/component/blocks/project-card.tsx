@@ -27,7 +27,8 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
-            <span className="rounded-[var(--radius)] bg-primary px-1.5 py-px font-mono text-[11px] text-on-accent">
+            {/* bg-primary は on-accent と組むとライトテーマで3.74と WCAG AA 未達（Issue #198）。 */}
+            <span className="rounded-[var(--radius)] bg-primary-dark px-1.5 py-px font-mono text-[11px] text-on-accent">
               {String(no).padStart(2, '0')}
             </span>
             <span className="font-mono text-[11.5px] text-faint">

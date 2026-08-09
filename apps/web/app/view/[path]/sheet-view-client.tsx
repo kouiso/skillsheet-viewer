@@ -13,11 +13,16 @@ interface SheetViewClientProps {
   blocks?: Block[];
   /** 編集者ログイン済みか。false（閲覧コードのみ等）のときは編集導線を出さない。 */
   canEdit?: boolean;
+  /**
+   * true のとき、DB への再接続に失敗して古いキャッシュを表示している可能性があることを
+   * 画面上部に案内する（Issue #204）。sheets-cache.ts の isDbContentStale() で判定する。
+   */
+  stale?: boolean;
 }
 
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
-const SheetViewClient = ({ title, content, blocks, canEdit = false }: SheetViewClientProps) => {
+const SheetViewClient = ({ title, content, blocks, canEdit = false, stale = false }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
   // 意図的に raw blocks（中身が空でも）で判定する — skill-sheet-viewer.tsx の isDashboard と
@@ -68,6 +73,14 @@ const SheetViewClient = ({ title, content, blocks, canEdit = false }: SheetViewC
 
   return (
     <div>
+      {stale && (
+        <div
+          role="status"
+          className="border-b border-warn/40 bg-warn-soft px-4 py-2 text-center text-sm text-warn-strong"
+        >
+          表示中の内容はしばらく更新されていない可能性があります。最新の状態と異なる場合があります。
+        </div>
+      )}
       {isDashboard ? (
         <ViewerTopbar
           name={profile?.data.name}

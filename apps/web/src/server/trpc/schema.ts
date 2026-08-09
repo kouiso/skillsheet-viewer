@@ -6,7 +6,12 @@ import { z } from 'zod';
 // zod 側でユニオンをミラーすると二重管理になり必ずドリフトするため、ここでは張らない。
 const blockInputSchema = z.custom<BlockInput>(isBlockInput, { message: 'invalid block input' });
 
-export const sheetIdInputSchema = z.object({ id: z.string() });
+// id は DB の uuid 列（packages/db/src/schema.ts）に対応する。形式が UUID でない値を
+// そのまま Drizzle/Postgres へ渡すと SQLSTATE 22P02（invalid input syntax for type uuid）が
+// throw され、is-config-error.ts の判定対象にも入っていないため 500 まで抜けてしまう
+// （Issue #196）。ここで弾いて sheet.byId 側の SkillSheetNotFoundError 経路（404）に
+// 合流させる。
+export const sheetIdInputSchema = z.object({ id: z.uuid() });
 
 export const saveSheetInputSchema = z.object({
   title: z.string(),

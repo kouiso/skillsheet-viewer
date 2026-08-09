@@ -27,10 +27,17 @@
   --primary-light: #14b8a6;
   --primary-dark: #08665e;
   --primary-foreground: #ffffff;
+  /* ボタンの hover は元々 opacity-90 で bg・fg 双方をページ背景へ透過blendしていたが、
+     背景付きボタン（default/secondary/destructive）はこれで文字コントラストが
+     4.5:1 を割り込んでいた（例: primary-dark×primary-foreground は 6.83:1 だが
+     opacity-90 後は約4.35:1。Codex レビュー指摘）。opacity ではなく不透明な専用トークンへ
+     差し替える（fg 色は変えない。bg だけ変えても十分「押せる」感が出る）。 */
+  --primary-hover: #075a52;
   --secondary: #0d9488;
   --secondary-light: #14b8a6;
   --secondary-dark: #08665e;
   --secondary-foreground: #ffffff;
+  --secondary-hover: #075a52;
   --muted: #f0f3f3;
   --muted-foreground: #4a565c;
   --accent: #ecfaf8;
@@ -40,6 +47,9 @@
   /* エラーバナー（bg-destructive/10 の上に text-destructive）は 3.88:1 で WCAG AA(4.5:1)
      未達だった（#152 S-4）。ティント背景上でも AA を満たす濃い赤。 */
   --destructive-strong: #b91c1c;
+  /* destructive ボタンの hover も同じ opacity-90 問題があったため、既存の
+     --destructive-strong をそのまま流用する（新規の色を増やさない）。 */
+  --destructive-hover: #b91c1c;
   --border: #dce3e4;
   --input: #dce3e4;
   --ring: #0d9488;
@@ -83,6 +93,9 @@
   --danger-soft: #fbf0ef;
   --warn: #d4a017;
   --warn-soft: #fdf6e6;
+  /* text-warn(#d4a017) は bg-warn-soft(#fdf6e6) 上で 2.21:1 しかなく AA(4.5:1) 未達
+     （鮮度バナー #204 で発覚、Codex レビュー指摘）。本文用に濃くした値（7.95:1）。 */
+  --warn-strong: #6b4400;
   /* Console は影なしだが、浮くもの（サジェスト・プレビューカード）だけ例外的に持つ。 */
   --shadow-editor: 0 10px 30px -16px rgba(16, 23, 26, 0.18);
 }
@@ -98,10 +111,14 @@
   --primary-light: #2dd4bf;
   --primary-dark: #0d9488;
   --primary-foreground: #0a0d0f;
+  /* ダークの hover も opacity-90 で 4.5:1 を割り込んでいた（primary-dark×primary-foreground
+     5.21:1 → opacity-90 後 約4.43:1）。既存の --primary（#14b8a6、7.83:1）を hover 専用に流用する。 */
+  --primary-hover: #14b8a6;
   --secondary: #14b8a6;
   --secondary-light: #2dd4bf;
   --secondary-dark: #0d9488;
   --secondary-foreground: #0a0d0f;
+  --secondary-hover: #14b8a6;
   --muted: #141a1e;
   --muted-foreground: #8b969d;
   --accent: #0c2320;
@@ -110,6 +127,9 @@
   --destructive-foreground: #0a0d0f;
   /* ダークはティント背景上でも既に AA を満たすため --destructive と同値。 */
   --destructive-strong: #ef4444;
+  /* destructive ボタンの hover（opacity-90 で 4.36:1 に低下）。#ef4444 より明るい赤で
+     opacity を使わず不透明のまま 7.05:1 を確保する。 */
+  --destructive-hover: #f87171;
   --border: #1d262b;
   --input: #1d262b;
   --ring: #14b8a6;
@@ -132,6 +152,7 @@
   --danger-soft: #2a1715;
   --warn: #e0b53a; /* #d4a017 は暗背景でくすむため明度を上げる */
   --warn-soft: #241d0d;
+  --warn-strong: #e0b53a; /* ダークは --warn が既に 8.63:1 で AA を満たすため同値 */
   --shadow-editor: 0 10px 30px -16px rgba(0, 0, 0, 0.6);
 }
 
@@ -147,10 +168,12 @@
   --color-primary-light: var(--primary-light);
   --color-primary-dark: var(--primary-dark);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-hover: var(--primary-hover);
   --color-secondary: var(--secondary);
   --color-secondary-light: var(--secondary-light);
   --color-secondary-dark: var(--secondary-dark);
   --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary-hover: var(--secondary-hover);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
@@ -158,6 +181,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-destructive-strong: var(--destructive-strong);
+  --color-destructive-hover: var(--destructive-hover);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -176,6 +200,7 @@
   --color-danger-soft: var(--danger-soft);
   --color-warn: var(--warn);
   --color-warn-soft: var(--warn-soft);
+  --color-warn-strong: var(--warn-strong);
 
   --radius-sm: 2px;
   --radius-md: 4px;
@@ -382,8 +407,10 @@ body {
   color: var(--accent-text);
 }
 .chip.on {
-  background-color: var(--primary);
-  border-color: var(--primary);
+  /* --primary は on-accent と組むとライトテーマで3.74と WCAG AA 未達（Issue #198）。
+     --primary-dark は両テーマで4.5以上を確保できる。 */
+  background-color: var(--primary-dark);
+  border-color: var(--primary-dark);
   color: var(--on-accent);
 }
 
@@ -400,7 +427,8 @@ body {
   color: var(--chip-text);
 }
 .techtag.hit {
-  background-color: var(--primary);
+  /* .chip.on と同じ理由で --primary-dark を使う（Issue #198）。 */
+  background-color: var(--primary-dark);
   color: var(--on-accent);
 }
 
