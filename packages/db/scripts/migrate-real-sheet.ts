@@ -233,8 +233,16 @@ function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where
       // PROCESS_HEADER_ORDER に無い工程名の列は、どの工程にも対応づかないため値ごと失われる。
       // ● 以外（○ / 担当 / 注記など）でも失われることに変わりはないので、非空なら
       // マーカーの種類を問わず記録する（Codexレビュー指摘）。
+      // 見出しセルが空でもデータセルに値があれば、その値は失われる。`label &&` で弾くと
+      // `| 工程 | 要件定義 | |` と `| 経験 | | 担当 |` の組が素通りする（Codexレビュー指摘）。
       const unknownCell = (data[i] ?? '').trim();
-      if (label && unknownCell) recordDropped(dropped, `${at}（未知の工程名）`, `${label}: ${unknownCell}`);
+      if (unknownCell) {
+        recordDropped(
+          dropped,
+          `${at}（未知の工程名）`,
+          label ? `${label}: ${unknownCell}` : `${i + 1}列目: ${unknownCell}`,
+        );
+      }
       continue;
     }
     const cell = data[i] ?? '';
@@ -391,6 +399,18 @@ function parseProjectBlock(
     const row = parseTableRow(line);
     if (!row) {
       recordDropped(dropped, `${where} の「技術スタック」（表の行として解釈できない）`, line);
+      continue;
+    }
+    // parseTableRow の正規表現は貪欲なので、3セル以上あっても失敗せず「最後のセル以外」を
+    // まとめてラベルとして返す。`| 使用言語 | TypeScript | 業務利用 |` は TypeScript が
+    // lang から消えて 業務利用 だけが tools に入るため、!row では検出できない
+    // （Codexレビュー指摘）。
+    const rawCells = line
+      .split('|')
+      .slice(1, -1)
+      .map((c) => c.trim());
+    if (rawCells.length > 2 && !isTableSeparatorRow(line)) {
+      recordDropped(dropped, `${where} の「技術スタック」（列が2つを超える）`, line);
       continue;
     }
     const [label, value] = row;
@@ -689,9 +709,10 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
       if (report) recordDropped(dropped, `${at}（技術分類が未確定）`, line);
       continue;
     }
-    const yearsMatch = yearsRaw.match(/(\d+(?:\.\d+)?)\s*年/);
-    // `6ヶ月` `1年未満` `経験あり` のような表記は years: 0 に潰れ、元の値が残らない
-    // （Codexレビュー指摘）。
+    // 部分一致にすると `1年未満` `1年6ヶ月` `約1年` が先頭の `1年` だけ拾って years: 1 になり、
+    // 「未満」「6ヶ月」「約」という付加情報を失ったまま警告も出ない。許容する `N年` 形式へ
+    // 完全一致させ、それ以外は解釈できない値として記録する（Codexレビュー指摘）。
+    const yearsMatch = yearsRaw.match(/^(\d+(?:\.\d+)?)\s*年$/);
     if (report && yearsRaw && !yearsMatch) {
       recordDropped(dropped, `${at}（経験年数を解釈できない）`, `${skillName}: ${yearsRaw}`);
     }

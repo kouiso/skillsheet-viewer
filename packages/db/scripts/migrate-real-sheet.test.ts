@@ -276,6 +276,29 @@ describe('parseCareerMarkdown（プロジェクト概要の重複）', () => {
   });
 });
 
+describe('parseCareerMarkdown（列数のずれ）', () => {
+  it('技術スタックの3列目以降を検出する（Codexレビュー）', () => {
+    // parseTableRow は貪欲なので row 自体は取れてしまい、!row では検出できない。
+    const md = careerMarkdown().replace('| 言語 | TypeScript, Go |', '| 使用言語 | TypeScript | 業務利用 |');
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    // 誤って tools に 業務利用 だけが入る挙動を止め、行ごと警告に回す。
+    expect(items[0].tech.tools).not.toContain('業務利用');
+    expect(dropped.map((d) => d.line)).toContain('| 使用言語 | TypeScript | 業務利用 |');
+    expect(dropped[0].where).toContain('列が2つを超える');
+  });
+
+  it('担当工程で見出しが空の列の値を検出する（Codexレビュー）', () => {
+    const md = careerMarkdown()
+      .replace('| 総合テスト | 保守・運用 |', '| 総合テスト |  |')
+      .replace('| 経験 | ● |  | ● | ● |  |  |  |', '| 経験 | ● |  | ● | ● |  |  | 担当 |');
+    const { dropped } = parseCareerMarkdown(md);
+
+    expect(dropped.map((d) => d.line).join()).toContain('担当');
+    expect(dropped[0].where).toContain('未知の工程名');
+  });
+});
+
 describe('isTableSeparatorRow', () => {
   it.each([
     ['|---|---|', true],
@@ -440,17 +463,33 @@ describe('parseSkillsMarkdown', () => {
     expect(dropped[0].where).toContain('4列目以降');
   });
 
-  it('N年形式でない経験年数を検出する（Codexレビュー）', () => {
-    // years: 0 に潰れて元の表記が残らない。
+  it.each([
+    '6ヶ月',
+    '1年未満',
+    '1年6ヶ月',
+    '約1年',
+    '5年以上',
+    '経験あり',
+  ])('N年形式でない経験年数「%s」を検出する（Codexレビュー）', (raw) => {
+    // 部分一致だと 1年未満 / 1年6ヶ月 / 約1年 / 5年以上 が先頭の数字だけ拾い、
+    // 付加情報を失ったまま警告も出なかった。完全一致に変えて全て検出する。
     const dropped: DroppedLine[] = [];
     const skills = parseSkillsMarkdown(
-      SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', '| 言語 | TypeScript | 6ヶ月 |'),
+      SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', `| 言語 | TypeScript | ${raw} |`),
       dropped,
     );
 
     expect(skills[0].skills[0].years).toBe(0);
-    expect(dropped.map((d) => d.line)).toContain('TypeScript: 6ヶ月');
+    expect(dropped.map((d) => d.line)).toContain(`TypeScript: ${raw}`);
     expect(dropped[0].where).toContain('経験年数を解釈できない');
+  });
+
+  it('N年形式の経験年数は従来どおり取り込み、警告しない（誤検知しない）', () => {
+    const dropped: DroppedLine[] = [];
+    const skills = parseSkillsMarkdown(SKILLS_MD, dropped);
+
+    expect(skills[0].skills[0]).toMatchObject({ name: 'TypeScript', years: 5 });
+    expect(dropped).toEqual([]);
   });
 
   it('スキルが1件も無い技術分類を検出する（Codexレビュー）', () => {
