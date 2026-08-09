@@ -98,6 +98,12 @@ const KNOWN_SUBSECTIONS = ['プロジェクト概要', '技術スタック', '�
 // main() が経歴セクションを切り出す起点。会社見出しより前に唯一存在してよい見出し。
 const CAREER_SECTION_HEADING = /^##\s*経歴/;
 
+// スキルセクションの <details>/<summary> 構造行。データではないため捨てても警告しない。
+const SKILLS_STRUCTURAL_LINE = /^\s*<\/?(?:details|summary|h[1-6])[\s/>]/i;
+
+// 担当工程表で「経験なし」を表す記号。値が失われているわけではないため警告しない。
+const PROCESS_NEGATIVE_MARKERS = new Set(['-', '‐', '−', 'ー', '―', '×', '✕', '✗', '無', 'なし', 'N/A', 'n/a']);
+
 // 末尾の "(3 ヶ月間)" / "（継続中）" 等の注記を取り除く。
 function stripTrailingAnnotation(s: string): string {
   return s.replace(/[\s]*[（(][^）)]*[）)]\s*$/, '').trim();
@@ -220,7 +226,23 @@ function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where
       continue;
     }
     const cell = data[i] ?? '';
-    if (cell.includes('●')) result.push(PROCESS_BUILDER_VOCAB[idx]);
+    if (cell.includes('●')) {
+      result.push(PROCESS_BUILDER_VOCAB[idx]);
+      continue;
+    }
+    // 既知の工程列でも ● 以外のマーカー（○ / 担当 など）は工程に変換されず失われる。
+    // ただし空欄と「経験なし」記号は失っている情報が無いので警告しない。これを警告すると
+    // 案件ごとに毎回出て本当の取りこぼしが埋もれる（Codexレビュー指摘）。
+    const trimmed = cell.trim();
+    if (trimmed && !PROCESS_NEGATIVE_MARKERS.has(trimmed)) {
+      recordDropped(dropped, `${at}（解釈できないマーカー）`, `${label}: ${trimmed}`);
+    }
+  }
+  // ヘッダより列数が多いデータ行の余剰セルは、対応する工程名が無く読まれないまま失われる
+  // （CodeRabbitレビュー指摘）。
+  for (let i = header.length; i < data.length; i++) {
+    const extra = (data[i] ?? '').trim();
+    if (extra) recordDropped(dropped, `${at}（ヘッダに対応する列が無い）`, extra);
   }
   return result;
 }
@@ -452,24 +474,26 @@ function deriveSkillLevel(years: number): string {
   return '初級';
 }
 
-// 下の switch が受け付けるラベル。ここに無いラベルは ProfileMeta のどこにも入らないため、
-// 取りこぼしとして警告する。switch の case を増やすときはこちらも追加すること。
-const PROFILE_LABELS = new Set([
-  '技術者名',
-  '所属',
-  '所屬',
-  '年齢',
-  '性別',
-  '資格',
-  '学歴',
-  '学歷',
-  '稼働',
-  '勤務形態',
-  '最寄駅',
-  '最寄り駅',
-  '得意分野',
-  '得意業務',
-]);
+// ラベル → 代入先の正本。判定と代入を同じ定義から引くことで、片方だけ足して
+// 「取り込んでいるのに警告が出る／黙って捨てるのに警告も出ない」ズレを防ぐ
+// （CodeRabbitレビュー指摘）。
+type ProfileField = 'name' | 'company' | keyof ProfileMeta;
+const PROFILE_LABEL_FIELDS: Record<string, ProfileField> = {
+  技術者名: 'name',
+  所属: 'company',
+  所屬: 'company',
+  年齢: 'age',
+  性別: 'gender',
+  資格: 'qualifications',
+  学歴: 'education',
+  学歷: 'education',
+  稼働: 'work',
+  勤務形態: 'work',
+  最寄駅: 'station',
+  最寄り駅: 'station',
+  得意分野: 'specialties',
+  得意業務: 'expertise',
+};
 
 function normalizeProfileLabel(label: string): string {
   return label.replace(/\s+/g, '').replace(/\*/g, '').replace(/:/g, '').trim();
@@ -515,48 +539,22 @@ export function parseProfileMarkdown(markdown: string, dropped: DroppedLine[] = 
     const label = normalizeProfileLabel(rawLabel);
     if (label === '項目') continue; // ヘッダ行
     if (!value) continue; // 値が空なら失うものが無い
-    if (report && !PROFILE_LABELS.has(label)) {
-      // switch のどの case にも当たらないラベルは ProfileMeta に入らず失われる
+    // Object.hasOwn を使うのは `constructor` のようなラベルを継承プロパティで拾わないため。
+    if (!Object.hasOwn(PROFILE_LABEL_FIELDS, label)) {
+      // どの項目にも対応しないラベルは ProfileMeta に入らず失われる
       // （例: `| 居住地 | 東京 |`。Codexレビュー指摘）。
-      recordDropped(dropped, `${at}（対応する項目が無いラベル）`, `${rawLabel}: ${value}`);
+      if (report) recordDropped(dropped, `${at}（対応する項目が無いラベル）`, `${rawLabel}: ${value}`);
       continue;
     }
-    switch (label) {
-      case '技術者名':
-        name = value;
-        break;
-      case '所属':
-      case '所屬':
-        company = value;
-        break;
-      case '年齢':
-        meta.age = value;
-        break;
-      case '性別':
-        meta.gender = value;
-        break;
-      case '資格':
-        meta.qualifications = value;
-        break;
-      case '学歴':
-      case '学歷':
-        meta.education = value;
-        break;
-      case '稼働':
-      case '勤務形態':
-        meta.work = value;
-        break;
-      case '最寄駅':
-      case '最寄り駅':
-        meta.station = value;
-        break;
-      case '得意分野':
-        meta.specialties = value;
-        break;
-      case '得意業務':
-        meta.expertise = value;
-        break;
+    const field = PROFILE_LABEL_FIELDS[label];
+    // 同じ項目が二度現れると後勝ちで上書きされ、先の値が失われる（Codexレビュー指摘）。
+    const previous = field === 'name' ? name : field === 'company' ? company : meta[field];
+    if (previous) {
+      recordDropped(dropped, `${at}（重複した項目の上書き）`, `${rawLabel}: ${previous}`);
     }
+    if (field === 'name') name = value;
+    else if (field === 'company') company = value;
+    else meta[field] = value;
   }
 
   const prStart = section.findIndex((line) => /^###\s*自己\s*PR/.test(line));
@@ -608,7 +606,10 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
     const report = i < scanEnd;
     if (!line.startsWith('|')) {
       // 表の行でなければスキルとして取り込まれない（Codexレビュー指摘）。
-      if (report) recordDropped(dropped, `${at}（表の行ではない）`, line);
+      // ただし <summary><h2>スキル・経験年数</h2></summary> のような構造行はデータではない。
+      // 除外しないと正常な実シートでも毎回 DROPPED_LINES が非ゼロになり、本当の
+      // 取りこぼしが恒常的な誤検知に埋もれる（Codexレビュー指摘）。
+      if (report && !SKILLS_STRUCTURAL_LINE.test(line)) recordDropped(dropped, `${at}（表の行ではない）`, line);
       continue;
     }
     const cells = line
@@ -634,6 +635,12 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
       if (report && !first && yearsRaw) recordDropped(dropped, `${at}（技術名が無い）`, line);
       continue;
     }
+    if (!currentCategory) {
+      // 分類が未確定のままのスキルは currentSkills に入るが、flushCategory が
+      // currentCategory 無しではブロックを出さないため、次の分類行で消える（Codexレビュー指摘）。
+      if (report) recordDropped(dropped, `${at}（技術分類が未確定）`, line);
+      continue;
+    }
     const yearsMatch = yearsRaw.match(/(\d+(?:\.\d+)?)\s*年/);
     const years = yearsMatch ? Number(yearsMatch[1]) : 0;
     currentSkills.push({ name: skillName, years, level: deriveSkillLevel(years) });
@@ -646,6 +653,8 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
 // --- メイン ---------------------------------------------------------------------------
 async function main() {
   const write = process.argv.includes('--write');
+  // 取りこぼしがあることを承知の上で上書きする場合のみ明示的に指定する。
+  const allowDropped = process.argv.includes('--allow-dropped');
 
   // loadWebEnvLocal() は .env.local が無くても throw しない（テストからの import を許すため）。
   // 実行時にここで明示的に止め、接続先不明のまま進まないようにする。
@@ -705,7 +714,12 @@ async function main() {
   const careerStart = fullMarkdown.search(/^##\s*経歴/im);
   const careerMarkdown = careerStart !== -1 ? fullMarkdown.slice(careerStart) : fullMarkdown;
   const { companies, items, dropped: careerDropped } = parseCareerMarkdown(careerMarkdown);
-  dropped.push(...careerDropped);
+  // `## 経歴` が無い入力では careerMarkdown が文書全体になるため、プロフィールとスキルが
+  // 正常に取り込んだ行まで「最初の会社見出しより前」として返ってくる。この経路でそのまま
+  // 集約すると取り込み済みの行を誤って警告するので、その分類だけ除く（Codexレビュー指摘）。
+  dropped.push(
+    ...(careerStart !== -1 ? careerDropped : careerDropped.filter((d) => d.where !== '最初の会社見出しより前')),
+  );
 
   console.log('PARSED_PROFILE:', profile ? 'yes' : 'no');
   console.log(
@@ -722,6 +736,15 @@ async function main() {
   if (dropped.length > 0) {
     console.warn('WARN: 以下の行はどのフィールドにも取り込まれていません。元データかパーサの見直しが必要です:');
     for (const d of dropped) console.warn(`  - [${d.where}] ${d.line}`);
+    // 警告は標準エラーに出るだけなので、非対話実行では見落とされる。saveSkillSheetBlocks は
+    // legacy markdown ブロックを含まない finalBlocks で置き換えるため、取りこぼしたまま
+    // 書き込むと元データが DB から消える。#151 D-7 はまさにこの経路（CodeRabbitレビュー指摘）。
+    if (write && !allowDropped) {
+      throw new Error(
+        `取りこぼしが ${dropped.length} 行あります。このまま上書きすると元データが失われます。` +
+          '元データかパーサを修正するか、承知の上で続行する場合は --allow-dropped を付けてください。',
+      );
+    }
   }
 
   const profileBlock: BlockInput | null = profile ? { type: 'profile', data: profile } : null;
