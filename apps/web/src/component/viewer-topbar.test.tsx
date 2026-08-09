@@ -93,6 +93,36 @@ describe('ViewerTopbar', () => {
     });
   });
 
+  describe('SP のヘッダーを2段に保つ（#190 回帰: 氏名未入力で3段になる不具合）', () => {
+    it('戻るリンクと SP 用アイコン群は同じ折り返さないコンテナに入る', () => {
+      renderTopbar();
+      const backLink = screen.getByLabelText('シート一覧へ戻る');
+      const [spTheme] = getIconCopies('テーマ切り替え');
+      const row = backLink.parentElement as HTMLElement;
+
+      // 親は flex-wrap のため、リンクとアイコンを別々の子にすると
+      // 「縮む前に折り返す」flexbox の挙動でアイコンが2段目へ落ちる。
+      expect(row.contains(spTheme)).toBe(true);
+      // SP は w-full で1行を占有し、sm 以上で w-auto + flex-1 のスペーサーになる。
+      expect(row.className).toContain('w-full');
+      expect(row.className).toContain('sm:w-auto');
+      expect(row.className).toContain('sm:flex-1');
+      // SP で flex-1 を付けると flex-basis:0 が w-full を打ち消して行を占有できなくなる。
+      expect(row.className).not.toMatch(/(?<!sm:)\bflex-1\b/);
+    });
+
+    it('氏名が未入力でも既定タイトルが省略記号に逃げ、リンクが行を押し広げない', () => {
+      renderTopbar({ name: undefined });
+      const backLink = screen.getByLabelText('シート一覧へ戻る');
+      const label = screen.getByText('エンジニアスキルシート');
+
+      // SP は縮小可能、sm 以上は自然幅を維持（デスクトップで氏名が潰れる回帰の防止）。
+      expect(backLink.className).toContain('min-w-0');
+      expect(backLink.className).toContain('sm:min-w-fit');
+      expect(label.className).toContain('truncate');
+    });
+  });
+
   describe('PDF ダウンロードの生成中フィードバック（#191）', () => {
     it('通常時は「PDFダウンロード」ラベルで押せる', () => {
       renderTopbar({ onDownloadPdf: vi.fn() });
