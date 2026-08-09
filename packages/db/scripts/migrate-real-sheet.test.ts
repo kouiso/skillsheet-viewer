@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { isTableSeparatorRow, parseCareerMarkdown } from './migrate-real-sheet';
+import {
+  type DroppedLine,
+  isTableSeparatorRow,
+  parseCareerMarkdown,
+  parseProfileMarkdown,
+  parseSkillsMarkdown,
+} from './migrate-real-sheet';
 
 /**
  * 案件1件分の最小 markdown。`extra` に渡した行を `#### プロジェクト概要` の直前
@@ -201,5 +207,125 @@ describe('parseCareerMarkdown', () => {
     expect(isTableSeparatorRow('| :--- | ---: |')).toBe(true);
     expect(isTableSeparatorRow('| 期間 | 2021年 |')).toBe(false);
     expect(isTableSeparatorRow('ふつうの文')).toBe(false);
+  });
+
+  it('会社見出しより前の想定外の見出しを検出する（Codexレビュー）', () => {
+    // `## 経歴` だけは main() が切り出しの起点にする想定済みの構造なので除外するが、
+    // それ以外の見出しは本文が無くてもどのフィールドにも入らない。
+    const md = careerMarkdown().replace('## 経歴', '## 経歴\n\n## 注意事項');
+    const { dropped } = parseCareerMarkdown(md);
+
+    expect(dropped.map((d) => d.line)).toContain('## 注意事項');
+    expect(dropped.map((d) => d.line)).not.toContain('## 経歴');
+  });
+
+  it('担当工程の未知の工程名は ● 以外のマーカーでも検出する（Codexレビュー）', () => {
+    const md = careerMarkdown()
+      .replace('| 総合テスト | 保守・運用 |', '| 総合テスト | 性能検証 |')
+      .replace('| 経験 | ● |  | ● | ● |  |  |  |', '| 経験 | ● |  | ● | ● |  |  | ○ |');
+    const { dropped } = parseCareerMarkdown(md);
+
+    expect(dropped.map((d) => d.line).join()).toContain('性能検証: ○');
+  });
+});
+
+// --- プロフィール／スキル ------------------------------------------------------------------
+const PROFILE_MD = [
+  '## 技術者プロファイル',
+  '',
+  '| 項目 | 内容 |',
+  '|---|---|',
+  '| 技術者名 | 山田太郎 |',
+  '| 年齢 | 30歳 |',
+  '',
+  '### 自己 PR',
+  '',
+  'ここは pr へそのまま入るので、表でなくても捨てた行にはなりません。',
+].join('\n');
+
+const SKILLS_MD = [
+  '<details>',
+  '',
+  '| 技術分類 | 技術名 | 経験年数 |',
+  '|---|---|---|',
+  '| 言語 | TypeScript | 5年 |',
+  '|  | Go | 2年 |',
+  '',
+  '</details>',
+].join('\n');
+
+describe('parseProfileMarkdown', () => {
+  it('正常なプロフィールでは1行も捨てない（誤検知しない）', () => {
+    const dropped: DroppedLine[] = [];
+    const profile = parseProfileMarkdown(PROFILE_MD, dropped);
+
+    expect(profile?.name).toBe('山田太郎');
+    expect(profile?.meta.age).toBe('30歳');
+    expect(profile?.pr).toContain('pr へそのまま入る');
+    expect(dropped).toEqual([]);
+  });
+
+  it('switch のどの case にも当たらないラベルを検出する（Codexレビュー P1）', () => {
+    const dropped: DroppedLine[] = [];
+    const profile = parseProfileMarkdown(PROFILE_MD.replace('| 年齢 | 30歳 |', '| 居住地 | 東京 |'), dropped);
+
+    // 居住地は ProfileMeta のどこにも入らない。
+    expect(profile?.meta.age).toBeUndefined();
+    expect(dropped.map((d) => d.line)).toContain('居住地: 東京');
+    expect(dropped[0].where).toContain('技術者プロファイル');
+  });
+
+  it('自己PR見出しより前の非テーブル行を検出する（Codexレビュー P1）', () => {
+    const dropped: DroppedLine[] = [];
+    parseProfileMarkdown(
+      PROFILE_MD.replace('| 項目 | 内容 |', '備考: この行は取り込まれません。\n| 項目 | 内容 |'),
+      dropped,
+    );
+
+    expect(dropped.map((d) => d.line)).toContain('備考: この行は取り込まれません。');
+  });
+});
+
+describe('parseSkillsMarkdown', () => {
+  it('正常なスキル表では1行も捨てない（誤検知しない）', () => {
+    const dropped: DroppedLine[] = [];
+    const skills = parseSkillsMarkdown(SKILLS_MD, dropped);
+
+    expect(skills).toHaveLength(1);
+    expect(skills[0].skills.map((s) => s.name)).toEqual(['TypeScript', 'Go']);
+    expect(dropped).toEqual([]);
+  });
+
+  it('スキルセクション内の非テーブル行を検出する（Codexレビュー P1）', () => {
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(
+      SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', '注記: 一部は独学です。\n| 言語 | TypeScript | 5年 |'),
+      dropped,
+    );
+
+    expect(dropped.map((d) => d.line)).toContain('注記: 一部は独学です。');
+    expect(dropped[0].where).toContain('スキル・経験年数');
+  });
+
+  it('<details> が無い場合でも、次の ## 見出し以降を捨てた行として報告しない', () => {
+    // endIdx が文末まで伸びる経路。経歴セクション全体を警告に載せてしまわないことの確認。
+    const md = [
+      '## スキル・経験年数',
+      '',
+      '| 技術分類 | 技術名 | 経験年数 |',
+      '|---|---|---|',
+      '| 言語 | TypeScript | 5年 |',
+      '',
+      '## 経歴',
+      '',
+      'ここは経歴セクションなのでスキル側の警告対象外です。',
+      '### 株式会社サンプル - 2020年4月 - 現在',
+    ].join('\n');
+    const dropped: DroppedLine[] = [];
+    const skills = parseSkillsMarkdown(md, dropped);
+
+    expect(skills[0].skills.map((s) => s.name)).toEqual(['TypeScript']);
+    expect(dropped.map((d) => d.line)).not.toContain('ここは経歴セクションなのでスキル側の警告対象外です。');
+    expect(dropped).toEqual([]);
   });
 });
