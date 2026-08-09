@@ -1,8 +1,10 @@
 'use client';
 
+import Link from 'next/link';
+
 import './sync-bar.css';
 
-export type SyncState = 'live' | 'stale' | 'closed';
+export type SyncState = 'live' | 'stale' | 'closed' | 'standalone';
 
 interface SyncBarProps {
   state: SyncState;
@@ -15,6 +17,10 @@ const LABEL: Record<SyncState, string> = {
   live: '編集中の内容を同期表示',
   stale: '同期が途切れています',
   closed: '編集画面が閉じられました — 表示は最後の内容です',
+  // #151 U-5: 「編集画面を開いたことがない（このURLへ直接アクセスした）」を
+  // 「接続後に閉じられた」と同一の closed 扱いにしていたため、本文が空なのに
+  // 「最後の内容です」と出て、データを失ったと誤解させていた。
+  standalone: '表示できるプレビューがありません。ビルダー画面のプレビューボタンから開いてください。',
 };
 
 const formatStamp = (at: number): string => {
@@ -41,6 +47,14 @@ export const SyncBar = ({ state, lastUpdatedAt, onReconnect }: SyncBarProps) => 
       <button type="button" className="reconnect" onClick={onReconnect}>
         ↻ 再接続
       </button>
+    )}
+    {/* #201: standalone（編集画面を経由せずこのURLを直接開いた）は再接続しても内容が
+        来ないため意図的に再接続ボタンを出していないが、案内文が指す編集画面への
+        リンクも無く、キーボード操作では Tab で止まる要素が0個で行き止まりだった。 */}
+    {state === 'standalone' && (
+      <Link href="/builder" className="reconnect">
+        ビルダー画面を開く
+      </Link>
     )}
   </div>
 );

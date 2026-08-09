@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { signIn } from '@/lib/auth-client';
+import { resolveNextPath } from '@/util/resolve-next-path';
 
 function LoginForm() {
   const router = useRouter();
@@ -29,8 +30,7 @@ function LoginForm() {
         setError('メールアドレスまたはパスワードが正しくありません');
         return;
       }
-      const next = searchParams.get('next');
-      const dest = next?.startsWith('/') && !next.startsWith('//') ? next : '/builder';
+      const dest = resolveNextPath(searchParams.get('next'), '/builder', window.location.origin);
       router.push(dest);
     } catch {
       setError('ログインに失敗しました。もう一度お試しください。');
@@ -52,7 +52,9 @@ function LoginForm() {
       {error && (
         <div
           role="alert"
-          className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+          // text-destructive（#dc2626）は bg-destructive/10 のティント背景上で 3.88:1 と
+          // WCAG AA(4.5:1) 未達だった（#152 S-4）。text-destructive-strong に切り替える。
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive-strong"
         >
           {error}
         </div>
@@ -88,8 +90,8 @@ function LoginForm() {
         {loading ? 'ログイン中...' : 'ログイン'}
       </Button>
       <p className="text-center text-sm text-muted-foreground">
-        閲覧のみの場合は{' '}
-        <Link href="/viewer-auth" className="text-primary underline underline-offset-2">
+        閲覧のみの場合は {/* text-primary は背景に対しライトテーマで3.74と WCAG AA 未達（Issue #198）。 */}
+        <Link href="/viewer-auth" className="text-primary-dark underline underline-offset-2">
           閲覧コード認証
         </Link>
       </p>

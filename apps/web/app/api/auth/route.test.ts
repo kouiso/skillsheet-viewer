@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { POST } from './route';
 
@@ -42,16 +42,22 @@ describe('POST /api/auth', () => {
     expect(res.status).toBe(403);
   });
 
-  it('VIEWER_CODE 未設定なら 500', async () => {
+  it('VIEWER_CODE 未設定なら 500 で console.error に記録する（互換アダプタの catch は元々何もログしていなかった）', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     delete process.env.VIEWER_CODE;
     delete process.env.VITE_VIEWER_CODE;
     const res = await POST(makeReq(JSON.stringify({ code: 'x' })));
     expect(res.status).toBe(500);
+    expect(consoleErrorSpy).toHaveBeenCalledWith('POST /api/auth: unexpected error:', expect.anything());
+    consoleErrorSpy.mockRestore();
   });
 
-  it('不正な JSON body は 400', async () => {
+  it('不正な JSON body は 400 で console.error に記録する', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await POST(makeReq('not-json'));
     expect(res.status).toBe(400);
+    expect(consoleErrorSpy).toHaveBeenCalledWith('POST /api/auth: failed to parse request body:', expect.any(Error));
+    consoleErrorSpy.mockRestore();
   });
 
   it('code が文字列でなければ 400', async () => {

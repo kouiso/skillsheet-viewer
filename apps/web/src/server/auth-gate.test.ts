@@ -36,6 +36,14 @@ describe('getEditorUserId / isEditor', () => {
     expect(await isEditor()).toBe(true);
   });
 
+  it('HTTP Request headers が渡された場合は Next.js global より優先する', async () => {
+    const requestHeaders = new Headers({ cookie: 'better-auth.session_token=http-token' });
+    getSessionMock.mockResolvedValue({ user: { id: 'owner-1' } });
+
+    await expect(getEditorUserId(requestHeaders)).resolves.toBe('owner-1');
+    expect(getSessionMock).toHaveBeenCalledWith({ headers: requestHeaders });
+  });
+
   it('owner と一致しない id は null / false', async () => {
     getSessionMock.mockResolvedValue({ user: { id: 'someone-else' } });
     expect(await getEditorUserId()).toBeNull();
@@ -59,5 +67,73 @@ describe('getEditorUserId / isEditor', () => {
     getSessionMock.mockRejectedValue(new Error('boom'));
     expect(await getEditorUserId()).toBeNull();
     expect(await isEditor()).toBe(false);
+  });
+});
+
+// React cache() は実際のレンダーコンテキスト外（vitest 環境）ではメモ化せず、呼び出すたびに
+// 関数を再実行する（caller.test.ts で実測済み）。そのため「1リクエストで getSession が1回」を
+// 素の vitest で直接は再現できない。ここでは cache() を「実際に効く」契約どおりに振る舞う
+// フェイク実装へ差し替え、その契約が満たされたときに auth-gate.ts の配線が正しく1回に
+// 閉じることだけを検証する（実際に cache() が効くこと自体は React 自身の契約）。
+describe('getEditorUserId の RSC 経路メモ化配線（cache() が契約どおり動く前提）', () => {
+  beforeEach(() => {
+    getSessionMock.mockReset();
+    process.env.BETTER_AUTH_SECRET = 'secret';
+    process.env.DATABASE_URL = 'postgres://x';
+    process.env.SKILLSHEET_OWNER_ID = 'owner-1';
+  });
+
+  afterEach(() => {
+    vi.doUnmock('react');
+    vi.resetModules();
+  });
+
+  // 素のフェイクを差し替えるだけでは「何らかのメモ化が起きた」ことしか固定できず、
+  // auth-gate.ts がモジュールスコープ変数で自前メモ化するよう書き換えられても
+  // （＝ React の request scope 保証を失い、別リクエスト間でユーザーの編集者判定が
+  // 漏れる cross-user leak になっても）このテストは気付かず通ってしまう。
+  // cacheSpy で「実際に react の cache() を経由したか」まで固定する。
+  function mockCacheAndImport() {
+    const cacheSpy = vi.fn(<T extends (...args: never[]) => unknown>(fn: T): T => {
+      let hasCached = false;
+      let cached: ReturnType<T>;
+      return ((...args: Parameters<T>) => {
+        if (!hasCached) {
+          hasCached = true;
+          cached = fn(...args) as ReturnType<T>;
+        }
+        return cached;
+      }) as T;
+    });
+    vi.doMock('react', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('react')>();
+      return { ...actual, cache: cacheSpy };
+    });
+    vi.resetModules();
+    return { cacheSpy, importFresh: () => import('./auth-gate') };
+  }
+
+  it('引数なし呼び出しを何度重ねても getSession は1回だけ、かつ react の cache() を実際に経由する', async () => {
+    const { cacheSpy, importFresh } = mockCacheAndImport();
+    getSessionMock.mockResolvedValue({ user: { id: 'owner-1' } });
+
+    const { getEditorUserId: freshGetEditorUserId } = await importFresh();
+    await Promise.all([freshGetEditorUserId(), freshGetEditorUserId(), freshGetEditorUserId()]);
+
+    expect(getSessionMock).toHaveBeenCalledTimes(1);
+    // モジュールスコープ変数などの自前メモ化に退行していないことの固定。
+    // これが無いと request scope を失う退行（別リクエスト間のセッション漏れ）を検知できない。
+    expect(cacheSpy).toHaveBeenCalled();
+  });
+
+  it('requestHeaders を渡す HTTP 経路は cache() を経由しないため、毎回 getSession を呼ぶ', async () => {
+    const { importFresh } = mockCacheAndImport();
+    getSessionMock.mockResolvedValue({ user: { id: 'owner-1' } });
+
+    const { getEditorUserId: freshGetEditorUserId } = await importFresh();
+    const h = new Headers({ cookie: 'better-auth.session_token=http-token' });
+    await Promise.all([freshGetEditorUserId(h), freshGetEditorUserId(h)]);
+
+    expect(getSessionMock).toHaveBeenCalledTimes(2);
   });
 });

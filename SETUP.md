@@ -10,8 +10,7 @@
         ▼                                    ▼
 Next.js 16 App（apps/web, Vercel）
   ├── /builder  … ブロック単位で編集（要 Better Auth セッション）
-  ├── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
-  └── /compare  … 2 枚を並べて比較
+  └── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
         │
         ▼
 Neon serverless Postgres（正本データ源 / Drizzle ORM, packages/db）
@@ -71,7 +70,7 @@ cp .env.example .env
 | `GITHUB_FILE_PATH` / `GITHUB_BRANCH` | シード元ファイル・ブランチ（既定 `skillsheet.md` / `main`） |
 | `BETTER_AUTH_URL` | デプロイ先 URL（省略時はリクエスト origin から推定） |
 | `APP_ENV` | 非 Vercel 環境での cookie Secure 判定補助（`production` / `preview` で Secure 付与。Vercel では `VERCEL_ENV` を優先） |
-| `REVALIDATE_SECRET` | GitHub 読み経路のキャッシュを `/api/revalidate` から手動失効させるためのシークレット |
+| `REVALIDATE_SECRET` | tRPC の `maintenance.revalidate` でキャッシュを手動失効させるためのシークレット |
 
 > DB 接続文字列は、実行時はプール用（`-pooler` ホスト）、マイグレーションは非プール文字列を使うと安定します。
 
@@ -98,9 +97,9 @@ pnpm dev
 
 ### 1. 閲覧コード（HMAC / `VIEWER_CODE`）
 
-- `/viewer-auth` で共有コードを入力 → `POST /api/auth` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`apps/web/src/server/session.ts`）
+- `/viewer-auth` で共有コードを入力 → tRPC の `auth.login` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`apps/web/src/server/session.ts`）
 - `/view` 配下の閲覧のみ許可。**編集はできない**（判定は `apps/web/src/server/viewer-gate.ts`）
-- ログアウトは `POST /api/logout`
+- ログアウトは tRPC の `auth.logout`。旧クライアント向けの `POST /api/logout` も同じ procedure へ委譲
 
 ### 2. 編集者ログイン（Better Auth）
 
@@ -110,7 +109,26 @@ pnpm dev
 
 ### オーナーアカウントのブートストラップ手順
 
-> TODO（親エージェントが最終補記）: 単一オーナー運用のため、UI からのサインアップは無効です。オーナーアカウントは Better Auth のテーブル（`user` / `account`）に一時的な手段で直接作成し、その `user.id` を `SKILLSHEET_OWNER_ID` に設定します。作成した email / password で `/login` からログインし、`/builder` で編集できることを確認してください。（具体的な作成コマンド・SQL はここに補記予定）
+単一オーナー運用のため、UI からのサインアップは無効です（`emailAndPassword.disableSignUp: true`）。最初のオーナーアカウントは `packages/db/scripts/bootstrap-owner.ts` で直接作成します。このスクリプトは Better Auth 自身の `/sign-up/email` と同じ手順（`auth.$context` → `ctx.password.hash()` でハッシュ生成 → `user` 行を作成 → `provider_id = 'credential'` の `account` 行を作成）を踏むため、パスワードハッシュの形式や `user.id` の生成規則を手で合わせる必要はありません。
+
+1. `.env` に `DATABASE_URL` / `BETTER_AUTH_SECRET` を設定済みであること（`SKILLSHEET_OWNER_ID` はこの時点ではまだ値が無くて構いません）
+2. マイグレーションを適用し、`user` / `account` テーブルを作成しておく（未実施なら `pnpm db:migrate`）
+3. オーナーアカウントを作成する（メールアドレスは任意の値に置き換えてください）
+
+   ```bash
+   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email='owner@example.com'
+   ```
+
+   `--password` を省略して対話端末（TTY）から実行すると、画面には表示されない対話プロンプトでパスワードの入力を求められます（8 文字以上を推奨）。シェル履歴や `ps` のプロセス引数一覧に平文で残らないため、この方法を推奨します。
+
+   標準出力に `user.id`（例: `f47ac10b-58cc-4372-a567-0e02b2c3d479` のような文字列）が表示されます。
+
+   > CI・自動化スクリプトなど非対話環境から実行する場合のみ、`--password='...'` 引数または `SKILLSHEET_OWNER_PASSWORD` 環境変数で指定できます。どちらもシェル履歴や `ps` に平文で残るリスクがあるため、対話端末が使える環境では避けてください。
+
+4. 出力された `user.id` を `.env`（本番は Vercel の環境変数）の `SKILLSHEET_OWNER_ID` に設定する
+5. `pnpm dev` を起動し、手順3で使った email / password で `/login` からログインできること、`/builder` で編集できることを確認する
+
+> 既に同じ email のオーナーが存在する状態で再実行した場合は、新規作成ではなく**パスワードの再発行**として動作します（`user.id` は変わらないため `SKILLSHEET_OWNER_ID` の再設定は不要です）。パスワードを紛失した場合の再発行手順としても同じコマンドが使えます。
 
 ## Vercel へのデプロイ
 
@@ -134,7 +152,7 @@ pnpm dev
 
 ### 認証コードが通らない
 
-- 入力コードと `.env` の `VIEWER_CODE` が一致するか確認（`POST /api/auth` が 401 を返す場合は不一致）
+- 入力コードと `.env` の `VIEWER_CODE` が一致するか確認（`auth.login` が `UNAUTHORIZED` を返す場合は不一致）
 
 ### ビルド・依存エラー
 

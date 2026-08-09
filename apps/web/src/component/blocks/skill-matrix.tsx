@@ -41,10 +41,19 @@ export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
       )}
       <div className="grid gap-y-[11px]">
         {data.skills.map((skill, i) => (
-          // 名前 / バー / 年数 の3列。バーを右へ寄せて縦のリズムを揃える。
+          // 名前 / 習熟度(★) / バー / 年数 の4列。習熟度は PDF（表形式）と同じ情報量になるよう、
+          // ホバー不要で常時可視のテキストとして表示する（issue #142）。
+          // 名前列は truncate（1行省略）だと 320px 幅で実効幅が約50pxまで縮み、
+          // 一般的な技術名すら読めなくなる（issue #197）。items-center → items-start は
+          // 折り返しが発生しない限り単一行時の見た目に影響しない（行高＝内容高のため）。
           // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
-          <div key={i} className="grid grid-cols-[1fr_84px_28px] items-center gap-3">
-            <span className="truncate text-sm text-foreground">{skill.name}</span>
+          <div key={i} className="grid grid-cols-[1fr_44px_84px_28px] items-start gap-3">
+            <span className="min-w-0 break-words text-sm text-foreground" title={skill.name}>
+              {skill.name}
+            </span>
+            <span className="truncate text-center text-xs text-foreground" title={skill.level}>
+              {skill.level}
+            </span>
             <span className="barTrack" title={skill.level}>
               {skill.years > 0 ? (
                 <span className="barFill block" style={{ width: `${getYearsBarPercent(skill.years)}%` }} />
@@ -60,9 +69,7 @@ export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
                   <span className="text-[10px] text-faint">y</span>
                 </>
               ) : (
-                <span className="text-faint" title={skill.level}>
-                  —
-                </span>
+                <span className="text-faint">—</span>
               )}
             </span>
           </div>

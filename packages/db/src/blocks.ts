@@ -8,7 +8,7 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
-import { formatMonthToken, formatPeriodDisplay } from './process';
+import { flattenTech, formatMonthToken, formatPeriodDisplay } from './process';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -55,12 +55,71 @@ export interface ExperienceBlockData {
   description: string;
 }
 
-/** プロフィールブロックのメタ情報。 */
+/**
+ * プロフィールブロックのメタ情報（年齢・勤務形態などの1行見出し+値の付随情報）。
+ *
+ * よく使う8項目には既知のキーでラベルを割り当てるが（PROFILE_META_LABELS）、
+ * それ以外の任意のラベルも自由に追加できる（Issue #193: 固定4項目のみ編集画面から
+ * 入力できず、性別・資格のように既知のキーでも入力欄が無いと編集画面から直せなかった。
+ * 固定リストへ1個ずつ足す設計は同じ問題を再生産するため、任意キーを許容する）。
+ */
 export interface ProfileMeta {
   age?: string;
+  gender?: string;
+  qualifications?: string;
+  education?: string;
   work?: string;
   station?: string;
-  education?: string;
+  specialties?: string;
+  expertise?: string;
+  /** 上記以外の任意の項目。キーがそのまま表示ラベルになる。 */
+  [key: string]: string | undefined;
+}
+
+/**
+ * ProfileMeta の既知キー → 表示ラベル。既知キー以外は orderedProfileMetaEntries() が
+ * キー自体をラベルとして使う。ビューア（profile-intro.tsx）と markdown/PDF 変換
+ * （profileBlockToMarkdown）の両方がこの1つの定義を共有する。
+ */
+export const PROFILE_META_LABELS: Record<string, string> = {
+  age: '年齢',
+  gender: '性別',
+  qualifications: '資格',
+  education: '学歴',
+  work: '勤務形態',
+  station: '最寄り駅',
+  specialties: '得意分野',
+  expertise: '得意業務',
+};
+
+/**
+ * 任意項目のキー（ユーザーが自由入力するラベル文字列）から表示ラベルを解決する。
+ * `PROFILE_META_LABELS[key]` を直接ブラケットアクセスすると、key が
+ * `constructor` / `toString` / `hasOwnProperty` 等の Object.prototype のプロパティ名と
+ * 一致した場合、それらの継承メンバ（関数やオブジェクト）を返してしまい、呼び出し先
+ * （escapeCell は文字列以外を渡されると例外、React は関数/オブジェクトを子要素に
+ * 取れず例外）でクラッシュする（chatgpt-codex-connector レビュー指摘。エディタは
+ * ラベルをこれらの予約語として弾いていないため、ユーザー入力だけで再現する）。
+ * Object.hasOwn で自プロパティのみを見て、無ければ key 自体をラベルとして使う。
+ */
+export function resolveProfileMetaLabel(key: string): string {
+  return Object.hasOwn(PROFILE_META_LABELS, key) ? PROFILE_META_LABELS[key] : key;
+}
+
+/**
+ * meta を「既知キー（PROFILE_META_LABELS の宣言順）→ それ以外のキー（オブジェクトの
+ * 挿入順）」の順に並べ、値が空の項目を除いて返す。ビューアと markdown/PDF 変換の
+ * どちらも同じ並び順になるよう、順序決定をこの1箇所に集約する。
+ */
+export function orderedProfileMetaEntries(meta: ProfileMeta | undefined): [string, string][] {
+  if (!meta) return [];
+  const knownKeys = Object.keys(PROFILE_META_LABELS);
+  const entries = Object.entries(meta).filter((e): e is [string, string] => !!e[1] && e[1].trim().length > 0);
+  const known = knownKeys
+    .map((k) => entries.find(([key]) => key === k))
+    .filter((e): e is [string, string] => e !== undefined);
+  const rest = entries.filter(([key]) => !knownKeys.includes(key));
+  return [...known, ...rest];
 }
 
 /** プロフィールブロックの構造化データ。 */
@@ -433,11 +492,59 @@ const ALIGN_MARKER: Record<TableAlign, string> = {
  * セルを GFM 表で安全な単一行へ整える。
  * - セル内改行は半角スペースへ（複数行貼り付けで表が崩れるのを防止）
  * - `|` はエスケープ
+ * - `<` `>` は実体参照へ（下記参照）
  * - 空セルは半角スペース 1 つ（空文字だと GFM の表がずれる）
+ *
+ * `<` `>` を素通しすると、"Reference <URL>" のような自由入力が remark に生 HTML の
+ * インラインノードとして解釈される（`<URL>` が HTML タグらしいパターンに一致するため。
+ * HTML5 の既知タグかどうかは問われない）。構造化ビューアは値を素のテキストとして
+ * 表示するため見た目には影響しないが、PDF 側（skill-sheet-document.tsx の
+ * INLINE_LEAF）は html ノードを意図的に描画せず捨てるため、"Reference <URL>" の
+ * "<URL>" 部分だけが PDF から消える（chatgpt-codex-connector レビュー指摘）。
+ * `&lt;`/`&gt;` は CommonMark の実体参照としてテキストノードへ復元されるため、
+ * 生 HTML として再解釈されずに見た目どおりの文字が残る。
  */
 function escapeCell(value: string): string {
-  const single = value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|');
+  const single = value.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return single.length > 0 ? single : ' ';
+}
+
+// 行頭のブロック開始トークン（見出し/リスト/引用/コードフェンス/水平線/生HTML）をエスケープし、
+// 自由入力の1行が独立した markdown 構造として解釈されるのを防ぐ。ビューア側（project-card.tsx /
+// project-preview.tsx）は company.note を素のテキストとして描画しており、生成する markdown でも
+// 同じ「構造を持たない文章」として扱う必要がある。
+function escapeMarkdownParagraph(value: string): string {
+  return (
+    value
+      .split('\n')
+      // 元の文章に既にバックスラッシュが含まれる場合（例:「\<img ...>」という文字列を
+      // 意図した入力）、先にこれをエスケープしておかないと、後続のメタ文字エスケープが
+      // 追加した `\` と合わせて `\\<` になってしまう。remark は `\\` を「リテラルな
+      // バックスラッシュ1文字」の escape として消費するため、その直後の `<img ...>` が
+      // エスケープされていない生のHTMLとして解釈されてしまう（レビュー指摘）。
+      // 既存のバックスラッシュを先に `\\` へエスケープしておけば、後続のメタ文字
+      // エスケープと合わせて remark 上も元の見た目（バックスラッシュ+文字）を維持できる。
+      .map((line) => line.replace(/\\/g, '\\\\'))
+      // 行頭の空白が4文字以上（タブ混在含む）だと remark がインデントコードブロックとして
+      // 解釈してしまう。表示側（project-card.tsx / project-preview.tsx）は素のテキストとして
+      // 描画するため構造が食い違う。タブを含む・4文字以上のときだけコードブロック化しない
+      // 3文字までに削る（タブ無しの1〜3文字の空白はそのまま維持する）。
+      .map((line) =>
+        line.replace(/^[ \t]+/, (indent) => (indent.includes('\t') || indent.length >= 4 ? '   ' : indent)),
+      )
+      // 行中のどこに出現しても remark に解釈されるインライン構文の記号
+      // （画像/リンクの `!`・`[`・`]`、強調の `*`・`_`、コードスパンの `` ` ``、
+      // 取り消し線/水平線の `~`、生HTMLの `<`）は、行頭以外に出現しても解釈されてしまう
+      // （例:「会社概要 ![機密](url)」のように行中に画像記法が来るケース、レビュー指摘）ため、
+      // 位置を問わず一括でエスケープする。`*` は行頭のリストマーカーとしても使われるが、
+      // この一括エスケープで行頭・行中どちらの意味も無効化される。
+      .map((line) => line.replace(/[![\]*_`~<]/g, '\\$&'))
+      // 見出し(#)・引用(>)・リスト(+-)・番号付きリスト・Setext見出しの下線(=)は
+      // 行頭にのみ構造として解釈されるため、行頭のときだけエスケープする
+      // （行中の `#` や `-` は remark 上ただの文字として扱われるため過剰エスケープを避ける）。
+      .map((line) => line.replace(/^(\s*)([#>+\-=]|\d+[.)])/, '$1\\$2'))
+      .join('\n')
+  );
 }
 
 /** 表ブロックを GFM markdown 表へ変換する。 */
@@ -493,14 +600,13 @@ export function profileBlockToMarkdown(data: ProfileBlockData): string {
     lines.push('\n**強み**');
     for (const s of data.strengths) lines.push(`- ${s}`);
   }
-  const meta = data.meta;
   const metaItems: string[] = [];
   // 所属会社はビューア（トップバー/kicker）で表示するため、markdown/PDF でも欠落させない（表示パリティ）。
   if (data.company?.trim()) metaItems.push(`| 所属会社 | ${escapeCell(data.company.trim())} |`);
-  if (meta.age) metaItems.push(`| 年齢 | ${escapeCell(meta.age)} |`);
-  if (meta.work) metaItems.push(`| 勤務形態 | ${escapeCell(meta.work)} |`);
-  if (meta.station) metaItems.push(`| 最寄り駅 | ${escapeCell(meta.station)} |`);
-  if (meta.education) metaItems.push(`| 学歴 | ${escapeCell(meta.education)} |`);
+  // 既知8項目に限らず、編集画面で追加した任意の項目も同じ並び順で出す（Issue #193）。
+  for (const [key, value] of orderedProfileMetaEntries(data.meta)) {
+    metaItems.push(`| ${escapeCell(resolveProfileMetaLabel(key))} | ${escapeCell(value)} |`);
+  }
   if (metaItems.length > 0) {
     lines.push('\n| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
@@ -547,14 +653,25 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     lines.push('');
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
+    if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
     if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
     if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
-    const tech = item.tech;
-    const techParts: string[] = [...tech.lang, ...tech.fw, ...tech.db, ...tech.infra, ...tech.tools, ...tech.collab];
+    const techParts = flattenTech(item.tech);
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
     if (item.process.length > 0) lines.push(`| 担当工程 | ${escapeCell(item.process.join(', '))} |`);
+    // 会社概要文（CompanyInfo.note）。従来 PDF・バックアップのどちらにも出力先が無く、
+    // 案件単体では伝わらない「どういう立ち位置でその会社に入っていたか」が欠落していた（#139）。
+    // 見出しと表の間に挟むと、PDF側の「見出し直後が表なら1ブロックとして分割禁止にする」
+    // （renderBlocks の heading+table 結合、#147）が効かなくなり、ページ境界で見出しと
+    // 表が分断される問題が再発する。表の後ろに置くことで見出し→表の隣接を保つ。
+    // ビューア側（project-card.tsx / project-preview.tsx）は note を素のテキストとして
+    // 描画するため、ここでも独立した見出し・リスト等として解釈されないようエスケープする。
+    if (company?.note?.trim()) {
+      lines.push('');
+      lines.push(escapeMarkdownParagraph(company.note.trim()));
+    }
     if (item.duties.trim()) {
       lines.push('');
       lines.push('**業務内容**');

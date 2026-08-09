@@ -99,4 +99,26 @@ describe('Header', () => {
       expect(screen.getByLabelText('PDFダウンロード')).toHaveAttribute('aria-label', 'PDFダウンロード');
     });
   });
+
+  describe('canEdit / backHref（#149 U-3 / U-4）', () => {
+    it('canEdit を省略すると編集ボタンが出る（既定は互換維持）', () => {
+      renderHeader();
+      expect(screen.getByLabelText('編集／ビルダー')).toBeInTheDocument();
+    });
+
+    it('canEdit=false のとき編集ボタンが出ない（閲覧コードのみのユーザー向け）', () => {
+      renderHeader({ canEdit: false });
+      expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
+    });
+
+    it('backHref 未指定では一覧へ戻るリンクが出ない', () => {
+      renderHeader();
+      expect(screen.queryByLabelText('シート一覧へ戻る')).not.toBeInTheDocument();
+    });
+
+    it('backHref 指定時は一覧へ戻るリンクが /view を指す', () => {
+      renderHeader({ backHref: '/view' });
+      expect(screen.getByLabelText('シート一覧へ戻る')).toHaveAttribute('href', '/view');
+    });
+  });
 });

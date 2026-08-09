@@ -1,0 +1,46 @@
+name: Semgrep
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths:
+      - "**/*.ts"
+      - "**/*.tsx"
+      - "**/*.js"
+      - "**/*.mjs"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Code Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep@sha256:2b33f46ba66cf8cc2ad59ccfa7d22951fd00c632c38f1339e84ec8e6e641a942
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      # 依存脆弱性は security-scan.yml の pnpm audit と security-audit.yml の audit-ci が
+      # 見ているため、ここは SAST に専念する。
+      # --metrics=off は使用状況メトリクスの送信のみを無効化する。ルール自体は
+      # p/default 指定時に Semgrep Registry から取得するため通信は残る。
+      # --config auto は metrics=off と併用できずエラーになるため、private 化に
+      # 備えて明示的なルールパック指定に変更している。
+      #
+      # --error は付けていない。導入時点でこのルールセットは既存コードに対して
+      # 21件の findings（ERROR severity 1件を含む）を出すため、即座に付けると
+      # 本PRと無関係な既存コードでCIが赤くなる。まず findings を triage
+      # （修正 or nosemgrep/.semgrepignoreで除外）してから、別PRでハードゲート化する。
+      - run: semgrep scan --config p/default --metrics=off
