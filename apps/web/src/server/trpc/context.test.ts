@@ -42,11 +42,12 @@ describe('createTRPCContext', () => {
     expect(getEditorUserIdMock).toHaveBeenCalledTimes(1);
   });
 
-  it('編集者なら ctx.getIsViewer() は閲覧 cookie を調べずに true を返す', async () => {
+  it('閲覧 cookie が無効でも編集者なら ctx.getIsViewer() は true を返す', async () => {
     getEditorUserIdMock.mockResolvedValue('owner');
+    hasViewerSessionMock.mockResolvedValue(false);
     const ctx = createTRPCContext();
     await expect(ctx.getIsViewer()).resolves.toBe(true);
-    expect(hasViewerSessionMock).not.toHaveBeenCalled();
+    expect(hasViewerSessionMock).toHaveBeenCalledTimes(1);
   });
 
   it('編集者でなく閲覧 cookie も無効なら ctx.getIsViewer() は false を返す', async () => {
@@ -56,19 +57,18 @@ describe('createTRPCContext', () => {
     await expect(ctx.getIsViewer()).resolves.toBe(false);
   });
 
-  it('編集者でなくても閲覧 cookie が有効なら ctx.getIsViewer() は true を返す', async () => {
-    getEditorUserIdMock.mockResolvedValue(null);
+  it('閲覧 cookie が有効なら編集者判定を行わず ctx.getIsViewer() は true を返す', async () => {
     hasViewerSessionMock.mockResolvedValue(true);
     const ctx = createTRPCContext();
     await expect(ctx.getIsViewer()).resolves.toBe(true);
+    expect(getEditorUserIdMock).not.toHaveBeenCalled();
   });
 
-  it('ctx.getIsViewer() を複数回呼んでも getEditorUserId / hasViewerSession の解決は 1 回だけ', async () => {
-    getEditorUserIdMock.mockResolvedValue(null);
+  it('ctx.getIsViewer() を複数回呼んでも有効な閲覧 cookie の解決は 1 回だけ', async () => {
     hasViewerSessionMock.mockResolvedValue(true);
     const ctx = createTRPCContext();
     await Promise.all([ctx.getIsViewer(), ctx.getIsViewer()]);
-    expect(getEditorUserIdMock).toHaveBeenCalledTimes(1);
+    expect(getEditorUserIdMock).not.toHaveBeenCalled();
     expect(hasViewerSessionMock).toHaveBeenCalledTimes(1);
   });
 
@@ -84,7 +84,7 @@ describe('createTRPCContext', () => {
     expect(ctx.request).toBe(req);
     expect(ctx.responseHeaders).toBe(resHeaders);
     await expect(ctx.getIsViewer()).resolves.toBe(true);
-    expect(getEditorUserIdMock).toHaveBeenCalledWith(req.headers);
+    expect(getEditorUserIdMock).not.toHaveBeenCalled();
     expect(hasViewerSessionMock).toHaveBeenCalledWith(req.headers);
   });
 });

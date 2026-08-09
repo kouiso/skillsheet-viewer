@@ -54,6 +54,40 @@ describe('createTRPCContext と実物の auth-gate/viewer-gate の結線（conte
     expect(getSessionMock).not.toHaveBeenCalled();
   });
 
+  it('HTTP auth.status: 閲覧 cookie だけなら canView=true / canEdit=false を返す', async () => {
+    const { createSessionToken } = await import('@/server/session');
+    const token = createSessionToken();
+    const req = new Request('https://example.com/api/trpc/auth.status', {
+      headers: { cookie: `session=${token}` },
+    });
+    const { createTRPCContext } = await import('./context');
+    const { createCallerFactory } = await import('./init');
+    const { authRouter } = await import('./router/auth');
+    const caller = createCallerFactory(authRouter)(createTRPCContext({ req }));
+
+    await expect(caller.status()).resolves.toEqual({ canEdit: false, canView: true });
+    expect(getSessionMock).not.toHaveBeenCalled();
+  });
+
+  it('HTTP auth.status: 閲覧 cookie と編集者 session の併存時も canEdit=true を維持する', async () => {
+    process.env.BETTER_AUTH_SECRET = 'secret';
+    process.env.DATABASE_URL = 'postgres://x';
+    process.env.SKILLSHEET_OWNER_ID = 'owner-1';
+    getSessionMock.mockResolvedValue({ user: { id: 'owner-1' } });
+    const { createSessionToken } = await import('@/server/session');
+    const token = createSessionToken();
+    const req = new Request('https://example.com/api/trpc/auth.status', {
+      headers: { cookie: `session=${token}; better-auth.session_token=cached-session` },
+    });
+    const { createTRPCContext } = await import('./context');
+    const { createCallerFactory } = await import('./init');
+    const { authRouter } = await import('./router/auth');
+    const caller = createCallerFactory(authRouter)(createTRPCContext({ req }));
+
+    await expect(caller.status()).resolves.toEqual({ canEdit: true, canView: true });
+    expect(getSessionMock).toHaveBeenCalledOnce();
+  });
+
   it('HTTP 経路: Cookie が無い/不正なら isViewer=false になる（実物の cookie パース経由）', async () => {
     const req = new Request('https://example.com/api/trpc/auth.status', {
       headers: { cookie: 'other=unrelated' },

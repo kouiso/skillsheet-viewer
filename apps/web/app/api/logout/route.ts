@@ -25,6 +25,6 @@ export async function POST(req: NextRequest) {
     if (!(error instanceof TRPCError) || shouldLogTRPCError(error.code)) {
       console.error('POST /api/logout: unexpected error:', error);
     }
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to log out' }, { status: 500 });
   }
 }
