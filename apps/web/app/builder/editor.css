@@ -273,6 +273,18 @@
     opacity 0.12s ease,
     color 0.12s ease,
     background 0.12s ease;
+  position: relative;
+}
+.row-del::before,
+.co-del::before,
+.row-eye::before {
+  content: '';
+  position: absolute;
+  top: -11px;
+  right: -11px;
+  bottom: -11px;
+  left: -11px;
+  border-radius: 6px;
 }
 .co-del {
   margin-right: 6px;
@@ -306,6 +318,16 @@
 .co-del:hover {
   color: var(--danger);
   background: var(--danger-soft);
+}
+
+/* タッチ端末では hover が使えないため常時表示し、22px 要素の周囲を ::before で
+   44px のタップ領域まで広げる（見た目は 22px のまま）（#220）。 */
+@media (hover: none) {
+  .row-del,
+  .co-del,
+  .row-eye {
+    opacity: 1;
+  }
 }
 
 .pv-hidden {
