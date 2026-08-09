@@ -203,6 +203,42 @@ describe('SkillSheetViewer', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  it('ダッシュボードのセクション間隔は SP で space-y-8、sm 以上で space-y-12（#190: SP の fold 内情報量を増やす）', async () => {
+    // isDashboard は project ブロックの有無で決まる（sheet-view-client.tsx と同じ判定）。
+    const blocks: Block[] = [
+      { id: 'p1', type: 'project', order: 0, data: { companies: [], items: [] } },
+      { id: 'm1', type: 'markdown', order: 1, data: { markdown: '## 目印' } },
+    ];
+    const { container } = render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    // 外側（contentRef）と内側（ブロック列）の2箇所が同じ間隔指定を持つ。
+    // 片方だけ直すとダッシュボードの縦リズムがズレるため両方を固定する。
+    const spaced = Array.from(container.querySelectorAll('div')).filter((el) =>
+      el.className.includes('space-y-8'),
+    ) as HTMLElement[];
+    expect(spaced).toHaveLength(2);
+    for (const el of spaced) {
+      expect(el.className).toContain('sm:space-y-12');
+    }
+  });
+
+  it('非ダッシュボード（project ブロック無し）のブロック列には space-y-8 を付けない（既存レイアウトの互換維持）', async () => {
+    const blocks: Block[] = [{ id: 'm1', type: 'markdown', order: 0, data: { markdown: '## 目印' } }];
+    const { container } = render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    expect(container.querySelector('[class*="space-y-8"]')).toBeNull();
+  });
+
   it('SkillMatrix グリッドの列最小幅が min(240px,100%) でコンテナ幅を超えない（320px 幅での横スクロール回帰防止）', async () => {
     const blocks: Block[] = [
       {
