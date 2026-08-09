@@ -6,19 +6,13 @@ import {
   type DragEndEvent,
   DragOverlay,
   type DragStartEvent,
-  KeyboardSensor,
   PointerSensor,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 // tableBlockToMarkdown 等の純関数/型はサーバ専用モジュール（neon ドライバ等）を
 // client バンドルに巻き込まないため、root の @skillsheet/db ではなく純粋サブエクスポート
@@ -63,7 +57,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
 import { DateTokenPicker } from '@/components/date-token-picker';
 import { SelectOrCustom } from '@/components/select-or-custom';
@@ -607,6 +601,8 @@ const ProfileBlockEditor = ({
   onChange,
   id,
   onValidityChange,
+  customDraft,
+  onCustomDraftChange,
 }: {
   data: ProfileBlockData;
   onChange: (data: ProfileBlockData) => void;
@@ -614,17 +610,22 @@ const ProfileBlockEditor = ({
   id: string;
   /** ラベル重複の有無を親へ通知する。親はこれを見て保存（自動/手動）を止める。 */
   onValidityChange: (id: string, hasConflict: boolean) => void;
+  /** タブ切替等でアンマウントされたときの未確定自由項目行（#216）。 */
+  customDraft?: CustomMetaRow[];
+  /** 自由項目行のドラフトを親へ通知する。 */
+  onCustomDraftChange?: (rows: CustomMetaRow[]) => void;
 }) => {
   const set = <K extends keyof ProfileBlockData>(field: K, value: ProfileBlockData[K]) =>
     onChange({ ...data, [field]: value });
   const setKnownMeta = (key: keyof ProfileMeta, value: string) =>
     onChange({ ...data, meta: { ...(data.meta ?? {}), [key]: value } });
 
-  const [customRows, setCustomRows] = useState<CustomMetaRow[]>(() =>
-    Object.entries(data.meta ?? {})
+  const [customRows, setCustomRows] = useState<CustomMetaRow[]>(() => {
+    if (customDraft) return customDraft;
+    return Object.entries(data.meta ?? {})
       .filter((e): e is [string, string] => !KNOWN_PROFILE_META_KEYS.has(e[0]) && e[1] !== undefined)
-      .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value })),
-  );
+      .map(([label, value]) => ({ id: `custom-${customMetaRowSeq++}`, label, value }));
+  });
   const conflictingRowIds = useMemo(() => findConflictingRowIds(customRows), [customRows]);
   // ラベルが一時的に空（リネーム中の一瞬等）で、かつ値が既にある行。このまま親へ
   // コミットすると値ごと消える（Codex レビュー指摘）ため、確定した状態になるまで
@@ -654,6 +655,7 @@ const ProfileBlockEditor = ({
   // （画面上は customRows のまま残り、エラー表示で気付ける）。親の data.meta を
   // 「最後に確定した安全な状態」のまま保つことで、タブ切替等での消失を防ぐ。
   const commitCustomRows = (rows: CustomMetaRow[]) => {
+    onCustomDraftChange?.(rows);
     setCustomRows(rows);
     const conflicts = findConflictingRowIds(rows);
     if (conflicts.size > 0 || rows.some((row) => row.label.trim() === '' && row.value.trim() !== '')) return;
@@ -820,7 +822,10 @@ const SortableBlock = ({
   onExperienceChange,
   onProfileChange,
   onProfileValidityChange,
+  customDraft,
+  onCustomDraftChange,
   onDelete,
+  onMoveBlock,
 }: {
   item: EditorItem;
   onMarkdownChange: (id: string, markdown: string) => void;
@@ -829,9 +834,19 @@ const SortableBlock = ({
   onExperienceChange: (id: string, data: ExperienceBlockData) => void;
   onProfileChange: (id: string, data: ProfileBlockData) => void;
   onProfileValidityChange: (id: string, hasConflict: boolean) => void;
+  customDraft?: CustomMetaRow[];
+  onCustomDraftChange?: (rows: CustomMetaRow[]) => void;
   onDelete: (id: string) => void;
+  onMoveBlock: (id: string, direction: -1 | 1) => void;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      onMoveBlock(item.id, event.key === 'ArrowUp' ? -1 : 1);
+    }
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -854,6 +869,7 @@ const SortableBlock = ({
         aria-label="ブロックを並べ替え"
         {...attributes}
         {...listeners}
+        onKeyDown={handleKeyDown}
       >
         <GripVertical className="size-5" />
       </button>
@@ -895,6 +911,8 @@ const SortableBlock = ({
           onChange={(data) => onProfileChange(item.id, data)}
           id={item.id}
           onValidityChange={onProfileValidityChange}
+          customDraft={customDraft}
+          onCustomDraftChange={onCustomDraftChange}
         />
       ) : item.type === 'stats' ? (
         <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
@@ -1107,10 +1125,25 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
     });
   }, []);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
+  // ProfileBlockEditor 内の任意メタ項目行はタブ切替等でアンマウントされても入力中の
+  // 未確定値を失わないよう、ブロック id 単位でドラフトを保持する（#216）。
+  const profileCustomDraftsRef = useRef<Map<string, CustomMetaRow[]>>(new Map());
+  const getProfileCustomDraft = useCallback((id: string) => profileCustomDraftsRef.current.get(id), []);
+  const setProfileCustomDraft = useCallback((id: string, rows: CustomMetaRow[]) => {
+    profileCustomDraftsRef.current.set(id, rows);
+  }, []);
+
+  const moveBlock = useCallback((id: string, direction: -1 | 1) => {
+    setItems((prev) => {
+      const index = prev.findIndex((i) => i.id === id);
+      if (index === -1) return prev;
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      return arrayMove(prev, index, target);
+    });
+  }, []);
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   // プレビューは重い（Markdown パース＋ハイライト）ため、入力のたびではなく
   // デバウンスして更新し、タイピングのラグを防ぐ。初期値・初回レンダリングは即時反映。
@@ -1338,7 +1371,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
   const updateProfile = (id: string, data: ProfileBlockData) =>
     setItems((prev) => prev.map((i) => (i.id === id && i.type === 'profile' ? { ...i, ...data } : i)));
 
-  const deleteBlock = (id: string) => setItems((prev) => prev.filter((i) => i.id !== id));
+  const deleteBlock = (id: string) => {
+    profileCustomDraftsRef.current.delete(id);
+    setItems((prev) => prev.filter((i) => i.id !== id));
+  };
 
   const addMarkdownBlock = () => setItems((prev) => [...prev, { id: newId(), type: 'markdown', markdown: '' }]);
 
@@ -1886,7 +1922,10 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                         onExperienceChange={updateExperience}
                         onProfileChange={updateProfile}
                         onProfileValidityChange={handleProfileValidityChange}
+                        customDraft={getProfileCustomDraft(item.id)}
+                        onCustomDraftChange={(rows) => setProfileCustomDraft(item.id, rows)}
                         onDelete={deleteBlock}
+                        onMoveBlock={moveBlock}
                       />
                     ))}
                   </div>
