@@ -176,26 +176,44 @@ const PROCESS_HEADER_ORDER = [
 // normalizeProcess が該当工程を other 扱いにしてしまい、集計から丸ごと消える）。
 const PROCESS_BUILDER_VOCAB = ['要件定義', '基本設計', '詳細設計', '実装', '結合テスト', '総合テスト', '運用・保守'];
 
-function parseProcessSection(lines: string[]): string[] {
+function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where = ''): string[] {
   // ヘッダ行 "| 工程 | 要件定義 | ... |" とデータ行 "| 経験 | ● | ... |" を探す。
+  const at = `${where} の「担当工程」`;
   const rows: string[][] = [];
   for (const line of lines) {
     const cells = line
       .split('|')
       .slice(1, -1)
       .map((c) => c.trim());
-    if (cells.length === 0) continue;
+    // 表の行でない自由文はこの関数が一切解釈しないため、記録して警告に回す（Codexレビュー指摘）。
+    if (cells.length === 0) {
+      recordDropped(dropped, `${at}（表の行ではない）`, line);
+      continue;
+    }
     if (/^:?-+:?$/.test(cells[0])) continue;
     rows.push(cells);
   }
-  if (rows.length < 2) return [];
+  const asLine = (row: string[]) => `| ${row.join(' | ')} |`;
+  if (rows.length < 2) {
+    // ヘッダ行だけ等、対で揃っていない場合は何も取り込まれない。
+    for (const row of rows) recordDropped(dropped, `${at}（ヘッダ行とデータ行が揃っていない）`, asLine(row));
+    return [];
+  }
+  // 解釈するのは先頭2行（ヘッダ＋データ）だけで、3行目以降は読まれないまま捨てられる。
+  for (const row of rows.slice(2)) recordDropped(dropped, `${at}（3行目以降は解釈されない）`, asLine(row));
+
   const header = rows[0];
   const data = rows[1];
   const result: string[] = [];
   for (let i = 1; i < header.length; i++) {
     const label = header[i];
     const idx = PROCESS_HEADER_ORDER.indexOf(label);
-    if (idx === -1) continue;
+    if (idx === -1) {
+      // PROCESS_HEADER_ORDER に無い工程名は、● が立っていてもどの工程にも対応づかず失われる。
+      if (label && (data[i] ?? '').includes('●'))
+        recordDropped(dropped, `${at}（未知の工程名）`, `${label}: ${data[i]}`);
+      continue;
+    }
     const cell = data[i] ?? '';
     if (cell.includes('●')) result.push(PROCESS_BUILDER_VOCAB[idx]);
   }
@@ -275,6 +293,12 @@ function parseProjectBlock(
     const m = line.match(/^####\s*(.+)$/);
     if (m) {
       current = m[1].trim();
+      // 同名のサブセクション見出しが再度現れると、それまで溜めた行は上書きで失われる。
+      // 上書き後の sections を見るだけでは検出できないため、ここで記録する（Codexレビュー指摘）。
+      const overwritten = sections[current];
+      if (overwritten) {
+        for (const prev of overwritten) recordDropped(dropped, `${where} の重複したサブセクション「${current}」`, prev);
+      }
       sections[current] = [];
       continue;
     }
@@ -318,7 +342,7 @@ function parseProjectBlock(
     tech[bucket].push(...splitTechValues(value));
   }
 
-  const process = parseProcessSection(sections.担当工程 ?? []);
+  const process = parseProcessSection(sections.担当工程 ?? [], dropped, where);
 
   const commentText = (sections.コメント ?? []).join('\n');
   const { duties, acquired, comment } = parseCommentSection(commentText);
