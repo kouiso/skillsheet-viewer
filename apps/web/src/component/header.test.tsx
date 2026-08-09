@@ -86,6 +86,11 @@ describe('Header', () => {
       expect(screen.getByLabelText('PDFを生成中')).toBeDisabled();
     });
 
+    it('pdfLoading 中は aria-busy で生成中であることを伝えること（#191）', () => {
+      renderHeader({ onDownloadPdf: vi.fn(), pdfLoading: true });
+      expect(screen.getByLabelText('PDFを生成中')).toHaveAttribute('aria-busy', 'true');
+    });
+
     it('pdfLoading でない場合はボタンが有効であること', () => {
       renderHeader({ onDownloadPdf: vi.fn(), pdfLoading: false });
       expect(screen.getByLabelText('PDFダウンロード')).not.toBeDisabled();

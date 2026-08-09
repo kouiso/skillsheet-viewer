@@ -88,6 +88,25 @@ describe('ProfileIntro', () => {
     expect(prEl.className).not.toContain('line-clamp-4');
   });
 
+  it('トグルは aria-expanded / aria-controls で開閉状態と対象を伝え、44px のタップ領域を持つ（レビュー指摘）', () => {
+    scrollHeight = 200;
+    clientHeight = 100;
+    const pr = 'あ'.repeat(200);
+    render(<ProfileIntro data={buildData({ pr })} />);
+
+    const button = screen.getByRole('button', { name: /続きを読む/ });
+    const prEl = screen.getByText(pr);
+
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button).toHaveAttribute('aria-controls', prEl.id);
+    expect(prEl.id).not.toBe('');
+    // #192 で他の操作ボタンに揃えた 44px 基準をこのトグルにも適用している。
+    expect(button.className).toContain('min-h-11');
+
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: /折りたたむ/ })).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('文字数が少なくても改行区切りで4行を超えていればボタンが出る（レビュー指摘: 文字数しきい値では検出できない回帰の防止）', () => {
     scrollHeight = 200;
     clientHeight = 100; // 短文でも実測で切り詰め有りと判定される状況を再現

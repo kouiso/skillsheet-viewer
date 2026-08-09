@@ -7,7 +7,6 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
-import useMediaQuery from '@/hooks/use-media-query';
 
 /** ビューアで表示ON/OFFを切り替えられるセクションのキー。 */
 export type ViewKey = 'skills' | 'process' | 'projects' | 'timeline';
@@ -51,14 +50,9 @@ export function ViewerTopbar({
   canEdit = true,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
-  // CSS order は視覚順のみで DOM順（キーボードのタブ順・スクリーンリーダーの読み上げ順）には
-  // 影響しない。ビュートグルとアイコン群は SP/sm 以上で視覚的な前後が入れ替わるため、
-  // order-* ではなく DOM 順自体を Tailwind の sm ブレークポイント(640px)に合わせて切り替える。
-  const isDesktop = useMediaQuery('(min-width: 640px)');
 
   const viewToggleFieldset = (
     <fieldset
-      key="view-toggles"
       // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
       // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
       className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
@@ -85,8 +79,15 @@ export function ViewerTopbar({
     </fieldset>
   );
 
-  const actionIcons = (
-    <div key="action-icons" className="flex items-center gap-2">
+  // SP は「戻る＋アイコン群」／「ビュートグル」の2段、sm 以上は「戻る…ビュートグル→アイコン群」の1段で、
+  // ビュートグルとアイコン群の視覚的な前後がブレークポイントで入れ替わる。
+  // CSS order で入れ替えると DOM順（タブ順・読み上げ順）が視覚順とズレ、
+  // useMediaQuery で DOM 順を切り替えると SSR が常に SP 順を返すため hydration 後に
+  // デスクトップだけ並びが入れ替わって毎回レイアウトシフトが起きる。
+  // display:none はフォーカス順からも a11y ツリーからも外れるので、CSS だけで
+  // 両ブレークポイントの DOM順=視覚順を成立させられる出し分けを採る。
+  const renderActionIcons = (className: string) => (
+    <div className={className}>
       {canEdit && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -158,19 +159,9 @@ export function ViewerTopbar({
 
         <div className="min-w-4 flex-1" />
 
-        {/* デスクトップはビュートグル→アイコン群、SPはアイコン群→ビュートグルの順に
-            DOM自体を並べ替える（isDesktop の説明はコンポーネント冒頭のコメント参照）。 */}
-        {isDesktop ? (
-          <>
-            {viewToggleFieldset}
-            {actionIcons}
-          </>
-        ) : (
-          <>
-            {actionIcons}
-            {viewToggleFieldset}
-          </>
-        )}
+        {renderActionIcons('flex items-center gap-2 sm:hidden')}
+        {viewToggleFieldset}
+        {renderActionIcons('hidden items-center gap-2 sm:flex')}
       </div>
     </motion.header>
   );
