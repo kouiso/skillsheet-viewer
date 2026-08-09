@@ -98,6 +98,8 @@ const KNOWN_SUBSECTIONS = ['プロジェクト概要', '技術スタック', '�
 // main() が経歴セクションを切り出す起点。会社見出しより前に唯一存在してよい見出し。
 const CAREER_SECTION_HEADING = /^##\s*経歴/;
 
+// セクションの正式名。構造行の判定は完全一致、セクション位置の探索は行内の部分一致で使う。
+const SKILLS_SECTION_NAME = 'スキル・経験年数';
 const SKILLS_SECTION_TITLE = /スキル・経験年数/;
 const HTML_WRAPPER_TAG = /^<\/?(?:details|summary|h[1-6])[\s/>]/i;
 
@@ -110,8 +112,13 @@ function isSkillsStructuralLine(line: string): boolean {
   const trimmed = line.trim();
   if (!HTML_WRAPPER_TAG.test(trimmed)) return false;
   const text = trimmed.replace(/<[^>]*>/g, '').trim();
-  return text === '' || SKILLS_SECTION_TITLE.test(text);
+  // 部分一致にすると `<h3>スキル・経験年数の注意事項</h3>` まで構造行と誤判定して
+  // 見逃す。既知のセクション名との完全一致に限る（Codexレビュー指摘）。
+  return text === '' || text === SKILLS_SECTION_NAME;
 }
+
+// 担当工程表の先頭セル（行ラベル）として想定している値。これ以外は注記等が紛れている。
+const PROCESS_ROW_LABELS = new Set(['工程', '経験']);
 
 // 担当工程表で「経験なし」を表す記号。値が失われているわけではないため警告しない。
 const PROCESS_NEGATIVE_MARKERS = new Set(['-', '‐', '−', 'ー', '―', '×', '✕', '✗', '無', 'なし', 'N/A', 'n/a']);
@@ -211,7 +218,16 @@ function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where
       recordDropped(dropped, `${at}（表の行ではない）`, line);
       continue;
     }
-    if (/^:?-+:?$/.test(cells[0])) continue;
+    // 先頭セルだけで区切り行と判定すると `|---|---|重要注記|` のような行が丸ごと消える。
+    // isTableSeparatorRow と同じく全セルが区切り記号のときだけ除外する（Codexレビュー指摘）。
+    if (cells.every((c) => /^:?-+:?$/.test(c))) continue;
+    if (/^:?-+:?$/.test(cells[0])) {
+      // 区切り行のつもりで書かれた行に値が紛れている。表としては解釈しない。
+      for (const c of cells) {
+        if (c && !/^:?-+:?$/.test(c)) recordDropped(dropped, `${at}（区切り行に紛れた値）`, c);
+      }
+      continue;
+    }
     rows.push(cells);
   }
   const asLine = (row: string[]) => `| ${row.join(' | ')} |`;
@@ -226,6 +242,13 @@ function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where
   const header = rows[0];
   const data = rows[1];
   const result: string[] = [];
+  // 先頭セルは走査対象外なので、`| 経験（主担当） | ● | … |` の「主担当」のような注記が
+  // どのフィールドにも入らないまま消える（Codexレビュー指摘）。
+  for (const first of [header[0], data[0]]) {
+    if (first && !PROCESS_ROW_LABELS.has(first)) {
+      recordDropped(dropped, `${at}（想定外の行ラベル）`, first);
+    }
+  }
   for (let i = 1; i < header.length; i++) {
     const label = header[i];
     const idx = PROCESS_HEADER_ORDER.indexOf(label);
@@ -248,6 +271,10 @@ function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where
     const cell = data[i] ?? '';
     if (cell.includes('●')) {
       result.push(PROCESS_BUILDER_VOCAB[idx]);
+      // `●（一部担当）` や `● / ○` の ● 以外の部分はどのフィールドにも残らない。
+      // 工程の取り込み自体は維持したまま、残余だけを警告に回す（Codexレビュー指摘）。
+      const residue = cell.replace(/●/g, '').trim();
+      if (residue) recordDropped(dropped, `${at}（●に付随する注記）`, `${label}: ${cell.trim()}`);
       continue;
     }
     // 既知の工程列でも ● 以外のマーカー（○ / 担当 など）は工程に変換されず失われる。
@@ -699,8 +726,10 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
       currentSkills.length = 0;
     }
     if (!skillName) {
-      // 技術名が無い行はスキルにならない。分類名も無ければこの行の内容は丸ごと失われる。
-      if (report && !first && yearsRaw) recordDropped(dropped, `${at}（技術名が無い）`, line);
+      // 技術名が無い行はスキルにならないので、経験年数セルの値はどこにも入らない。
+      // `!first` を条件に入れていたため `| 言語 |  | 5年 |` の 5年 が素通りしていた
+      // （Codexレビュー指摘）。分類の有無にかかわらず記録する。
+      if (report && yearsRaw) recordDropped(dropped, `${at}（技術名が無い）`, line);
       continue;
     }
     if (!currentCategory) {
