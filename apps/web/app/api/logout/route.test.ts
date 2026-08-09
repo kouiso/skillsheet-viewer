@@ -49,7 +49,7 @@ describe('POST /api/logout compatibility adapter', () => {
     const res = await POST(req);
 
     expect(res.status).toBe(500);
-    await expect(res.json()).resolves.toEqual({ error: 'Server configuration error' });
+    await expect(res.json()).resolves.toEqual({ error: 'Failed to log out' });
     expect(consoleErrorSpy).toHaveBeenCalledWith('POST /api/logout: unexpected error:', expect.any(Error));
     consoleErrorSpy.mockRestore();
   });
