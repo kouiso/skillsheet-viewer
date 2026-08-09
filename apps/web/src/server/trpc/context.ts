@@ -36,8 +36,11 @@ export function createTRPCContext(options?: TRPCContextOptions) {
   const resolveIsViewer = (): Promise<boolean> => {
     if (!isViewerPromise) {
       isViewerPromise = (async () => {
-        if ((await resolveEditorUserId()) !== null) return true;
-        return hasViewerSession(requestHeaders);
+        // 閲覧 cookie は HMAC のローカル検証だけで完結するため、DB を参照する
+        // Better Auth より先に判定する。共有リンクの閲覧を DB 遅延・障害へ
+        // 不要に巻き込まず、cookie が無い場合だけ編集者セッションを確認する。
+        if (await hasViewerSession(requestHeaders)) return true;
+        return (await resolveEditorUserId()) !== null;
       })();
     }
     return isViewerPromise;

@@ -6,7 +6,7 @@ import { getCachedSheet, getCachedSheets } from '@/server/sheets-cache';
 import { router, viewerProcedure } from '../init';
 import { githubSheetPathInputSchema } from '../schema';
 
-// DB が正本で、この router は GitHub 由来の legacy 経路（/view/[path]・/compare）専用。
+// DB が正本で、この router は GitHub 由来の legacy 経路（/view/[path]）専用。
 export const githubSheetRouter = router({
   list: viewerProcedure.query(() => getCachedSheets()),
 
@@ -15,7 +15,7 @@ export const githubSheetRouter = router({
   // （sheet.byId と同じ理由。詳細はそちらのコメント参照）。
   //
   // path はここで isValidSheetPath / isSheetFileName を必ず通す。移行前は
-  // app/view/[path]/page.tsx と app/compare/page.tsx が notFound() で弾いていたが、
+  // app/view/[path]/page.tsx が notFound() で弾いていたが、
   // このチェックはページ側にしか無く router には無かった。/api/trpc は URL 直叩きが
   // できるため、ページの導線を経由しない任意の path（.. トラバーサルや
   // CLAUDE.md/AGENTS.md 等の AI 指示系ファイル）でも GitHub API へそのまま渡ってしまう。

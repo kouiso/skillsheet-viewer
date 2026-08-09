@@ -59,6 +59,7 @@ const getCachedDbSheetByIdMock = vi.mocked(getCachedDbSheetById);
 const getCachedDbSheetMock = vi.mocked(getCachedDbSheet);
 const revalidateTagMock = vi.mocked(revalidateTag);
 const MD = { type: 'markdown' as const, data: { markdown: 'x' } };
+const SHEET_ID = '00000000-0000-4000-8000-000000000001';
 
 // editorProcedure/viewerProcedure は middleware が ctx.getEditorUserId() / ctx.getIsViewer() を
 // 解決するだけなので、createTRPCContext()（cookies/headers 読み取り）を経由せず
@@ -231,6 +232,14 @@ describe('sheet.save', () => {
     expect(saveMock).not.toHaveBeenCalled();
   });
 
+  it('UUID でない sheetId は BAD_REQUEST を返し保存しない', async () => {
+    const caller = callerAs('owner');
+    await expect(caller.sheet.save({ title: 'T', blocks: [MD], sheetId: 'not-a-uuid' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(saveMock).not.toHaveBeenCalled();
+  });
+
   it('ConflictError は CONFLICT に変換し、キャッシュは無効化しない', async () => {
     saveMock.mockRejectedValue(new ConflictError());
     const caller = callerAs('owner');
@@ -285,15 +294,21 @@ describe('sheet.create', () => {
 describe('sheet.delete', () => {
   it('非編集者は UNAUTHORIZED を返し削除しない', async () => {
     const caller = callerAs(null);
-    await expect(caller.sheet.delete({ sheetId: 's1' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.sheet.delete({ sheetId: SHEET_ID })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(deleteSheetMock).not.toHaveBeenCalled();
+  });
+
+  it('UUID でない sheetId は BAD_REQUEST を返し削除しない', async () => {
+    const caller = callerAs('owner');
+    await expect(caller.sheet.delete({ sheetId: 'not-a-uuid' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(deleteSheetMock).not.toHaveBeenCalled();
   });
 
   it('編集者は指定 sheetId を削除し、キャッシュを即時失効させる', async () => {
     const caller = callerAs('owner');
-    const result = await caller.sheet.delete({ sheetId: 's1' });
+    const result = await caller.sheet.delete({ sheetId: SHEET_ID });
     expect(result).toEqual({ ok: true });
-    expect(deleteSheetMock).toHaveBeenCalledWith('s1');
+    expect(deleteSheetMock).toHaveBeenCalledWith(SHEET_ID);
     expect(revalidateTagMock).toHaveBeenCalledWith('db-sheet', { expire: 0 });
   });
 });

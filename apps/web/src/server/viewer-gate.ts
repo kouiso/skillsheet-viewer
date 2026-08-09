@@ -41,8 +41,8 @@ function cookieValue(cookieHeader: string, name: string): string | undefined {
 }
 
 /**
- * 閲覧 cookie だけを検証する。tRPC context は編集者判定を先に一度だけ行い、
- * 非編集者の場合にこの関数を呼ぶことで Better Auth の二重参照を避ける。
+ * 閲覧 cookie だけを検証する。tRPC context はこのローカル検証を先に行い、
+ * cookie が無効な場合だけ Better Auth の編集者判定へ進む。
  */
 async function resolveHasViewerSession(requestHeaders?: Headers): Promise<boolean> {
   const token = requestHeaders
