@@ -146,22 +146,36 @@ export function ViewerTopbar({
       className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
     >
       <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
-        <Link
-          href="/view"
-          className="flex min-h-11 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent"
-          aria-label="シート一覧へ戻る"
-        >
-          <ArrowLeft className="size-4 text-muted-foreground" aria-hidden="true" />
-          <span aria-hidden className="size-[9px] rounded-[2px] bg-primary" />
-          <span className="text-[15px] font-semibold text-foreground">{name || 'エンジニアスキルシート'}</span>
-          {company && <span className="font-mono text-[11.5px] text-faint">{company}</span>}
-        </Link>
+        {/* 「戻るリンク＋SP用アイコン群」を折り返さない1つの行にまとめる。
+            親は flex-wrap だが、flexbox は「縮めてから折り返す」のではなく
+            「入らなければ折り返す」ため、リンクに min-w-0 を付けるだけでは足りない。
+            氏名が未入力のシートはフォールバックの「エンジニアスキルシート」が入って
+            リンクだけで約222px を占め、アイコン群が2段目・ビュートグルが3段目へ押し出されて
+            #190 で狙った「SPは2段」が崩れる（実機で3段=177px を確認）。
+            この内側コンテナは既定の flex-nowrap なので、リンクが縮んで省略記号に逃げる。
+            sm 以上では w-auto + flex-1 となり、従来のスペーサー（min-w-4 flex-1）と同じく
+            ビュートグルとアイコン群を右端へ寄せる役割を兼ねる。 */}
+        {/* flex-1 は sm 以上だけに付ける。SP で flex-1 を付けると flex-basis が 0% になり
+            w-full（100%）を打ち消して行を占有できず、ビュートグルが同じ行に載ってしまう。 */}
+        <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto sm:min-w-fit sm:flex-1">
+          <Link
+            href="/view"
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent sm:min-w-fit sm:flex-none"
+            aria-label="シート一覧へ戻る"
+          >
+            <ArrowLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span aria-hidden className="size-[9px] shrink-0 rounded-[2px] bg-primary" />
+            <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">
+              {name || 'エンジニアスキルシート'}
+            </span>
+            {company && <span className="min-w-0 truncate font-mono text-[11.5px] text-faint">{company}</span>}
+          </Link>
 
-        <div className="min-w-4 flex-1" />
+          {renderActionIcons('flex shrink-0 items-center gap-2 sm:hidden')}
+        </div>
 
-        {renderActionIcons('flex items-center gap-2 sm:hidden')}
         {viewToggleFieldset}
-        {renderActionIcons('hidden items-center gap-2 sm:flex')}
+        {renderActionIcons('hidden shrink-0 items-center gap-2 sm:flex')}
       </div>
     </motion.header>
   );
