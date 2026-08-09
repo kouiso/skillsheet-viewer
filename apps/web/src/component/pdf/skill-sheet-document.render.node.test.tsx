@@ -1,9 +1,8 @@
-// このファイルは vitest.config.ts（environment: 'jsdom'）側で走る。jsdom で
-// renderToBuffer すると埋め込みフォントのサブセットがバイトレベルで壊れるため、
-// ここで生成した PDF は本番と同じバイト列ではない。テキスト層とレイアウト計算は
-// 環境に依らず一致するので既存の検証はそのまま成立するが、
-// **フォント・グリフ・描画の可視性に関する主張はこのファイルに書かないこと。**
-// それらは *.node.test.tsx（vitest.config.pdf.ts / environment: 'node'）側で見る。
+// このファイルは vitest.config.pdf.ts（environment: 'node'）側で走る。
+// jsdom では renderToBuffer すると別 realm の Uint8Array 判定でフォントサブセットが
+// バイトレベルで壊れるため、フォント・グリフ・描画の可視性に関する主張は
+// **決して jsdom 側の *.test.tsx に書かないこと。**
+// それらの検証は *.node.test.tsx（vitest.config.pdf.ts / environment: 'node'）側で行う。
 
 import { existsSync } from 'node:fs';
 import path from 'node:path';

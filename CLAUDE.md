@@ -5,6 +5,8 @@ alwaysApply: true
 - 常に日本語で会話する
 - 常に[prompt](prompt/prompt.md) に従うこと
 - 常にプロジェクトの`doc`ディレクトリのドキュメントを前提に作業する
+- PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。
+- コメントはインラインの「なぜそうしたか」を重視し、JSDoc/docstring を全関数に付けることは求めない。パッケージ境界を越える公開 API には必要に応じて docstring を書く。
 
 ## プロジェクト技術スタック
 
@@ -31,9 +33,9 @@ alwaysApply: true
 ## MCP Tools: code-review-graph
 
 **IMPORTANT: This project has a knowledge graph. ALWAYS use the
-code-review-graph MCP tools BEFORE using Grep/Glob/Read to explore
-the codebase.** The graph is faster, cheaper (fewer tokens), and gives
-you structural context (callers, dependents, test coverage) that file
+`code-review-graph` MCP tools BEFORE using Grep/Glob/Read to explore the
+codebase.** The graph is faster, cheaper (fewer tokens), and gives you
+structural context (callers, dependents, test coverage) that file
 scanning cannot.
 
 ### When to use graph tools FIRST
@@ -55,7 +57,7 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 | `get_impact_radius` | Understanding blast radius of a change |
 | `get_affected_flows` | Finding which execution paths are impacted |
 | `query_graph` | Tracing callers, callees, imports, tests, dependencies |
-| `semantic_search_nodes` | Finding functions/classes by name or keyword |
+| `semantic_search_nodes` | Finding functions by name or keyword |
 | `get_architecture_overview` | Understanding high-level codebase structure |
 | `refactor_tool` | Planning renames, finding dead code |
 
