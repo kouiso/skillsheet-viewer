@@ -352,9 +352,20 @@ test('E. auth edge cases', async ({ browser }) => {
   await page.getByLabel('認証コード').fill(viewerCode);
   await page.getByRole('button', { name: '認証' }).click();
   await page.waitForURL(/\/(view|view\/db)/);
-  await page.goto('/builder');
-  await expect(page).toHaveURL(/login/);
-  await capture(page, 'E-viewer-to-login.png');
+  await page.waitForLoadState('networkidle');
+
+  // /builder へは新規ページで遷移する。viewer-auth のクライアントサイド
+  // router.push('/view') と page.goto('/builder') が並走すると Chromium で
+  // net::ERR_ABORTED になるケースがある (#207 敵対テストで発覚)。
+  const builderPage = await anonContext.newPage();
+  const { errors: bErrors, warnings: bWarnings, off: bOff } = collectErrors(builderPage);
+  await builderPage.goto('/builder');
+  await expect(builderPage).toHaveURL(/login/);
+  await capture(builderPage, 'E-viewer-to-login.png');
+  bOff();
+  errors.push(...bErrors);
+  warnings.push(...bWarnings);
+  await builderPage.close();
 
   off();
   const nonAuthErrors = errors.filter((e) => !/401|net::ERR_|Failed to load resource/.test(e));
