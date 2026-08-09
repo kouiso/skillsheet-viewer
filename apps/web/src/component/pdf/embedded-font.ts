@@ -167,9 +167,13 @@ export function extractEmbeddedTrueTypeFonts(pdf: Buffer): Buffer[] {
 
     // 終端キーワードで切ると、圧縮データ末尾が 0x0D のときにその 1 バイトまで
     // 区切りとして食われて展開に失敗する。宣言された /Length で切る。
+    // /Length が読めない場合に `\nendstream` を探して代用すると、ストリーム本体の
+    // バイナリに偶然そのバイト列が含まれるだけで途中を本物の終端と誤認して切り詰める
+    // （実測で再現済み）。安全に境界を決められないフォントは、壊れた中身を拾うより
+    // 抽出しない方が安全なので諦める。
     const declared = readDeclaredLength(objects, object.body.slice(0, streamKeyword.index));
-    const bodyEnd =
-      declared === null ? text.indexOf('\nendstream', bodyStart) : Math.min(bodyStart + declared, pdf.length);
+    if (declared === null) continue;
+    const bodyEnd = Math.min(bodyStart + declared, pdf.length);
     if (bodyEnd <= bodyStart) continue;
 
     const raw = pdf.subarray(bodyStart, bodyEnd);

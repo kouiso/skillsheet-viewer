@@ -289,4 +289,22 @@ describe('extractEmbeddedTrueTypeFonts', () => {
     expect(extracted).toHaveLength(1);
     expect(extracted[0].equals(font)).toBe(true);
   });
+
+  it('/Length が全く宣言されていない場合、本体に紛れた "endstream" 文字列で誤って切り詰めない', () => {
+    // /Length が読めないと安全に境界を決められない。以前は `\nendstream` を探して
+    // 代用していたが、無圧縮ストリーム本体に偶然そのバイト列が含まれると、そこを
+    // 本物の終端と誤認して途中で切り詰めていた。安全に決められないなら抽出しない。
+    const font = buildFont(healthyTables([80, 120]));
+    // 本体（無圧縮のまま埋める）に "\nendstream" を混入させ、本物の終端より手前に
+    // 偽の終端を作る。
+    const bodyWithDecoy = Buffer.concat([font, Buffer.from('\nendstream', 'latin1'), font]);
+    const header = Buffer.from('%PDF-1.7\n1 0 obj\n<< /FontFile2 2 0 R >>\nendobj\n', 'latin1');
+    const objectHead = Buffer.from('2 0 obj\n<< >>\nstream\n', 'latin1');
+    const objectTail = Buffer.from('\nendstream\nendobj\n', 'latin1');
+    const pdf = Buffer.concat([header, objectHead, bodyWithDecoy, objectTail]);
+
+    const extracted = extractEmbeddedTrueTypeFonts(pdf);
+
+    expect(extracted).toHaveLength(0);
+  });
 });
