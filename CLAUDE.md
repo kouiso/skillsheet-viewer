@@ -5,6 +5,7 @@ alwaysApply: true
 - 常に日本語で会話する
 - 常に[prompt](prompt/prompt.md) に従うこと
 - 常にプロジェクトの`doc`ディレクトリのドキュメントを前提に作業する
+- PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。
 
 ## プロジェクト技術スタック
 
