@@ -2,6 +2,7 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech, formatPeriodDisplay, sortByStartDesc } from '@skillsheet/db/process';
+import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface TimelineProps {
   items: ProjectItem[];
@@ -38,9 +39,13 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
                   {formatPeriodDisplay(item.period) || '(期間未入力)'}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="text-[14.5px] font-semibold text-foreground">{item.title || '(タイトル未入力)'}</div>
+                  <div className="text-[14.5px] font-semibold text-foreground">
+                    {sanitizeHtml(item.title) || '(タイトル未入力)'}
+                  </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {[company?.name, item.role, item.scope].filter(Boolean).join(' · ')}
+                    {[sanitizeHtml(company?.name), sanitizeHtml(item.role), sanitizeHtml(item.scope)]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </div>
                 </div>
               </div>

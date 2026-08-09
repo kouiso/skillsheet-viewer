@@ -30,6 +30,12 @@ export type ConfigErrorKind =
   | 'github-missing-env'
   | 'github-auth-failed';
 
+type ErrorWithCode = Error & { code?: unknown };
+
+function isErrorWithCode(err: unknown): err is ErrorWithCode {
+  return err instanceof Error;
+}
+
 // tRPC の procedure は throw を無条件で TRPCError（code: 'INTERNAL_SERVER_ERROR'）に
 // ラップし、元のエラーは .cause に retain する。.message は cause.message を引き継ぐため
 // メッセージ文字列での判定は素通しできるが、.code は TRPCError 自身の code
@@ -42,18 +48,17 @@ function collectErrorCodes(err: Error): unknown[] {
   const codes: unknown[] = [];
   const seen = new Set<unknown>();
   let current: unknown = err;
-  while (current instanceof Error && !seen.has(current)) {
+  while (isErrorWithCode(current) && !seen.has(current)) {
     seen.add(current);
-    const code = (current as { code?: unknown }).code;
-    if (code !== undefined) codes.push(code);
-    current = (current as { cause?: unknown }).cause;
+    if (current.code !== undefined) codes.push(current.code);
+    current = current.cause;
   }
   return codes;
 }
 
 /** エラーが「待っても直らない設定不備」に該当するかを判定し、原因の種類まで返す。 */
 export function classifyConfigError(err: unknown): ConfigErrorKind | null {
-  if (!(err instanceof Error)) return null;
+  if (!isErrorWithCode(err)) return null;
   if (err.message.includes('Missing required GitHub env vars')) return 'github-missing-env';
   if (GITHUB_AUTH_ERROR_PATTERN.test(err.message)) return 'github-auth-failed';
   if (err.message.includes('DATABASE_URL is not set') || err.message.includes('SKILLSHEET_OWNER_ID is not set')) {
