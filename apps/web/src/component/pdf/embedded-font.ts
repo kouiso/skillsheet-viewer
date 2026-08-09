@@ -80,15 +80,25 @@ function readLocaOffsets(font: Buffer, loca: TableRecord, indexToLocFormat: numb
   return offsets;
 }
 
-/** PDF のオブジェクト辞書から、宣言された /Length を読む。間接参照は解決する。 */
+/**
+ * PDF のオブジェクト辞書から、宣言された /Length を読む。間接参照は解決する。
+ * `/Length1` 等の別キーは `\s` を要求することで拾わない。
+ */
 function readDeclaredLength(text: string, dictionary: string): number | null {
-  const direct = /\/Length\s+(\d+)(?!\s+\d+\s+R)/.exec(dictionary);
-  if (direct) return Number(direct[1]);
+  // 間接参照を先に見る。直接値のパターンで否定先読みを使うと、`/Length 1234 0 R` の
+  // ときに (\d+) が "123" までバックトラックして先読みが成立し、誤った長さを返す。
   const indirect = /\/Length\s+(\d+)\s+\d+\s+R/.exec(dictionary);
-  if (!indirect) return null;
-  const target = new RegExp(`(?<![0-9])${indirect[1]}\\s+0\\s+obj\\s*(\\d+)`).exec(text);
-  return target ? Number(target[1]) : null;
+  if (indirect) {
+    const target = new RegExp(`(?<![0-9])${indirect[1]}\\s+0\\s+obj\\s*(\\d+)`).exec(text);
+    return target ? Number(target[1]) : null;
+  }
+  const direct = /\/Length\s+(\d+)/.exec(dictionary);
+  return direct ? Number(direct[1]) : null;
 }
+
+// 正規表現に literal で書いている終端キーワード。捕捉範囲の開始位置を末尾から
+// 逆算するのに使う。
+const END_OBJECT_KEYWORD = 'endobj';
 
 /**
  * PDF バイト列から /FontFile2 で参照される TrueType サブセットを全て取り出す。
@@ -106,7 +116,10 @@ export function extractEmbeddedTrueTypeFonts(pdf: Buffer): Buffer[] {
 
     const streamKeyword = /stream\r?\n/.exec(object[1]);
     if (!streamKeyword) continue;
-    const bodyStart = object.index + object[0].indexOf(object[1]) + streamKeyword.index + streamKeyword[0].length;
+    // 捕捉範囲は `endobj` の直前で終わるので、末尾から引けば開始位置が厳密に出る
+    // （`object[0].indexOf(object[1])` は本文が先頭側にも現れうる分だけ危うい）。
+    const captureStart = object.index + object[0].length - END_OBJECT_KEYWORD.length - object[1].length;
+    const bodyStart = captureStart + streamKeyword.index + streamKeyword[0].length;
 
     // 終端キーワードで切ると、圧縮データ末尾が 0x0D のときにその 1 バイトまで
     // 区切りとして食われて展開に失敗する。宣言された /Length で切る。

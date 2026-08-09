@@ -174,11 +174,20 @@ describe('inspectEmbeddedFont', () => {
 function buildPdfWithFontFile(streamBody: Buffer): Buffer {
   const header = Buffer.from('%PDF-1.7\n1 0 obj\n<< /FontFile2 2 0 R >>\nendobj\n', 'latin1');
   const objectHead = Buffer.from(
-    `2 0 obj\n<< /Length ${streamBody.length} /Filter /FlateDecode >>\nstream\n`,
+    `2 0 obj\n<< /Length ${streamBody.length} /Length1 ${streamBody.length * 2} /Filter /FlateDecode >>\nstream\n`,
     'latin1',
   );
   const objectTail = Buffer.from('\nendstream\nendobj\n', 'latin1');
   return Buffer.concat([header, objectHead, streamBody, objectTail]);
+}
+
+/** /Length を間接参照（`/Length 9 0 R`）で持つ形の PDF。 */
+function buildPdfWithIndirectLength(streamBody: Buffer): Buffer {
+  const header = Buffer.from('%PDF-1.7\n1 0 obj\n<< /FontFile2 2 0 R >>\nendobj\n', 'latin1');
+  const objectHead = Buffer.from('2 0 obj\n<< /Length 9 0 R /Filter /FlateDecode >>\nstream\n', 'latin1');
+  const objectTail = Buffer.from('\nendstream\nendobj\n', 'latin1');
+  const lengthObject = Buffer.from(`9 0 obj\n${streamBody.length}\nendobj\n`, 'latin1');
+  return Buffer.concat([header, objectHead, streamBody, objectTail, lengthObject]);
 }
 
 describe('extractEmbeddedTrueTypeFonts', () => {
@@ -203,5 +212,27 @@ describe('extractEmbeddedTrueTypeFonts', () => {
 
     expect(extracted).toHaveLength(1);
     expect(extracted[0]).toHaveLength(endsWithCarriageReturn.length);
+  });
+
+  it('/Length が間接参照でも参照先を解決して取り出す', () => {
+    // `/Length 9 0 R` を「直接値 9」と読み違えると 9 バイトで切ってしまう。
+    // 否定先読みでこれを弾こうとするとバックトラックで通ってしまうため、
+    // 間接参照を先に判定している。
+    const font = buildFont(healthyTables([80, 120]));
+
+    const extracted = extractEmbeddedTrueTypeFonts(buildPdfWithIndirectLength(deflateSync(font)));
+
+    expect(extracted).toHaveLength(1);
+    expect(extracted[0].equals(font)).toBe(true);
+  });
+
+  it('辞書に /Length1 が併記されていても /Length を取り違えない', () => {
+    // `/Length1` は Type1 系フォントの非圧縮長。`\s` を要求しているので拾わない。
+    const font = buildFont(healthyTables([80, 120, 64]));
+
+    const extracted = extractEmbeddedTrueTypeFonts(buildPdfWithFontFile(deflateSync(font)));
+
+    expect(extracted).toHaveLength(1);
+    expect(extracted[0].equals(font)).toBe(true);
   });
 });
