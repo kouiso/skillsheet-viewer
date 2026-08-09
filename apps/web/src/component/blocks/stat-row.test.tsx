@@ -21,11 +21,11 @@ describe('StatRow', () => {
     expect(grid?.className).toContain('sm:grid-cols-4');
   });
 
-  it('mb-6 は sm: prefix 付きになっている（親の space-y と二重に空かないようにする）', () => {
+  it('mb-6 はブレークポイント無しで常に付く（space-y-0 のシートで次ブロックとの余白が消える回帰の防止）', () => {
     const { container } = render(<StatRow data={buildData()} />);
     const grid = container.firstElementChild;
-    expect(grid?.className).not.toMatch(/(?<!sm:)mb-6/);
-    expect(grid?.className).toContain('sm:mb-6');
+    // ダッシュボードでは親の space-y-* と隣接兄弟マージンとして相殺されるため二重には空かない。
+    expect(grid?.className).toMatch(/(?<!sm:)mb-6/);
   });
 
   it('数値は SP で text-[26px]、sm 以上で sm:text-[30px]', () => {

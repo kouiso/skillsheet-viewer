@@ -11,7 +11,10 @@ export const StatRow = ({ data }: StatRowProps) => {
 
   return (
     // gap-px + 親の bg-border で 1px のヘアライン格子を作る（console は影を使わない）。
-    <div className="grid grid-cols-2 gap-px border border-border bg-border sm:mb-6 sm:grid-cols-4">
+    // mb-6 は親が space-y-* を持つダッシュボードでは隣接兄弟マージンとして相殺されるため
+    // 二重には空かない。逆に外すと space-y-0 のレイアウト（project ブロックが無いシート）で
+    // 次ブロックとの余白が消えるので、ブレークポイントを付けず常に持たせる。
+    <div className="mb-6 grid grid-cols-2 gap-px border border-border bg-border sm:grid-cols-4">
       {data.items.map((item, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
         <div key={i} className="bg-card px-3 py-3.5 sm:px-4 sm:py-[18px]">

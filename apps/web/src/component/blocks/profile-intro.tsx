@@ -1,7 +1,7 @@
 'use client';
 
 import type { ProfileBlockData } from '@skillsheet/db/blocks';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
@@ -25,6 +25,8 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
   // 4行を超えて隠れることがあるため、文字数しきい値では検出できない。
   const [isPrTruncated, setIsPrTruncated] = useState(false);
   const prRef = useRef<HTMLParagraphElement>(null);
+  // 開閉ボタンから自己PR段落を aria-controls で指すための id。
+  const prId = useId();
   const metaEntries = (Object.entries(data.meta) as [string, string | undefined][]).filter(
     ([, v]) => v && v.trim().length > 0,
   );
@@ -123,6 +125,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
         <>
           <p
             ref={prRef}
+            id={prId}
             // line-clamp は SP 専用（sm 以上は続きを読むボタンを出さないため、常に全文表示に戻す）。
             className={`max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80 sm:order-2 sm:line-clamp-none ${
               !expanded ? 'line-clamp-4' : ''
@@ -134,7 +137,11 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
-              className="-mt-2 self-start text-xs font-medium text-accent-text sm:hidden"
+              aria-expanded={expanded}
+              aria-controls={prId}
+              // 開閉トグルなので min-h-11: SP 専用の操作でありながらタップ領域が
+              // 文字高さ(約17px)しか無く、#192 で 44px を確保した他のボタンと不揃いだった。
+              className="-mt-3 flex min-h-11 items-center self-start text-xs font-medium text-accent-text sm:hidden"
             >
               {expanded ? '折りたたむ' : '続きを読む'}
             </button>
