@@ -52,16 +52,69 @@ loadWebEnvLocal();
 const SHEET_ID = process.env.SHEET_ID ?? '18a79e66-75e2-47e8-922e-d61342bb5233';
 
 const newId = () => crypto.randomUUID();
+// 各行を「まだ読まれていない」状態で保持し、パーサーが処理した行を消費済みにする。
+// 最後に未消費の非空行を拾うことで、パーサー間の隙間や見落としを検出する（#227）。
+type TrackedLine = { text: string; consumed: boolean };
+
+class LineTracker {
+  lines: TrackedLine[];
+
+  constructor(text: string) {
+    this.lines = text.split('\n').map((line) => ({ text: line, consumed: false }));
+  }
+
+  consume(i: number) {
+    if (i >= 0 && i < this.lines.length) this.lines[i].consumed = true;
+  }
+
+  findIndex(predicate: RegExp, start = 0): number {
+    for (let i = start; i < this.lines.length; i++) {
+      if (predicate.test(this.lines[i].text)) return i;
+    }
+    return -1;
+  }
+
+  slice(start: number, end?: number): TrackedLine[] {
+    return this.lines.slice(start, end ?? this.lines.length);
+  }
+
+  get length() {
+    return this.lines.length;
+  }
+}
+
+function collectUnconsumed(tracker: LineTracker, dropped: DroppedLine[], where: string): void {
+  for (const line of tracker.lines) {
+    if (line.consumed) continue;
+    if (!line.text.trim()) continue;
+    if (isTableSeparatorRow(line.text)) continue;
+    pushDropped(dropped, where, line.text);
+    line.consumed = true;
+  }
+}
 
 // --- markdown テーブル行パース --------------------------------------------------------
 
 // "| ラベル | 値 |" 形式の行から [ラベル, 値] を取り出す（区切り行 :--- は呼び出し側で除外）。
+// 末尾パイプの有無にかかわらず正しくセルを取り出す（#227）。
+function splitPipeRow(line: string): string[] {
+  const parts = line.split('|');
+  const firstEmpty = parts[0].trim() === '';
+  const lastEmpty = parts[parts.length - 1].trim() === '';
+  const start = firstEmpty ? 1 : 0;
+  const end = lastEmpty ? parts.length - 1 : parts.length;
+  return parts.slice(start, end).map((c) => c.trim());
+}
+
+// "| ラベル | 値 |" 形式の行から [ラベル, 値] を取り出す（区切り行は呼び出し側で除外）。
 function parseTableRow(line: string): [string, string] | null {
-  const m = line.match(/^\|(.+)\|(.+)\|$/);
-  if (!m) return null;
-  const label = m[1].trim();
-  const value = m[2].trim();
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('|')) return null;
+  const cells = splitPipeRow(line);
+  if (cells.length < 2) return null;
+  const label = cells[0];
   if (/^:?-+:?$/.test(label)) return null;
+  const value = cells.slice(1).join(' | ');
   return [label, value];
 }
 
@@ -77,6 +130,7 @@ function stripBold(s: string): string {
 export type DroppedLine = { where: string; line: string };
 
 /** `|---|:---:|` のような表の区切り行。データではないため捨てても警告しない。 */
+/** `|---|:---:|` のような表の区切り行。データではないため捨てても警告しない。 */
 export function isTableSeparatorRow(line: string): boolean {
   const trimmed = line.trim();
   if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) return false;
@@ -85,7 +139,7 @@ export function isTableSeparatorRow(line: string): boolean {
 }
 
 /** 空行と表の区切り行を除いた「本来データだったはずの行」だけを記録する。 */
-function recordDropped(dropped: DroppedLine[], where: string, line: string): void {
+function pushDropped(dropped: DroppedLine[], where: string, line: string): void {
   if (!line.trim()) return;
   if (isTableSeparatorRow(line)) return;
   dropped.push({ where, line: line.trim() });
@@ -96,11 +150,11 @@ function recordDropped(dropped: DroppedLine[], where: string, line: string): voi
 const KNOWN_SUBSECTIONS = ['プロジェクト概要', '技術スタック', '担当工程', 'コメント'];
 
 // main() が経歴セクションを切り出す起点。会社見出しより前に唯一存在してよい見出し。
-const CAREER_SECTION_HEADING = /^##\s*経歴/;
+// main() が経歴セクションを切り出す起点。会社見出しより前に唯一存在してよい見出し。
+const CAREER_SECTION_HEADING = /^##\s*経歴(?:\s|$)/;
 
 // セクションの正式名。構造行の判定は完全一致、セクション位置の探索は行内の部分一致で使う。
 const SKILLS_SECTION_NAME = 'スキル・経験年数';
-const SKILLS_SECTION_TITLE = /スキル・経験年数/;
 const HTML_WRAPPER_TAG = /^<\/?(?:details|summary|h[1-6])[\s/>]/i;
 
 /**
@@ -151,14 +205,22 @@ function normalizePeriod(raw: string): string {
 }
 
 // --- 技術スタック行ラベル → ProjectTech バケット ----------------------------------------
+// --- 技術スタック行ラベル → ProjectTech バケット ----------------------------------------
 const TECH_LABEL_MAP: Record<string, keyof ProjectTech> = {
+  言語: 'lang',
   使用言語: 'lang',
+  フレームワーク: 'fw',
+  ライブラリ: 'fw',
   'フレームワーク・ライブラリ': 'fw',
+  DB: 'db',
   データベース: 'db',
-  'クラウド・インフラ': 'infra',
+  クラウド: 'infra',
   インフラ: 'infra',
+  'クラウド・インフラ': 'infra',
   外部サービス: 'tools',
+  サービス: 'tools',
   開発ツール: 'tools',
+  ツール: 'tools',
   コラボレーションツール: 'collab',
 };
 
@@ -204,63 +266,58 @@ const PROCESS_HEADER_ORDER = [
 // normalizeProcess が該当工程を other 扱いにしてしまい、集計から丸ごと消える）。
 const PROCESS_BUILDER_VOCAB = ['要件定義', '基本設計', '詳細設計', '実装', '結合テスト', '総合テスト', '運用・保守'];
 
-function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where = ''): string[] {
-  // ヘッダ行 "| 工程 | 要件定義 | ... |" とデータ行 "| 経験 | ● | ... |" を探す。
+function parseProcessSection(lines: TrackedLine[], dropped: DroppedLine[] = [], where = ''): string[] {
   const at = `${where} の「担当工程」`;
   const rows: string[][] = [];
+  const rowLines: TrackedLine[] = [];
   for (const line of lines) {
-    const cells = line
-      .split('|')
-      .slice(1, -1)
-      .map((c) => c.trim());
-    // 表の行でない自由文はこの関数が一切解釈しないため、記録して警告に回す（Codexレビュー指摘）。
-    if (cells.length === 0) {
-      recordDropped(dropped, `${at}（表の行ではない）`, line);
+    line.consumed = true;
+    const text = line.text;
+    if (!text.trim()) continue;
+    if (!text.trim().startsWith('|')) {
+      pushDropped(dropped, `${at}（表の行ではない）`, text);
       continue;
     }
-    // 先頭セルだけで区切り行と判定すると `|---|---|重要注記|` のような行が丸ごと消える。
-    // isTableSeparatorRow と同じく全セルが区切り記号のときだけ除外する（Codexレビュー指摘）。
+    const cells = splitPipeRow(text);
+    if (cells.length === 0) {
+      pushDropped(dropped, `${at}（表の行ではない）`, text);
+      continue;
+    }
     if (cells.every((c) => /^:?-+:?$/.test(c))) continue;
     if (/^:?-+:?$/.test(cells[0])) {
-      // 区切り行のつもりで書かれた行に値が紛れている。表としては解釈しない。
       for (const c of cells) {
-        if (c && !/^:?-+:?$/.test(c)) recordDropped(dropped, `${at}（区切り行に紛れた値）`, c);
+        if (c && !/^:?-+:?$/.test(c)) pushDropped(dropped, `${at}（区切り行に紛れた値）`, c);
       }
       continue;
     }
     rows.push(cells);
+    rowLines.push(line);
   }
-  const asLine = (row: string[]) => `| ${row.join(' | ')} |`;
+
   if (rows.length < 2) {
-    // ヘッダ行だけ等、対で揃っていない場合は何も取り込まれない。
-    for (const row of rows) recordDropped(dropped, `${at}（ヘッダ行とデータ行が揃っていない）`, asLine(row));
+    for (const line of rowLines) pushDropped(dropped, `${at}（ヘッダ行とデータ行が揃っていない）`, line.text);
     return [];
   }
-  // 解釈するのは先頭2行（ヘッダ＋データ）だけで、3行目以降は読まれないまま捨てられる。
-  for (const row of rows.slice(2)) recordDropped(dropped, `${at}（3行目以降は解釈されない）`, asLine(row));
+
+  for (let i = 2; i < rows.length; i++) {
+    pushDropped(dropped, `${at}（3行目以降は解釈されない）`, rowLines[i].text);
+  }
 
   const header = rows[0];
   const data = rows[1];
   const result: string[] = [];
-  // 先頭セルは走査対象外なので、`| 経験（主担当） | ● | … |` の「主担当」のような注記が
-  // どのフィールドにも入らないまま消える（Codexレビュー指摘）。
   for (const first of [header[0], data[0]]) {
     if (first && !PROCESS_ROW_LABELS.has(first)) {
-      recordDropped(dropped, `${at}（想定外の行ラベル）`, first);
+      pushDropped(dropped, `${at}（想定外の行ラベル）`, first);
     }
   }
   for (let i = 1; i < header.length; i++) {
     const label = header[i];
     const idx = PROCESS_HEADER_ORDER.indexOf(label);
     if (idx === -1) {
-      // PROCESS_HEADER_ORDER に無い工程名の列は、どの工程にも対応づかないため値ごと失われる。
-      // ● 以外（○ / 担当 / 注記など）でも失われることに変わりはないので、非空なら
-      // マーカーの種類を問わず記録する（Codexレビュー指摘）。
-      // 見出しセルが空でもデータセルに値があれば、その値は失われる。`label &&` で弾くと
-      // `| 工程 | 要件定義 | |` と `| 経験 | | 担当 |` の組が素通りする（Codexレビュー指摘）。
       const unknownCell = (data[i] ?? '').trim();
       if (unknownCell) {
-        recordDropped(
+        pushDropped(
           dropped,
           `${at}（未知の工程名）`,
           label ? `${label}: ${unknownCell}` : `${i + 1}列目: ${unknownCell}`,
@@ -271,25 +328,18 @@ function parseProcessSection(lines: string[], dropped: DroppedLine[] = [], where
     const cell = data[i] ?? '';
     if (cell.includes('●')) {
       result.push(PROCESS_BUILDER_VOCAB[idx]);
-      // `●（一部担当）` や `● / ○` の ● 以外の部分はどのフィールドにも残らない。
-      // 工程の取り込み自体は維持したまま、残余だけを警告に回す（Codexレビュー指摘）。
       const residue = cell.replace(/●/g, '').trim();
-      if (residue) recordDropped(dropped, `${at}（●に付随する注記）`, `${label}: ${cell.trim()}`);
+      if (residue) pushDropped(dropped, `${at}（●に付随する注記）`, `${label}: ${cell.trim()}`);
       continue;
     }
-    // 既知の工程列でも ● 以外のマーカー（○ / 担当 など）は工程に変換されず失われる。
-    // ただし空欄と「経験なし」記号は失っている情報が無いので警告しない。これを警告すると
-    // 案件ごとに毎回出て本当の取りこぼしが埋もれる（Codexレビュー指摘）。
     const trimmed = cell.trim();
     if (trimmed && !PROCESS_NEGATIVE_MARKERS.has(trimmed)) {
-      recordDropped(dropped, `${at}（解釈できないマーカー）`, `${label}: ${trimmed}`);
+      pushDropped(dropped, `${at}（解釈できないマーカー）`, `${label}: ${trimmed}`);
     }
   }
-  // ヘッダより列数が多いデータ行の余剰セルは、対応する工程名が無く読まれないまま失われる
-  // （CodeRabbitレビュー指摘）。
   for (let i = header.length; i < data.length; i++) {
     const extra = (data[i] ?? '').trim();
-    if (extra) recordDropped(dropped, `${at}（ヘッダに対応する列が無い）`, extra);
+    if (extra) pushDropped(dropped, `${at}（ヘッダに対応する列が無い）`, extra);
   }
   return result;
 }
@@ -352,104 +402,124 @@ function parseCompanyHeading(text: string): { name: string; period: string } {
 
 // --- プロジェクト1件分（見出し行の次から次の ■ or ### まで）のパース -----------------------
 function parseProjectBlock(
-  headingText: string,
-  bodyLines: string[],
+  headingLine: TrackedLine,
+  bodyLines: TrackedLine[],
   companyId: string,
   dropped: DroppedLine[] = [],
 ): ProjectItem {
+  headingLine.consumed = true;
+  const headingText = headingLine.text.replace(/^####\s*/, '').trim();
   const { title, scope } = parseProjectHeading(headingText);
   const where = `案件「${title}」`;
 
-  // サブセクションごとに分割 (#### プロジェクト概要 / #### 技術スタック / #### 担当工程 / #### コメント)
-  // null プロトタイプで作る。通常のオブジェクトだと `#### constructor` や `#### toString`
-  // のような見出しに対して sections[current] が Object.prototype 由来の値（関数など）を
-  // 返し、初回にもかかわらず重複と誤判定した上、反復不能な値への for...of で移行全体が
-  // TypeError で停止する（Codexレビュー指摘）。
-  const sections: Record<string, string[]> = Object.create(null);
+  const sections: Record<string, { headingLine: TrackedLine; bodyLines: TrackedLine[] }> = Object.create(null);
   let current: string | null = null;
+  const preHeading: TrackedLine[] = [];
+
   for (const line of bodyLines) {
-    const m = line.match(/^####\s*(.+)$/);
+    line.consumed = true;
+    const m = line.text.match(/^####\s*(.+)$/);
     if (m) {
-      current = m[1].trim();
-      // 同名のサブセクション見出しが再度現れると、それまで溜めた行は上書きで失われる。
-      // 上書き後の sections を見るだけでは検出できないため、ここで記録する（Codexレビュー指摘）。
-      const overwritten = sections[current];
-      if (overwritten) {
-        for (const prev of overwritten) recordDropped(dropped, `${where} の重複したサブセクション「${current}」`, prev);
+      const name = m[1].trim();
+      if (current !== null && Object.hasOwn(sections, name)) {
+        const prev = sections[name];
+        pushDropped(dropped, `${where} の重複したサブセクション「${name}」`, prev.headingLine.text);
+        for (const l of prev.bodyLines) pushDropped(dropped, `${where} の重複したサブセクション「${name}」`, l.text);
       }
-      sections[current] = [];
+      sections[name] = { headingLine: line, bodyLines: [] };
+      current = name;
       continue;
     }
-    if (current) sections[current].push(line);
-    // 最初のサブセクション見出しより前に書かれた行は、どのフィールドにも入らず捨てられる。
-    else recordDropped(dropped, `${where} の冒頭（サブセクション見出しより前）`, line);
+    if (current !== null) {
+      sections[current].bodyLines.push(line);
+    } else {
+      preHeading.push(line);
+    }
   }
 
-  for (const [name, sectionLines] of Object.entries(sections)) {
-    if (KNOWN_SUBSECTIONS.includes(name)) continue;
-    // 見出し行自体もどの出力フィールドにも入らない。本文が空の場合は子行の記録だけでは
-    // 何も残らず、見出しが消えたことに気付けない（Codexレビュー指摘）。
-    recordDropped(dropped, `${where} の未知のサブセクション「${name}」`, `#### ${name}`);
-    for (const line of sectionLines) recordDropped(dropped, `${where} の未知のサブセクション「${name}」`, line);
+  for (const line of preHeading) {
+    pushDropped(dropped, `${where} の冒頭（サブセクション見出しより前）`, line.text);
   }
 
   let period = '';
   let role = '';
   let team = '';
   const overviewExtra: string[] = [];
-  for (const line of sections.プロジェクト概要 ?? []) {
-    const row = parseTableRow(line);
-    if (!row) {
-      recordDropped(dropped, `${where} の「プロジェクト概要」（表の行として解釈できない）`, line);
-      continue;
-    }
-    const [label, value] = row;
-    // 単一値フィールドが二度現れると後勝ちで上書きされ、先の値が失われる（Codexレビュー指摘）。
-    const overwriteGuard = (previous: string) => {
-      if (previous)
-        recordDropped(dropped, `${where} の「プロジェクト概要」（重複した項目の上書き）`, `${label}: ${previous}`);
-    };
-    if (label === '期間') {
-      overwriteGuard(period);
-      period = normalizePeriod(value);
-    } else if (label === '役割') {
-      overwriteGuard(role);
-      role = stripBold(value);
-    } else if (label === 'チーム規模' || label === 'チーム') {
-      overwriteGuard(team);
-      team = stripBold(value);
-    } else if (value) overviewExtra.push(`${label}: ${stripBold(value)}`);
-  }
-
   const tech = emptyTech();
-  for (const line of sections.技術スタック ?? []) {
-    const row = parseTableRow(line);
-    if (!row) {
-      recordDropped(dropped, `${where} の「技術スタック」（表の行として解釈できない）`, line);
+  let process: string[] = [];
+  let duties = '';
+  let acquired = '';
+  let comment = '';
+
+  for (const [name, section] of Object.entries(sections)) {
+    if (!KNOWN_SUBSECTIONS.includes(name)) {
+      pushDropped(dropped, `${where} の未知のサブセクション「${name}」`, `#### ${name}`);
+      for (const line of section.bodyLines)
+        pushDropped(dropped, `${where} の未知のサブセクション「${name}」`, line.text);
       continue;
     }
-    // parseTableRow の正規表現は貪欲なので、3セル以上あっても失敗せず「最後のセル以外」を
-    // まとめてラベルとして返す。`| 使用言語 | TypeScript | 業務利用 |` は TypeScript が
-    // lang から消えて 業務利用 だけが tools に入るため、!row では検出できない
-    // （Codexレビュー指摘）。
-    const rawCells = line
-      .split('|')
-      .slice(1, -1)
-      .map((c) => c.trim());
-    if (rawCells.length > 2 && !isTableSeparatorRow(line)) {
-      recordDropped(dropped, `${where} の「技術スタック」（列が2つを超える）`, line);
-      continue;
+
+    if (name === 'プロジェクト概要') {
+      for (const line of section.bodyLines) {
+        line.consumed = true;
+        const row = parseTableRow(line.text);
+        if (!row) {
+          pushDropped(dropped, `${where} の「プロジェクト概要」（表の行として解釈できない）`, line.text);
+          continue;
+        }
+        const [label, value] = row;
+        if (label === '項目') continue;
+        if (!value) continue;
+        const overwriteGuard = (previous: string) => {
+          if (previous)
+            pushDropped(dropped, `${where} の「プロジェクト概要」（重複した項目の上書き）`, `${label}: ${previous}`);
+        };
+        if (label === '期間') {
+          overwriteGuard(period);
+          period = normalizePeriod(value);
+        } else if (label === '役割') {
+          overwriteGuard(role);
+          role = stripBold(value);
+        } else if (label === 'チーム規模' || label === 'チーム') {
+          overwriteGuard(team);
+          team = stripBold(value);
+        } else if (value) {
+          overviewExtra.push(`${label}: ${stripBold(value)}`);
+        }
+      }
+    } else if (name === '技術スタック') {
+      for (const line of section.bodyLines) {
+        line.consumed = true;
+        const row = parseTableRow(line.text);
+        if (!row) {
+          pushDropped(dropped, `${where} の「技術スタック」（表の行として解釈できない）`, line.text);
+          continue;
+        }
+        const [label, value] = row;
+        const rawCells = splitPipeRow(line.text);
+        if (rawCells.length > 2 && !isTableSeparatorRow(line.text)) {
+          pushDropped(dropped, `${where} の「技術スタック」（列が2つを超える）`, line.text);
+          continue;
+        }
+        if (label === '項目') continue;
+        const bucket = TECH_LABEL_MAP[label];
+        if (bucket === undefined) {
+          pushDropped(dropped, `${where} の「技術スタック」（未知のラベル）`, line.text);
+          continue;
+        }
+        tech[bucket].push(...splitTechValues(value));
+      }
+    } else if (name === '担当工程') {
+      process = parseProcessSection(section.bodyLines, dropped, where);
+    } else if (name === 'コメント') {
+      const commentText = section.bodyLines.map((l) => l.text).join('\n');
+      for (const line of section.bodyLines) line.consumed = true;
+      const parsed = parseCommentSection(commentText);
+      duties = parsed.duties;
+      acquired = parsed.acquired;
+      comment = parsed.comment;
     }
-    const [label, value] = row;
-    if (label === '項目') continue; // ヘッダ行
-    const bucket = TECH_LABEL_MAP[label] ?? 'tools';
-    tech[bucket].push(...splitTechValues(value));
   }
-
-  const process = parseProcessSection(sections.担当工程 ?? [], dropped, where);
-
-  const commentText = (sections.コメント ?? []).join('\n');
-  const { duties, acquired, comment } = parseCommentSection(commentText);
 
   return {
     id: newId(),
@@ -468,75 +538,93 @@ function parseProjectBlock(
 }
 
 // --- 全体パース：会社ごとに分割 → 各会社内のプロジェクトごとに分割 -------------------------
+function parseCareerSection(
+  tracker: LineTracker,
+  dropped: DroppedLine[],
+): { companies: CompanyInfo[]; items: ProjectItem[] } {
+  const companies: CompanyInfo[] = [];
+  const items: ProjectItem[] = [];
+
+  const careerStartIdx = tracker.findIndex(CAREER_SECTION_HEADING);
+  if (careerStartIdx !== -1) tracker.consume(careerStartIdx);
+  const section = tracker.slice(careerStartIdx !== -1 ? careerStartIdx + 1 : 0);
+
+  let currentCompanyId: string | null = null;
+  const currentCompanyIntro: TrackedLine[] = [];
+  let currentProjectHeadingLine: TrackedLine | null = null;
+  let currentProjectHeadingText = '';
+  const currentProjectBody: TrackedLine[] = [];
+
+  const flushProject = () => {
+    if (currentProjectHeadingLine !== null && currentCompanyId !== null) {
+      items.push(parseProjectBlock(currentProjectHeadingLine, currentProjectBody, currentCompanyId, dropped));
+    } else if (currentProjectHeadingLine !== null) {
+      pushDropped(dropped, '会社見出しより前の案件', currentProjectHeadingText);
+      for (const line of currentProjectBody) pushDropped(dropped, '会社見出しより前の案件', line.text);
+    }
+    currentProjectHeadingLine = null;
+    currentProjectHeadingText = '';
+    currentProjectBody.length = 0;
+  };
+
+  const flushCompanyNote = () => {
+    if (currentCompanyId !== null) {
+      const prev = companies.find((c) => c.id === currentCompanyId);
+      if (prev)
+        prev.note = currentCompanyIntro
+          .map((l) => l.text)
+          .join('\n')
+          .trim();
+    }
+    currentCompanyIntro.length = 0;
+  };
+
+  for (const line of section) {
+    if (line.consumed) continue;
+    line.consumed = true;
+
+    const companyMatch = line.text.match(/^###(?!#)\s*(.+)$/);
+    if (companyMatch) {
+      flushProject();
+      flushCompanyNote();
+      const { name, period } = parseCompanyHeading(companyMatch[1]);
+      const id = newId();
+      companies.push({ id, name, kind: '', period, note: '' });
+      currentCompanyId = id;
+      continue;
+    }
+
+    const projectMatch = line.text.match(/^####\s*(■.+)$/);
+    if (projectMatch) {
+      flushProject();
+      currentProjectHeadingLine = line;
+      currentProjectHeadingText = projectMatch[1];
+      continue;
+    }
+
+    if (currentProjectHeadingLine !== null) {
+      currentProjectBody.push(line);
+    } else if (currentCompanyId !== null) {
+      currentCompanyIntro.push(line);
+    } else if (!CAREER_SECTION_HEADING.test(line.text)) {
+      pushDropped(dropped, '最初の会社見出しより前', line.text);
+    }
+  }
+
+  flushProject();
+  flushCompanyNote();
+
+  return { companies, items };
+}
+
 export function parseCareerMarkdown(markdown: string): {
   companies: CompanyInfo[];
   items: ProjectItem[];
   dropped: DroppedLine[];
 } {
-  const lines = markdown.split('\n');
-  const companies: CompanyInfo[] = [];
-  const items: ProjectItem[] = [];
+  const tracker = new LineTracker(markdown);
   const dropped: DroppedLine[] = [];
-
-  let currentCompanyId: string | null = null;
-  let currentCompanyIntro: string[] = [];
-  let currentProjectHeading: string | null = null;
-  let currentProjectBody: string[] = [];
-
-  const flushProject = () => {
-    if (currentProjectHeading !== null && currentCompanyId !== null) {
-      items.push(parseProjectBlock(currentProjectHeading, currentProjectBody, currentCompanyId, dropped));
-    } else if (currentProjectHeading !== null) {
-      // 会社見出しより前に現れた案件はどの会社にも紐づけられず、見出しごと丸ごと捨てられる。
-      recordDropped(dropped, '会社見出しより前の案件', currentProjectHeading);
-      for (const line of currentProjectBody) recordDropped(dropped, '会社見出しより前の案件', line);
-    }
-    currentProjectHeading = null;
-    currentProjectBody = [];
-  };
-
-  for (const line of lines) {
-    const companyMatch = line.match(/^###(?!#)\s*(.+)$/);
-    if (companyMatch) {
-      flushProject();
-      const { name, period } = parseCompanyHeading(companyMatch[1]);
-      const note = currentCompanyIntro.join('\n').trim();
-      if (currentCompanyId !== null) {
-        const prev = companies.find((c) => c.id === currentCompanyId);
-        if (prev) prev.note = note;
-      }
-      const id = newId();
-      companies.push({ id, name, kind: '', period, note: '' });
-      currentCompanyId = id;
-      currentCompanyIntro = [];
-      continue;
-    }
-
-    const projectMatch = line.match(/^####\s*(■.+)$/);
-    if (projectMatch) {
-      flushProject();
-      currentProjectHeading = projectMatch[1];
-      continue;
-    }
-
-    if (currentProjectHeading !== null) {
-      currentProjectBody.push(line);
-    } else if (currentCompanyId !== null) {
-      currentCompanyIntro.push(line);
-    } else if (!CAREER_SECTION_HEADING.test(line)) {
-      // 最初の会社見出し(###)より前の行は、会社にも案件にも属さないまま捨てられる。
-      // 除外するのは `## 経歴`（main() がここを起点に切り出す想定済みの構造）だけにする。
-      // 見出し行を一律で除外すると `## 注意事項` のような想定外の見出しを見逃す
-      // （Codexレビュー指摘）。
-      recordDropped(dropped, '最初の会社見出しより前', line);
-    }
-  }
-  flushProject();
-  if (currentCompanyId !== null) {
-    const prev = companies.find((c) => c.id === currentCompanyId);
-    if (prev) prev.note = currentCompanyIntro.join('\n').trim();
-  }
-
+  const { companies, items } = parseCareerSection(tracker, dropped);
   return { companies, items, dropped };
 }
 
@@ -572,72 +660,71 @@ function normalizeProfileLabel(label: string): string {
   return label.replace(/\s+/g, '').replace(/\*/g, '').replace(/:/g, '').trim();
 }
 
-export function parseProfileMarkdown(markdown: string, dropped: DroppedLine[] = []): ProfileBlockData | null {
-  const lines = markdown.split('\n');
-  const startIdx = lines.findIndex((line) => /^##\s*技術者プロファイル/.test(line));
+function parseProfileSection(tracker: LineTracker, dropped: DroppedLine[]): ProfileBlockData | null {
+  const startIdx = tracker.findIndex(/^##\s*技術者プロファイル(?:\s|$)/);
   if (startIdx === -1) return null;
+  tracker.consume(startIdx);
   const at = '技術者プロファイル';
 
-  let endIdx = lines.length;
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    // プロファイル内の「### 自己 PR」等はサブセクションとして含めるため、
-    // 区切りは `## ` 見出し（次セクション）または <details> の開始のみとする。
-    if (/^(?:#{2}\s|<details[\s>])/.test(lines[i])) {
+  let endIdx = tracker.length;
+  for (let i = startIdx + 1; i < tracker.length; i++) {
+    if (/^(?:#{2}\s|<details[\s>])/.test(tracker.lines[i].text)) {
       endIdx = i;
       break;
     }
   }
-  const section = lines.slice(startIdx + 1, endIdx);
+  const section = tracker.slice(startIdx + 1, endIdx);
 
-  // 自己PR見出し以降は pr へそのまま取り込まれるため、取りこぼしの検査対象は見出しより前だけ。
-  const prHeadingIdx = section.findIndex((line) => /^###\s*自己\s*PR/.test(line));
+  const prHeadingIdx = section.findIndex((line) => /^###\s*自己\s*PR/.test(line.text));
   const scanEnd = prHeadingIdx === -1 ? section.length : prHeadingIdx;
 
   const meta: ProfileMeta = {};
   let name = '';
   let company = '';
+  const prLines: TrackedLine[] = [];
+
   for (const [i, line] of section.entries()) {
-    const report = i < scanEnd;
-    if (!line.startsWith('|')) {
-      // 表でも自己PRでもない行は、どのフィールドにも入らない（Codexレビュー指摘）。
-      if (report) recordDropped(dropped, `${at}（表の行ではない）`, line);
+    if (line.consumed) continue;
+    line.consumed = true;
+
+    if (i === prHeadingIdx) continue;
+    if (prHeadingIdx !== -1 && i > prHeadingIdx) {
+      prLines.push(line);
       continue;
     }
-    const row = parseTableRow(line);
+    if (i >= scanEnd) continue;
+
+    if (!line.text.startsWith('|')) {
+      pushDropped(dropped, `${at}（表の行ではない）`, line.text);
+      continue;
+    }
+    const row = parseTableRow(line.text);
     if (!row) {
-      if (report) recordDropped(dropped, `${at}（表の行として解釈できない）`, line);
+      pushDropped(dropped, `${at}（表の行として解釈できない）`, line.text);
       continue;
     }
     const [rawLabel, value] = row;
     const label = normalizeProfileLabel(rawLabel);
-    if (label === '項目') continue; // ヘッダ行
-    if (!value) continue; // 値が空なら失うものが無い
-    // Object.hasOwn を使うのは `constructor` のようなラベルを継承プロパティで拾わないため。
+    if (label === '項目') continue;
+    if (!value) continue;
     if (!Object.hasOwn(PROFILE_LABEL_FIELDS, label)) {
-      // どの項目にも対応しないラベルは ProfileMeta に入らず失われる
-      // （例: `| 居住地 | 東京 |`。Codexレビュー指摘）。
-      if (report) recordDropped(dropped, `${at}（対応する項目が無いラベル）`, `${rawLabel}: ${value}`);
+      pushDropped(dropped, `${at}（対応する項目が無いラベル）`, `${rawLabel}: ${value}`);
       continue;
     }
     const field = PROFILE_LABEL_FIELDS[label];
-    // 同じ項目が二度現れると後勝ちで上書きされ、先の値が失われる（Codexレビュー指摘）。
     const previous = field === 'name' ? name : field === 'company' ? company : meta[field];
     if (previous) {
-      recordDropped(dropped, `${at}（重複した項目の上書き）`, `${rawLabel}: ${previous}`);
+      pushDropped(dropped, `${at}（重複した項目の上書き）`, `${rawLabel}: ${previous}`);
     }
     if (field === 'name') name = value;
     else if (field === 'company') company = value;
     else meta[field] = value;
   }
 
-  const prStart = section.findIndex((line) => /^###\s*自己\s*PR/.test(line));
-  const pr =
-    prStart !== -1
-      ? section
-          .slice(prStart + 1)
-          .join('\n')
-          .trim()
-      : '';
+  const pr = prLines
+    .map((l) => l.text)
+    .join('\n')
+    .trim();
 
   if (!name && !company && Object.values(meta).every((v) => !v) && !pr) {
     return null;
@@ -646,33 +733,35 @@ export function parseProfileMarkdown(markdown: string, dropped: DroppedLine[] = 
   return { name, title: '', pr, strengths: [], meta, company };
 }
 
-export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = []): SkillsBlockData[] {
-  const lines = markdown.split('\n');
-  let startIdx = lines.findIndex((line) => /^<details[\s>]/.test(line));
-  let endIdx = lines.length;
-  // <details> で囲まれていれば終端が明示されているので、警告範囲を絞る必要はない。
+export function parseProfileMarkdown(markdown: string, dropped: DroppedLine[] = []): ProfileBlockData | null {
+  const tracker = new LineTracker(markdown);
+  return parseProfileSection(tracker, dropped);
+}
+
+function parseSkillsSection(tracker: LineTracker, dropped: DroppedLine[]): SkillsBlockData[] {
+  let startIdx = tracker.findIndex(/^<details[\s>]/i);
   const hasDetails = startIdx !== -1;
+  let endBoundaryIdx: number;
+
   if (hasDetails) {
-    endIdx = lines.findIndex((line) => /^<\/details>/.test(line), startIdx + 1);
-    if (endIdx === -1) endIdx = lines.length;
+    endBoundaryIdx = tracker.findIndex(/^<\/details>/i, startIdx + 1);
+    if (endBoundaryIdx === -1) endBoundaryIdx = tracker.length;
   } else {
-    startIdx = lines.findIndex((line) => SKILLS_SECTION_TITLE.test(line));
+    startIdx = tracker.findIndex(/^##\s*スキル・経験年数(?:\s|$)/);
     if (startIdx === -1) return [];
+    endBoundaryIdx = tracker.findIndex(/^##\s/, startIdx + 1);
+    if (endBoundaryIdx === -1) endBoundaryIdx = tracker.length;
+    tracker.consume(startIdx);
   }
-  const section = lines.slice(startIdx + 1, endIdx);
+
+  const section = hasDetails
+    ? tracker.slice(startIdx, endBoundaryIdx + 1)
+    : tracker.slice(startIdx + 1, endBoundaryIdx);
   const at = 'スキル・経験年数';
-  // <details> が無い経路では endIdx が文末まで伸びる。そのまま警告対象にすると経歴セクション
-  // 全体を「捨てた行」として報告してしまうため、パース対象は従来どおりにしたまま、警告の
-  // 範囲だけ次の `## ` 見出しまでに絞る。
-  // 打ち切るのはこのフォールバック経路だけにする。<details> がある場合にも適用すると、
-  // ブロック内の `## 補足` 以降が検査対象から外れて逆に取りこぼす（Codexレビュー指摘）。
-  const nextHeadingIdx = hasDetails ? -1 : section.findIndex((line) => /^##\s/.test(line));
-  const scanEnd = nextHeadingIdx === -1 ? section.length : nextHeadingIdx;
 
   const blocks: SkillsBlockData[] = [];
   let currentCategory = '';
-  // スキルを1件も持たない分類は出力されず黙って消えるため、元行を控えて警告に回す。
-  let currentCategoryLine = '';
+  let currentCategoryLine: TrackedLine | null = null;
   let currentCategoryReport = false;
   const currentSkills: SkillEntry[] = [];
 
@@ -682,27 +771,31 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
       blocks.push({ category: currentCategory, skills: [...currentSkills] });
       return;
     }
-    // 分類名だけの行が次の分類または表末尾まで続いた場合、その分類名はどこにも入らない
-    // （Codexレビュー指摘）。
-    if (currentCategoryReport) recordDropped(dropped, `${at}（スキルが1件も無い技術分類）`, currentCategoryLine);
+    if (currentCategoryLine && currentCategoryReport) {
+      pushDropped(dropped, `${at}（スキルが1件も無い技術分類）`, currentCategoryLine.text);
+    }
   };
 
-  for (const [i, line] of section.entries()) {
-    const report = i < scanEnd;
-    if (!line.startsWith('|')) {
-      // 表の行でなければスキルとして取り込まれない（Codexレビュー指摘）。
-      // ただし <summary><h2>スキル・経験年数</h2></summary> のような構造行はデータではない。
-      // 除外しないと正常な実シートでも毎回 DROPPED_LINES が非ゼロになり、本当の
-      // 取りこぼしが恒常的な誤検知に埋もれる（Codexレビュー指摘）。
-      if (report && !isSkillsStructuralLine(line)) recordDropped(dropped, `${at}（表の行ではない）`, line);
+  for (const [_i, line] of section.entries()) {
+    if (line.consumed) continue;
+    line.consumed = true;
+
+    if (isSkillsStructuralLine(line.text)) continue;
+
+    if (HTML_WRAPPER_TAG.test(line.text.trim())) {
+      const stripped = line.text.replace(/<[^>]*>/g, '').trim();
+      if (stripped) pushDropped(dropped, `${at}（HTMLタグ内の想定外の内容）`, line.text);
       continue;
     }
-    const cells = line
-      .split('|')
-      .slice(1, -1)
-      .map((c) => c.trim());
+
+    if (!line.text.startsWith('|')) {
+      pushDropped(dropped, `${at}（表の行ではない）`, line.text);
+      continue;
+    }
+
+    const cells = splitPipeRow(line.text);
     if (cells.length < 3) {
-      if (report) recordDropped(dropped, `${at}（列が3つ未満）`, line);
+      pushDropped(dropped, `${at}（列が3つ未満）`, line.text);
       continue;
     }
     const first = stripBold(cells[0]);
@@ -710,40 +803,28 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
     const yearsRaw = stripBold(cells[2]);
     if (first === '技術分類' || skillName === '技術名' || /^:?-+:?$/.test(first)) continue;
 
-    // 読むのは先頭3セルだけなので、4列目以降の値はどのフィールドにも入らない
-    // （Codexレビュー指摘）。
-    if (report) {
-      for (const extra of cells.slice(3)) {
-        if (extra.trim()) recordDropped(dropped, `${at}（4列目以降は読まれない）`, extra);
-      }
+    for (const extra of cells.slice(3)) {
+      if (extra.trim()) pushDropped(dropped, `${at}（4列目以降は読まれない）`, extra);
     }
 
     if (first) {
       flushCategory();
       currentCategory = first;
       currentCategoryLine = line;
-      currentCategoryReport = report;
+      currentCategoryReport = true;
       currentSkills.length = 0;
     }
     if (!skillName) {
-      // 技術名が無い行はスキルにならないので、経験年数セルの値はどこにも入らない。
-      // `!first` を条件に入れていたため `| 言語 |  | 5年 |` の 5年 が素通りしていた
-      // （Codexレビュー指摘）。分類の有無にかかわらず記録する。
-      if (report && yearsRaw) recordDropped(dropped, `${at}（技術名が無い）`, line);
+      if (yearsRaw) pushDropped(dropped, `${at}（技術名が無い）`, line.text);
       continue;
     }
     if (!currentCategory) {
-      // 分類が未確定のままのスキルは currentSkills に入るが、flushCategory が
-      // currentCategory 無しではブロックを出さないため、次の分類行で消える（Codexレビュー指摘）。
-      if (report) recordDropped(dropped, `${at}（技術分類が未確定）`, line);
+      pushDropped(dropped, `${at}（技術分類が未確定）`, line.text);
       continue;
     }
-    // 部分一致にすると `1年未満` `1年6ヶ月` `約1年` が先頭の `1年` だけ拾って years: 1 になり、
-    // 「未満」「6ヶ月」「約」という付加情報を失ったまま警告も出ない。許容する `N年` 形式へ
-    // 完全一致させ、それ以外は解釈できない値として記録する（Codexレビュー指摘）。
     const yearsMatch = yearsRaw.match(/^(\d+(?:\.\d+)?)\s*年$/);
-    if (report && yearsRaw && !yearsMatch) {
-      recordDropped(dropped, `${at}（経験年数を解釈できない）`, `${skillName}: ${yearsRaw}`);
+    if (yearsRaw && !yearsMatch) {
+      pushDropped(dropped, `${at}（経験年数を解釈できない）`, `${skillName}: ${yearsRaw}`);
     }
     const years = yearsMatch ? Number(yearsMatch[1]) : 0;
     currentSkills.push({ name: skillName, years, level: deriveSkillLevel(years) });
@@ -753,14 +834,32 @@ export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = [
   return blocks;
 }
 
+export function parseSkillsMarkdown(markdown: string, dropped: DroppedLine[] = []): SkillsBlockData[] {
+  const tracker = new LineTracker(markdown);
+  return parseSkillsSection(tracker, dropped);
+}
+
 // --- メイン ---------------------------------------------------------------------------
+export function parseRealSheetMarkdown(markdown: string): {
+  profile: ProfileBlockData | null;
+  skills: SkillsBlockData[];
+  companies: CompanyInfo[];
+  items: ProjectItem[];
+  dropped: DroppedLine[];
+} {
+  const tracker = new LineTracker(markdown);
+  const dropped: DroppedLine[] = [];
+  const profile = parseProfileSection(tracker, dropped);
+  const skills = parseSkillsSection(tracker, dropped);
+  const { companies, items } = parseCareerSection(tracker, dropped);
+  collectUnconsumed(tracker, dropped, 'どのセクションにも含まれない');
+  return { profile, skills, companies, items, dropped };
+}
+
 async function main() {
   const write = process.argv.includes('--write');
-  // 取りこぼしがあることを承知の上で上書きする場合のみ明示的に指定する。
   const allowDropped = process.argv.includes('--allow-dropped');
 
-  // loadWebEnvLocal() は .env.local が無くても throw しない（テストからの import を許すため）。
-  // 実行時にここで明示的に止め、接続先不明のまま進まないようにする。
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL が未設定です。apps/web/.env.local を用意するか、環境変数で渡してください。');
   }
@@ -784,12 +883,8 @@ async function main() {
     if (r.type === 'stats' && isStatsBlockData(r.data)) statsBlocks.push({ type: 'stats', data: r.data });
     else if (r.type === 'markdown') markdownParts.push((r.data as { markdown: string }).markdown);
     else if (r.type === 'project') {
-      // 再実行（process.ts語彙修正の再適用等）を想定し、既存 project ブロックは
-      // 再構築対象として無視する（元の legacy markdown からの再パースを正とする）。
       skippedExistingProject = true;
     } else if (r.type === 'profile' || r.type === 'skills') {
-      // プロフィール・スキルは元 markdown から再生成するため既存ブロックは無視。
-      // markdown が無い場合は上位で fallback エラーになるため、ここでは単にスキップ。
     } else throw new Error(`未対応の既存ブロック type=${r.type} order=${r.order}（データ消失防止のため中断）`);
   }
   if (skippedExistingProject)
@@ -807,22 +902,7 @@ async function main() {
             throw new Error('legacy markdown が DB にも /tmp/real_markdown.md にも見つかりません');
           })();
 
-  // プロフィール・スキル・経歴の3パーサすべての取りこぼしを1つに集約する。経歴だけを
-  // 見ていると、プロフィールやスキルで行が失われていても DROPPED_LINES: 0 と表示され、
-  // --write が警告なしに legacy markdown を置き換えてしまう（Codexレビュー指摘）。
-  const dropped: DroppedLine[] = [];
-  const profile = parseProfileMarkdown(fullMarkdown, dropped);
-  const skills = parseSkillsMarkdown(fullMarkdown, dropped);
-
-  const careerStart = fullMarkdown.search(/^##\s*経歴/im);
-  const careerMarkdown = careerStart !== -1 ? fullMarkdown.slice(careerStart) : fullMarkdown;
-  const { companies, items, dropped: careerDropped } = parseCareerMarkdown(careerMarkdown);
-  // `## 経歴` が無い入力では careerMarkdown が文書全体になるため、プロフィールとスキルが
-  // 正常に取り込んだ行まで「最初の会社見出しより前」として返ってくる。この経路でそのまま
-  // 集約すると取り込み済みの行を誤って警告するので、その分類だけ除く（Codexレビュー指摘）。
-  dropped.push(
-    ...(careerStart !== -1 ? careerDropped : careerDropped.filter((d) => d.where !== '最初の会社見出しより前')),
-  );
+  const { profile, skills, companies, items, dropped } = parseRealSheetMarkdown(fullMarkdown);
 
   console.log('PARSED_PROFILE:', profile ? 'yes' : 'no');
   console.log(
@@ -834,14 +914,10 @@ async function main() {
   console.log('PARSED_COMPANIES:', companies.length);
   console.log('PARSED_PROJECTS:', items.length);
 
-  // 捨てた行がある＝元データの一部が DB に入らないということなので、黙って進めない（#151 D-7）。
   console.log('DROPPED_LINES:', dropped.length);
   if (dropped.length > 0) {
     console.warn('WARN: 以下の行はどのフィールドにも取り込まれていません。元データかパーサの見直しが必要です:');
     for (const d of dropped) console.warn(`  - [${d.where}] ${d.line}`);
-    // 警告は標準エラーに出るだけなので、非対話実行では見落とされる。saveSkillSheetBlocks は
-    // legacy markdown ブロックを含まない finalBlocks で置き換えるため、取りこぼしたまま
-    // 書き込むと元データが DB から消える。#151 D-7 はまさにこの経路（CodeRabbitレビュー指摘）。
     if (write && !allowDropped) {
       throw new Error(
         `取りこぼしが ${dropped.length} 行あります。このまま上書きすると元データが失われます。` +
