@@ -367,6 +367,55 @@ describe('BuilderClient', () => {
     expect(Object.hasOwn(profileData.meta, '__proto__')).toBe(true);
     expect(Object.getOwnPropertyDescriptor(profileData.meta, '__proto__')?.value).toBe('テスト値');
   });
+
+  describe('隣接アイコンボタンの間隔（#192）', () => {
+    // AC は「隣接する 44px ボタンの間隔を 8px 以上」。Tailwind の gap-2 が 8px なので、
+    // gap-1（4px）へ戻す回帰をクラス指定で固定する（jsdom は実寸を測れないため）。
+    it('テーブル列の揃えボタン群と削除ボタンが gap-2（8px）で並ぶ', () => {
+      const blocks: Block[] = [
+        {
+          id: 'table-1',
+          type: 'table',
+          order: 0,
+          data: { columns: [{ label: '列1', align: 'left' }], rows: [['a']] },
+        },
+      ];
+      render(<BuilderClient initialBlocks={blocks} initialTitle="t" {...defaultProps} />);
+      const alignButton = screen.getByRole('button', { name: '列1を左揃え' });
+      const group = alignButton.parentElement as HTMLElement;
+      expect(group.className).toContain('gap-2');
+      expect(group.className).not.toMatch(/\bgap-1\b/);
+    });
+
+    it('トップバーの操作群が gap-2（8px）で並び、SP では折り返して画面外へ出ない', () => {
+      const { container } = render(
+        <BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />,
+      );
+      const topbar = container.querySelector('[data-slot="builder-topbar"]') as HTMLElement;
+      const row = topbar.querySelector(':scope > div') as HTMLElement;
+      const actions = row.children[row.children.length - 1] as HTMLElement;
+
+      expect(actions.className).toContain('gap-2');
+      expect(actions.className).not.toMatch(/\bgap-1\b/);
+
+      // 「自動保存に失敗 — 保存ボタンで再試行」は 210px あり、shrink-0 + whitespace-nowrap の
+      // ままだと 375px/320px で保存ボタン自体が画面外へ出て押せなくなる（実機実測: 右端394px）。
+      // SP だけ折り返しを許可し、sm 以上は従来どおり1行に保つ。
+      expect(actions.className).toContain('flex-wrap');
+      expect(actions.className).toContain('min-w-0');
+      expect(actions.className).toContain('sm:flex-nowrap');
+      expect(actions.className).toContain('sm:shrink-0');
+      expect(actions.className).not.toMatch(/(?<!sm:)\bshrink-0\b/);
+    });
+
+    it('シート一覧の行（選択ボタン + 削除ボタン）が gap-2（8px）で並ぶ', () => {
+      render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+      const deleteButton = screen.getByRole('button', { name: '「テストシート」を削除' });
+      const row = deleteButton.closest('li') as HTMLElement;
+      expect(row.className).toContain('gap-2');
+      expect(row.className).not.toMatch(/\bgap-1\b/);
+    });
+  });
 });
 
 describe('BuilderClient 自動保存', () => {

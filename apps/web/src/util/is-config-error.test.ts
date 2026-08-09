@@ -29,8 +29,7 @@ describe('isConfigError', () => {
   });
 
   it('未マイグレーション（テーブル不在）のエラーを設定エラーとして検出する（.code が取れる場合）', () => {
-    const err = new Error('relation "blocks" does not exist');
-    (err as { code?: string }).code = '42P01';
+    const err = Object.assign(new Error('relation "blocks" does not exist'), { code: '42P01' });
     expect(isConfigError(err)).toBe(true);
   });
 
@@ -45,8 +44,7 @@ describe('isConfigError', () => {
   });
 
   it('DATABASE_URL の書式が壊れている（ERR_INVALID_URL）エラーを検出する（Issue #195）', () => {
-    const err = new TypeError('Invalid URL');
-    (err as { code?: string }).code = 'ERR_INVALID_URL';
+    const err = Object.assign(new TypeError('Invalid URL'), { code: 'ERR_INVALID_URL' });
     expect(isConfigError(err)).toBe(true);
   });
 });
@@ -61,12 +59,10 @@ describe('classifyConfigError', () => {
     expect(classifyConfigError(new Error('DATABASE_URL is not set'))).toBe('db-missing-env');
     expect(classifyConfigError(new Error('SKILLSHEET_OWNER_ID is not set'))).toBe('db-missing-env');
 
-    const tableErr = new Error('relation "blocks" does not exist');
-    (tableErr as { code?: string }).code = '42P01';
+    const tableErr = Object.assign(new Error('relation "blocks" does not exist'), { code: '42P01' });
     expect(classifyConfigError(tableErr)).toBe('db-table-missing');
 
-    const urlErr = new TypeError('Invalid URL');
-    (urlErr as { code?: string }).code = 'ERR_INVALID_URL';
+    const urlErr = Object.assign(new TypeError('Invalid URL'), { code: 'ERR_INVALID_URL' });
     expect(classifyConfigError(urlErr)).toBe('db-malformed-url');
   });
 
@@ -75,11 +71,9 @@ describe('classifyConfigError', () => {
   });
 
   it('tRPC が TRPCError でラップした ERR_INVALID_URL も cause を辿って検出する（Codex レビュー指摘: /view 経由では元の .code が隠れて検出できていなかった）', () => {
-    const innerErr = new TypeError('Invalid URL');
-    (innerErr as { code?: string }).code = 'ERR_INVALID_URL';
+    const innerErr = Object.assign(new TypeError('Invalid URL'), { code: 'ERR_INVALID_URL' });
     // TRPCError は message を cause.message で上書きし、code は自身の 'INTERNAL_SERVER_ERROR' になる。
-    const wrapped = new Error(innerErr.message, { cause: innerErr });
-    (wrapped as { code?: string }).code = 'INTERNAL_SERVER_ERROR';
+    const wrapped = Object.assign(new Error(innerErr.message, { cause: innerErr }), { code: 'INTERNAL_SERVER_ERROR' });
     expect(classifyConfigError(wrapped)).toBe('db-malformed-url');
   });
 

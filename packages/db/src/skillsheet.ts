@@ -368,10 +368,12 @@ export async function saveSkillSheetBlocks(
         .where(eq(skillSheets.id, resolvedSheetId))
         .for('update')
         .limit(1);
-      // tRPC + superjson 経由なら Date のまま渡るが、呼び出し元を問わず安全に
-      // 比較できるよう、比較前に必ず Date へ正規化してから getTime() で比較する。
+      // tRPC + superjson 経由なら Date のまま渡るが、DB ドライバーが文字列を
+      // 返すこともある。呼び出し元を問わず安全に比較できるよう、両辺を必ず
+      // Date へ正規化してから getTime() で比較する。
       const expectedTime = new Date(expectedUpdatedAt).getTime();
-      if (current && current.updatedAt.getTime() > expectedTime) {
+      const currentTime = current ? new Date(current.updatedAt).getTime() : 0;
+      if (current && currentTime > expectedTime) {
         throw new ConflictError();
       }
     }
@@ -397,7 +399,9 @@ export async function saveSkillSheetBlocks(
     }
     // 保存後のサーバー時刻の updatedAt を返す。クライアントはこれを次回の
     // expectedUpdatedAt に用いることで、クライアント時計とのズレによる誤 Conflict を防ぐ（A4）。
-    return { updatedAt: updated.updatedAt };
+    // DB ドライバーが文字列を返す場合も Date で統一する（Date インスタンスの場合はそのまま）。
+    const updatedAt = updated.updatedAt instanceof Date ? updated.updatedAt : new Date(updated.updatedAt);
+    return { updatedAt };
   });
 }
 

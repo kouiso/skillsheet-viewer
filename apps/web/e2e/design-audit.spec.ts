@@ -8,9 +8,9 @@ import {
   REAL_VOLUME_DEMO_TITLE,
   REAL_VOLUME_PROJECT_COUNT,
 } from '@skillsheet/db';
+import { authFile, login } from './auth';
 
-const email = process.env.E2E_EMAIL ?? 'e2e-owner@example.test';
-const password = process.env.E2E_PASSWORD ?? 'E2e-test-pass-99';
+test.use({ storageState: authFile });
 
 let viewSheetId = '';
 
@@ -87,13 +87,6 @@ async function capturePage(
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   await page.goto(route, { waitUntil: 'networkidle' });
   return measureAndCapture(page, viewport, theme, name);
-}
-async function login(page: Page) {
-  await page.goto('/login');
-  await page.getByLabel('メールアドレス').fill(email);
-  await page.getByLabel('パスワード').fill(password);
-  await page.getByRole('button', { name: 'ログイン' }).click();
-  await page.waitForURL('/builder');
 }
 
 test.describe('Claude Design 全画面監査', () => {
