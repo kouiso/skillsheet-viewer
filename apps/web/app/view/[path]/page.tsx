@@ -7,7 +7,7 @@ import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/g
 import { createServerCaller } from '@/server/trpc/caller';
 import { classifyConfigError } from '@/util/is-config-error';
 
-import SheetViewClient from './sheet-view-client';
+import DeferredEditSheetView from './deferred-edit-sheet-view';
 
 interface PageProps {
   params: Promise<{ path: string }>;
@@ -35,13 +35,12 @@ export default async function SheetViewPage({ params }: PageProps) {
   if (!isValidSheetPath(path) || !isSheetFileName(path)) notFound();
 
   let sheet: SheetContent;
-  let canEdit = false;
   try {
     const caller = await createServerCaller();
-    // auth.status() はシート取得の入力に使わないため、直列待機せず並列で開始する。
-    const [authStatus, loadedSheet] = await Promise.all([caller.auth.status(), caller.githubSheet.byPath({ path })]);
-    canEdit = authStatus.canEdit;
-    sheet = loadedSheet;
+    // HMAC cookie を持つ閲覧者は、本文表示をローカル検証だけで進める。
+    // 編集者判定はクライアント側で遅延し、Better Auth / DB の遅延や障害で
+    // 閲覧者向けの本文まで待たせない。
+    sheet = await caller.githubSheet.byPath({ path });
   } catch (err) {
     // tRPC procedure は throw を無条件で TRPCError にラップするため、元の SheetNotFoundError
     // ではなく code: 'NOT_FOUND' で判定する（githubSheet.byPath 側のコメント参照）。
@@ -64,5 +63,5 @@ export default async function SheetViewPage({ params }: PageProps) {
 
   // key={path}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー
   // ON/OFF トグルの state（初回マウント時に決まる）を新しいシートへ持ち越さない。
-  return <SheetViewClient key={path} title={sheet.title} content={sheet.content} canEdit={canEdit} />;
+  return <DeferredEditSheetView key={path} title={sheet.title} content={sheet.content} />;
 }

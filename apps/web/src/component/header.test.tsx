@@ -116,6 +116,17 @@ describe('Header', () => {
       expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
     });
 
+    it('固定slotは閲覧者・編集者の両状態で44pxを維持する', () => {
+      const { unmount } = renderHeader({ canEdit: false, reserveEditSlot: true });
+      expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
+      expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
+      unmount();
+
+      renderHeader({ canEdit: true, reserveEditSlot: true });
+      expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
+      expect(screen.getByLabelText('編集／ビルダー')).toBeInTheDocument();
+    });
+
     it('backHref 未指定では一覧へ戻るリンクが出ない', () => {
       renderHeader();
       expect(screen.queryByLabelText('シート一覧へ戻る')).not.toBeInTheDocument();
