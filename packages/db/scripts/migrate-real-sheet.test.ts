@@ -81,9 +81,16 @@ describe('parseCareerMarkdown', () => {
   it('誰も読まない未知のサブセクションの中身を検出する', () => {
     const { dropped } = parseCareerMarkdown(careerMarkdown('', ['', '#### 備考', '', '社外秘の補足。'].join('\n')));
 
-    expect(dropped).toHaveLength(1);
-    expect(dropped[0].line).toBe('社外秘の補足。');
-    expect(dropped[0].where).toContain('備考');
+    // 見出し行と本文の両方が失われるので、両方を報告する。
+    expect(dropped.map((d) => d.line)).toEqual(['#### 備考', '社外秘の補足。']);
+    expect(dropped.every((d) => d.where.includes('備考'))).toBe(true);
+  });
+
+  it('本文が空の未知サブセクションでも見出し行を検出する（Codexレビュー）', () => {
+    // 子行が無いと、見出しだけ記録する経路が無ければ dropped が空になる。
+    const { dropped } = parseCareerMarkdown(careerMarkdown('', ['', '#### 備考', ''].join('\n')));
+
+    expect(dropped.map((d) => d.line)).toEqual(['#### 備考']);
   });
 
   it('プロジェクト概要の中で表の行として解釈できない自由文を検出する', () => {
@@ -254,6 +261,21 @@ describe('parseCareerMarkdown', () => {
   });
 });
 
+describe('parseCareerMarkdown（プロジェクト概要の重複）', () => {
+  it('単一値フィールドが重複したとき、上書きで失われる先行値を検出する（Codexレビュー）', () => {
+    const md = careerMarkdown().replace(
+      '| 役割 | **バックエンド** |',
+      '| 役割 | **バックエンド** |\n| 役割 | **フロントエンド** |',
+    );
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    // 後勝ちで上書きされる挙動自体は変えていない。
+    expect(items[0].role).toBe('フロントエンド');
+    expect(dropped.map((d) => d.line)).toContain('役割: バックエンド');
+    expect(dropped[0].where).toContain('重複した項目の上書き');
+  });
+});
+
 describe('isTableSeparatorRow', () => {
   it.each([
     ['|---|---|', true],
@@ -384,6 +406,72 @@ describe('parseSkillsMarkdown', () => {
     expect(skills.flatMap((s) => s.skills.map((x) => x.name))).not.toContain('TypeScript');
     expect(dropped.some((d) => d.where.includes('技術分類が未確定'))).toBe(true);
     expect(dropped.map((d) => d.line).join()).toContain('TypeScript');
+  });
+
+  it('想定外のHTML見出しは構造行として除外しない（Codexレビュー）', () => {
+    // タグ名だけで除外していると <h3>補足</h3> のような内容行を見逃す。
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(
+      SKILLS_MD.replace('| 技術分類 | 技術名 | 経験年数 |', '<h3>補足</h3>\n| 技術分類 | 技術名 | 経験年数 |'),
+      dropped,
+    );
+
+    expect(dropped.map((d) => d.line)).toContain('<h3>補足</h3>');
+  });
+
+  it('<details> 内の ## 見出し以降も検査する（Codexレビュー）', () => {
+    // 見出しでの打ち切りはフォールバック経路限定。<details> があるときに適用すると逆に取りこぼす。
+    const dropped: DroppedLine[] = [];
+    parseSkillsMarkdown(SKILLS_MD.replace('</details>', '## 補足\n\nここは取り込まれません。\n\n</details>'), dropped);
+
+    expect(dropped.map((d) => d.line)).toContain('ここは取り込まれません。');
+  });
+
+  it('4列目以降の値を検出する（Codexレビュー）', () => {
+    const dropped: DroppedLine[] = [];
+    const skills = parseSkillsMarkdown(
+      SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', '| 言語 | TypeScript | 5年 | 業務利用 |'),
+      dropped,
+    );
+
+    // 先頭3セルは従来どおり読めている。
+    expect(skills[0].skills[0]).toMatchObject({ name: 'TypeScript', years: 5 });
+    expect(dropped.map((d) => d.line)).toContain('業務利用');
+    expect(dropped[0].where).toContain('4列目以降');
+  });
+
+  it('N年形式でない経験年数を検出する（Codexレビュー）', () => {
+    // years: 0 に潰れて元の表記が残らない。
+    const dropped: DroppedLine[] = [];
+    const skills = parseSkillsMarkdown(
+      SKILLS_MD.replace('| 言語 | TypeScript | 5年 |', '| 言語 | TypeScript | 6ヶ月 |'),
+      dropped,
+    );
+
+    expect(skills[0].skills[0].years).toBe(0);
+    expect(dropped.map((d) => d.line)).toContain('TypeScript: 6ヶ月');
+    expect(dropped[0].where).toContain('経験年数を解釈できない');
+  });
+
+  it('スキルが1件も無い技術分類を検出する（Codexレビュー）', () => {
+    // 分類行だけがあり、次の分類まで技術名が現れないと flushCategory が黙って捨てる。
+    const md = [
+      '<details>',
+      '<summary><h2>スキル・経験年数</h2></summary>',
+      '',
+      '| 技術分類 | 技術名 | 経験年数 |',
+      '|---|---|---|',
+      '| インフラ |  |  |',
+      '| 言語 | TypeScript | 5年 |',
+      '',
+      '</details>',
+    ].join('\n');
+    const dropped: DroppedLine[] = [];
+    const skills = parseSkillsMarkdown(md, dropped);
+
+    expect(skills.map((s) => s.category)).toEqual(['言語']);
+    expect(dropped.some((d) => d.where.includes('スキルが1件も無い技術分類'))).toBe(true);
+    expect(dropped.map((d) => d.line).join()).toContain('インフラ');
   });
 
   it('<summary> などの構造行は捨てた行として報告しない（Codexレビュー P2）', () => {
