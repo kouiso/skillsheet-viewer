@@ -91,7 +91,11 @@ function LoginForm() {
       </Button>
       <p className="text-center text-sm text-muted-foreground">
         閲覧のみの場合は {/* text-primary は背景に対しライトテーマで3.74と WCAG AA 未達（Issue #198）。 */}
-        <Link href="/viewer-auth" className="text-primary-dark underline underline-offset-2">
+        <Link
+          href="/viewer-auth"
+          className="inline-flex h-12 min-w-12 items-center justify-center rounded px-2 text-primary-dark underline underline-offset-2"
+          aria-label="閲覧コード認証へ"
+        >
           閲覧コード認証
         </Link>
       </p>
@@ -114,6 +118,7 @@ export default function LoginPage() {
         transition={{ duration: 25, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
         className="pointer-events-none absolute -bottom-[15%] -left-[10%] size-[360px] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.15)_0%,transparent_70%)]"
       />
+
       <motion.div
         initial={{ opacity: 0, y: 50, scale: 0.9 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
