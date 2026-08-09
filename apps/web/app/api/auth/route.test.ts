@@ -42,12 +42,32 @@ describe('POST /api/auth', () => {
     expect(res.status).toBe(403);
   });
 
+  it('cross-origin の不正 JSON は body を解析せず 403', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await POST(makeReq('not-json', { origin: 'http://evil.example', host: 'localhost:3000' }));
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual({ error: 'Forbidden' });
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+  });
+
   it('VIEWER_CODE 未設定なら 500 で console.error に記録する（互換アダプタの catch は元々何もログしていなかった）', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     delete process.env.VIEWER_CODE;
     delete process.env.VITE_VIEWER_CODE;
     const res = await POST(makeReq(JSON.stringify({ code: 'x' })));
     expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({ error: 'Server configuration error' });
+    expect(consoleErrorSpy).toHaveBeenCalledWith('POST /api/auth: unexpected error:', expect.anything());
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('session cookie 発行の想定外エラーは認証失敗として 500 を返す', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    delete process.env.SESSION_SECRET;
+    const res = await POST(makeReq(JSON.stringify({ code: 'correct-code' })));
+    expect(res.status).toBe(500);
+    await expect(res.json()).resolves.toEqual({ error: 'Failed to authenticate' });
     expect(consoleErrorSpy).toHaveBeenCalledWith('POST /api/auth: unexpected error:', expect.anything());
     consoleErrorSpy.mockRestore();
   });
