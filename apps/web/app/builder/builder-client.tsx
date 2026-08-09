@@ -1652,7 +1652,13 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
               </span>
             )}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          {/* SP では自動保存インジケータのラベルが長い（「自動保存に失敗 — 保存ボタンで再試行」で
+              210px）。shrink-0 + whitespace-nowrap のままだと操作群が画面外へ押し出され、
+              375px/320px で横スクロールが発生し、**メッセージが押せと言っている保存ボタン自体が
+              画面外に出て押せなくなる**（実機実測: 右端 394px > 幅 375px。gap-1 だった頃から続く既存不具合）。
+              SP だけ折り返しを許可し、インジケータが自分の行へ落ちるようにする。
+              sm 以上は従来どおり1行（flex-nowrap + shrink-0）。 */}
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 sm:shrink-0 sm:flex-nowrap">
             {activeTab === 'project' && (
               <button type="button" onClick={() => setHistoryOpen(true)} className="btn sm">
                 ↺ 履歴
