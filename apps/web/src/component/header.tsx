@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileDown, FileText, Moon, PencilLine, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, FileText, Loader2, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
@@ -84,10 +84,11 @@ const Header = ({
                   size="icon"
                   onClick={() => void onDownloadPdf()}
                   disabled={pdfLoading}
-                  aria-label="PDFダウンロード"
+                  aria-busy={pdfLoading}
+                  aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
                   className="min-h-11 min-w-11"
                 >
-                  <FileDown />
+                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>PDFをダウンロード</TooltipContent>

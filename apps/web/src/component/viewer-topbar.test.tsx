@@ -67,13 +67,21 @@ describe('ViewerTopbar', () => {
 
   it('固定slotは閲覧者・編集者の両状態で44pxを維持する', () => {
     const { unmount } = renderTopbar({ canEdit: false, reserveEditSlot: true });
-    expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
+    const slots = screen.getAllByTestId('edit-slot');
+    expect(slots).toHaveLength(2);
+    for (const slot of slots) {
+      expect(slot).toHaveClass('size-11', 'shrink-0');
+    }
     expect(screen.queryByLabelText('編集／ビルダー')).not.toBeInTheDocument();
     unmount();
 
     renderTopbar({ canEdit: true, reserveEditSlot: true });
-    expect(screen.getByTestId('edit-slot')).toHaveClass('size-11', 'shrink-0');
-    expect(screen.getByLabelText('編集／ビルダー')).toBeInTheDocument();
+    const slots2 = screen.getAllByTestId('edit-slot');
+    expect(slots2).toHaveLength(2);
+    for (const slot of slots2) {
+      expect(slot).toHaveClass('size-11', 'shrink-0');
+    }
+    expect(screen.getAllByLabelText('編集／ビルダー')).toHaveLength(2);
   });
 
   describe('DOM順と視覚順の一致（レビュー指摘: キーボードのタブ順・読み上げ順の対策）', () => {
