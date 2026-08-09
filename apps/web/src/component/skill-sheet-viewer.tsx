@@ -139,6 +139,13 @@ const MarkdownContent = memo(function MarkdownContent({ content, blockId, onImag
               </td>
             );
           },
+          table({ children }) {
+            return (
+              <div className="overflow-x-auto">
+                <table className="min-w-[480px] w-full border-collapse">{children}</table>
+              </div>
+            );
+          },
         }}
       >
         {content}
@@ -300,13 +307,18 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         // design: max-width 1180px / padding 44px 32px 96px / セクション間 48px
-        className={`mx-auto w-full flex-1 px-4 pt-8 pb-16 sm:px-8 sm:pt-11 sm:pb-24 ${
+        // min-w-0: flex item 子（StatRow 等）の min-w による幅拡張を抑え、横スクロールを子側に閉じ込める。
+        className={`mx-auto min-w-0 w-full flex-1 px-4 pt-8 pb-16 sm:px-8 sm:pt-11 sm:pb-24 ${
           isDashboard ? 'max-w-[1180px]' : 'max-w-4xl'
         }`}
       >
         <div
           ref={contentRef}
-          className={isDashboard ? 'space-y-8 sm:space-y-12' : 'rounded border border-border bg-card p-4 sm:p-6 md:p-8'}
+          className={
+            isDashboard
+              ? 'min-w-0 space-y-8 sm:space-y-12'
+              : 'min-w-0 overflow-hidden rounded border border-border bg-card p-4 sm:p-6 md:p-8'
+          }
         >
           {blocks ? (
             <div className={isDashboard ? 'space-y-8 sm:space-y-12' : 'space-y-0'}>

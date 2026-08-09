@@ -299,8 +299,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 1rem;
-  display: block;
-  overflow: auto;
+  display: table;
 }
 .markdown-content th,
 .markdown-content td {
