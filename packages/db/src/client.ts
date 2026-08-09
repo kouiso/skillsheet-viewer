@@ -1,12 +1,12 @@
 /**
- * Drizzle client for Neon serverless Postgres.
+ * Neon serverless Postgres 用の Drizzle クライアント。
  *
- * Uses the WebSocket driver (`neon-serverless`) so the auth/edit path (Better
- * Auth) can run interactive transactions, and to avoid the
- * `@neondatabase/serverless` >=1.0 tagged-template incompatibility of the HTTP
- * driver. The pooled `DATABASE_URL` (`-pooler` host) is expected at runtime.
+ * 認証・編集パス（Better Auth）でインタラクティブなトランザクションを実行できるよう、
+ * また HTTP ドライバでの `@neondatabase/serverless` >=1.0 のタグ付きテンプレート非互換を
+ * 避けるため、WebSocket ドライバ（`neon-serverless`）を使用する。実行時にはプール接続用の
+ * `DATABASE_URL`（`-pooler` ホスト）を前提とする。
  *
- * Server-only. Never import this from a Client Component.
+ * サーバー専用。Client Component からは決して import しないこと。
  */
 import { neonConfig, Pool } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
@@ -31,9 +31,9 @@ export function createDb(databaseUrl: string) {
 let cachedDb: Database | null = null;
 
 /**
- * Returns a Drizzle client from `DATABASE_URL`, or throws if it is not configured.
- * The instance is cached at module scope to reuse it across warm serverless
- * invocations (`DATABASE_URL` is fixed for the process lifetime).
+ * `DATABASE_URL` から Drizzle クライアントを返す。未設定の場合は例外を投げる。
+ * warm な serverless 呼び出し間で再利用できるよう、モジュールスコープでインスタンスを
+ * キャッシュする（`DATABASE_URL` はプロセスの生存期間中は固定のため）。
  */
 export function getDb(): Database {
   if (cachedDb) {
