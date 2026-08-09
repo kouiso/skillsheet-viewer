@@ -67,6 +67,16 @@ function healthyTables(outlineLengths: number[]): TableInput[] {
   ];
 }
 
+/** 指定タグのテーブルレコードの先頭位置を返す。破損させる試験で使う。 */
+function findTableRecord(font: Buffer, tag: string): number {
+  const numTables = font.readUInt16BE(4);
+  for (let i = 0; i < numTables; i++) {
+    const record = SFNT_HEADER_BYTES + i * TABLE_RECORD_BYTES;
+    if (font.toString('latin1', record, record + 4) === tag) return record;
+  }
+  throw new Error(`テーブルが見つからない: ${tag}`);
+}
+
 /** glyph-verify.node.test.tsx が課しているのと同じ整合条件。 */
 function isHealthy(report: EmbeddedFontReport): boolean {
   return (
@@ -156,6 +166,32 @@ describe('inspectEmbeddedFont', () => {
     expect(() => inspectEmbeddedFont(font)).toThrow(/必須テーブルがない/);
   });
 
+  it('テーブルレコードがサブセットの範囲外を指す場合は、どのテーブルかが分かる形で失敗する', () => {
+    const font = buildFont(healthyTables([80, 120]));
+    // glyf の offset だけをバッファ長より先へ書き換える。長さだけ見ていると
+    // 健全と誤判定しうるので、offset + length の範囲で弾けることを固定する。
+    const glyfRecord = findTableRecord(font, 'glyf');
+    font.writeUInt32BE(font.length + 1024, glyfRecord + 8);
+
+    expect(() => inspectEmbeddedFont(font)).toThrow(/glyf テーブルがサブセットの範囲外/);
+  });
+
+  it('indexToLocFormat が 0 / 1 以外なら失敗する', () => {
+    const tables = healthyTables([80, 120]);
+    const broken = tables.map((table) => (table.tag === 'head' ? { tag: 'head', data: head(7) } : table));
+
+    expect(() => inspectEmbeddedFont(buildFont(broken))).toThrow(/indexToLocFormat が不正/);
+  });
+
+  it('loca のテーブル長がエントリ幅の倍数でない場合は失敗する', () => {
+    // 32bit loca なのに長さが 4 の倍数でないと、末尾を切り捨てて読むことになる。
+    const font = buildFont(healthyTables([80, 120]));
+    const locaRecord = findTableRecord(font, 'loca');
+    font.writeUInt32BE(font.readUInt32BE(locaRecord + 12) - 1, locaRecord + 12);
+
+    expect(() => inspectEmbeddedFont(font)).toThrow(/loca テーブル長がエントリ幅の倍数でない/);
+  });
+
   it('loca のエントリ数が numGlyphs + 1 と合わない場合を検知する', () => {
     // jsdom で実測した破損は loca が 126 エントリなのに numGlyphs + 1 = 521 だった。
     // オフセットの単調性だけに頼らず、この件数不一致でも落とせるようにしておく。
@@ -221,6 +257,24 @@ describe('extractEmbeddedTrueTypeFonts', () => {
     const font = buildFont(healthyTables([80, 120]));
 
     const extracted = extractEmbeddedTrueTypeFonts(buildPdfWithIndirectLength(deflateSync(font)));
+
+    expect(extracted).toHaveLength(1);
+    expect(extracted[0].equals(font)).toBe(true);
+  });
+
+  it('世代番号が 0 でない参照でも取り出す', () => {
+    // `/FontFile2 12 1 R` を `12 0 obj` で探すと見つからない。世代番号まで見て引く。
+    const font = buildFont(healthyTables([80, 120]));
+    const body = deflateSync(font);
+    const pdf = Buffer.concat([
+      Buffer.from('%PDF-1.7\n1 0 obj\n<< /FontFile2 12 1 R >>\nendobj\n', 'latin1'),
+      Buffer.from(`12 1 obj\n<< /Length 7 2 R /Filter /FlateDecode >>\nstream\n`, 'latin1'),
+      body,
+      Buffer.from('\nendstream\nendobj\n', 'latin1'),
+      Buffer.from(`7 2 obj\n${body.length}\nendobj\n`, 'latin1'),
+    ]);
+
+    const extracted = extractEmbeddedTrueTypeFonts(pdf);
 
     expect(extracted).toHaveLength(1);
     expect(extracted[0].equals(font)).toBe(true);

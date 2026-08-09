@@ -5,7 +5,7 @@ import { getDocument, OPS } from 'pdfjs-dist';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import PDF_FONT_FAMILY from './constants';
-import { extractEmbeddedTrueTypeFonts, inspectEmbeddedFont } from './embedded-font';
+import { countEmbeddedFontFiles, extractEmbeddedTrueTypeFonts, inspectEmbeddedFont } from './embedded-font';
 import { SkillSheetDocument } from './skill-sheet-document';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
@@ -16,13 +16,22 @@ const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
 // 本文の長さに依存しない不変条件にするため、絶対数ではなくこの余裕で見る。
 const ALLOWED_EMPTY_GLYPHS = 2;
 
-// 和文本文が載る側のサブセットが持つべきグリフ数の下限。和文がフォールバックで
-// 別フォントへ逃げた場合に気付くためだけの、字種より十分小さい値。
-const MINIMUM_JAPANESE_GLYPHS = 20;
-
 // PDF の text rendering mode 3 は「文字を描かない（不可視テキスト）」。
 // 字形が正しく埋まっていても、これが立っていると画面には何も出ない。
 const TEXT_RENDERING_MODE_INVISIBLE = 3;
+
+// 本文から和文（ひらがな・カタカナ・CJK統合漢字）の字種を数える。閾値を本文から
+// 導くことで、本文を書き換えたときに嘘の下限が残らないようにする。
+function distinctJapaneseCodePoints(text: string): Set<string> {
+  const found = new Set<string>();
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    const isKana = code >= 0x3040 && code <= 0x30ff;
+    const isIdeograph = code >= 0x4e00 && code <= 0x9fff;
+    if (isKana || isIdeograph) found.add(character);
+  }
+  return found;
+}
 
 const CONTENT = [
   '## 概要',
@@ -63,8 +72,16 @@ describe('PDF glyph rendering verify', () => {
 
     // ラスタライズ（pdftoppm 等）を挟まないのは、PATH 上の外部バイナリに依存すると
     // 環境によって黙って検証が飛ぶため。代わりに埋め込みサブセットを直接読む。
+    // 和文が別のフォントへ逃げる経路が無いことを先に固定する。CFF(/FontFile3) や
+    // Type1(/FontFile) が 1 本でも混ざっていれば、以降の TrueType 側の検査だけでは
+    // 「和文はそちらで描かれている」可能性を排除できない。
+    const kinds = countEmbeddedFontFiles(buffer);
+    expect(kinds.cff).toBe(0);
+    expect(kinds.type1).toBe(0);
+    expect(kinds.trueType).toBeGreaterThan(0);
+
     const fonts = extractEmbeddedTrueTypeFonts(buffer);
-    expect(fonts.length).toBeGreaterThan(0);
+    expect(fonts).toHaveLength(kinds.trueType);
 
     const reports = fonts.map((font) => inspectEmbeddedFont(font));
 
@@ -80,8 +97,28 @@ describe('PDF glyph rendering verify', () => {
       expect(report.nonEmptyGlyphCount).toBeGreaterThanOrEqual(report.numGlyphs - ALLOWED_EMPTY_GLYPHS);
     }
 
-    // 和文が別フォントへ逃げていないこと。
-    expect(Math.max(...reports.map((report) => report.numGlyphs))).toBeGreaterThanOrEqual(MINIMUM_JAPANESE_GLYPHS);
+    // 本文の和文字種は、少なくとも 1 つのサブセットに入っていなければならない。
+    // 逃げ道が無いことと合わせて、和文がサブセット化から漏れていないことを見る。
+    const japanese = distinctJapaneseCodePoints(CONTENT);
+    const totalGlyphs = reports.reduce((sum, report) => sum + report.numGlyphs, 0);
+    expect(totalGlyphs).toBeGreaterThanOrEqual(japanese.size);
+  });
+
+  it('本文の和文がテキスト層から抜け落ちていない', { timeout: 60_000 }, async () => {
+    const buffer = await renderToBuffer(<SkillSheetDocument title="日本語グリフ検証" content={CONTENT} />);
+    const document = await getDocument({ data: new Uint8Array(buffer) }).promise;
+
+    let extracted = '';
+    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
+      const page = await document.getPage(pageNumber);
+      const content = await page.getTextContent();
+      extracted += content.items.map((item) => ('str' in item ? item.str : '')).join('');
+    }
+
+    // 字形の健全性だけ見ていると「そもそも本文が入っていない PDF」を素通りさせる。
+    for (const character of distinctJapaneseCodePoints(CONTENT)) {
+      expect(extracted).toContain(character);
+    }
   });
 
   it('本文が不可視テキストとして描かれていない', { timeout: 60_000 }, async () => {
