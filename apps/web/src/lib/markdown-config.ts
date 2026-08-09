@@ -21,6 +21,9 @@ export const isSafeImageSrc = (src: string): boolean => {
 // rehype-raw が有効化する生HTML描画を details/summary タグに限定する。
 // style属性はデフォルトスキーマで除外済み（XSS防止）。
 // img の src は http/https/相対パスのみ許可し、javascript:/data: 等を除外する。
+// <script> はデフォルトスキーマの strip リストに含まれており、タグとその子テキストが
+// 除去される。これを外すと未知タグと同じ「子孫を残した unwrap」扱いになり、
+// alert(1) 等の危険な文字列が画面に漏れるので、strip は維持する。
 export const MARKDOWN_SANITIZE_SCHEMA = {
   ...defaultSchema,
   tagNames: [...(defaultSchema.tagNames ?? []), 'details', 'summary'],
