@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { type Browser, expect, type Page, test } from '@playwright/test';
 import { buildConsoleDemoBlocks, createSheet, deleteSheet, listSheets } from '@skillsheet/db';
 import { getDocument } from 'pdfjs-dist';
-import { authFile, login } from './auth';
 
+const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const RUN_ID = randomUUID().slice(0, 8);
 const SHEET_PREFIX = `PDF Glyph Sheet ${RUN_ID}`;
 
@@ -51,7 +51,12 @@ function distinctJapaneseCodePoints(text: string): Set<string> {
   return found;
 }
 
-test.use({ storageState: authFile });
+async function authenticateViewer(page: Page) {
+  await page.goto('/viewer-auth');
+  await page.getByLabel('認証コード').fill(viewerCode);
+  await page.getByRole('button', { name: '認証' }).click();
+  await page.waitForURL('/view');
+}
 
 test.describe.configure({ mode: 'serial' });
 
@@ -63,22 +68,26 @@ test.afterAll(async () => {
   await cleanupSheetsByPrefix(SHEET_PREFIX);
 });
 
-test('本番経路のブラウザ toBlob PDF に日本語グリフが描画されている', async ({ page }) => {
+test('本番経路のブラウザ toBlob PDF に日本語グリフが描画されている', async ({ browser }: { browser: Browser }) => {
   const title = `${SHEET_PREFIX} ${Date.now()}`;
   const blocks = buildConsoleDemoBlocks();
-  const sheetId = await createSheet(title, blocks);
+  await createSheet(title, blocks);
 
-  await login(page);
-  await page.goto(`/builder?sheet=${sheetId}`, { waitUntil: 'networkidle' });
-  const [popup] = await Promise.all([
-    page.waitForEvent('popup'),
-    page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click(),
-  ]);
-  await popup.waitForLoadState('networkidle');
+  const context = await browser.newContext({});
+  const page = await context.newPage();
+
+  await authenticateViewer(page);
+  await expect(page.getByRole('button', { name: new RegExp(title) }).first()).toBeVisible();
+
+  await page
+    .getByRole('button', { name: new RegExp(title) })
+    .first()
+    .click();
+  await page.waitForURL(/\/view\/db\//);
 
   const [download] = await Promise.all([
-    popup.waitForEvent('download'),
-    popup.getByRole('button', { name: 'PDFダウンロード' }).click(),
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'PDFダウンロード' }).click(),
   ]);
 
   const downloadPath = await download.path();
@@ -87,7 +96,6 @@ test('本番経路のブラウザ toBlob PDF に日本語グリフが描画さ�
     throw new Error('PDF download path is missing');
   }
 
-  // 一時ファイルは Playwright が掃除する前にコピーして検証する
   const savedPath = path.join(process.cwd(), 'test-results', 'playwright', `pdf-glyph-${RUN_ID}.pdf`);
   await fs.mkdir(path.dirname(savedPath), { recursive: true });
   await fs.copyFile(downloadPath, savedPath);
