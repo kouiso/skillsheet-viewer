@@ -1,6 +1,6 @@
 // 18 巡目 D-2 再測定。17 巡目までの測り方には 2 つ欠陥があった（Codex 指摘）。
 //
-//   1. probe が `slice(0, 6)` だったため、`I・K` `8` `年` `4` `名` `28歳` のような短い値は
+//   1. probe が `slice(0, 6)` だったため、`I・K` `8` `年` `4` `名` `20代` のような短い値は
 //      probe が値そのものになり、PDF 内の無関係な日付・人数・年齢に当たって
 //      「出ている」と誤判定できた。stats を label / value / unit で別々に見ていたのも同じ穴。
 //   2. 検証用シート自体に過去の巡の書き込み（C-5 の社名 / C-13 の自己PR / C-7 の工程・技術タグ /
@@ -9,7 +9,7 @@
 // 2 は検証用ブランチのブロックを親（本番・未書き込み）と md5 一致するまで戻して解消済み。
 // このスクリプトは 1 を直す。**隣接して描画される値を連結した複合 probe** で見る。
 //   - stats: 表のラベル行（全ラベル連結）と値行（全 value+unit 連結）
-//   - profile.meta: `| 年齢 | 28歳 |` 行なので `年齢28歳` の隣接
+//   - profile.meta: `| 年齢 | 20代 |` 行なので `年齢20代` の隣接
 //   - name/title: `# I・K` の直後に `**<title>**` が来るので連結
 // 正規化後 8 文字未満の probe は「短すぎて一意でない」として **ヒット扱いにせず tooShort に落とす**。
 import { chromium } from '<REPO>/node_modules/.pnpm/playwright@1.62.0/node_modules/playwright/index.mjs';
@@ -105,7 +105,7 @@ const profileResults = [
   check('profile:name+title(# 見出しの直後に **title**)', `${profile?.name ?? ''}${profile?.title ?? ''}`),
   check('profile:pr', profile?.pr),
   ...(profile?.strengths ?? []).map((s, i) => check(`profile:strengths[${i}]`, String(s))),
-  // meta は `| 年齢 | 28歳 |` の行なのでラベルと値を隣接させる
+  // meta は `| 年齢 | 20代 |` の行なのでラベルと値を隣接させる
   ...Object.entries(profile?.meta ?? {}).map(([k, v]) => {
     const jp = { age: '年齢', work: '勤務形態', station: '最寄り駅', education: '学歴' }[k] ?? k;
     return check(`profile:meta.${k}(${jp}+値)`, `${jp}${v}`);

@@ -226,7 +226,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             <input
               value={p.title}
               onChange={(e) => set('title', e.target.value)}
-              placeholder="例：マッチングアプリ「mypappy」"
+              placeholder="例：マッチングアプリの開発"
               aria-label="案件タイトル"
               className={`inp${!p.title.trim() ? ' err' : ''}`}
             />

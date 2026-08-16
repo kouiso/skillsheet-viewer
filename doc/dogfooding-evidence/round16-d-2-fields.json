@@ -150,7 +150,7 @@
     },
     {
       "field": "meta.age",
-      "probe": "28歳",
+      "probe": "20代",
       "inPdf": true,
       "inScreen": true
     },
@@ -162,13 +162,13 @@
     },
     {
       "field": "meta.station",
-      "probe": "成田駅",
+      "probe": "最寄駅",
       "inPdf": true,
       "inScreen": true
     },
     {
       "field": "meta.education",
-      "probe": "高卒",
+      "probe": "非公開",
       "inPdf": true,
       "inScreen": true
     },

@@ -46,9 +46,9 @@ const SAMPLE = `## 技術者プロファイル
 
 ## 経歴
 
-### ◆ 株式会社az
+### ◆ Q 社（自社サービス事業会社）
 
-#### ■ 1. mypappy
+#### ■ 1. マッチングアプリの開発
 
 概要テキスト。
 `;
@@ -67,8 +67,8 @@ describe('splitMarkdownIntoBlocks', () => {
     expect(segments[0].markdown.startsWith('## 技術者プロファイル')).toBe(true);
     expect(segments.some((s) => s.markdown.startsWith('<details'))).toBe(true);
     expect(segments.some((s) => s.markdown.startsWith('## 経歴'))).toBe(true);
-    expect(segments.some((s) => s.markdown.startsWith('### ◆ 株式会社az'))).toBe(true);
-    expect(segments.some((s) => s.markdown.startsWith('#### ■ 1. mypappy'))).toBe(true);
+    expect(segments.some((s) => s.markdown.startsWith('### ◆ Q 社（自社サービス事業会社）'))).toBe(true);
+    expect(segments.some((s) => s.markdown.startsWith('#### ■ 1. マッチングアプリの開発'))).toBe(true);
   });
 
   it('order は 0 始まりの昇順で連結順を決める', () => {
