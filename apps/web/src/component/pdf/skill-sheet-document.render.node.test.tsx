@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { Font, renderToBuffer, View } from '@react-pdf/renderer';
+import { type ProjectBlockData, projectBlockToMarkdown } from '@skillsheet/db';
 import { getDocument } from 'pdfjs-dist';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
@@ -763,6 +764,59 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       const text = normalizeExtractedText(rawText);
       // CJK文字（句読点含む）と隣接するASCIIハイフンが無いこと。
       expect(text).not.toMatch(/[぀-ヿ一-鿿、。]-|-[぀-ヿ一-鿿、。]/);
+    },
+    RENDER_TIMEOUT_MS,
+  );
+});
+
+// #242 の回帰防止。projectBlockToMarkdown が comment を出さず、かつ duties / acquired を
+// escape していたため、画面に出ている案件本文と箇条書きが PDF から丸ごと落ちていた。
+// markdown 文字列の検査だけでは「PDF のテキスト層に載ったか」までは言えないので、
+// 実バイト描画して pdfjs で抽出したテキストで確認する。
+describe('projectBlockToMarkdown → PDF テキスト層（Issue #242）', () => {
+  beforeAll(() => {
+    registerNodeFonts();
+  });
+
+  const PROJECT: ProjectBlockData = {
+    companies: [
+      { id: 'c1', name: 'Q 社', kind: '自社サービス事業会社', period: '2025-11〜現在', note: '会社概要の文' },
+    ],
+    items: [
+      {
+        id: 'p1',
+        companyId: 'c1',
+        title: 'マッチングアプリの開発',
+        scope: 'iOS / Android / Web',
+        period: '2025-11〜現在',
+        role: 'フルスタック',
+        team: '13 名',
+        tech: { lang: ['TypeScript'], fw: ['React Native'], db: [], infra: [], tools: [], collab: [] },
+        process: ['要件定義', '実装'],
+        duties: '- モバイルアプリの機能開発\n- バックエンドのクエリ最適化',
+        acquired: '- React Native での開発\n- N+1 解消',
+        comment: '四つのリポジトリに横断的に関わりました。\n\n**モバイル**\n\n- メッセージ機能を実装\n- 課金演出を実装',
+      },
+    ],
+  };
+
+  it(
+    'comment 本文と duties / acquired の箇条書きが PDF のテキスト層に載る',
+    async () => {
+      const content = projectBlockToMarkdown(PROJECT);
+      // markdown 段階で escape 由来のバックスラッシュが残っていないこと。
+      expect(content).not.toContain('\\-');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+
+      const text = normalizeExtractedText(await extractPdfText(buffer));
+      expect(text).toContain('四つのリポジトリに横断的に関わりました');
+      expect(text).toContain('メッセージ機能を実装');
+      expect(text).toContain('モバイルアプリの機能開発');
+      expect(text).toContain('N+1 解消'.replace(/\s/g, ''));
+      // 会社概要文は素テキスト扱いのままなので、こちらも欠落していないこと。
+      expect(text).toContain('会社概要の文');
     },
     RENDER_TIMEOUT_MS,
   );

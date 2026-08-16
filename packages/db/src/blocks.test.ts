@@ -793,6 +793,81 @@ describe('projectBlockToMarkdown', () => {
       .filter((l) => l.trim() !== '');
     expect(between).toEqual([]);
   });
+
+  // #242: comment は案件1件あたり数百文字の本文で、画面では InlineMarkdown で
+  // 描画されているのに PDF・バックアップの出力先が無く丸ごと落ちていた。
+  it('comment を本文として出力する', () => {
+    const withComment: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [{ ...PROJECT.items[0], comment: '案件コメント本文' }],
+    };
+    expect(projectBlockToMarkdown(withComment)).toContain('案件コメント本文');
+  });
+
+  it('comment が空文字のときは本文段落を出さない', () => {
+    const md = projectBlockToMarkdown(PROJECT);
+    expect(md).not.toContain('案件コメント本文');
+    // 習得スキル節の後ろに空行以外が続かない（comment 由来の段落が無い）。
+    const tail = md
+      .slice(md.indexOf('習得スキルテスト') + '習得スキルテスト'.length)
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    expect(tail).toEqual([]);
+  });
+
+  // #242: duties / acquired / comment はビューア側が InlineMarkdown で描画する
+  // markdown フィールド。PDF 側だけ escape していたため `\- ` の羅列になっていた。
+  it('duties / acquired / comment の箇条書き・見出し・強調を markdown 構造のまま残す', () => {
+    const withMarkdown: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [
+        {
+          ...PROJECT.items[0],
+          duties: '- 箇条書き1\n- 箇条書き2',
+          acquired: '### 小見出し\n**強調**',
+          comment: '[モバイル]\n- コメント内の箇条書き',
+        },
+      ],
+    };
+    const md = projectBlockToMarkdown(withMarkdown);
+    expect(md).toContain('- 箇条書き1');
+    expect(md).toContain('### 小見出し');
+    expect(md).toContain('**強調**');
+    expect(md).toContain('- コメント内の箇条書き');
+    expect(md).not.toContain('\\-');
+    expect(md).not.toContain('\\#');
+  });
+
+  it('duties / acquired / comment の <script> / <style> は内容ごと落とす', () => {
+    const withScript: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [
+        {
+          ...PROJECT.items[0],
+          duties: '前<script>alert(1)</script>後',
+          acquired: '前<style>body{}</style>後',
+          comment: '前<script src="https://example.com/x.js"></script>後',
+        },
+      ],
+    };
+    const md = projectBlockToMarkdown(withScript);
+    expect(md).not.toContain('alert(1)');
+    expect(md).not.toContain('<script');
+    expect(md).not.toContain('<style');
+    expect(md).toContain('前後');
+  });
+
+  // note だけは画面側（project-card.tsx / project-preview.tsx）が素のテキストとして
+  // 描画するため、markdown 構造化しない従来の escape を維持する。
+  it('note は markdown 化せず従来どおり escape する（duties などと扱いを分ける）', () => {
+    const withBoth: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '- note の箇条書き' }],
+      items: [{ ...PROJECT.items[0], duties: '- duties の箇条書き' }],
+    };
+    const md = projectBlockToMarkdown(withBoth);
+    expect(md).toContain('\\- note の箇条書き');
+    expect(md).toContain('- duties の箇条書き');
+  });
 });
 
 describe('blocksToMarkdown — 新型ブロック dispatch', () => {
