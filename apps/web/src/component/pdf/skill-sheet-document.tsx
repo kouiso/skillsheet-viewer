@@ -4,7 +4,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
-import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
+import { isSafeLinkHref, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
 
 // @react-pdf/textkit の getNodes() は、非空白シラブルの直後が厳密に半角スペース ' ' で
@@ -252,8 +252,19 @@ function renderInlineNode(node: MdNode, key: number, ctx?: InlineContext): React
         </Text>
       );
     }
+    // 画面側は rehype-sanitize が javascript:/file: 等の href を落とすが、<Link src> は
+    // そのまま PDF の URI アクションになる。安全なスキーム以外は注釈を出さず、
+    // 見た目だけ従来どおりの styled Text にする（本文は消さない）。
+    const href = node.url ?? '';
+    if (!isSafeLinkHref(href)) {
+      return (
+        <Text key={key} style={styles.link}>
+          {renderInline(node.children, ctx)}
+        </Text>
+      );
+    }
     return (
-      <Link key={key} src={node.url ?? ''} style={styles.link}>
+      <Link key={key} src={href} style={styles.link}>
         {renderInline(node.children, ctx)}
       </Link>
     );

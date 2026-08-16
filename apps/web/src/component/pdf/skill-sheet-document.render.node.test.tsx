@@ -804,19 +804,75 @@ describe('projectBlockToMarkdown → PDF テキスト層（Issue #242）', () =>
     'comment 本文と duties / acquired の箇条書きが PDF のテキスト層に載る',
     async () => {
       const content = projectBlockToMarkdown(PROJECT);
-      // markdown 段階で escape 由来のバックスラッシュが残っていないこと。
-      expect(content).not.toContain('\\-');
 
       const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
       expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
 
       const text = normalizeExtractedText(await extractPdfText(buffer));
       expect(text).toContain('四つのリポジトリに横断的に関わりました');
-      expect(text).toContain('メッセージ機能を実装');
-      expect(text).toContain('モバイルアプリの機能開発');
-      expect(text).toContain('N+1 解消'.replace(/\s/g, ''));
+      // 箇条書きは「本文が載っているか」だけでは守れない。escape された `\- 項目` も
+      // 抽出テキスト上は `- 項目` になり、本文の部分文字列一致は素通りするため。
+      // renderList だけが行頭へ `•` を描くので、この記号の有無で
+      // 「list ノードとして描かれたか / エスケープされた段落か」を実バイトで判別する。
+      expect(text).toContain('•メッセージ機能を実装');
+      expect(text).toContain('•モバイルアプリの機能開発');
+      expect(text).toContain(`•${'N+1 解消'.replace(/\s/g, '')}`);
       // 会社概要文は素テキスト扱いのままなので、こちらも欠落していないこと。
+      // かつ、こちらは list にならない（`•` を伴わない）。
       expect(text).toContain('会社概要の文');
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  // #147 / #194 の再発経路。案件カードは「見出し+表とそれに続く自由記述」を1つの
+  // 分割不可単位として描くが、自由記述に見出しが混ざるとその走査がそこで打ち切られ、
+  // カード自身がページ境界で割れる。blocks.ts 側で見出し記法を落としているので、
+  // 実バイト上もカードが1つの単位に収まっていること。
+  it(
+    '自由記述に見出し記法があっても案件カードが分割単位を保つ',
+    async () => {
+      const withHeading: ProjectBlockData = {
+        companies: PROJECT.companies,
+        items: [{ ...PROJECT.items[0], comment: '前置き\n\n### 小見出し\n\n- 箇条書き' }],
+      };
+      const content = projectBlockToMarkdown(withHeading);
+      expect(content.split('\n')).not.toContain('### 小見出し');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const text = normalizeExtractedText(await extractPdfText(buffer));
+      expect(text).toContain('小見出し');
+      expect(text).toContain('•箇条書き');
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  // 画面側は rehype-sanitize が javascript:/file: の href を落とすが、PDF の <Link> は
+  // そのまま URI アクションになる。自由記述が markdown として通る以上、PDF だけ
+  // 素通しだと第三者へ渡す成果物にクリック可能な危険リンクが焼き付く。
+  it(
+    '自由記述の危険なスキームのリンクを PDF の URI アクションにしない',
+    async () => {
+      const withLinks: ProjectBlockData = {
+        companies: PROJECT.companies,
+        items: [
+          {
+            ...PROJECT.items[0],
+            comment: '[報告書](javascript:alert(1)) と [社内](file:///etc/passwd) と [公開](https://example.com)',
+          },
+        ],
+      };
+      const content = projectBlockToMarkdown(withLinks);
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const raw = buffer.toString('latin1');
+
+      expect(raw).not.toContain('javascript:');
+      expect(raw).not.toContain('file:///etc/passwd');
+      // 安全なリンクは従来どおり注釈になること（許可リストが全部落としていない証拠）。
+      expect(raw).toContain('https://example.com');
+      // リンクの文言自体は本文として残る。
+      const text = normalizeExtractedText(await extractPdfText(buffer));
+      expect(text).toContain('報告書');
+      expect(text).toContain('社内');
     },
     RENDER_TIMEOUT_MS,
   );

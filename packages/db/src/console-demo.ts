@@ -255,7 +255,7 @@ const RAW_PROJECTS: RawProject[] = [
       'リリースが5ヶ月遅延した状態から参入。Chromium を使い高精細DICOM画像を待機時間ゼロで表示するロジックを実装。Git Flow・自動デプロイなど提案技術の多くが採用され、面接も多数担当。',
   },
   {
-    title: 'マッチングアプリ「PatentStart」',
+    title: '士業向けマッチングアプリ',
     scope: 'iOS / Android / Web',
     company: 'B社（ベンチャー）',
     period: '2020.06 — 2021.08',
@@ -268,7 +268,7 @@ const RAW_PROJECTS: RawProject[] = [
       'Ionic React のハイブリッドアプリ開発をベンチャーに提案し開発を主導。スマホ課金・Web決済を導入し、フロントで解決できない部分を Cloud Functions で実装。チーム向け講習会も開催。',
   },
   {
-    title: 'HorseManager（馬匹健康管理）',
+    title: '家畜の健康管理システム',
     scope: '個人開発 / クロスプラットフォーム',
     company: '個人開発',
     period: '2020.01 — 2021.02',

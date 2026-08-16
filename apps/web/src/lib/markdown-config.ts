@@ -18,6 +18,32 @@ export const isSafeImageSrc = (src: string): boolean => {
   return MARKDOWN_IMG_SRC_PROTOCOLS.some((p) => src.toLowerCase().startsWith(`${p}:`));
 };
 
+// リンク href として許可するURLスキーム。rehype-sanitize の既定値をそのまま使い、
+// 画面（rehype-sanitize が href を落とす）と PDF（後述の isSafeLinkHref）で
+// 同じ判定になるようにする。
+export const MARKDOWN_LINK_HREF_PROTOCOLS: readonly string[] = defaultSchema.protocols?.href ?? [
+  'http',
+  'https',
+  'mailto',
+  'tel',
+];
+
+/**
+ * href が安全なスキームか（または相対パスか）を判定する。
+ *
+ * 画面側は rehype-sanitize が `javascript:` 等の href を属性ごと落とすが、PDF 側の
+ * `<Link src>` はそのまま PDF の URI アクションになる。案件の自由記述（duties /
+ * acquired / comment）が markdown として通るようになった以上、PDF だけ素通しだと
+ * 第三者へ渡す成果物に `javascript:` / `file:` のクリック注釈が焼き付く。
+ */
+export const isSafeLinkHref = (href: string): boolean => {
+  const trimmed = href.trim();
+  if (trimmed === '') return false;
+  // 相対パス・アンカー（スキームを持たない）は許可する。
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return true;
+  return MARKDOWN_LINK_HREF_PROTOCOLS.some((p) => trimmed.toLowerCase().startsWith(`${p}:`));
+};
+
 // rehype-raw が有効化する生HTML描画を details/summary タグに限定する。
 // style属性はデフォルトスキーマで除外済み（XSS防止）。
 // img の src は http/https/相対パスのみ許可し、javascript:/data: 等を除外する。

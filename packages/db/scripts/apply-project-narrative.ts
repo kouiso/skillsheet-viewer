@@ -1,62 +1,47 @@
 /**
- * 案件本文（`item.comment` / `item.duties` / `item.acquired`）と会社概要（`company.note`）を
- * 外部の JSON ファイルから流し込むスクリプト。
+ * 案件の本文・担当領域（`item.comment` / `duties` / `acquired` / `scope`）と
+ * 会社の概要・区分（`company.note` / `kind`）を、外部の JSON ファイルから流し込むスクリプト。
  *
- * 本文そのものをこのリポジトリへ置かないのが狙い。skillsheet-viewer は public なので、
- * 職務経歴の文章を同梱すると閲覧コードによる保護を素通りしてしまう。文章の正本は
- * private 側（skill-sheet リポジトリの skillsheet.md）に置き、このスクリプトは
- * 手元で書き出した JSON を読んで DB へ反映するだけにする。
+ * 値そのものをこのリポジトリへ置かないのが狙い。skillsheet-viewer は public なので、
+ * 職務経歴の文章はもちろん、実在の顧客名・サービス名を含む案件タイトルを同梱すると
+ * 閲覧コードによる保護を素通りしてしまう。正本は private 側（skill-sheet リポジトリの
+ * skillsheet.md）に置き、このスクリプトは手元で書き出した JSON を読んで DB へ反映するだけにする。
+ *
+ * `backfill-project-data.ts` は会社名の括弧書きから機械的に決まる kind と技術分類だけを
+ * 扱う。そこで拾えない値（案件ごとの scope、括弧書きの無い会社の kind）はこちらで渡す。
  *
  * JSON の形（キーは案件タイトル / 会社名。書き換えたい項目だけ書けばよい）:
  *   {
- *     "projects": { "<案件タイトル>": { "comment": "...", "duties": "...", "acquired": "..." } },
- *     "companies": { "<会社名>": { "note": "..." } }
+ *     "projects": { "<案件タイトル>": { "comment": "...", "duties": "...", "acquired": "...", "scope": "..." } },
+ *     "companies": { "<会社名>": { "note": "...", "kind": "..." } }
  *   }
  *
- * 冪等。既に同じ文字列が入っている項目は更新対象に数えない。
+ * 冪等。既に同じ文字列が入っている項目は更新対象に数えず、中身が変わらなかった
+ * ブロックは UPDATE 自体を出さない（`block-write.ts` 参照）。
  *
  * 実行:
  *   確認のみ: pnpm --filter @skillsheet/db exec tsx scripts/apply-project-narrative.ts <path.json>
  *   反映:     pnpm --filter @skillsheet/db exec tsx scripts/apply-project-narrative.ts <path.json> --apply
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 import { eq } from 'drizzle-orm';
 
 import { isProjectBlockData } from '../src/blocks';
 import { getDb } from '../src/client';
 import { blocks } from '../src/schema';
+import { type BlockUpdate, loadWebEnvLocal, writeBlockUpdates } from './block-write';
 
-type ProjectPatch = { comment?: string; duties?: string; acquired?: string };
-type CompanyPatch = { note?: string };
+type ProjectPatch = { comment?: string; duties?: string; acquired?: string; scope?: string };
+type CompanyPatch = { note?: string; kind?: string };
 interface NarrativeFile {
   projects?: Record<string, ProjectPatch>;
   companies?: Record<string, CompanyPatch>;
 }
 
-const PROJECT_FIELDS = ['comment', 'duties', 'acquired'] as const;
-
-function loadWebEnvLocal(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const envPath = resolve(here, '../../../apps/web/.env.local');
-  if (!existsSync(envPath)) {
-    throw new Error(`apps/web/.env.local が見つかりません: ${envPath}`);
-  }
-  for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
+const PROJECT_FIELDS = ['comment', 'duties', 'acquired', 'scope'] as const;
+const COMPANY_FIELDS = ['note', 'kind'] as const;
 
 function readNarrative(path: string): NarrativeFile {
   if (!existsSync(path)) {
@@ -84,6 +69,7 @@ async function main(): Promise<void> {
   const rows = await db.select().from(blocks).where(eq(blocks.type, 'project'));
 
   let changed = 0;
+  const updates: BlockUpdate[] = [];
   const unmatchedProjects = new Set(Object.keys(narrative.projects ?? {}));
   const unmatchedCompanies = new Set(Object.keys(narrative.companies ?? {}));
 
@@ -95,10 +81,15 @@ async function main(): Promise<void> {
       const patch = narrative.companies?.[company.name.trim()];
       if (!patch) return company;
       unmatchedCompanies.delete(company.name.trim());
-      if (patch.note === undefined || patch.note === company.note) return company;
-      changed += 1;
-      console.log(`  会社概要 ${company.name}: ${company.note?.length ?? 0} 字 → ${patch.note.length} 字`);
-      return { ...company, note: patch.note };
+      const next = { ...company };
+      for (const field of COMPANY_FIELDS) {
+        const value = patch[field];
+        if (value === undefined || value === company[field]) continue;
+        changed += 1;
+        console.log(`  ${company.name} の ${field}: ${company[field]?.length ?? 0} 字 → ${value.length} 字`);
+        next[field] = value;
+      }
+      return next;
     });
 
     const items = data.items.map((item) => {
@@ -116,12 +107,7 @@ async function main(): Promise<void> {
       return next;
     });
 
-    if (apply) {
-      await db
-        .update(blocks)
-        .set({ data: { ...data, companies, items } })
-        .where(eq(blocks.id, row.id));
-    }
+    updates.push({ id: row.id, sheetId: row.sheetId, data: { ...data, companies, items }, previous: data });
   }
 
   for (const title of unmatchedProjects) console.warn(`  JSON の案件がシートに見つかりません: ${title}`);
@@ -129,7 +115,15 @@ async function main(): Promise<void> {
 
   console.log('');
   console.log(`更新対象: ${changed} 項目`);
-  console.log(apply ? '→ DB へ反映しました。' : '→ 確認のみ（反映するには --apply を付ける）。');
+
+  if (!apply) {
+    console.log('→ 確認のみ（反映するには --apply を付ける）。');
+    return;
+  }
+  const result = await writeBlockUpdates(db, updates);
+  console.log(
+    `→ DB へ反映しました（ブロック ${result.written} 件を更新 / ${result.skipped} 件は変更なしのため据え置き、シート ${result.sheets} 件の updated_at を更新）。`,
+  );
 }
 
 main().catch((err) => {

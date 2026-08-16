@@ -49,8 +49,8 @@
       "マッチングアプリの開発"
     ],
     "itemsUnderHiddenCompany": [
-      "HorseManager ～馬匹の健康管理システム～ 第二弾",
-      "HorseFeeders ～馬匹の飼料管理システム～ 第一弾"
+      "家畜の健康管理システム 第二弾",
+      "家畜の飼料管理システム 第一弾"
     ],
     "backupBytes": 21751,
     "companyHiddenNamePresent": [
@@ -61,11 +61,11 @@
     ],
     "itemsUnderHiddenCompanyPresent": [
       {
-        "title": "HorseManager ～馬匹の健康管理システム～ 第二弾",
+        "title": "家畜の健康管理システム 第二弾",
         "present": true
       },
       {
-        "title": "HorseFeeders ～馬匹の飼料管理システム～ 第一弾",
+        "title": "家畜の飼料管理システム 第一弾",
         "present": true
       }
     ],

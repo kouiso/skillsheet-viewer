@@ -550,14 +550,51 @@ function escapeMarkdownParagraph(value: string): string {
   );
 }
 
+// 案件の自由記述に含まれる見出し記法を、見出しでない素の行へ落とす。
+//
+// ビューア側の InlineMarkdown は h1〜h6 の component override を持たず、Tailwind preflight が
+// 見出しの字送り・太さを inherit へ潰すため、`### 小見出し` は地の文と同じ見た目になる。
+// 一方 PDF 側は heading ノードに構造的な意味を与えており、`skill-sheet-document.tsx` の
+// 案件カード分割は「次の heading までを1つの分割不可単位」として trailing を集める。
+// 自由記述に見出しが混ざると、その場でカードが打ち切られてカード自身がページ境界で
+// 割れる（#147 / #194 の再発経路）。画面が構造として扱っていないものを PDF だけが
+// 構造として扱うのが誤りなので、生成する markdown の側で見出しにしない。
+function stripHeadingSyntax(value: string): string {
+  const lines = value.split('\n');
+  const out: string[] = [];
+  for (const line of lines) {
+    // ATX 見出し（`## foo`）。マーカーだけ落として本文は残す。
+    const atx = line.match(/^(\s{0,3})#{1,6}[ \t]+(.*)$/);
+    if (atx) {
+      out.push(atx[1] + atx[2]);
+      continue;
+    }
+    // Setext 見出し（直前の段落行を `===` / `---` の下線が見出しへ格上げする）。
+    // 前に空行を挟むと下線は段落から切り離され、`---` は水平線・`===` は素の行になる。
+    const previous = out.at(-1);
+    if (previous !== undefined && previous.trim() !== '' && /^\s{0,3}(=+|-+)\s*$/.test(line)) {
+      out.push('');
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 // 案件の自由記述（duties / acquired / comment）向け。ビューア側はこの3つを
-// InlineMarkdown（react-markdown + rehype-sanitize）で描画しており、箇条書き・強調・
-// 見出しがそのまま構造として出る。PDF 側だけ escapeMarkdownParagraph をかけていたため、
+// InlineMarkdown（react-markdown + rehype-sanitize）で描画しており、箇条書き・強調が
+// そのまま構造として出る。PDF 側だけ escapeMarkdownParagraph をかけていたため、
 // 同じ文字列が `\- ` の羅列になって画面と食い違っていた（#242）。
-// 構造は保ったまま <script>/<style> だけ落とす。残りの生HTMLは PDF レンダラ側の
-// html ノード処理（inline は破棄、block は stripHtml）で無害化される。
+//
+// 構造は保ったまま <script>/<style> だけ落とす。この文字列の行き先は PDF だけではない:
+//   - PDF: `skill-sheet-document.tsx`。生HTMLは html ノード処理で無害化される
+//     （inline は INLINE_LEAF で破棄、block は stripHtml）
+//   - プレビュー: builder-client → BroadcastChannel/localStorage → preview-client →
+//     `skill-sheet-viewer.tsx` の MarkdownContent。rehype-raw が有効だが
+//     rehype-sanitize（MARKDOWN_SANITIZE_SCHEMA）が後段に入る
+//   - `blocksToMarkdown` 経由の `sheet.content`、およびバックアップ書き出しの .md
+// 生HTMLを無害化しているのは各描画経路のサニタイザであって、この関数ではない。
 function asInlineMarkdown(value: string): string {
-  return sanitizeScriptAndStyle(value);
+  return stripHeadingSyntax(sanitizeScriptAndStyle(value));
 }
 
 /** 表ブロックを GFM markdown 表へ変換する。 */

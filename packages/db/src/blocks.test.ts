@@ -817,24 +817,54 @@ describe('projectBlockToMarkdown', () => {
 
   // #242: duties / acquired / comment はビューア側が InlineMarkdown で描画する
   // markdown フィールド。PDF 側だけ escape していたため `\- ` の羅列になっていた。
-  it('duties / acquired / comment の箇条書き・見出し・強調を markdown 構造のまま残す', () => {
+  it('duties / acquired / comment の箇条書き・強調を markdown 構造のまま残す', () => {
     const withMarkdown: ProjectBlockData = {
       companies: PROJECT.companies,
       items: [
         {
           ...PROJECT.items[0],
           duties: '- 箇条書き1\n- 箇条書き2',
-          acquired: '### 小見出し\n**強調**',
+          acquired: '**強調**',
           comment: '[モバイル]\n- コメント内の箇条書き',
         },
       ],
     };
     const md = projectBlockToMarkdown(withMarkdown);
     expect(md).toContain('- 箇条書き1');
-    expect(md).toContain('### 小見出し');
     expect(md).toContain('**強調**');
     expect(md).toContain('- コメント内の箇条書き');
     expect(md).not.toContain('\\-');
+    expect(md).not.toContain('\\#');
+  });
+
+  // 自由記述の見出しは、PDF 側の案件カード分割（次の heading までを1単位とする走査）を
+  // その場で打ち切り、カードをページ境界で割る。ビューアは h1〜h6 を地の文と同じ見た目へ
+  // 潰しており構造として扱っていないので、生成する markdown でも見出しにしない。
+  it('duties / acquired / comment の見出し記法は本文を残したまま見出しでなくする', () => {
+    const withHeading: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [
+        {
+          ...PROJECT.items[0],
+          duties: '### ATX 見出し\n- 箇条書き',
+          acquired: 'Setext 見出し\n===\n本文',
+          comment: '#### 4段見出し\n段落',
+        },
+      ],
+    };
+    const md = projectBlockToMarkdown(withHeading);
+    // 本文は残る
+    expect(md).toContain('ATX 見出し');
+    expect(md).toContain('Setext 見出し');
+    expect(md).toContain('4段見出し');
+    expect(md).toContain('- 箇条書き');
+    // 見出しにはならない（`**業務内容**` 等の構造行と衝突しないよう行単位で見る）
+    const lines = md.split('\n');
+    expect(lines).not.toContain('### ATX 見出し');
+    expect(lines).not.toContain('#### 4段見出し');
+    // Setext の下線は直前に空行が入り、段落から切り離される
+    expect(md).toContain('Setext 見出し\n\n===');
+    // エスケープで潰したのではない（`\#` を出すと画面に `#` が見えてしまう）
     expect(md).not.toContain('\\#');
   });
 
