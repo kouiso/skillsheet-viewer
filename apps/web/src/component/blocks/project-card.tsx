@@ -2,7 +2,7 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { deriveDuration, formatPeriodDisplay, normalizeProcess } from '@skillsheet/db/process';
-import { projectAreaLabel } from '@skillsheet/db/tech-area';
+import { resolveProjectArea } from '@skillsheet/db/tech-area';
 import { formatTeamSize } from '@/util/format-team-size';
 import { sanitizeHtml } from '@/util/sanitize-html';
 import { InlineMarkdown } from '../inline-markdown';
@@ -23,7 +23,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
   const normalized = normalizeProcess(item.process);
   const duration = sanitizeHtml(item.duration?.trim() || deriveDuration(item.period));
   const summary = item.summary?.trim() || item.duties;
-  const areaLabel = projectAreaLabel(item.scope, item.tech);
+  const area = resolveProjectArea(item.scope, item.tech);
 
   return (
     <article className="flex min-w-0 flex-col gap-3.5 rounded-[var(--radius-lg)] border border-border bg-card px-[22px] py-5 transition-colors duration-150 hover:border-primary">
@@ -39,9 +39,15 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
             </span>
           </div>
           <h3 className="text-[17px] leading-snug text-foreground">{sanitizeHtml(item.title) || '(タイトル未入力)'}</h3>
-          {/* 「担当領域」ではなく「技術領域」。元シートに担当領域の記載が無い場合は技術スタックから
-              導出しており、「この技術を使った」までしか言えないため（tech-area.ts 参照）。 */}
-          {areaLabel && <p className="mt-0.5 text-[12.5px] text-muted-foreground">{sanitizeHtml(areaLabel)}</p>}
+          {/* 導出値には必ず「技術領域」を添える。タイトル直下という位置だけで読み手は
+              「担当した領域」と受け取るが、技術スタックから言えるのは「その技術がどの領域か」まで。
+              取り込んだ scope は本人の言葉なのでラベルを付けない（tech-area.ts 参照）。 */}
+          {area.text && (
+            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+              {area.derived && <span className="kicker mr-1.5">技術領域</span>}
+              {sanitizeHtml(area.text)}
+            </p>
+          )}
           {/* 会社概要文（CompanyInfo.note）。従来どこにも描画先が無く、ビューア・PDF・バックアップの
               全経路で欠落していた（#139）。projectBlockToMarkdown 側も同じ位置づけで出力する。
               空白のみの値は projectBlockToMarkdown と同じく trim() 後に判定する。 */}

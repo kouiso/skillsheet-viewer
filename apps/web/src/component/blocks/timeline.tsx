@@ -2,13 +2,19 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech, formatPeriodDisplay, sortByStartDesc } from '@skillsheet/db/process';
-import { projectAreaLabel } from '@skillsheet/db/tech-area';
+import { resolveProjectArea } from '@skillsheet/db/tech-area';
 import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface TimelineProps {
   items: ProjectItem[];
   companyMap: Map<string, CompanyInfo>;
   activeTech: string[];
+}
+
+function timelineArea(item: ProjectItem): string {
+  const area = resolveProjectArea(item.scope, item.tech);
+  if (!area.text) return '';
+  return area.derived ? `技術領域 ${sanitizeHtml(area.text)}` : sanitizeHtml(area.text);
 }
 
 // 案件タイムライン。start（period から導出）降順の縦レール表示。
@@ -44,11 +50,9 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
                     {sanitizeHtml(item.title) || '(タイトル未入力)'}
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
-                    {[
-                      sanitizeHtml(company?.name),
-                      sanitizeHtml(item.role),
-                      sanitizeHtml(projectAreaLabel(item.scope, item.tech)),
-                    ]
+                    {/* 役割の隣に無ラベルで並べると担当領域として読まれるため、
+                        導出値のときだけ「技術領域」を前置する（tech-area.ts 参照）。 */}
+                    {[sanitizeHtml(company?.name), sanitizeHtml(item.role), timelineArea(item)]
                       .filter(Boolean)
                       .join(' · ')}
                   </div>
