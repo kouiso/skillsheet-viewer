@@ -2,7 +2,7 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@skillsheet/db/process';
-import { projectAreaLabel } from '@skillsheet/db/tech-area';
+import { projectAreaText } from '@skillsheet/db/tech-area';
 import { useRef, useState } from 'react';
 
 import { InlineMarkdown } from '@/component/inline-markdown';
@@ -54,7 +54,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
   const summary = project.summary?.trim() || project.duties.trim();
   /** スコープ欄の値そのままか、空なら技術スタックからの導出値（由来を添える）。 */
   const ownScope = project.scope.trim();
-  const derivedArea = ownScope ? '' : projectAreaLabel('', project.tech);
+  const derivedArea = ownScope ? '' : projectAreaText('', project.tech);
   const scopePreview = ownScope || (derivedArea ? `${derivedArea}（技術スタックから導出）` : 'スコープ未入力');
 
   const toolbarRef = useRef<HTMLDivElement>(null);

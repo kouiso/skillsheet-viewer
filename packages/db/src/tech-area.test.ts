@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ProjectTech } from './blocks';
-import { deriveTechAreas, projectAreaLabel } from './tech-area';
+import { deriveTechAreas, projectAreaText, resolveProjectArea } from './tech-area';
 
 const tech = (partial: Partial<ProjectTech>): ProjectTech => ({
   lang: [],
@@ -77,16 +77,26 @@ describe('deriveTechAreas', () => {
   });
 });
 
-describe('projectAreaLabel', () => {
-  it('元シートから取り込んだ担当領域があればそれを優先する', () => {
-    expect(projectAreaLabel('要件定義 / PM', tech({ fw: ['React'] }))).toBe('要件定義 / PM');
+describe('resolveProjectArea', () => {
+  it('元シートから取り込んだ担当領域を優先し、導出ではないと示す', () => {
+    expect(resolveProjectArea('要件定義 / PM', tech({ fw: ['React'] }))).toEqual({
+      text: '要件定義 / PM',
+      derived: false,
+    });
   });
 
-  it('空白のみの取り込み値は未入力として扱い、技術スタックから導出する', () => {
-    expect(projectAreaLabel('   ', tech({ fw: ['React'] }))).toBe('Web');
+  it('空白のみの取り込み値は未入力として扱い、導出値として返す', () => {
+    expect(resolveProjectArea('   ', tech({ fw: ['React'] }))).toEqual({ text: 'Web', derived: true });
   });
 
   it('導出結果が無ければ空文字（描画側で行ごと落とす）', () => {
-    expect(projectAreaLabel('', tech({ tools: ['Jest'] }))).toBe('');
+    expect(resolveProjectArea('', tech({ tools: ['Jest'] }))).toEqual({ text: '', derived: true });
+  });
+
+  // 由来を落とした文字列だけを返す API を残すと、描画側がラベル無しで出せてしまう。
+  // 検索インデックス用の projectAreaText は由来を必要としない用途に限る。
+  it('projectAreaText は文字列のみを返す', () => {
+    expect(projectAreaText('', tech({ fw: ['React'] }))).toBe('Web');
+    expect(projectAreaText('要件定義', tech({ fw: ['React'] }))).toBe('要件定義');
   });
 });

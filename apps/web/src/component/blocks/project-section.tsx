@@ -2,7 +2,7 @@
 
 import { filterVisibleProjectData, type ProjectBlockData } from '@skillsheet/db/blocks';
 import { flattenTech } from '@skillsheet/db/process';
-import { projectAreaLabel } from '@skillsheet/db/tech-area';
+import { projectAreaText } from '@skillsheet/db/tech-area';
 import { motion, useReducedMotion } from 'framer-motion';
 import { type ReactNode, useMemo, useState } from 'react';
 import { ProcessOverview } from './process-overview';
@@ -81,7 +81,7 @@ export function ProjectSection({
       const company = companyMap.get(item.companyId);
       const haystack = [
         item.title,
-        projectAreaLabel(item.scope, item.tech),
+        projectAreaText(item.scope, item.tech),
         item.role,
         company?.name ?? '',
         item.summary ?? item.duties,
