@@ -10,7 +10,7 @@ function buildData(overrides: Partial<ProfileBlockData>): ProfileBlockData {
     title: 'フルスタックエンジニア',
     pr: '自己PRです。',
     strengths: ['React', 'TypeScript'],
-    meta: { age: '28歳', work: 'フルリモート' },
+    meta: { age: '30代', work: 'フルリモート' },
     ...overrides,
   };
 }
@@ -44,7 +44,7 @@ describe('ProfileIntro', () => {
     render(<ProfileIntro data={buildData({})} />);
     const sp = screen.getByTestId('profile-intro-sp');
     const name = screen.getByText('山田太郎');
-    const meta = within(sp).getByText('28歳').closest('dl') as HTMLElement;
+    const meta = within(sp).getByText('30代').closest('dl') as HTMLElement;
     const strengths = within(sp).getByText('React').closest('ul') as HTMLElement;
     const pr = within(sp).getByText('自己PRです。');
 
@@ -61,7 +61,7 @@ describe('ProfileIntro', () => {
     const name = screen.getByText('山田太郎');
     const pr = within(desktop).getByText('自己PRです。');
     const strengths = within(desktop).getByText('React').closest('ul') as HTMLElement;
-    const meta = within(desktop).getByText('28歳').closest('dl') as HTMLElement;
+    const meta = within(desktop).getByText('30代').closest('dl') as HTMLElement;
 
     expect(name.compareDocumentPosition(pr) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(pr.compareDocumentPosition(strengths) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

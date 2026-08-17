@@ -18,7 +18,7 @@ function careerMarkdown(extra = '', subsections = ''): string {
     '',
     '### 株式会社サンプル - 2020年4月 - 現在',
     '',
-    '#### ■ 1. PatentStart',
+    '#### ■ 1. 士業向けマッチングアプリ',
     extra,
     '#### プロジェクト概要',
     '',
@@ -52,13 +52,13 @@ function careerMarkdown(extra = '', subsections = ''): string {
 
 describe('parseCareerMarkdown', () => {
   it('案件見出しと最初のサブセクションの間に置かれた前置き文を捨てずに検出する（#151 D-7）', () => {
-    const preface = 'App Store から、PatentStart と検索すると、赤いアプリが表示されます。';
+    const preface = 'App Store から、サービス名で検索すると、赤いアプリが表示されます。';
     const { items, dropped } = parseCareerMarkdown(careerMarkdown(preface));
 
     expect(items).toHaveLength(1);
     expect(dropped).toHaveLength(1);
     expect(dropped[0].line).toBe(preface);
-    expect(dropped[0].where).toContain('PatentStart');
+    expect(dropped[0].where).toContain('士業向けマッチングアプリ');
     expect(dropped[0].where).toContain('冒頭');
   });
 

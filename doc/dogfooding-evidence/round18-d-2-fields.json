@@ -146,7 +146,7 @@
     {
       "company": "I 社",
       "label": "note:I 社",
-      "probe": "業務委託にて高槻市スマホアプリの修正作業を担当",
+      "probe": "業務委託にて自治体向けスマホアプリの修正作業を担当",
       "tooShort": false,
       "inPdf": false,
       "inScreen": false
@@ -277,7 +277,7 @@
     },
     {
       "label": "profile:meta.age(年齢+値)",
-      "probe": "年齢28歳",
+      "probe": "年齢20代",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null
@@ -291,14 +291,14 @@
     },
     {
       "label": "profile:meta.station(最寄り駅+値)",
-      "probe": "最寄り駅成田駅",
+      "probe": "最寄り駅最寄駅",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null
     },
     {
       "label": "profile:meta.education(学歴+値)",
-      "probe": "学歴高卒",
+      "probe": "学歴非公開",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null
@@ -314,7 +314,7 @@
     },
     {
       "label": "stats:values(表の値行の全 value+unit 連結)",
-      "probe": "8年30+案件4名28歳",
+      "probe": "8年30+案件4名20代",
       "tooShort": false,
       "inPdf": true,
       "inScreen": false
@@ -356,7 +356,7 @@
     },
     {
       "label": "stats:value隣接[2]",
-      "probe": "4名28歳",
+      "probe": "4名20代",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null
@@ -370,7 +370,7 @@
     },
     {
       "label": "stats:value隣接[3]",
-      "probe": "28歳8年",
+      "probe": "20代8年",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null

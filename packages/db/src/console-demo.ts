@@ -12,14 +12,16 @@ import { createSheet, listSheets } from './skillsheet';
 
 const newId = () => crypto.randomUUID();
 
-// --- ハンドオフ redesign2/data.js の内容（そのまま転記） -----------------------------------
+// --- ハンドオフ redesign2/data.js を土台にした検証用フィクスチャ -----------------------------
+// このリポジトリは public なので、実在の会社名・サービス名・個人が特定できる属性は置かない。
+// 正本（Neon）側と同じ匿名表記（Q 社 / A 社 …）に揃えることで、画面での見え方も本番と一致する。
 const RAW_PROFILE = {
   name: 'I・K',
   title: 'フルスタックエンジニア / エンジニアリングマネージャー',
-  age: '28歳',
+  age: '20代',
   work: 'フルリモート',
-  station: '成田駅',
-  education: '高卒',
+  station: '最寄駅（非公開）',
+  education: '非公開',
   strengths: ['React', 'TypeScript', 'Nest.js', 'Ionic', 'Capacitor', 'Laravel', 'Terraform'],
   pr: 'フロントエンド・バックエンド・インフラまで一気通貫で担当可能。要件定義やPM/PLなど上流工程の経験も豊富で、AIエージェントを組み込んだ開発・レビュー基盤の構築も得意。新しい技術は必ず自分のPCで動かして確かめる性格。',
 };
@@ -101,9 +103,9 @@ interface RawProject {
 
 const RAW_PROJECTS: RawProject[] = [
   {
-    title: 'マッチングアプリ「mypappy」',
+    title: 'マッチングアプリの開発',
     scope: 'iOS / Android / Web / バックエンド',
-    company: '株式会社az',
+    company: 'Q 社（自社サービス事業会社）',
     period: '2025.11 — 現在',
     duration: '継続中',
     role: 'フルスタック / EM',
@@ -125,9 +127,9 @@ const RAW_PROJECTS: RawProject[] = [
       'モバイル・バックエンド・Web・管理画面の4リポジトリすべてに主要メンバーとして横断参画。チャット・本人確認(eKYC)・課金演出、通知基盤とN+1解消、CI/CD・AIレビュー基盤の構築までフルスタックで担当。',
   },
   {
-    title: 'コンテンツメディア「Pink Labo」',
+    title: 'コンテンツメディアの開発',
     scope: 'Web / CMS / インフラ',
-    company: '株式会社az',
+    company: 'Q 社（自社サービス事業会社）',
     period: '2025.12 — 現在',
     duration: '継続中',
     role: 'フルスタック / EM',
@@ -253,7 +255,7 @@ const RAW_PROJECTS: RawProject[] = [
       'リリースが5ヶ月遅延した状態から参入。Chromium を使い高精細DICOM画像を待機時間ゼロで表示するロジックを実装。Git Flow・自動デプロイなど提案技術の多くが採用され、面接も多数担当。',
   },
   {
-    title: 'マッチングアプリ「PatentStart」',
+    title: '士業向けマッチングアプリ',
     scope: 'iOS / Android / Web',
     company: 'B社（ベンチャー）',
     period: '2020.06 — 2021.08',
@@ -266,7 +268,7 @@ const RAW_PROJECTS: RawProject[] = [
       'Ionic React のハイブリッドアプリ開発をベンチャーに提案し開発を主導。スマホ課金・Web決済を導入し、フロントで解決できない部分を Cloud Functions で実装。チーム向け講習会も開催。',
   },
   {
-    title: 'HorseManager（馬匹健康管理）',
+    title: '家畜の健康管理システム',
     scope: '個人開発 / クロスプラットフォーム',
     company: '個人開発',
     period: '2020.01 — 2021.02',

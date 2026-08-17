@@ -137,7 +137,7 @@
     {
       "company": "I 社",
       "label": "note:I 社",
-      "probe": "業務委託にて高槻市スマホアプリの修正作業を担当",
+      "probe": "業務委託にて自治体向けスマホアプリの修正作業を担当",
       "tooShort": false,
       "inPdf": false,
       "inScreen": false
@@ -268,14 +268,14 @@
     },
     {
       "label": "profile:meta全項目(ラベル+値の連結)",
-      "probe": "年齢28歳勤務形態フルリモト最寄り駅成田駅学歴高卒",
+      "probe": "年齢20代勤務形態フルリモト最寄り駅最寄駅学歴非公開",
       "tooShort": false,
       "inPdf": true,
       "inScreen": true
     },
     {
       "label": "profile:meta.age",
-      "probe": "年齢28歳",
+      "probe": "年齢20代",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null
@@ -289,14 +289,14 @@
     },
     {
       "label": "profile:meta.station",
-      "probe": "最寄り駅成田駅",
+      "probe": "最寄り駅最寄駅",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null
     },
     {
       "label": "profile:meta.education",
-      "probe": "学歴高卒",
+      "probe": "学歴非公開",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null
@@ -305,8 +305,8 @@
   "statsResults": [
     {
       "label": "stats:全枠(PDF=ラベル行/値行, 画面=カード連結)",
-      "pdfProbe": "エンジニア歴参画プロジェクト数育成した教え子年齢8年30+案件4名28歳",
-      "screenProbe": "8年エンジニア歴30+案件参画プロジェクト数4名育成した教え子28歳年齢",
+      "pdfProbe": "エンジニア歴参画プロジェクト数育成した教え子年齢8年30+案件4名20代",
+      "screenProbe": "8年エンジニア歴30+案件参画プロジェクト数4名育成した教え子20代年齢",
       "tooShort": false,
       "inPdf": true,
       "inScreen": true
@@ -320,7 +320,7 @@
     },
     {
       "label": "stats:PDF値行(全 value+unit 連結)",
-      "probe": "8年30+案件4名28歳",
+      "probe": "8年30+案件4名20代",
       "tooShort": false,
       "inPdf": true,
       "inScreen": false
@@ -352,7 +352,7 @@
     {
       "label": "stats:枠[3] 年齢",
       "pdfProbe": "エンジニア歴参画プロジェクト数育成した教え子年齢",
-      "screenProbe": "28歳年齢",
+      "screenProbe": "20代年齢",
       "tooShort": true,
       "inPdf": null,
       "inScreen": null

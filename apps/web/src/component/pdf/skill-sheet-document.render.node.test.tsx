@@ -8,6 +8,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 
 import { Font, renderToBuffer, View } from '@react-pdf/renderer';
+import { type ProjectBlockData, projectBlockToMarkdown } from '@skillsheet/db';
 import { getDocument } from 'pdfjs-dist';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
@@ -763,6 +764,115 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       const text = normalizeExtractedText(rawText);
       // CJK文字（句読点含む）と隣接するASCIIハイフンが無いこと。
       expect(text).not.toMatch(/[぀-ヿ一-鿿、。]-|-[぀-ヿ一-鿿、。]/);
+    },
+    RENDER_TIMEOUT_MS,
+  );
+});
+
+// #242 の回帰防止。projectBlockToMarkdown が comment を出さず、かつ duties / acquired を
+// escape していたため、画面に出ている案件本文と箇条書きが PDF から丸ごと落ちていた。
+// markdown 文字列の検査だけでは「PDF のテキスト層に載ったか」までは言えないので、
+// 実バイト描画して pdfjs で抽出したテキストで確認する。
+describe('projectBlockToMarkdown → PDF テキスト層（Issue #242）', () => {
+  beforeAll(() => {
+    registerNodeFonts();
+  });
+
+  const PROJECT: ProjectBlockData = {
+    companies: [
+      { id: 'c1', name: 'Q 社', kind: '自社サービス事業会社', period: '2025-11〜現在', note: '会社概要の文' },
+    ],
+    items: [
+      {
+        id: 'p1',
+        companyId: 'c1',
+        title: 'マッチングアプリの開発',
+        scope: 'iOS / Android / Web',
+        period: '2025-11〜現在',
+        role: 'フルスタック',
+        team: '13 名',
+        tech: { lang: ['TypeScript'], fw: ['React Native'], db: [], infra: [], tools: [], collab: [] },
+        process: ['要件定義', '実装'],
+        duties: '- モバイルアプリの機能開発\n- バックエンドのクエリ最適化',
+        acquired: '- React Native での開発\n- N+1 解消',
+        comment: '四つのリポジトリに横断的に関わりました。\n\n**モバイル**\n\n- メッセージ機能を実装\n- 課金演出を実装',
+      },
+    ],
+  };
+
+  it(
+    'comment 本文と duties / acquired の箇条書きが PDF のテキスト層に載る',
+    async () => {
+      const content = projectBlockToMarkdown(PROJECT);
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+
+      const text = normalizeExtractedText(await extractPdfText(buffer));
+      expect(text).toContain('四つのリポジトリに横断的に関わりました');
+      // 箇条書きは「本文が載っているか」だけでは守れない。escape された `\- 項目` も
+      // 抽出テキスト上は `- 項目` になり、本文の部分文字列一致は素通りするため。
+      // renderList だけが行頭へ `•` を描くので、この記号の有無で
+      // 「list ノードとして描かれたか / エスケープされた段落か」を実バイトで判別する。
+      expect(text).toContain('•メッセージ機能を実装');
+      expect(text).toContain('•モバイルアプリの機能開発');
+      expect(text).toContain(`•${'N+1 解消'.replace(/\s/g, '')}`);
+      // 会社概要文は素テキスト扱いのままなので、こちらも欠落していないこと。
+      // かつ、こちらは list にならない（`•` を伴わない）。
+      expect(text).toContain('会社概要の文');
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  // #147 / #194 の再発経路。案件カードは「見出し+表とそれに続く自由記述」を1つの
+  // 分割不可単位として描くが、自由記述に見出しが混ざるとその走査がそこで打ち切られ、
+  // カード自身がページ境界で割れる。blocks.ts 側で見出し記法を落としているので、
+  // 実バイト上もカードが1つの単位に収まっていること。
+  it(
+    '自由記述に見出し記法があっても案件カードが分割単位を保つ',
+    async () => {
+      const withHeading: ProjectBlockData = {
+        companies: PROJECT.companies,
+        items: [{ ...PROJECT.items[0], comment: '前置き\n\n### 小見出し\n\n- 箇条書き' }],
+      };
+      const content = projectBlockToMarkdown(withHeading);
+      expect(content.split('\n')).not.toContain('### 小見出し');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const text = normalizeExtractedText(await extractPdfText(buffer));
+      expect(text).toContain('小見出し');
+      expect(text).toContain('•箇条書き');
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  // 画面側は rehype-sanitize が javascript:/file: の href を落とすが、PDF の <Link> は
+  // そのまま URI アクションになる。自由記述が markdown として通る以上、PDF だけ
+  // 素通しだと第三者へ渡す成果物にクリック可能な危険リンクが焼き付く。
+  it(
+    '自由記述の危険なスキームのリンクを PDF の URI アクションにしない',
+    async () => {
+      const withLinks: ProjectBlockData = {
+        companies: PROJECT.companies,
+        items: [
+          {
+            ...PROJECT.items[0],
+            comment: '[報告書](javascript:alert(1)) と [社内](file:///etc/passwd) と [公開](https://example.com)',
+          },
+        ],
+      };
+      const content = projectBlockToMarkdown(withLinks);
+      const buffer = await renderToBuffer(<SkillSheetDocument title="テスト" content={content} />);
+      const raw = buffer.toString('latin1');
+
+      expect(raw).not.toContain('javascript:');
+      expect(raw).not.toContain('file:///etc/passwd');
+      // 安全なリンクは従来どおり注釈になること（許可リストが全部落としていない証拠）。
+      expect(raw).toContain('https://example.com');
+      // リンクの文言自体は本文として残る。
+      const text = normalizeExtractedText(await extractPdfText(buffer));
+      expect(text).toContain('報告書');
+      expect(text).toContain('社内');
     },
     RENDER_TIMEOUT_MS,
   );

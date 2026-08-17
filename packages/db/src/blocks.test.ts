@@ -46,9 +46,9 @@ const SAMPLE = `## 技術者プロファイル
 
 ## 経歴
 
-### ◆ 株式会社az
+### ◆ Q 社（自社サービス事業会社）
 
-#### ■ 1. mypappy
+#### ■ 1. マッチングアプリの開発
 
 概要テキスト。
 `;
@@ -67,8 +67,8 @@ describe('splitMarkdownIntoBlocks', () => {
     expect(segments[0].markdown.startsWith('## 技術者プロファイル')).toBe(true);
     expect(segments.some((s) => s.markdown.startsWith('<details'))).toBe(true);
     expect(segments.some((s) => s.markdown.startsWith('## 経歴'))).toBe(true);
-    expect(segments.some((s) => s.markdown.startsWith('### ◆ 株式会社az'))).toBe(true);
-    expect(segments.some((s) => s.markdown.startsWith('#### ■ 1. mypappy'))).toBe(true);
+    expect(segments.some((s) => s.markdown.startsWith('### ◆ Q 社（自社サービス事業会社）'))).toBe(true);
+    expect(segments.some((s) => s.markdown.startsWith('#### ■ 1. マッチングアプリの開発'))).toBe(true);
   });
 
   it('order は 0 始まりの昇順で連結順を決める', () => {
@@ -646,6 +646,32 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('業務内容テスト');
   });
 
+  it('技術領域は元シートから取り込んだ値を優先する', () => {
+    expect(projectBlockToMarkdown(PROJECT)).toContain('| 技術領域 | 5名 |');
+  });
+
+  it('取り込んだ担当領域が無い場合は技術スタックから導出する（#240 / #241 — 正本に無い文言を保存しないため）', () => {
+    const withoutScope: ProjectBlockData = {
+      ...PROJECT,
+      items: [{ ...PROJECT.items[0], scope: '' }],
+    };
+    expect(projectBlockToMarkdown(withoutScope)).toContain('| 技術領域 | Web |');
+  });
+
+  it('取り込んだ担当領域が無く技術スタックからも判定できない場合は技術領域の行を出さない', () => {
+    const noSignal: ProjectBlockData = {
+      ...PROJECT,
+      items: [
+        {
+          ...PROJECT.items[0],
+          scope: '',
+          tech: { lang: [], fw: [], db: ['PostgreSQL'], infra: [], tools: ['Git'], collab: [] },
+        },
+      ],
+    };
+    expect(projectBlockToMarkdown(noSignal)).not.toContain('技術領域');
+  });
+
   it('担当工程は画面と同じ7段モデルへ正規化し、対応表外の値は末尾に残す（#206）', () => {
     const withProcess: ProjectBlockData = {
       ...PROJECT,
@@ -792,6 +818,134 @@ describe('projectBlockToMarkdown', () => {
       .split('\n')
       .filter((l) => l.trim() !== '');
     expect(between).toEqual([]);
+  });
+
+  // #242: comment は案件1件あたり数百文字の本文で、画面では InlineMarkdown で
+  // 描画されているのに PDF・バックアップの出力先が無く丸ごと落ちていた。
+  it('comment を本文として出力する', () => {
+    const withComment: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [{ ...PROJECT.items[0], comment: '案件コメント本文' }],
+    };
+    expect(projectBlockToMarkdown(withComment)).toContain('案件コメント本文');
+  });
+
+  it('comment が空文字のときは本文段落を出さない', () => {
+    const md = projectBlockToMarkdown(PROJECT);
+    expect(md).not.toContain('案件コメント本文');
+    // 習得スキル節の後ろに空行以外が続かない（comment 由来の段落が無い）。
+    const tail = md
+      .slice(md.indexOf('習得スキルテスト') + '習得スキルテスト'.length)
+      .split('\n')
+      .filter((l) => l.trim() !== '');
+    expect(tail).toEqual([]);
+  });
+
+  // #242: duties / acquired / comment はビューア側が InlineMarkdown で描画する
+  // markdown フィールド。PDF 側だけ escape していたため `\- ` の羅列になっていた。
+  it('duties / acquired / comment の箇条書き・強調を markdown 構造のまま残す', () => {
+    const withMarkdown: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [
+        {
+          ...PROJECT.items[0],
+          duties: '- 箇条書き1\n- 箇条書き2',
+          acquired: '**強調**',
+          comment: '[モバイル]\n- コメント内の箇条書き',
+        },
+      ],
+    };
+    const md = projectBlockToMarkdown(withMarkdown);
+    expect(md).toContain('- 箇条書き1');
+    expect(md).toContain('**強調**');
+    expect(md).toContain('- コメント内の箇条書き');
+    expect(md).not.toContain('\\-');
+    expect(md).not.toContain('\\#');
+  });
+
+  // 自由記述の見出しは、PDF 側の案件カード分割（次の heading までを1単位とする走査）を
+  // その場で打ち切り、カードをページ境界で割る。ビューアは h1〜h6 を地の文と同じ見た目へ
+  // 潰しており構造として扱っていないので、生成する markdown でも見出しにしない。
+  it('duties / acquired / comment の見出し記法は本文を残したまま見出しでなくする', () => {
+    const withHeading: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [
+        {
+          ...PROJECT.items[0],
+          duties: '### ATX 見出し\n- 箇条書き',
+          acquired: 'Setext 見出し\n===\n本文',
+          comment: '#### 4段見出し\n段落',
+        },
+      ],
+    };
+    const md = projectBlockToMarkdown(withHeading);
+    // 本文は残る
+    expect(md).toContain('ATX 見出し');
+    expect(md).toContain('Setext 見出し');
+    expect(md).toContain('4段見出し');
+    expect(md).toContain('- 箇条書き');
+    // 見出しにはならない（`**業務内容**` 等の構造行と衝突しないよう行単位で見る）
+    const lines = md.split('\n');
+    expect(lines).not.toContain('### ATX 見出し');
+    expect(lines).not.toContain('#### 4段見出し');
+    // Setext の下線は直前に空行が入り、段落から切り離される
+    expect(md).toContain('Setext 見出し\n\n===');
+    // エスケープで潰したのではない（`\#` を出すと画面に `#` が見えてしまう）
+    expect(md).not.toContain('\\#');
+  });
+
+  // CommonMark では本文の無い `###` 単独行も見出しになる。ここを取りこぼすと、
+  // 上のテストが防いでいるカード分割の打ち切りがそのまま起きる。
+  it('本文を持たない見出しマーカー単独行も見出しにしない', () => {
+    const markerOnly: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [{ ...PROJECT.items[0], comment: '段落\n\n###\n次の段落' }],
+    };
+    const lines = projectBlockToMarkdown(markerOnly).split('\n');
+    expect(lines).not.toContain('###');
+    expect(lines).toContain('次の段落');
+  });
+
+  // コードフェンスの中身は markdown 構造ではなくコード本体。書き換えると原文が変わる。
+  it('コードフェンス内の # 始まりの行は書き換えない', () => {
+    const fenced: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [{ ...PROJECT.items[0], comment: '```bash\n# コメント行\nls -la\n```' }],
+    };
+    const md = projectBlockToMarkdown(fenced);
+    expect(md).toContain('# コメント行');
+    expect(md).not.toContain('\\# コメント行');
+  });
+
+  it('duties / acquired / comment の <script> / <style> は内容ごと落とす', () => {
+    const withScript: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [
+        {
+          ...PROJECT.items[0],
+          duties: '前<script>alert(1)</script>後',
+          acquired: '前<style>body{}</style>後',
+          comment: '前<script src="https://example.com/x.js"></script>後',
+        },
+      ],
+    };
+    const md = projectBlockToMarkdown(withScript);
+    expect(md).not.toContain('alert(1)');
+    expect(md).not.toContain('<script');
+    expect(md).not.toContain('<style');
+    expect(md).toContain('前後');
+  });
+
+  // note だけは画面側（project-card.tsx / project-preview.tsx）が素のテキストとして
+  // 描画するため、markdown 構造化しない従来の escape を維持する。
+  it('note は markdown 化せず従来どおり escape する（duties などと扱いを分ける）', () => {
+    const withBoth: ProjectBlockData = {
+      companies: [{ ...PROJECT.companies[0], note: '- note の箇条書き' }],
+      items: [{ ...PROJECT.items[0], duties: '- duties の箇条書き' }],
+    };
+    const md = projectBlockToMarkdown(withBoth);
+    expect(md).toContain('\\- note の箇条書き');
+    expect(md).toContain('- duties の箇条書き');
   });
 });
 

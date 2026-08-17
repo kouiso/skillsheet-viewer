@@ -369,7 +369,7 @@ function parseCommentSection(text: string): { duties: string; acquired: string; 
   }
 
   // 先頭マーカー前の前置き文（≪担当業務≫等の前の自由文）をコメントに含める。
-  // 例: 案件21の "App Store から、PatentStart と検索すると、赤いアプリが表示されます。"
+  // 例: 案件21の "App Store から、サービス名で検索すると、赤いアプリが表示されます。"
   const preface = text.slice(0, positions[0].index).trim();
   const commentBody = sectionFor('≪コメント≫');
   return {
