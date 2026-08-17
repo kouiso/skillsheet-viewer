@@ -34,7 +34,7 @@ KEBAB='^[a-z0-9]+(-[a-z0-9]+)*$'
 # 参照されるため、手でケバブケースへ変えると解決できなくなる。
 is_exempt() {
   case "$1" in
-    README.md|SETUP.md|VERIFY.md|TODO.md|CLAUDE.md|AGENTS.md|LICENSE|Makefile|Dockerfile) return 0 ;;
+    README.md|SETUP.md|CLAUDE.md|AGENTS.md|LICENSE|Makefile|Dockerfile) return 0 ;;
     .*|*/.*) return 0 ;;
     packages/db/drizzle/*) return 0 ;;
     apps/web/public/fonts/*) return 0 ;;

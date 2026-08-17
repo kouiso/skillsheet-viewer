@@ -49,8 +49,8 @@
       "架空案件10の開発"
     ],
     "itemsUnderHiddenCompany": [
-      "FictionalApp03 ～馬匹の健康管理システム～ 第二弾",
-      "HorseFeeders ～馬匹の飼料管理システム～ 第一弾"
+      "架空案件11の開発 第二弾",
+      "家畜の飼料管理システム 第一弾"
     ],
     "backupBytes": 21751,
     "companyHiddenNamePresent": [
@@ -61,11 +61,11 @@
     ],
     "itemsUnderHiddenCompanyPresent": [
       {
-        "title": "FictionalApp03 ～馬匹の健康管理システム～ 第二弾",
+        "title": "架空案件11の開発 第二弾",
         "present": true
       },
       {
-        "title": "HorseFeeders ～馬匹の飼料管理システム～ 第一弾",
+        "title": "家畜の飼料管理システム 第一弾",
         "present": true
       }
     ],

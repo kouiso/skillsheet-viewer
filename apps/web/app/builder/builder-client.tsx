@@ -536,7 +536,7 @@ const KNOWN_PROFILE_META_FIELDS: { key: keyof ProfileMeta; placeholder: string }
   { key: 'qualifications', placeholder: '例: 自動車普通車免許' },
   { key: 'education', placeholder: '例: ○○大学卒' },
   { key: 'work', placeholder: '例: フルリモート' },
-  { key: 'station', placeholder: '例: 守山駅' },
+  { key: 'station', placeholder: '例: ◯◯駅' },
   { key: 'specialties', placeholder: '例: フロントエンド設計' },
   { key: 'expertise', placeholder: '例: チームマネジメント' },
 ];

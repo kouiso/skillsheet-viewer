@@ -194,7 +194,7 @@ test('editor: edit all block types on dashboard sheet', async ({ page }) => {
   await page.getByLabel('強み').fill('自動化テスト\n品質保証\nドッグフーディング');
   await page.getByLabel('年齢').fill('30');
   await page.getByLabel('勤務形態').fill('フルリモート');
-  await page.getByLabel('最寄り駅').fill('渋谷駅');
+  await page.getByLabel('最寄り駅').fill('◯◯駅');
   await page.getByLabel('学歴').fill('大学卒');
 
   await capture(page, 'B-editor-profile-light.png');

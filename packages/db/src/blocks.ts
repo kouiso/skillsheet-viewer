@@ -10,6 +10,8 @@
 
 import { flattenTech, formatMonthToken, formatPeriodDisplay, normalizeProcess, PROCESS_LABELS } from './process';
 import { sanitizeMarkdown, sanitizeScriptAndStyle } from './sanitize-html';
+// tech-area.ts はこのファイルから型のみを取り込むため、実行時の循環は発生しない。
+import { projectAreaLabel } from './tech-area';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -550,6 +552,67 @@ function escapeMarkdownParagraph(value: string): string {
   );
 }
 
+// 案件の自由記述に含まれる見出し記法を、見出しでない素の行へ落とす。
+//
+// ビューア側の InlineMarkdown は h1〜h6 の component override を持たず、Tailwind preflight が
+// 見出しの字送り・太さを inherit へ潰すため、`### 小見出し` は地の文と同じ見た目になる。
+// 一方 PDF 側は heading ノードに構造的な意味を与えており、`skill-sheet-document.tsx` の
+// 案件カード分割は「次の heading までを1つの分割不可単位」として trailing を集める。
+// 自由記述に見出しが混ざると、その場でカードが打ち切られてカード自身がページ境界で
+// 割れる（#147 / #194 の再発経路）。画面が構造として扱っていないものを PDF だけが
+// 構造として扱うのが誤りなので、生成する markdown の側で見出しにしない。
+function stripHeadingSyntax(value: string): string {
+  const lines = value.split('\n');
+  const out: string[] = [];
+  // ``` / ~~~ の中身はコード本体であって markdown 構造ではないので書き換えない。
+  let fence: string | null = null;
+  for (const line of lines) {
+    const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fence !== null) {
+      out.push(line);
+      if (fenceMatch && fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (fenceMatch) {
+      fence = fenceMatch[1];
+      out.push(line);
+      continue;
+    }
+    // ATX 見出し（`## foo`）。マーカーだけ落として本文は残す。
+    // CommonMark では本文の無い `###` 単独行も見出しなので、同じく落とす（#147 / #194 の再発経路）。
+    const atx = line.match(/^(\s{0,3})#{1,6}(?:[ \t]+(.*))?$/);
+    if (atx) {
+      out.push(atx[1] + (atx[2] ?? ''));
+      continue;
+    }
+    // Setext 見出し（直前の段落行を `===` / `---` の下線が見出しへ格上げする）。
+    // 前に空行を挟むと下線は段落から切り離され、`---` は水平線・`===` は素の行になる。
+    const previous = out.at(-1);
+    if (previous !== undefined && previous.trim() !== '' && /^\s{0,3}(=+|-+)\s*$/.test(line)) {
+      out.push('');
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
+// 案件の自由記述（duties / acquired / comment）向け。ビューア側はこの3つを
+// InlineMarkdown（react-markdown + rehype-sanitize）で描画しており、箇条書き・強調が
+// そのまま構造として出る。PDF 側だけ escapeMarkdownParagraph をかけていたため、
+// 同じ文字列が `\- ` の羅列になって画面と食い違っていた（#242）。
+//
+// 構造は保ったまま <script>/<style> だけ落とす。この文字列の行き先は PDF だけではない:
+//   - PDF: `skill-sheet-document.tsx`。生HTMLは html ノード処理で無害化される
+//     （inline は INLINE_LEAF で破棄、block は stripHtml）
+//   - プレビュー: builder-client → BroadcastChannel/localStorage → preview-client →
+//     `skill-sheet-viewer.tsx` の MarkdownContent。rehype-raw が有効だが
+//     rehype-sanitize（MARKDOWN_SANITIZE_SCHEMA）が後段に入る
+//   - `blocksToMarkdown` 経由の `sheet.content`、およびバックアップ書き出しの .md
+// 生HTMLを無害化しているのは各描画経路のサニタイザであって、この関数ではない。
+function asInlineMarkdown(value: string): string {
+  return stripHeadingSyntax(sanitizeScriptAndStyle(value));
+}
+
 /** 表ブロックを GFM markdown 表へ変換する。 */
 export function tableBlockToMarkdown(data: TableBlockData): string {
   const { columns, rows } = data;
@@ -662,7 +725,10 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
     if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
-    if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
+    // 元シートに担当領域の記載が無ければ技術スタックから導出する。行名を「技術領域」にしているのは
+    // 「この技術を使った」までしか根拠が無いため（tech-area.ts 参照）。
+    const areaLabel = projectAreaLabel(item.scope, item.tech);
+    if (areaLabel) lines.push(`| 技術領域 | ${escapeCell(areaLabel)} |`);
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
     const techParts = flattenTech(item.tech);
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);
@@ -685,13 +751,20 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
       lines.push('');
       lines.push('**業務内容**');
       lines.push('');
-      lines.push(escapeMarkdownParagraph(item.duties.trim()));
+      lines.push(asInlineMarkdown(item.duties.trim()));
     }
     if (item.acquired.trim()) {
       lines.push('');
       lines.push('**習得スキル・実績**');
       lines.push('');
-      lines.push(escapeMarkdownParagraph(item.acquired.trim()));
+      lines.push(asInlineMarkdown(item.acquired.trim()));
+    }
+    // 案件コメント（ProjectItem.comment）。案件1件あたり数百文字の本文で、
+    // 画面では InlineMarkdown で描画されているのに PDF には出力先が無く、
+    // 最も情報量の多い文章が丸ごと欠落していた（#242）。
+    if (item.comment?.trim()) {
+      lines.push('');
+      lines.push(asInlineMarkdown(item.comment.trim()));
     }
     lines.push('');
   }

@@ -12,14 +12,16 @@ import { createSheet, listSheets } from './skillsheet';
 
 const newId = () => crypto.randomUUID();
 
-// --- ハンドオフ redesign2/data.js の内容（そのまま転記） -----------------------------------
+// --- ハンドオフ redesign2/data.js を土台にした検証用フィクスチャ -----------------------------
+// このリポジトリは public なので、実在の会社名・サービス名・個人が特定できる属性は置かない。
+// 正本（Neon）側と同じ匿名表記（Q 社 / A 社 …）に揃えることで、画面での見え方も本番と一致する。
 const RAW_PROFILE = {
   name: '見本 花子（架空）',
   title: 'サンプルエンジニア / サンプルエンジニアリングマネージャー',
-  age: '28歳',
+  age: '20代',
   work: 'フルリモート',
-  station: '成田駅',
-  education: '高卒',
+  station: '最寄駅（非公開）',
+  education: '非公開',
   strengths: ['React', 'TypeScript', 'Nest.js', 'Ionic', 'Capacitor', 'Laravel', 'Terraform'],
   pr: '架空の案件説明文03。表示確認用のサンプルで、実在の業務とは関係ありません。',
 };
@@ -101,9 +103,9 @@ interface RawProject {
 
 const RAW_PROJECTS: RawProject[] = [
   {
-    title: '架空サービス04',
+    title: '架空案件10の開発',
     scope: 'iOS / Android / Web / バックエンド',
-    company: '株式会社az',
+    company: 'Q 社（自社サービス事業会社）',
     period: '2025.11 — 現在',
     duration: '継続中',
     role: 'フルスタック / EM',
@@ -125,9 +127,9 @@ const RAW_PROJECTS: RawProject[] = [
       '架空の案件説明文04。表示確認用のサンプルで、実在の業務とは関係ありません。',
   },
   {
-    title: '架空サービス02',
+    title: '架空案件09の開発',
     scope: 'Web / CMS / インフラ',
-    company: '株式会社az',
+    company: 'Q 社（自社サービス事業会社）',
     period: '2025.12 — 現在',
     duration: '継続中',
     role: 'フルスタック / EM',
@@ -253,7 +255,7 @@ const RAW_PROJECTS: RawProject[] = [
       '架空の案件説明文06。表示確認用のサンプルで、実在の業務とは関係ありません。',
   },
   {
-    title: '架空サービス01',
+    title: '架空案件06の開発',
     scope: 'iOS / Android / Web',
     company: 'B社（ベンチャー）',
     period: '2020.06 — 2021.08',
@@ -266,7 +268,7 @@ const RAW_PROJECTS: RawProject[] = [
       '架空の案件説明文05。表示確認用のサンプルで、実在の業務とは関係ありません。',
   },
   {
-    title: '架空サービス03',
+    title: '架空案件11の開発',
     scope: '個人開発 / クロスプラットフォーム',
     company: '個人開発',
     period: '2020.01 — 2021.02',

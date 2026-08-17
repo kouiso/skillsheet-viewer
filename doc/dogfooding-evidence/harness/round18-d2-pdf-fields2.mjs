@@ -4,10 +4,10 @@
 //   - 画面 : `stat-row.tsx` がカードを並べる。1 枚が value → unit → label の順
 // 同じ probe を両面に当てると、必ずどちらかが外れる。面ごとに probe を分ける。
 //
-// profile.meta はどちらの面も「ラベル → 値」の隣接（PDF は `| 年齢 | 28歳 |` の表、
-// 画面は `年齢 28歳 · 勤務形態 …` の 1 行）なので共通 probe でよい。
+// profile.meta はどちらの面も「ラベル → 値」の隣接（PDF は `| 年齢 | 20代 |` の表、
+// 画面は `年齢 20代 · 勤務形態 …` の 1 行）なので共通 probe でよい。
 //
-// 短い値（`8` `年` `28歳` `高卒`）は単独だと PDF 内の無関係な数字に当たるため、
+// 短い値（`8` `年` `20代` `非公開`）は単独だと PDF 内の無関係な数字に当たるため、
 // 正規化後 8 文字未満の probe はヒット扱いにせず tooShort に落とす（Codex 指摘）。
 // 落ちた項目は、それらを含む連結 probe 側で担保する。
 import { chromium } from '<REPO>/node_modules/.pnpm/playwright@1.62.0/node_modules/playwright/index.mjs';

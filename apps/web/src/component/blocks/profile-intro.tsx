@@ -88,7 +88,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
 
   const renderMeta = () =>
     metaEntries.length > 0 ? (
-      // design は「年齢 28歳 · 勤務形態 フルリモート · …」の1行。2段組の定義リストはやめる。
+      // design は「年齢 30代 · 勤務形態 フルリモート · …」の1行。2段組の定義リストはやめる。
       // SP は2列グリッド、sm 以上は1行フレックスに戻す。
       <dl className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs text-faint sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px]">
         {metaEntries.map(([key, value], i) => (

@@ -2,6 +2,7 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@skillsheet/db/process';
+import { projectAreaLabel } from '@skillsheet/db/tech-area';
 import { useRef, useState } from 'react';
 
 import { InlineMarkdown } from '@/component/inline-markdown';
@@ -51,6 +52,10 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
   /** 要約欄そのものに値がある（担当業務での代替ではない）。 */
   const hasOwnSummary = Boolean(project.summary?.trim());
   const summary = project.summary?.trim() || project.duties.trim();
+  /** スコープ欄の値そのままか、空なら技術スタックからの導出値（由来を添える）。 */
+  const ownScope = project.scope.trim();
+  const derivedArea = ownScope ? '' : projectAreaLabel('', project.tech);
+  const scopePreview = ownScope || (derivedArea ? `${derivedArea}（技術スタックから導出）` : 'スコープ未入力');
 
   const toolbarRef = useRef<HTMLDivElement>(null);
   /** 上下キー移動でいま tab の受け口になっているスロット。null なら先頭。 */
@@ -158,7 +163,11 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
                 <h3 className="pv-title">{project.title || '（無題の案件）'}</h3>
               </div>
               <div {...sync('scope')}>
-                <div className="pv-scope">{project.scope || 'スコープ未入力'}</div>
+                {/* 閲覧側と同じ導出を通す。編集画面のプレビューが閲覧結果と食い違うと、
+                    未入力のまま公開して初めて表示が変わることに気づく（WYSIWYG を崩さない）。
+                    ただし導出値には由来を添える。添えんと「入力欄は空やのに値が見える」状態になり、
+                    クリックして飛んだ先の空欄との対応が分からん。 */}
+                <div className="pv-scope">{scopePreview}</div>
               </div>
               {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。
                   空白のみの値は blocks.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}
