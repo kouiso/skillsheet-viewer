@@ -48,6 +48,19 @@ describe('deriveTechAreas', () => {
     expect(deriveTechAreas(tech({ lang: ['C#'], fw: ['CefSharp', 'React (Hooks)'] }))).toEqual(['Web', 'デスクトップ']);
   });
 
+  it('短いキーは語として一致しない限り根拠にしない（Vite plugin が gin に化けない）', () => {
+    expect(deriveTechAreas(tech({ fw: ['Vite plugin', 'Echobot'] }))).toEqual([]);
+  });
+
+  it('短いキーが語として現れればバックエンドと判定する', () => {
+    expect(deriveTechAreas(tech({ lang: ['Go'], fw: ['Gin'] }))).toEqual(['バックエンド']);
+    expect(deriveTechAreas(tech({ fw: ['Echo (Go)'] }))).toEqual(['バックエンド']);
+  });
+
+  it('誤検出語を含む 1 セル記述でも、同じセルの他の技術は評価する', () => {
+    expect(deriveTechAreas(tech({ fw: ['React Native + Tailwind'] }))).toEqual(['iOS', 'Android', 'Web']);
+  });
+
   it('判定材料が tools / collab / db にしか無い場合は空（誤検出を避ける）', () => {
     expect(deriveTechAreas(tech({ db: ['PostgreSQL'], tools: ['Jest'], collab: ['Slack'] }))).toEqual([]);
   });

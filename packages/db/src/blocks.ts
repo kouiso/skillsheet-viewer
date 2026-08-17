@@ -564,11 +564,25 @@ function escapeMarkdownParagraph(value: string): string {
 function stripHeadingSyntax(value: string): string {
   const lines = value.split('\n');
   const out: string[] = [];
+  // ``` / ~~~ の中身はコード本体であって markdown 構造ではないので書き換えない。
+  let fence: string | null = null;
   for (const line of lines) {
+    const fenceMatch = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (fence !== null) {
+      out.push(line);
+      if (fenceMatch && fenceMatch[1][0] === fence[0] && fenceMatch[1].length >= fence.length) fence = null;
+      continue;
+    }
+    if (fenceMatch) {
+      fence = fenceMatch[1];
+      out.push(line);
+      continue;
+    }
     // ATX 見出し（`## foo`）。マーカーだけ落として本文は残す。
-    const atx = line.match(/^(\s{0,3})#{1,6}[ \t]+(.*)$/);
+    // CommonMark では本文の無い `###` 単独行も見出しなので、同じく落とす（#147 / #194 の再発経路）。
+    const atx = line.match(/^(\s{0,3})#{1,6}(?:[ \t]+(.*))?$/);
     if (atx) {
-      out.push(atx[1] + atx[2]);
+      out.push(atx[1] + (atx[2] ?? ''));
       continue;
     }
     // Setext 見出し（直前の段落行を `===` / `---` の下線が見出しへ格上げする）。

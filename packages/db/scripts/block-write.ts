@@ -18,7 +18,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 
 import type { Database } from '../src/client';
 import { blocks, skillSheets } from '../src/schema';
@@ -66,6 +66,39 @@ export async function writeBlockUpdates(db: Database, updates: BlockUpdate[]): P
     await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(inArray(skillSheets.id, sheetIds));
   });
   return { written: changed.length, skipped: updates.length - changed.length, sheets: sheetIds.length };
+}
+
+/**
+ * 更新対象のシートを明示的に絞り込む。
+ *
+ * 案件本文の一括更新は「案件タイトル」「会社名」の文字列一致だけで書き換え先を決めるため、
+ * 対象シートを限定しないと、同じ DB にある検証用デモシートや別オーナーのシートまで
+ * 巻き込んで書き換わる。DB 全体を無条件に対象にする経路を残さないよう、
+ * `--sheet-id` か `SKILLSHEET_OWNER_ID` のどちらかを必須にする。
+ */
+export async function resolveTargetSheetIds(db: Database, argv: string[]): Promise<string[]> {
+  const flagIndex = argv.findIndex((a) => a === '--sheet-id' || a.startsWith('--sheet-id='));
+  if (flagIndex !== -1) {
+    const raw = argv[flagIndex];
+    const id = raw.includes('=') ? raw.slice(raw.indexOf('=') + 1) : argv[flagIndex + 1];
+    if (!id) throw new Error('--sheet-id にシート ID を渡してください');
+    const found = await db.select({ id: skillSheets.id }).from(skillSheets).where(eq(skillSheets.id, id));
+    if (found.length === 0) throw new Error(`シートが見つかりません: ${id}`);
+    return [id];
+  }
+
+  const ownerId = process.env.SKILLSHEET_OWNER_ID;
+  if (!ownerId) {
+    throw new Error('更新対象が絞れません。--sheet-id を渡すか SKILLSHEET_OWNER_ID を設定してください');
+  }
+  const owned = await db.select({ id: skillSheets.id }).from(skillSheets).where(eq(skillSheets.ownerId, ownerId));
+  if (owned.length === 0) throw new Error(`オーナー ${ownerId} のシートがありません`);
+  return owned.map((row) => row.id);
+}
+
+/** 対象シートに属する project ブロックだけを引く条件。 */
+export function projectBlocksOfSheets(sheetIds: string[]) {
+  return and(eq(blocks.type, 'project'), inArray(blocks.sheetId, sheetIds));
 }
 
 /** `apps/web/.env.local` を読んで `DATABASE_URL` 等をプロセスへ流し込む。 */

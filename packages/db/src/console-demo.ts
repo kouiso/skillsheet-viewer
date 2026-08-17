@@ -18,7 +18,7 @@ const newId = () => crypto.randomUUID();
 const RAW_PROFILE = {
   name: 'I・K',
   title: 'フルスタックエンジニア / エンジニアリングマネージャー',
-  age: '20 代',
+  age: '20代',
   work: 'フルリモート',
   station: '最寄駅（非公開）',
   education: '非公開',

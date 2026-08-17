@@ -270,8 +270,8 @@
     },
     {
       "field": "items[3].value",
-      "raw": "28",
-      "probe": "28",
+      "raw": "20代",
+      "probe": "20代",
       "inPdf": true,
       "inScreen": true
     },

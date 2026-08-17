@@ -16,16 +16,23 @@
  * 冪等。既に値が入っている項目は上書きしない（人が後から直した値を潰さないため）。
  * 中身が変わらなかったブロックは UPDATE 自体を出さない（`block-write.ts` 参照）。
  *
+ * 対象シートは `--sheet-id` か `SKILLSHEET_OWNER_ID` で必ず絞る（`block-write.ts` 参照）。
+ *
  * 実行:
  *   確認のみ: pnpm --filter @skillsheet/db exec tsx scripts/backfill-project-data.ts
  *   反映:     pnpm --filter @skillsheet/db exec tsx scripts/backfill-project-data.ts --apply
+ *   シート指定: 上記に `--sheet-id <uuid>` を足す（省略時は SKILLSHEET_OWNER_ID の全シート）
  */
-import { eq } from 'drizzle-orm';
-
 import { isProjectBlockData, type ProjectTech } from '../src/blocks';
 import { getDb } from '../src/client';
 import { blocks } from '../src/schema';
-import { type BlockUpdate, loadWebEnvLocal, writeBlockUpdates } from './block-write';
+import {
+  type BlockUpdate,
+  loadWebEnvLocal,
+  projectBlocksOfSheets,
+  resolveTargetSheetIds,
+  writeBlockUpdates,
+} from './block-write';
 
 // 技術スタックの分類が実態と合っていないもの（#240 / #241）。
 // 課金 SDK・決済サービス・分析タグはフレームワークでもコラボレーションツールでもないので、
@@ -88,12 +95,13 @@ function resolveKind(name: string, note: string): string | null {
   return kindFromCompanyName(name) ?? kindFromNote(note);
 }
 
-loadWebEnvLocal();
-
 async function main(): Promise<void> {
+  loadWebEnvLocal();
   const apply = process.argv.includes('--apply');
   const db = getDb();
-  const rows = await db.select().from(blocks).where(eq(blocks.type, 'project'));
+  const sheetIds = await resolveTargetSheetIds(db, process.argv.slice(2));
+  console.log(`対象シート: ${sheetIds.length} 件`);
+  const rows = await db.select().from(blocks).where(projectBlocksOfSheets(sheetIds));
 
   let companiesFilled = 0;
   let companiesSkipped = 0;

@@ -894,6 +894,29 @@ describe('projectBlockToMarkdown', () => {
     expect(md).not.toContain('\\#');
   });
 
+  // CommonMark では本文の無い `###` 単独行も見出しになる。ここを取りこぼすと、
+  // 上のテストが防いでいるカード分割の打ち切りがそのまま起きる。
+  it('本文を持たない見出しマーカー単独行も見出しにしない', () => {
+    const markerOnly: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [{ ...PROJECT.items[0], comment: '段落\n\n###\n次の段落' }],
+    };
+    const lines = projectBlockToMarkdown(markerOnly).split('\n');
+    expect(lines).not.toContain('###');
+    expect(lines).toContain('次の段落');
+  });
+
+  // コードフェンスの中身は markdown 構造ではなくコード本体。書き換えると原文が変わる。
+  it('コードフェンス内の # 始まりの行は書き換えない', () => {
+    const fenced: ProjectBlockData = {
+      companies: PROJECT.companies,
+      items: [{ ...PROJECT.items[0], comment: '```bash\n# コメント行\nls -la\n```' }],
+    };
+    const md = projectBlockToMarkdown(fenced);
+    expect(md).toContain('# コメント行');
+    expect(md).not.toContain('\\# コメント行');
+  });
+
   it('duties / acquired / comment の <script> / <style> は内容ごと落とす', () => {
     const withScript: ProjectBlockData = {
       companies: PROJECT.companies,

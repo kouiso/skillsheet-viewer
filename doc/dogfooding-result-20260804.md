@@ -253,7 +253,7 @@
 |---|---|---|
 | S-1 (#152) | 担当工程ドーナツが `strokeLinecap="round"` のぶん一律 +15.1° 過大に描かれ、31/32 が満円（100%）に見える | `process-overview.tsx` |
 | S-2 (#152) | 案件コメントに無条件 `italic` が当たり、和文 100〜918 字が全文合成斜体になる | `project-card.tsx:82` |
-| S-3 (#152) | 統計カード 4 枚目「28 歳 / 年齢」が直上メタ行の「年齢 28 歳」と重複し、KPI の 1/4 が情報量ゼロ | シートデータ側 |
+| S-3 (#152) | 統計カード 4 枚目の年齢が直上メタ行の年齢と重複し、KPI の 1/4 が情報量ゼロ | シートデータ側 |
 | S-4 (#152) | 技術フィルタの placeholder（ライト 3.35:1）とエラーバナーの文字（3.88:1）が WCAG AA 未達 | `tech-filter.tsx` / `bg-destructive/10` |
 | S-5 (#152) | ビルダーの細部: ヘッダーで開閉トグルと別窓起動がともに「プレビュー」表記で判別できない／期間欄に「継続中」が 3 箇所重複しチェックボックスの余白が 0px／ドラッグハンドルが垂直中央で削除ボタンと非対称／検索アイコンだけ U+2315 のテキストグリフ | `builder-client.tsx` / `editor.css` |
 | S-6 (#156) | キーボードフォーカスが見えない要素が **4 つ**ある。**13 巡目に対象を特定し直し（1 巡目の記述は誤り。詳細は下記）、17 巡目に 4 つ目を足した**。原因は 2 種類に分かれる。**(1) shadcn `Button` の送信・保存ボタン 3 つ** — `/login` の「ログイン」、`/viewer-auth` の「認証」、`/builder` の「保存」。**(2) ビューアの技術フィルタ検索入力**（`/view/db/:id`）— 枠線色と背景だけ変わり、リングは出ない。どちらも実キーボードで Tab を当てると `:focus-visible` には一致するのに、計算値は `outline: none 0px` / `box-shadow: none` | (1) `components/ui/button.tsx:9` の基底クラスが `focus-visible:outline-none` で UA 既定のリングを消したうえで `focus-visible:ring-2 focus-visible:ring-ring` を当てているが、この ring が box-shadow として出ていない。outline を消す指定だけが効いている状態<br>(2) `component/blocks/tech-filter.tsx:50` は `outline-none focus:border-primary focus:bg-card` で、**UA 既定の outline を消したあとリングを当てる指定自体が無い**。ボタン側とは別の直し方が要る。`aria-label` も無く E-3 の計測で `input:(無名)` として出る |

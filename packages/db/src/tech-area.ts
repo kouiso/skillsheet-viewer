@@ -19,6 +19,13 @@ interface AreaRule {
   area: string;
   /** 小文字化した技術名に対する部分一致キーワード。 */
   keys: string[];
+  /**
+   * 部分一致では誤検出する短いキー。語単位の完全一致だけを根拠にする。
+   *
+   * 例: `gin` を部分一致で見ると `Vite plugin` が、`echo` は `Echobot` が
+   * 「バックエンド」に化ける。書いていない領域を出さないため、ここは語境界で判定する。
+   */
+  exactKeys?: string[];
 }
 
 // 部分一致にしているのは、実際のシートが "Next.js 15 (App Router)" や
@@ -68,8 +75,6 @@ const AREA_RULES: AreaRule[] = [
       'fastapi',
       'spring',
       '.net',
-      'gin',
-      'echo',
       'php',
       'graphql',
       'prisma',
@@ -78,6 +83,7 @@ const AREA_RULES: AreaRule[] = [
       'hono',
       'grpc',
     ],
+    exactKeys: ['gin', 'echo'],
   },
   {
     area: 'デスクトップ',
@@ -104,10 +110,16 @@ const WEB_FALSE_POSITIVES = ['react native', 'react hook form'];
 export function deriveTechAreas(tech: ProjectTech | undefined): string[] {
   if (!tech) return [];
   const pool = [...(tech.lang ?? []), ...(tech.fw ?? []), ...(tech.infra ?? [])].map((t) => t.toLowerCase());
-  return AREA_RULES.filter(({ area, keys }) =>
+  return AREA_RULES.filter(({ area, keys, exactKeys }) =>
     pool.some((t) => {
-      if (area === 'Web' && WEB_FALSE_POSITIVES.some((fp) => t.includes(fp))) return false;
-      return keys.some((k) => t.includes(k));
+      // 誤検出語は「その語だけ」を消して評価する。技術名まるごと評価対象外にすると、
+      // `React Native + Tailwind` のような 1 セル記述で tailwind まで見落とす。
+      const masked = area === 'Web' ? WEB_FALSE_POSITIVES.reduce((s, fp) => s.replaceAll(fp, ' '), t) : t;
+      if (keys.some((k) => masked.includes(k))) return true;
+      if (!exactKeys) return false;
+      // 技術名の区切り（空白・記号）で分割し、語として一致する場合だけ根拠にする。
+      const tokens = masked.split(/[^a-z0-9.+#]+/);
+      return exactKeys.some((k) => tokens.includes(k));
     }),
   ).map(({ area }) => area);
 }

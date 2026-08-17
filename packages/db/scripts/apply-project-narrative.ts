@@ -19,19 +19,28 @@
  * 冪等。既に同じ文字列が入っている項目は更新対象に数えず、中身が変わらなかった
  * ブロックは UPDATE 自体を出さない（`block-write.ts` 参照）。
  *
+ * 対象シートは `--sheet-id` か `SKILLSHEET_OWNER_ID` で必ず絞る。案件タイトル・会社名の
+ * 文字列一致だけで書き換え先を決める経路なので、絞らないと同じ DB の検証用デモシートや
+ * 別オーナーのシートまで巻き込む。
+ *
  * 実行:
  *   確認のみ: pnpm --filter @skillsheet/db exec tsx scripts/apply-project-narrative.ts <path.json>
  *   反映:     pnpm --filter @skillsheet/db exec tsx scripts/apply-project-narrative.ts <path.json> --apply
+ *   シート指定: 上記に `--sheet-id <uuid>` を足す（省略時は SKILLSHEET_OWNER_ID の全シート）
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { eq } from 'drizzle-orm';
-
 import { isProjectBlockData } from '../src/blocks';
 import { getDb } from '../src/client';
 import { blocks } from '../src/schema';
-import { type BlockUpdate, loadWebEnvLocal, writeBlockUpdates } from './block-write';
+import {
+  type BlockUpdate,
+  loadWebEnvLocal,
+  projectBlocksOfSheets,
+  resolveTargetSheetIds,
+  writeBlockUpdates,
+} from './block-write';
 
 type ProjectPatch = { comment?: string; duties?: string; acquired?: string; scope?: string };
 type CompanyPatch = { note?: string; kind?: string };
@@ -54,19 +63,21 @@ function readNarrative(path: string): NarrativeFile {
   return parsed as NarrativeFile;
 }
 
-loadWebEnvLocal();
-
 async function main(): Promise<void> {
+  loadWebEnvLocal();
   const args = process.argv.slice(2);
   const apply = args.includes('--apply');
-  const jsonPath = args.find((a) => !a.startsWith('--'));
+  // `--sheet-id <id>` の値を JSON パスと誤認しないよう、拡張子で見分ける。
+  const jsonPath = args.find((a) => !a.startsWith('--') && a.endsWith('.json'));
   if (!jsonPath) {
     throw new Error('本文 JSON のパスを引数で渡してください');
   }
 
   const narrative = readNarrative(resolve(jsonPath));
   const db = getDb();
-  const rows = await db.select().from(blocks).where(eq(blocks.type, 'project'));
+  const sheetIds = await resolveTargetSheetIds(db, args);
+  console.log(`対象シート: ${sheetIds.length} 件`);
+  const rows = await db.select().from(blocks).where(projectBlocksOfSheets(sheetIds));
 
   let changed = 0;
   const updates: BlockUpdate[] = [];
