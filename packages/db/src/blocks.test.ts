@@ -646,8 +646,8 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('業務内容テスト');
   });
 
-  it('技術領域は元シートから取り込んだ値を優先する', () => {
-    expect(projectBlockToMarkdown(PROJECT)).toContain('| 技術領域 | 5名 |');
+  it('元シートから取り込んだ値は「担当領域」として出す（本人の言葉なので導出扱いにしない）', () => {
+    expect(projectBlockToMarkdown(PROJECT)).toContain('| 担当領域 | 5名 |');
   });
 
   it('取り込んだ担当領域が無い場合は技術スタックから導出する（#240 / #241 — 正本に無い文言を保存しないため）', () => {

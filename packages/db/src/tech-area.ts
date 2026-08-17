@@ -124,14 +124,32 @@ export function deriveTechAreas(tech: ProjectTech | undefined): string[] {
   ).map(({ area }) => area);
 }
 
+export interface ProjectArea {
+  /** 表示する文字列。該当が無ければ空。 */
+  text: string;
+  /**
+   * true のとき技術スタックからの導出値。描画側は必ず由来を示すラベルを添える。
+   *
+   * 由来を隠すと、案件タイトル直下の位置だけで読み手は「この人が担当した領域」と受け取る。
+   * 導出できるのは「書かれた技術がどの領域のものか」までで、担当範囲は元シートに無い。
+   * ラベルを外した瞬間にこの導出は嘘になるので、text だけを返す API は用意しない。
+   */
+  derived: boolean;
+}
+
 /**
- * 表示用の技術領域の文字列。
+ * 表示用の技術領域を、由来つきで返す。
  *
  * 元シートに担当領域の列があって取り込まれている場合（`item.scope`）はそちらを優先する。
- * インポートした値が常に導出より正しいため。空のときだけ技術スタックから導出する。
+ * インポートした値が常に導出より正しく、かつ本人の言葉なのでラベルも付けない。
  */
-export function projectAreaLabel(scope: string | undefined, tech: ProjectTech | undefined): string {
+export function resolveProjectArea(scope: string | undefined, tech: ProjectTech | undefined): ProjectArea {
   const imported = scope?.trim();
-  if (imported) return imported;
-  return deriveTechAreas(tech).join(' / ');
+  if (imported) return { text: imported, derived: false };
+  return { text: deriveTechAreas(tech).join(' / '), derived: true };
+}
+
+/** 検索インデックス等、由来の区別が要らない用途向けの文字列。 */
+export function projectAreaText(scope: string | undefined, tech: ProjectTech | undefined): string {
+  return resolveProjectArea(scope, tech).text;
 }
