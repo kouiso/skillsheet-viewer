@@ -10,6 +10,8 @@
 
 import { flattenTech, formatMonthToken, formatPeriodDisplay, normalizeProcess, PROCESS_LABELS } from './process';
 import { sanitizeMarkdown, sanitizeScriptAndStyle } from './sanitize-html';
+// tech-area.ts はこのファイルから型のみを取り込むため、実行時の循環は発生しない。
+import { projectAreaLabel } from './tech-area';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -709,7 +711,10 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
     if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
-    if (item.scope) lines.push(`| 規模・スコープ | ${escapeCell(item.scope)} |`);
+    // 元シートに担当領域の記載が無ければ技術スタックから導出する。行名を「技術領域」にしているのは
+    // 「この技術を使った」までしか根拠が無いため（tech-area.ts 参照）。
+    const areaLabel = projectAreaLabel(item.scope, item.tech);
+    if (areaLabel) lines.push(`| 技術領域 | ${escapeCell(areaLabel)} |`);
     if (item.team) lines.push(`| チーム | ${escapeCell(item.team)} |`);
     const techParts = flattenTech(item.tech);
     if (techParts.length > 0) lines.push(`| 技術スタック | ${escapeCell(techParts.join(', '))} |`);

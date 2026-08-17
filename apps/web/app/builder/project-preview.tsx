@@ -2,6 +2,7 @@
 
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@skillsheet/db/process';
+import { projectAreaLabel } from '@skillsheet/db/tech-area';
 import { useRef, useState } from 'react';
 
 import { InlineMarkdown } from '@/component/inline-markdown';
@@ -158,7 +159,9 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
                 <h3 className="pv-title">{project.title || '（無題の案件）'}</h3>
               </div>
               <div {...sync('scope')}>
-                <div className="pv-scope">{project.scope || 'スコープ未入力'}</div>
+                {/* 閲覧側と同じ導出を通す。編集画面のプレビューが閲覧結果と食い違うと、
+                    未入力のまま公開して初めて表示が変わることに気づく（WYSIWYG を崩さない）。 */}
+                <div className="pv-scope">{projectAreaLabel(project.scope, project.tech) || 'スコープ未入力'}</div>
               </div>
               {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。
                   空白のみの値は blocks.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}

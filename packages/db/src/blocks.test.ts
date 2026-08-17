@@ -646,6 +646,32 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('業務内容テスト');
   });
 
+  it('技術領域は元シートから取り込んだ値を優先する', () => {
+    expect(projectBlockToMarkdown(PROJECT)).toContain('| 技術領域 | 5名 |');
+  });
+
+  it('取り込んだ担当領域が無い場合は技術スタックから導出する（#240 / #241 — 正本に無い文言を保存しないため）', () => {
+    const withoutScope: ProjectBlockData = {
+      ...PROJECT,
+      items: [{ ...PROJECT.items[0], scope: '' }],
+    };
+    expect(projectBlockToMarkdown(withoutScope)).toContain('| 技術領域 | Web |');
+  });
+
+  it('取り込んだ担当領域が無く技術スタックからも判定できない場合は技術領域の行を出さない', () => {
+    const noSignal: ProjectBlockData = {
+      ...PROJECT,
+      items: [
+        {
+          ...PROJECT.items[0],
+          scope: '',
+          tech: { lang: [], fw: [], db: ['PostgreSQL'], infra: [], tools: ['Git'], collab: [] },
+        },
+      ],
+    };
+    expect(projectBlockToMarkdown(noSignal)).not.toContain('技術領域');
+  });
+
   it('担当工程は画面と同じ7段モデルへ正規化し、対応表外の値は末尾に残す（#206）', () => {
     const withProcess: ProjectBlockData = {
       ...PROJECT,
