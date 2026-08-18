@@ -48,6 +48,11 @@ secret
 # vercel
 .vercel
 
+# cloudflare (opennext build output / wrangler state / local secrets)
+.open-next
+.wrangler
+.dev.vars
+
 # temp
 /temp
 .npm

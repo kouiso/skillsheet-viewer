@@ -17,7 +17,7 @@ import { NextResponse } from 'next/server';
  * Next.js 16 で `middleware.ts`（関数名 `middleware`）は非推奨になり、
  * `proxy.ts`（関数名 `proxy`）に置き換わった。
  */
-export function proxy(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-skillsheet-pathname', request.nextUrl.pathname + request.nextUrl.search);
 

@@ -1,0 +1,16 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "skillsheet-viewer",
+  "main": ".open-next/worker.js",
+  // 2025-04-01 以降で wrangler の vars/secrets が process.env に載る。
+  // 2025-05-05 以降で FinalizationRegistry の不具合を回避できる。
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
