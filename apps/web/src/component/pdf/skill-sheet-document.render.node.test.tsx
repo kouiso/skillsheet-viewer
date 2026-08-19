@@ -878,9 +878,8 @@ describe('projectBlockToMarkdown → PDF テキスト層（Issue #242）', () =>
   );
 
   it(
-    'D社相当の長文案件を描画して検証用 PDF を書き出せる',
+    'D社相当の長文案件を描画できる',
     async () => {
-      const { writeFileSync } = await import('node:fs');
       const content = [
         '### D社 — 配達業務アプリの開発',
         '',
@@ -906,7 +905,7 @@ describe('projectBlockToMarkdown → PDF テキスト層（Issue #242）', () =>
 
       const buffer = await renderToBuffer(<SkillSheetDocument title="エンジニアスキルシート" content={content} />);
       expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
-      writeFileSync('/tmp/opencode/dsha.pdf', buffer);
+      expect(buffer.subarray(-1024).toString('latin1')).toContain('%%EOF');
     },
     RENDER_TIMEOUT_MS,
   );
