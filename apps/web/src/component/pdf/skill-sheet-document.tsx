@@ -4,7 +4,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { DESIGN_TOKENS_LIGHT } from '@/lib/design-tokens';
-import { isSafeLinkHref, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
+import { isSafeLinkHref, PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
 
 // @react-pdf/textkit の getNodes() は、非空白シラブルの直後が厳密に半角スペース ' ' で
@@ -597,13 +597,10 @@ export interface SkillSheetDocumentProps {
  * フォント登録は呼び出し側で行う前提（ブラウザ: pdf/fonts.ts / Node: 検証スクリプト）。
  */
 export const SkillSheetDocument = ({ title, content }: SkillSheetDocumentProps) => {
-  // remark-breaks を加えてビューアと同じく単一改行（ソフトブレーク）を改行として扱う。
-  // remark-breaks は tree トランスフォーマのため parse だけでは適用されない。
-  // runSync まで通してプラグインの変換フェーズを実行する。
-  // プラグイン構成は MARKDOWN_REMARK_PLUGINS（ビューア側と共通）を使う。ここだけ独自に
-  // 組むと、プラグインを足したときに画面と PDF の解釈がズレる（remarkCjkFriendly の
-  // 取りこぼしで実際に発生した、#138 のレビュー指摘）。
-  const processor = unified().use(remarkParse).use(MARKDOWN_REMARK_PLUGINS);
+  // 単独改行は markdown 既定どおり空白扱い。remark-breaks は行を短く切って
+  // @react-pdf の Text 内 \n と重なりを起こすため使わない。
+  // GFM と CJK 強調はビューアと同じプラグインを使う。
+  const processor = unified().use(remarkParse).use(PDF_REMARK_PLUGINS);
   const tree = processor.runSync(processor.parse(content)) as unknown as MdNode;
 
   return (

@@ -9,7 +9,8 @@
     "./blocks": "./src/blocks.ts",
     "./process": "./src/process.ts",
     "./tech-area": "./src/tech-area.ts",
-    "./sanitize-html": "./src/sanitize-html.ts"
+    "./sanitize-html": "./src/sanitize-html.ts",
+    "./text": "./src/text.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

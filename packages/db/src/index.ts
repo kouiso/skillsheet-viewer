@@ -5,3 +5,4 @@ export * from './process';
 export * from './real-volume-demo';
 export * from './schema';
 export * from './skillsheet';
+export * from './text';
