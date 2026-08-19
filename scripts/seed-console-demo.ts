@@ -2,7 +2,7 @@
  * Console方向のダッシュボードUI（プロフィール/統計/スキルマトリクス/工程の俯瞰/案件詳細/タイムライン）
  * を実データで見た目確認するための検証用シートを1件 INSERT するスクリプト。
  *
- * 実行: pnpm --filter @/db exec tsx scripts/seed-console-demo.ts
+ * 実行: pnpm exec tsx scripts/seed-console-demo.ts
  */
 import { createConsoleDemoSheet } from '../src/db/console-demo';
 // .env.local のパース規則が2箇所に分かれると片方だけ直す退行が入るため、共通実装を使う。

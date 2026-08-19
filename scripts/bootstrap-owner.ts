@@ -18,14 +18,14 @@
  *
  * 実行（新規オーナー作成、リポジトリルートの `.env`（無ければ `.env.local`）の
  * DATABASE_URL / BETTER_AUTH_SECRET を使用）:
- *   pnpm --filter @/db exec tsx scripts/bootstrap-owner.ts --email=owner@example.com
+ *   pnpm exec tsx scripts/bootstrap-owner.ts --email=owner@example.com
  * `--password` を省略し対話端末（TTY）から実行すると、画面に表示されない対話プロンプトで
  * パスワードを読み取る（シェル履歴・`ps` への平文露出を避けるため、これが推奨経路）。
  *
  * CI 等の非対話環境向けに `--password=<password>` 引数や環境変数での指定も可
  * （CLI引数が優先。ただしどちらもシェル履歴・`ps` に残るリスクがある）:
  *   SKILLSHEET_OWNER_EMAIL=owner@example.com SKILLSHEET_OWNER_PASSWORD='Str0ng-Pass!' \
- *     pnpm --filter @/db exec tsx scripts/bootstrap-owner.ts
+ *     pnpm exec tsx scripts/bootstrap-owner.ts
  *
  * 既に同じ email のユーザーが存在する場合は「新規作成」ではなく「パスワードの再発行」を行う
  * （dogfooding 時に実際に必要になったユースケース。既存 user.id はそのまま維持される）。
@@ -44,7 +44,7 @@ import { createDb } from '../src/db/client';
 import { account, session, user, verification } from '../src/db/schema';
 
 const USAGE = `使い方:
-  pnpm --filter @/db exec tsx scripts/bootstrap-owner.ts --email=<email> [--name=<name>]
+  pnpm exec tsx scripts/bootstrap-owner.ts --email=<email> [--name=<name>]
 
   --password を省略し対話端末（TTY）から実行すると、画面に表示されない対話プロンプトで
   パスワードを読み取る（推奨）。CI 等の非対話環境向けに --password=<password> 引数や

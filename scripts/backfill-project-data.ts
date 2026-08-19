@@ -19,8 +19,8 @@
  * 対象シートは `--sheet-id` か `SKILLSHEET_OWNER_ID` で必ず絞る（`block-write.ts` 参照）。
  *
  * 実行:
- *   確認のみ: pnpm --filter @/db exec tsx scripts/backfill-project-data.ts
- *   反映:     pnpm --filter @/db exec tsx scripts/backfill-project-data.ts --apply
+ *   確認のみ: pnpm exec tsx scripts/backfill-project-data.ts
+ *   反映:     pnpm exec tsx scripts/backfill-project-data.ts --apply
  *   シート指定: 上記に `--sheet-id <uuid>` を足す（省略時は SKILLSHEET_OWNER_ID の全シート）
  */
 import { isProjectBlockData, type ProjectTech } from '../src/db/blocks';
