@@ -1,4 +1,4 @@
 setup:
   install: "pnpm install --frozen-lockfile"
-  test: "pnpm -r --if-present test"
+  test: "pnpm test"
   lint: "pnpm lint"

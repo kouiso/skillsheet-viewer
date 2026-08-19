@@ -115,7 +115,7 @@ App Router の `params` は Next.js が既にデコード済みのため、`deco
 
 ### [M] サーバー専用モジュールのクライアント混入（high）
 
-`"use client"` ファイルから `@skillsheet/db` や `server-only` パッケージを import している場合は指摘する。
+`"use client"` ファイルから `@/db` や `@/db/client` や `server-only` パッケージを import している場合は指摘する。
 
 根拠: プロジェクト prompt.md に明示されたルール。
 

@@ -27,8 +27,8 @@ is_exempt() {
   case "$1" in
     README.md|SETUP.md|VERIFY.md|TODO.md|CLAUDE.md|AGENTS.md|LICENSE|Makefile|Dockerfile) return 0 ;;
     .*|*/.*) return 0 ;;
-    packages/db/drizzle/*) return 0 ;;
-    apps/web/public/fonts/*) return 0 ;;
+    drizzle/*) return 0 ;;
+    public/fonts/*) return 0 ;;
     material/*) return 0 ;;
     .github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE*) return 0 ;;
   esac
