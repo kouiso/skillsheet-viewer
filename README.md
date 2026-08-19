@@ -12,7 +12,7 @@
 
 ## 技術スタック
 
-- **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
+- **構成**: Next.js 16 単一アプリ（App Router）
 - **言語**: TypeScript
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
 - **UI**: Tailwind CSS v4 + shadcn/ui（Radix UI）
@@ -24,23 +24,23 @@
 - **テスト**: Vitest
 - **ランタイム / パッケージ管理**: mise（Node 22.x）/ pnpm
 
-## モノレポ構成
+## 構成
 
 ```
 .
-├── apps/
-│   └── web/                 # Next.js 16 アプリ（App Router）
-│       ├── app/             # ルーティング（page.tsx / layout.tsx / route.ts）
-│       └── src/
-│           ├── component/   # 機能コンポーネント（Markdown ビューア・PDF 等）
-│           ├── components/  # shadcn/ui ベースの UI 部品
-│           ├── context/     # React Context
-│           ├── hooks/       # カスタムフック
-│           ├── lib/         # 認証クライアント・環境変数検証など
-│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション・キャッシュ）
-│           └── util/        # ユーティリティ関数
-└── packages/
-    └── db/                  # Drizzle ORM + Neon（スキルシートの正本 / Better Auth テーブル）
+├── app/                 # ルーティング（page.tsx / layout.tsx / route.ts）
+├── src/
+│   ├── component/       # 機能コンポーネント（Markdown ビューア・PDF 等）
+│   ├── components/      # shadcn/ui ベースの UI 部品
+│   ├── context/         # React Context
+│   ├── db/              # Drizzle ORM + Neon（スキルシートの正本 / Better Auth テーブル）
+│   ├── hooks/           # カスタムフック
+│   ├── lib/             # 認証クライアント・環境変数検証など
+│   ├── server/          # サーバー専用ロジック（認証ゲート・セッション・キャッシュ）
+│   └── util/            # ユーティリティ関数
+├── drizzle/             # マイグレーション
+├── e2e/
+└── public/
 ```
 
 ## クイックスタート
@@ -77,13 +77,13 @@ pnpm dev
 
 | コマンド | 説明 |
 |---------|------|
-| `pnpm dev` | 開発サーバー起動（`apps/web`） |
+| `pnpm dev` | 開発サーバー起動 |
 | `pnpm build` | 本番ビルド |
 | `pnpm start` | ビルド後のサーバー起動 |
 | `pnpm lint` | Biome でチェック（`biome check .`） |
 | `pnpm format` | Biome でフォーマット（`biome format --write .`） |
-| `pnpm -r type-check` | 全パッケージの型チェック |
-| `pnpm -r --if-present test` | 全テスト（Vitest） |
+| `pnpm type-check` | 全パッケージの型チェック |
+| `pnpm test` | 全テスト（Vitest） |
 | `pnpm test:e2e` | 本番ビルドを Chrome/Chromium で検証し、`test-results/e2e/` に証跡を保存 |
 | `pnpm db:generate` | スキーマからマイグレーション生成（Drizzle） |
 | `pnpm db:migrate` | マイグレーション適用 |

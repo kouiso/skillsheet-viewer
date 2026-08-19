@@ -1,26 +1,26 @@
 # 開発ガイド
 
-すべてのコマンドはリポジトリルートで実行します（pnpm workspaces モノレポ）。
+すべてのコマンドはリポジトリルートで実行します。
 
 ## コマンド
 
 ### 開発
 
-- `pnpm dev` - 開発サーバーを起動（`apps/web`）
+- `pnpm dev` - 開発サーバーを起動
 - `pnpm build` - 本番用ビルドを実行
 - `pnpm start` - ビルド後のサーバーを起動
 
 ### テスト
 
 - `pnpm test` - 全パッケージのテストを実行（vitest）
-- `pnpm --filter @skillsheet/web test:watch` - 監視モードでテスト実行
-- `pnpm --filter @skillsheet/web test:coverage` - カバレッジ付きでテスト実行
+- `pnpm test:watch` - 監視モードでテスト実行
+- `pnpm test:coverage` - カバレッジ付きでテスト実行
 
 ### コード品質
 
 - `pnpm lint` - Biome でコードをチェック（`biome check`）
 - `pnpm format` - Biome でフォーマット（`biome format --write`）
-- `pnpm -r type-check` - TypeScript 型チェック（全パッケージ）
+- `pnpm type-check` - TypeScript 型チェック（全パッケージ）
 
 ### DB（Drizzle）
 
@@ -63,7 +63,7 @@
 - **この規約は `scripts/check-naming.sh` が機械的に検査する。**
   `task naming` でローカル確認でき、CI（`.github/workflows/ci.yml` の naming ジョブ）でも必ず走る。
   例外を増やすときは同スクリプトの `is_exempt()` に理由付きで追加する（無言で足さない）
-- サーバー専用モジュール（`apps/web/src/server` や `packages/db`）は Client Component から import しない
+- サーバー専用モジュール（`src/server` や `src/db`）は Client Component から import しない
 
 ### TypeScript
 
@@ -79,7 +79,7 @@
 ### スタイリング
 
 - Tailwind CSS v4 + shadcn/ui（Radix UI）を使用
-- 共通 UI 部品は `apps/web/src/components/ui` に集約
+- 共通 UI 部品は `src/components/ui` に集約
 
 ## Markdown レンダリング
 
@@ -97,7 +97,7 @@
 
 詳細は `prompt/prompt.md` の「認証の2系統設計」を参照。
 
-- 編集者ログイン: Better Auth（`apps/web/src/lib/auth.ts` / `server/auth-gate.ts`）
+- 編集者ログイン: Better Auth（`src/lib/auth.ts` / `server/auth-gate.ts`）
 - 閲覧コード: HMAC + VIEWER_CODE（`server/session.ts` / `server/viewer-gate.ts`）
 
 ## 依存の脆弱性対応
@@ -161,14 +161,14 @@ story の `tags: ['autodocs']` はこれを addons に入れないとドキュ�
 1. `node_modules` を削除して再インストール
 
    ```bash
-   rm -rf node_modules apps/web/node_modules packages/db/node_modules
+   rm -rf node_modules
    pnpm install
    ```
 
 2. 型エラーの切り分け
 
    ```bash
-   pnpm -r type-check
+   pnpm type-check
    ```
 
 ### スキルシートが表示されない

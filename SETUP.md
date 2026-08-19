@@ -8,12 +8,12 @@
 編集者（Better Auth ログイン）        閲覧者（閲覧コード / HMAC）
         │                                    │
         ▼                                    ▼
-Next.js 16 App（apps/web, Vercel）
+Next.js 16 App（Vercel）
   ├── /builder  … ブロック単位で編集（要 Better Auth セッション）
   └── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
         │
         ▼
-Neon serverless Postgres（正本データ源 / Drizzle ORM, packages/db）
+Neon serverless Postgres（正本データ源 / Drizzle ORM, `src/db`）
   ├── skill_sheets / blocks         … スキルシート本体（ブロック列）
   └── user / session / account / …  … Better Auth のテーブル
         ▲
@@ -52,7 +52,7 @@ pnpm install
 cp .env.example .env
 ```
 
-#### 必須（欠けると起動時に fail-fast で throw / `apps/web/src/lib/env.ts`）
+#### 必須（欠けると起動時に fail-fast で throw / `src/lib/env.ts`）
 
 | 変数 | 用途 |
 |------|------|
@@ -81,7 +81,7 @@ pnpm db:migrate
 ```
 
 - **新規（fresh）DB**: そのまま実行すれば Drizzle が全マイグレーションを適用します。
-- **既存本番 DB**: Better Auth CLI などで先にテーブルが作られている場合、そのまま流すと「テーブルが既に存在する」で失敗します。最初に 1 回だけ baseline を行ってから通常運用に移します。手順は [`packages/db/drizzle/MIGRATION-BASELINE.md`](./packages/db/drizzle/MIGRATION-BASELINE.md) を参照してください。
+- **既存本番 DB**: Better Auth CLI などで先にテーブルが作られている場合、そのまま流すと「テーブルが既に存在する」で失敗します。最初に 1 回だけ baseline を行ってから通常運用に移します。手順は [`drizzle/MIGRATION-BASELINE.md`](./drizzle/MIGRATION-BASELINE.md) を参照してください。
 
 ### 4. 開発サーバーの起動
 
@@ -97,26 +97,26 @@ pnpm dev
 
 ### 1. 閲覧コード（HMAC / `VIEWER_CODE`）
 
-- `/viewer-auth` で共有コードを入力 → tRPC の `auth.login` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`apps/web/src/server/session.ts`）
-- `/view` 配下の閲覧のみ許可。**編集はできない**（判定は `apps/web/src/server/viewer-gate.ts`）
+- `/viewer-auth` で共有コードを入力 → tRPC の `auth.login` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`src/server/session.ts`）
+- `/view` 配下の閲覧のみ許可。**編集はできない**（判定は `src/server/viewer-gate.ts`）
 - ログアウトは tRPC の `auth.logout`。旧クライアント向けの `POST /api/logout` も同じ procedure へ委譲
 
 ### 2. 編集者ログイン（Better Auth）
 
-- `/login` で email / password ログイン（`apps/web/src/lib/auth.ts` の `betterAuth` + Drizzle アダプタ、エンドポイントは `/api/auth/[...all]`）
-- セッション必須。スキルシートの作成・編集は編集者ログインが通っている場合のみ可能（判定は `apps/web/src/server/auth-gate.ts` の `isEditor()`）
+- `/login` で email / password ログイン（`src/lib/auth.ts` の `betterAuth` + Drizzle アダプタ、エンドポイントは `/api/auth/[...all]`）
+- セッション必須。スキルシートの作成・編集は編集者ログインが通っている場合のみ可能（判定は `src/server/auth-gate.ts` の `isEditor()`）
 - **サインアップ UI はなく、単一オーナー運用**です。`SKILLSHEET_OWNER_ID` に対応するオーナーアカウントのみが編集対象を持ちます
 
 ### オーナーアカウントのブートストラップ手順
 
-単一オーナー運用のため、UI からのサインアップは無効です（`emailAndPassword.disableSignUp: true`）。最初のオーナーアカウントは `packages/db/scripts/bootstrap-owner.ts` で直接作成します。このスクリプトは Better Auth 自身の `/sign-up/email` と同じ手順（`auth.$context` → `ctx.password.hash()` でハッシュ生成 → `user` 行を作成 → `provider_id = 'credential'` の `account` 行を作成）を踏むため、パスワードハッシュの形式や `user.id` の生成規則を手で合わせる必要はありません。
+単一オーナー運用のため、UI からのサインアップは無効です（`emailAndPassword.disableSignUp: true`）。最初のオーナーアカウントは `scripts/bootstrap-owner.ts` で直接作成します。このスクリプトは Better Auth 自身の `/sign-up/email` と同じ手順（`auth.$context` → `ctx.password.hash()` でハッシュ生成 → `user` 行を作成 → `provider_id = 'credential'` の `account` 行を作成）を踏むため、パスワードハッシュの形式や `user.id` の生成規則を手で合わせる必要はありません。
 
 1. `.env` に `DATABASE_URL` / `BETTER_AUTH_SECRET` を設定済みであること（`SKILLSHEET_OWNER_ID` はこの時点ではまだ値が無くて構いません）
 2. マイグレーションを適用し、`user` / `account` テーブルを作成しておく（未実施なら `pnpm db:migrate`）
 3. オーナーアカウントを作成する（メールアドレスは任意の値に置き換えてください）
 
    ```bash
-   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email='owner@example.com'
+   pnpm --filter @/db exec tsx scripts/bootstrap-owner.ts --email='owner@example.com'
    ```
 
    `--password` を省略して対話端末（TTY）から実行すると、画面には表示されない対話プロンプトでパスワードの入力を求められます（8 文字以上を推奨）。シェル履歴や `ps` のプロセス引数一覧に平文で残らないため、この方法を推奨します。
@@ -157,9 +157,9 @@ pnpm dev
 ### ビルド・依存エラー
 
 ```bash
-rm -rf node_modules apps/web/node_modules packages/db/node_modules
+rm -rf node_modules
 pnpm install
-pnpm -r type-check
+pnpm type-check
 ```
 
 ## ライセンス

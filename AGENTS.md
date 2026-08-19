@@ -19,5 +19,5 @@ pnpm install --frozen-lockfile
 
 ### Testing
 ```bash
-pnpm -r --if-present test
+pnpm test
 ```

@@ -31,7 +31,7 @@ tasks:
     desc: "動作確認（命名規約・型チェック・テスト・ビルド）"
     cmds:
       - ./scripts/check-naming.sh
-      - pnpm -r type-check
-      - pnpm -r --if-present test
+      - pnpm type-check
+      - pnpm test
       - pnpm build
       - echo "✅ Health check passed"
