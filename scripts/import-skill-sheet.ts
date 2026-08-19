@@ -2,7 +2,7 @@
  * kouiso/skill-sheet の skillsheet.md を Markdown ブロックとして DB にインポートする。
  *
  * 実行:
- *   GITHUB_TOKEN=... pnpm --filter @/db exec tsx scripts/import-skill-sheet.ts
+ *   GITHUB_TOKEN=... pnpm exec tsx scripts/import-skill-sheet.ts
  *
  * 既存の `エンジニアスキルシート` タイトルがあれば削除して新規作成する。
  */

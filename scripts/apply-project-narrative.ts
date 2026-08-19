@@ -24,8 +24,8 @@
  * 別オーナーのシートまで巻き込む。
  *
  * 実行:
- *   確認のみ: pnpm --filter @/db exec tsx scripts/apply-project-narrative.ts <path.json>
- *   反映:     pnpm --filter @/db exec tsx scripts/apply-project-narrative.ts <path.json> --apply
+ *   確認のみ: pnpm exec tsx scripts/apply-project-narrative.ts <path.json>
+ *   反映:     pnpm exec tsx scripts/apply-project-narrative.ts <path.json> --apply
  *   シート指定: 上記に `--sheet-id <uuid>` を足す（省略時は SKILLSHEET_OWNER_ID の全シート）
  */
 import { existsSync, readFileSync } from 'node:fs';

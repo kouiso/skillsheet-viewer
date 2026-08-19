@@ -4,8 +4,8 @@
  * 新規に組み立てて、saveSkillSheetBlocks で置き換える（--write 時のみ）。
  *
  * 実行:
- *   ドライラン(DB書き込みなし。/tmp/migrated_project_block.json に出力): pnpm --filter @/db exec tsx scripts/migrate-real-sheet.ts
- *   本番書き込み: pnpm --filter @/db exec tsx scripts/migrate-real-sheet.ts --write
+ *   ドライラン(DB書き込みなし。/tmp/migrated_project_block.json に出力): pnpm exec tsx scripts/migrate-real-sheet.ts
+ *   本番書き込み: pnpm exec tsx scripts/migrate-real-sheet.ts --write
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
