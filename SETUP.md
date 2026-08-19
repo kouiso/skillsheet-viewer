@@ -8,13 +8,13 @@
 編集者（Better Auth ログイン）        閲覧者（閲覧コード / HMAC）
         │                                    │
         ▼                                    ▼
-Next.js 16 App（apps/web, Vercel）
+Next.js 16 App（Vercel）
   ├── /builder  … ブロック単位で編集（要 Better Auth セッション）
   ├── /view 系  … スキルシートを Markdown 整形表示・PDF 出力
   └── /compare  … 2 枚を並べて比較
         │
         ▼
-Neon serverless Postgres（正本データ源 / Drizzle ORM, packages/db）
+Neon serverless Postgres（正本データ源 / Drizzle ORM, `src/db`）
   ├── skill_sheets / blocks         … スキルシート本体（ブロック列）
   └── user / session / account / …  … Better Auth のテーブル
         ▲
@@ -53,7 +53,7 @@ pnpm install
 cp .env.example .env
 ```
 
-#### 必須（欠けると起動時に fail-fast で throw / `apps/web/src/lib/env.ts`）
+#### 必須（欠けると起動時に fail-fast で throw / `src/lib/env.ts`）
 
 | 変数 | 用途 |
 |------|------|
@@ -82,7 +82,7 @@ pnpm db:migrate
 ```
 
 - **新規（fresh）DB**: そのまま実行すれば Drizzle が全マイグレーションを適用します。
-- **既存本番 DB**: Better Auth CLI などで先にテーブルが作られている場合、そのまま流すと「テーブルが既に存在する」で失敗します。最初に 1 回だけ baseline を行ってから通常運用に移します。手順は [`packages/db/drizzle/MIGRATION-BASELINE.md`](./packages/db/drizzle/MIGRATION-BASELINE.md) を参照してください。
+- **既存本番 DB**: Better Auth CLI などで先にテーブルが作られている場合、そのまま流すと「テーブルが既に存在する」で失敗します。最初に 1 回だけ baseline を行ってから通常運用に移します。手順は [`drizzle/MIGRATION-BASELINE.md`](./drizzle/MIGRATION-BASELINE.md) を参照してください。
 
 ### 4. 開発サーバーの起動
 
@@ -98,14 +98,14 @@ pnpm dev
 
 ### 1. 閲覧コード（HMAC / `VIEWER_CODE`）
 
-- `/viewer-auth` で共有コードを入力 → `POST /api/auth` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`apps/web/src/server/session.ts`）
-- `/view` 配下の閲覧のみ許可。**編集はできない**（判定は `apps/web/src/server/viewer-gate.ts`）
+- `/viewer-auth` で共有コードを入力 → `POST /api/auth` が `VIEWER_CODE` を `timingSafeEqual` で照合し、HMAC 署名付きセッション cookie を発行（`src/server/session.ts`）
+- `/view` 配下の閲覧のみ許可。**編集はできない**（判定は `src/server/viewer-gate.ts`）
 - ログアウトは `POST /api/logout`
 
 ### 2. 編集者ログイン（Better Auth）
 
-- `/login` で email / password ログイン（`apps/web/src/lib/auth.ts` の `betterAuth` + Drizzle アダプタ、エンドポイントは `/api/auth/[...all]`）
-- セッション必須。スキルシートの作成・編集は編集者ログインが通っている場合のみ可能（判定は `apps/web/src/server/auth-gate.ts` の `isEditor()`）
+- `/login` で email / password ログイン（`src/lib/auth.ts` の `betterAuth` + Drizzle アダプタ、エンドポイントは `/api/auth/[...all]`）
+- セッション必須。スキルシートの作成・編集は編集者ログインが通っている場合のみ可能（判定は `src/server/auth-gate.ts` の `isEditor()`）
 - **サインアップ UI はなく、単一オーナー運用**です。`SKILLSHEET_OWNER_ID` に対応するオーナーアカウントのみが編集対象を持ちます
 
 ### オーナーアカウントのブートストラップ手順
@@ -139,9 +139,9 @@ pnpm dev
 ### ビルド・依存エラー
 
 ```bash
-rm -rf node_modules apps/web/node_modules packages/db/node_modules
+rm -rf node_modules
 pnpm install
-pnpm -r type-check
+pnpm type-check
 ```
 
 ## ライセンス
