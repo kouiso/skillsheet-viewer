@@ -25,6 +25,7 @@ export default defineConfig({
         },
       },
       {
+        extends: true,
         test: {
           name: 'db',
           environment: 'node',

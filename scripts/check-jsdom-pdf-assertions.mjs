@@ -12,7 +12,7 @@ import { join, relative } from 'node:path';
 import { cwd } from 'node:process';
 
 const ROOT = cwd();
-const TARGET_DIR = join(ROOT, 'src');
+const TARGET_DIRS = [join(ROOT, 'src'), join(ROOT, 'app')];
 
 const FORBIDDEN_PATTERNS = [
   { pattern: /from\s+['"]@react-pdf\/renderer['"]/, reason: '@react-pdf/renderer を直接 import している' },
@@ -43,16 +43,18 @@ async function* walk(dir) {
 let exitCode = 0;
 const violations = [];
 
-for await (const filePath of walk(TARGET_DIR)) {
-  const content = await readFile(filePath, 'utf-8');
-  const lines = content.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith('//')) continue;
-    for (const { pattern, reason } of FORBIDDEN_PATTERNS) {
-      if (pattern.test(line)) {
-        violations.push({ file: relative(ROOT, filePath), line: i + 1, reason });
-        exitCode = 1;
+for (const targetDir of TARGET_DIRS) {
+  for await (const filePath of walk(targetDir)) {
+    const content = await readFile(filePath, 'utf-8');
+    const lines = content.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (line.startsWith('//')) continue;
+      for (const { pattern, reason } of FORBIDDEN_PATTERNS) {
+        if (pattern.test(line)) {
+          violations.push({ file: relative(ROOT, filePath), line: i + 1, reason });
+          exitCode = 1;
+        }
       }
     }
   }
