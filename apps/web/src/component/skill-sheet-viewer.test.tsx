@@ -39,6 +39,21 @@ const DETAILS_CONTENT = `## テストセクション
 `;
 
 describe('SkillSheetViewer', () => {
+  it('狭幅でも表の内容幅がページ全体を押し広げない', () => {
+    const { container } = render(
+      <SkillSheetViewer
+        skillSheet={{
+          title: '表のプレビュー',
+          content: '| 長い列名 | 列2 |\n| --- | --- |\n| 折り返さない長い内容 | 値 |',
+        }}
+        compareMode
+      />,
+    );
+
+    const main = container.firstElementChild?.firstElementChild;
+    expect(main).toHaveClass('min-w-0');
+  });
+
   it('生HTML（<details>/<summary>）を要素として描画し、生HTMLコードを文字列で表示しない', async () => {
     render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: DETAILS_CONTENT }} />);
 
