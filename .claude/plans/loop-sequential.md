@@ -10,8 +10,8 @@
 | 4 | #53 テンプレート機能 | #50 merge 必要 | waiting |
 
 ## Done Gate（各 issue 共通）
-- `pnpm -r type-check` exit 0
-- `pnpm -r --if-present test` exit 0
+- `pnpm type-check` exit 0
+- `pnpm test` exit 0
 - `pnpm build` exit 0
 - PR 作成 + Closes #<N>
 

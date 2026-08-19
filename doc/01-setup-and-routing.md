@@ -8,7 +8,7 @@
 
 ## 技術スタック
 
-- **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
+- **構成**: Next.js 16 単一アプリ（App Router）
 - **言語**: TypeScript
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
 - **UI**: Tailwind CSS v4 + shadcn/ui（Radix UI）、アニメーションは framer-motion
@@ -42,44 +42,38 @@ pnpm --version # 10.33.0
 
 `package.json` でも `engines.node` に `22.x`、`packageManager` に `pnpm@10.33.0` を宣言している。
 
-### モノレポ構成
+### ディレクトリ構成
 
-`pnpm-workspace.yaml` が管理対象パッケージを定義する。
+単一の Next.js アプリ。DB 層は `src/db`。
 
-```yaml
-packages:
-  - apps/*
-  - packages/*
-```
-
-| パッケージ | 役割 |
+| パス | 役割 |
 |-----------|------|
-| `apps/web`（`@skillsheet/web`） | Next.js アプリ本体（画面・API・サーバー処理） |
-| `packages/db`（`@skillsheet/db`） | Drizzle スキーマ、ブロックモデル、DB アクセス層 |
+| `app/` | 画面・API・サーバー処理（App Router） |
+| `src/db/` | Drizzle スキーマ、ブロックモデル、DB アクセス層 |
 
-`apps/web` は `@skillsheet/db` を `workspace:*` として参照する。
+Client Component は `@/db/blocks` と `@/db/process` など純関数だけを import する。
 
 ### 依存インストールと主要コマンド
 
 いずれもリポジトリルートで実行する。
 
 ```bash
-pnpm install         # 全パッケージの依存を導入
-pnpm dev             # 開発サーバー起動（apps/web / next dev）
+pnpm install         # 依存を導入
+pnpm dev             # 開発サーバー起動（next dev）
 pnpm build           # 本番ビルド
-pnpm -r type-check   # 全パッケージ型チェック
-pnpm -r --if-present test  # 全テスト（vitest）
+pnpm type-check      # TypeScript 型チェック
+pnpm test            # 全テスト（vitest）
 pnpm db:generate     # Drizzle マイグレーション生成
 pnpm db:migrate      # マイグレーション適用
 ```
 
-環境変数のセットアップ手順は `SETUP.md` を参照。必須変数（`DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`）は `apps/web/src/lib/env.ts` の `assertServerEnv()` が起動時に検証し、欠けていれば全欠落を列挙して即座に throw する。
+環境変数のセットアップ手順は `SETUP.md` を参照。必須変数（`DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`）は `src/lib/env.ts` の `assertServerEnv()` が起動時に検証し、欠けていれば全欠落を列挙して即座に throw する。
 
 ---
 
 ## Part 2: App Router とルーティング
 
-Next.js App Router では `apps/web/app` 配下のディレクトリ構造がそのまま URL になる。ページは既定で React Server Component（RSC）として動作し、`'use client'` を宣言したファイルのみクライアントコンポーネントになる。
+Next.js App Router では `app/` 配下のディレクトリ構造がそのまま URL になる。ページは既定で React Server Component（RSC）として動作し、`'use client'` を宣言したファイルのみクライアントコンポーネントになる。
 
 ### ルート一覧
 
@@ -147,7 +141,7 @@ export default async function ViewLayout({ children }: { children: React.ReactNo
 
 ## まとめ
 
-- mise で Node/pnpm を固定し、pnpm workspaces で `apps/web` と `packages/db` を束ねる。
+- mise で Node/pnpm を固定し、ルートの Next.js アプリ 1 本として動かす。
 - ルーティングは `app/` のディレクトリ構造がそのまま URL。ページは既定で RSC。
 - `/view` 配下は `view/layout.tsx` の `requireViewer()` が一括で閲覧ゲートをかける。
 - DB を読むページは `connection()` で動的化してからサーバー側でデータ取得し、クライアントコンポーネントへ props で渡す。

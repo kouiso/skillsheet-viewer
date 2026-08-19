@@ -14,7 +14,7 @@
 
 ## 技術スタック
 
-- **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
+- **構成**: Next.js 16 単一アプリ（App Router）
 - **言語**: TypeScript
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
 - **データ層**: tRPC v11 + @trpc/react-query + @tanstack/react-query（`src/server/trpc/`）。RSC は server caller で直呼び、クライアントは HTTP 経由（`/api/trpc/[trpc]`）。認可・入力検証（zod）・エラーコードは procedure に集約
@@ -29,31 +29,31 @@
 このアプリは目的の違う2種類の認証を持ちます。混同しないこと。
 
 1. **編集者ログイン（Better Auth）**
-   - `apps/web/src/lib/auth.ts` で `betterAuth` + Drizzle アダプタを構成
+   - `src/lib/auth.ts` で `betterAuth` + Drizzle アダプタを構成
    - セッション必須。スキルシートの作成・編集はこちらが通っている場合のみ可能
-   - 判定は `apps/web/src/server/auth-gate.ts`
+   - 判定は `src/server/auth-gate.ts`
 
 2. **閲覧コード（HMAC / VIEWER_CODE）**
    - `VIEWER_CODE` を `/viewer-auth` で検証し、HMAC 署名付き cookie を発行
-   - 署名・検証は `apps/web/src/server/session.ts`（`createHmac` + `timingSafeEqual`）
-   - 閲覧専用。編集はできない。判定は `apps/web/src/server/viewer-gate.ts`
+   - 署名・検証は `src/server/session.ts`（`createHmac` + `timingSafeEqual`）
+   - 閲覧専用。編集はできない。判定は `src/server/viewer-gate.ts`
 
 編集系の動線を触るときは Better Auth 側、閲覧系の動線を触るときは HMAC 側、というように対象を取り違えないよう注意してください。
 
 ## データの流れ（DB 中心）
 
-- スキルシートの正本は Neon Postgres に保存（`packages/db`）
+- スキルシートの正本は Neon Postgres に保存（`src/db`）
 - 1枚のスキルシートは順序付きの「ブロック」の集まりとして持つ
 - 表示時はブロック列を Markdown に組み立てて react-markdown でレンダリング
 - DB が空のスキルシートは、初回アクセス時に既存の GitHub Markdown ソースからシードする
-- サーバー専用モジュール（`packages/db/src/skillsheet.ts` など）は Client Component から import しない
+- サーバー専用モジュール（`src/db/skillsheet.ts` など）は Client Component から import しない
 
 ## 主要コマンド（リポジトリルートで実行）
 
-- `pnpm dev` — 開発サーバー起動（apps/web）
+- `pnpm dev` — 開発サーバー起動
 - `pnpm build` — 本番ビルド
-- `pnpm -r type-check` — 全パッケージ型チェック
-- `pnpm -r --if-present test` — 全テスト（vitest）
+- `pnpm type-check` — 全パッケージ型チェック
+- `pnpm test` — 全テスト（vitest）
 - `pnpm db:generate` — Drizzle マイグレーション生成
 - `pnpm db:migrate` — マイグレーション適用
 
@@ -64,7 +64,7 @@
 ## 完了の定義（Done Gate）
 
 IF skillsheet-viewer で変更の完了(done)を判断する
-THEN ローカルで `pnpm -r type-check` / `pnpm -r --if-present test` / `pnpm build`
+THEN ローカルで `pnpm type-check` / `pnpm test` / `pnpm build`
   が全て exit 0 であることを静的チェックのゲートとする。
   リモートCI(GitHub Actions)の赤は、課金停止でジョブ自体が起動しないことが原因なので
   done のブロッカーにしない。
