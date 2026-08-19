@@ -14,7 +14,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
+import { PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 
 import PDF_FONT_FAMILY from './constants';
 import { splitForHyphenation } from './fonts';
@@ -147,7 +147,7 @@ function buildContent(): string {
 // SkillSheetDocument 本体と同じ remark パイプラインで markdown を mdast ノード列に変換する。
 // renderBlocks の構造検証テストで、コンポーネントと同じ木を組み立てるために使う。
 function parseMarkdown(content: string): MdNode[] {
-  const processor = unified().use(remarkParse).use(MARKDOWN_REMARK_PLUGINS);
+  const processor = unified().use(remarkParse).use(PDF_REMARK_PLUGINS);
   const tree = processor.runSync(processor.parse(content)) as unknown as MdNode;
   return tree.children ?? [];
 }
@@ -873,6 +873,40 @@ describe('projectBlockToMarkdown → PDF テキスト層（Issue #242）', () =>
       const text = normalizeExtractedText(await extractPdfText(buffer));
       expect(text).toContain('報告書');
       expect(text).toContain('社内');
+    },
+    RENDER_TIMEOUT_MS,
+  );
+
+  it(
+    'D社相当の長文案件を描画して検証用 PDF を書き出せる',
+    async () => {
+      const { writeFileSync } = await import('node:fs');
+      const content = [
+        '### D社 — 配達業務アプリの開発',
+        '',
+        '| 項目 | 内容 |',
+        '| :--- | :--- |',
+        '| 期間 | 2024.04〜2024.12 |',
+        '| 役割 | SE |',
+        '| 技術スタック | TypeScript, Python, Next.js, Chakra UI, GraphQL, FastAPI, PostgreSQL, AWS |',
+        '',
+        '**習得スキル・実績**',
+        '',
+        'GRAPHQL, オニオンアーキテクチャ、クリーンアーキテクチャ、Next.js パフォーマンス最適化、',
+        'Python での Excel 出力',
+        '本案件では、実装をメインで担当しておりました。',
+        'バックエンド',
+        'バックエンドは、Python での Excel 出力を担当致しました。',
+        'Pythonのような型定義が甘めの言語では、デバッグの難易度が少々上がるため、デバッグの開発体験は重要だと感じて',
+        'いました。',
+        'Vscodeのlaunch.json等の設定やDocker上でのDebugポートの設定を行いました。',
+        'フロントエンド',
+        '2024年9月時点で最新のNext.js app routerの実装を担当致しました。',
+      ].join('\n');
+
+      const buffer = await renderToBuffer(<SkillSheetDocument title="エンジニアスキルシート" content={content} />);
+      expect(buffer.subarray(0, PDF_HEADER.length).toString('latin1')).toBe(PDF_HEADER);
+      writeFileSync('/tmp/opencode/dsha.pdf', buffer);
     },
     RENDER_TIMEOUT_MS,
   );

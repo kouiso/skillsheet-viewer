@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TechFilter } from './tech-filter';
@@ -10,73 +11,57 @@ const noop = {
   onClear: vi.fn(),
 };
 
+const ALL = [
+  { name: 'TypeScript', count: 3 },
+  { name: 'React', count: 2 },
+  { name: 'OnlyOnce', count: 1 },
+];
+
 describe('TechFilter', () => {
-  it('トグル状態を aria-pressed で通知する（スクリーンリーダー a11y 回帰防止）', () => {
+  it('未選択の技術チップは出さない（チップ雲を置かない）', () => {
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);
+
+    expect(screen.queryByRole('button', { name: /TypeScript/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /すべての技術を表示/ })).toBeNull();
+  });
+
+  it('案件検索欄は技術選択と別に残る', () => {
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);
+
+    expect(screen.getByPlaceholderText('案件・技術・役割を検索…')).toBeTruthy();
+    expect(screen.getByLabelText('技術を選ぶ')).toBeTruthy();
+  });
+
+  it('技術選択に入力すると一致する技術が出る（1件だけの技術も含む）', async () => {
+    const user = userEvent.setup();
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);
+
+    await user.click(screen.getByLabelText('技術を選ぶ'));
+    await user.type(screen.getByLabelText('技術を選ぶ'), 'Only');
+
+    expect(screen.getByRole('option', { name: /OnlyOnce/ })).toBeTruthy();
+  });
+
+  it('選んだ技術はチップになり aria-pressed=true になる', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
     render(
       <TechFilter
-        all={[
-          { name: 'TypeScript', count: 3 },
-          { name: 'React', count: 2 },
-        ]}
+        all={ALL}
         active={['TypeScript']}
         count={1}
-        total={2}
-        {...noop}
-      />,
-    );
-
-    expect(screen.getByRole('button', { name: /TypeScript/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: /React/ })).toHaveAttribute('aria-pressed', 'false');
-  });
-
-  it('1案件のみの技術は既定で隠し、展開ボタンで出す', async () => {
-    const { rerender } = render(
-      <TechFilter
-        all={[
-          { name: 'TypeScript', count: 3 },
-          { name: 'OnlyOnce', count: 1 },
-        ]}
-        active={[]}
-        count={3}
         total={3}
-        {...noop}
+        query=""
+        onQueryChange={vi.fn()}
+        onToggle={onToggle}
+        onClear={vi.fn()}
       />,
     );
 
-    expect(screen.queryByRole('button', { name: /OnlyOnce/ })).toBeNull();
+    const chip = screen.getByRole('button', { name: /TypeScript/ });
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
 
-    const expand = screen.getByRole('button', { name: /すべての技術を表示/ });
-    expand.click();
-    rerender(
-      <TechFilter
-        all={[
-          { name: 'TypeScript', count: 3 },
-          { name: 'OnlyOnce', count: 1 },
-        ]}
-        active={[]}
-        count={3}
-        total={3}
-        {...noop}
-      />,
-    );
-
-    expect(screen.getByRole('button', { name: /OnlyOnce/ })).toBeTruthy();
-  });
-
-  it('選択中の技術は1案件のみでも隠さない（隠れると解除できなくなるため）', () => {
-    render(
-      <TechFilter
-        all={[
-          { name: 'TypeScript', count: 3 },
-          { name: 'OnlyOnce', count: 1 },
-        ]}
-        active={['OnlyOnce']}
-        count={1}
-        total={3}
-        {...noop}
-      />,
-    );
-
-    expect(screen.getByRole('button', { name: /OnlyOnce/ })).toHaveAttribute('aria-pressed', 'true');
+    await user.click(chip);
+    expect(onToggle).toHaveBeenCalledWith('TypeScript');
   });
 });
