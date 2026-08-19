@@ -113,6 +113,13 @@ interface BuilderClientProps {
   initialTitle: string;
   sheets: SheetSummary[];
   activeSheetId: string;
+  /**
+   * サーバ側でシートを読めなかったときの理由。
+   * null なら正常（＝空なら本当にまだ何も無い）。
+   * 以前はここを渡しておらず、読み込み失敗でも空の編集画面が出るだけだったため、
+   * 利用者は「保存したものが消えた」と誤解した。
+   */
+  loadFailure?: 'config' | 'unknown' | null;
 }
 
 const newId = () =>
@@ -304,8 +311,10 @@ const TableBlockEditor = ({
                         aria-label={`列${ci + 1}を${label}`}
                         aria-pressed={col.align === value}
                         className={`inline-flex h-11 w-11 items-center justify-center rounded ${
+                          // bg-primary は白文字と組むとライトテーマで 3.74:1 と AA 未達（Issue #198）。
+                          // ボタン背景は button.tsx と同じく --primary-dark を使う。
                           col.align === value
-                            ? 'bg-primary text-primary-foreground'
+                            ? 'bg-primary-dark text-primary-foreground'
                             : 'text-muted-foreground hover:bg-muted'
                         }`}
                       >
@@ -453,6 +462,7 @@ const SkillsBlockEditor = ({
                     options={LEVEL_OPTIONS}
                     onChange={(v) => setSkill(i, 'level', v)}
                     placeholder="習熟度"
+                    label={`スキル${i + 1}の習熟度`}
                   />
                 </td>
                 <td className="border border-border p-1 text-center">
@@ -964,7 +974,7 @@ const PaletteChip = ({ blockType, label, icon }: (typeof PALETTE_ITEMS)[number])
       type="button"
       {...listeners}
       {...attributes}
-      className={`inline-flex h-11 cursor-grab items-center gap-1 rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary active:cursor-grabbing ${
+      className={`inline-flex h-11 cursor-grab items-center gap-1 rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-primary-dark active:cursor-grabbing ${
         isDragging ? 'opacity-40' : ''
       }`}
     >
@@ -976,7 +986,8 @@ const PaletteChip = ({ blockType, label, icon }: (typeof PALETTE_ITEMS)[number])
 
 /** ドラッグ中のオーバーレイ用プレースホルダ。 */
 const DragPreview = ({ blockType }: { blockType: PaletteBlockType }) => (
-  <div className="flex items-center gap-1 rounded border border-primary bg-primary/10 px-3 py-1.5 text-sm text-primary shadow-md">
+  // text-primary（#0d9488）は薄い背景の上でライトテーマ 3.36:1 と AA 未達。文字色は --primary-dark を使う。
+  <div className="flex items-center gap-1 rounded border border-primary bg-primary/10 px-3 py-1.5 text-primary-dark text-sm shadow-md">
     {blockType === 'markdown' ? <Plus className="size-3.5" /> : <Table className="size-3.5" />}
     {blockType === 'markdown' ? 'テキスト' : 'テーブル'}
   </div>
@@ -1009,7 +1020,13 @@ const createPaletteItem = (blockType: PaletteBlockType): EditorItem => {
   };
 };
 
-const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, activeSheetId }: BuilderClientProps) => {
+const BuilderClient = ({
+  initialBlocks,
+  initialTitle,
+  sheets: initialSheets,
+  activeSheetId,
+  loadFailure = null,
+}: BuilderClientProps) => {
   const router = useRouter();
   const { mode, toggleTheme } = useThemeMode();
   const [items, setItems] = useState<EditorItem[]>(() => initialBlocks.map(blockToItem));
@@ -1619,6 +1636,16 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
 
   return (
     <div className="min-h-screen">
+      {loadFailure && (
+        <div
+          role="alert"
+          className="border-b border-danger/40 bg-danger-soft px-4 py-2 text-center text-sm text-danger"
+        >
+          {loadFailure === 'config'
+            ? '保存済みのシートを読み込めませんでした（サーバー設定が未完了の可能性があります）。このまま編集して保存すると、既存の内容を上書きするおそれがあります。'
+            : '保存済みのシートを読み込めませんでした。このまま編集して保存すると、既存の内容を上書きするおそれがあります。ページを再読み込みしてください。'}
+        </div>
+      )}
       {/* テンプレート選択ダイアログ */}
       {showCreateDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -1813,7 +1840,8 @@ const BuilderClient = ({ initialBlocks, initialTitle, sheets: initialSheets, act
                         router.push(`/builder?sheet=${sheet.id}`);
                       }}
                       className={`flex min-h-11 min-w-0 flex-1 items-center gap-1.5 truncate rounded px-2 py-1 text-left text-sm ${
-                        sheet.id === activeSheetId ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                        // 選択中の背景も bg-primary だと 3.74:1 で AA 未達（Issue #198 の横展開漏れ）。
+                        sheet.id === activeSheetId ? 'bg-primary-dark text-primary-foreground' : 'hover:bg-muted'
                       }`}
                     >
                       <FileText className="size-4 shrink-0" />

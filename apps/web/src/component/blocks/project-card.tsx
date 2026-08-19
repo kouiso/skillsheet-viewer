@@ -106,7 +106,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
 
       {item.acquired && (
         <div className="text-sm">
-          <p className="mb-1 font-mono text-[10px] tracking-[0.1em] text-accent-text">≪習得スキル・実績≫</p>
+          <p className="mb-1 font-mono text-[11px] tracking-[0.1em] text-accent-text">≪習得スキル・実績≫</p>
           <InlineMarkdown
             content={collapseSoftBreaks(item.acquired)}
             className="break-words leading-relaxed text-foreground/80"

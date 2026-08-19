@@ -67,7 +67,7 @@ export const SkillMatrix = ({ data, className = 'mb-6' }: SkillMatrixProps) => {
               {skill.years > 0 ? (
                 <>
                   {skill.years}
-                  <span className="text-[10px] text-faint">y</span>
+                  <span className="text-[11px] text-faint">y</span>
                 </>
               ) : (
                 <span className="text-faint">—</span>

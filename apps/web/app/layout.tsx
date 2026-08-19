@@ -5,6 +5,7 @@ import { assertServerEnv } from '@/lib/env';
 
 import { Providers } from './providers';
 import './globals.css';
+import { THEME_INIT_SCRIPT } from '@/lib/theme-init-script';
 
 export const metadata: Metadata = {
   title: 'エンジニアスキルシート',
@@ -33,8 +34,9 @@ const ibmPlexMono = IBM_Plex_Mono({
 // さもないと tRPC の同一オリジン fetch が「URL に認証情報を含む」として拒否される。
 const baseInitScript = `(function(){try{var b=document.querySelector('base');if(!b){b=document.createElement('base');document.head.prepend(b)}b.href=window.location.origin+'/';}catch(e){}})()`;
 
-// FOUC 防止: ハイドレーション前に localStorage → .dark クラスを適用する
-const themeInitScript = `(function(){try{var m=localStorage.getItem('theme-mode');var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(m==='dark'||(!m&&d)){document.documentElement.classList.add('dark')}else{document.documentElement.classList.remove('dark')}}catch(e){}})()`;
+// FOUC 防止: ハイドレーション前に localStorage → .dark クラスを適用する。
+// global-error.tsx でも同じものが必要なので定数を共有する。
+const themeInitScript = THEME_INIT_SCRIPT;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   assertServerEnv();

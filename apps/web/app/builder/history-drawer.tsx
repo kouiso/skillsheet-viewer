@@ -24,6 +24,7 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,12 +33,18 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
     window.addEventListener('keydown', onKey);
     // 開いている間だけ 30 秒ごとに相対時刻を更新する
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    // `<dialog open>` を直接書くと非モーダルになり、top layer にも載らず背面が inert にならない。
+    // その結果 Tab が背後の編集画面へ抜け、キーボード利用者はフォーカスを見失う。
+    // showModal() で開くことでブラウザ標準のフォーカス閉じ込めを効かせる。
+    const dialog = dialogRef.current;
+    if (dialog && !dialog.open) dialog.showModal();
     // 開いた直後の操作先をドロワー内へ移す。ここを移さないと、Tab が背後のトップバーから
     // 始まってしまい、キーボードだけでは中身へ辿り着けない。
     closeButtonRef.current?.focus();
     return () => {
       window.removeEventListener('keydown', onKey);
       window.clearInterval(timer);
+      if (dialog?.open) dialog.close();
     };
   }, []);
 
@@ -52,7 +59,17 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
       {/* 背景を閉じるための実ボタン。div に onClick を付けるとキーボードから閉じられないため、
           全面を覆うボタンにしてある（見た目は透明）。Escape でも閉じる。 */}
       <button type="button" className="hist-overlay-close" aria-label="変更履歴を閉じる" onClick={onClose} />
-      <dialog className="hist-drawer" aria-label="変更履歴" open>
+      {/* open 属性は付けない。付けると非モーダルになる（上の useEffect で showModal する）。 */}
+      <dialog
+        ref={dialogRef}
+        className="hist-drawer"
+        aria-label="変更履歴"
+        onCancel={(e) => {
+          // Escape はブラウザが dialog を閉じるが、親の開閉状態も合わせないと再度開けなくなる。
+          e.preventDefault();
+          onCloseRef.current();
+        }}
+      >
         <div className="hist-head">
           <div>
             <strong>変更履歴</strong>

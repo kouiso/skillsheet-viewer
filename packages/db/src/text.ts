@@ -1,4 +1,5 @@
-const LIST_LINE = /^\s*(?:[-*•]|\d+[.)])\s/;
+// `+` も Markdown の箇条書き記号。落とすと `+ 項目1` / `+ 項目2` が1行に連結される。
+const LIST_LINE = /^\s*(?:[-+*•]|\d+[.)])\s/;
 const SETEXT_UNDERLINE = /^\s*(?:={2,}|-{3,})\s*$/;
 
 /** 段落内の単独改行を空白に潰す。空行は段落、リスト行と Setext 下線は行のまま残す。 */
@@ -25,5 +26,7 @@ export function collapseSoftBreaks(text: string): string {
 
 /** インライン強調 `**…**` を外す。対にならない `**` は残さない。 */
 export function unwrapEmphasis(text: string): string {
-  return text.replace(/\*\*([^*]+)\*\*/g, '$1');
+  // 対になった強調を外したあと、閉じ忘れた `**` が本文に残ると
+  // 画面にも PDF にも `**` がそのまま出てしまうため、残余も取り除く。
+  return text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*\*/g, '');
 }

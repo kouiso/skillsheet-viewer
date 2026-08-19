@@ -29,7 +29,7 @@ export function ProcessStepper({ done, compact = false }: ProcessStepperProps) {
             {!compact && (
               <span
                 title={title}
-                className={`flex items-center justify-center gap-0.5 break-keep text-center font-mono text-[10px] leading-tight ${isDone ? 'text-accent-text' : 'text-faint'}`}
+                className={`flex items-center justify-center gap-0.5 break-keep text-center font-mono text-[11px] leading-tight ${isDone ? 'text-accent-text' : 'text-faint'}`}
               >
                 <StatusIcon className="size-2.5 shrink-0" aria-hidden="true" />
                 {/* 狭幅では「・」の直後だけで折り返す（語中の「実装・単/体」折れを防ぐ）。 */}

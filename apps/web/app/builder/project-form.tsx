@@ -442,7 +442,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
 
       {/* 危険操作 */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <span className="font-mono text-[10.5px] text-faint">
+        <span className="font-mono text-[11px] text-faint">
           id: {p.id} · company_id: {p.companyId}
         </span>
         <button type="button" onClick={onDelete} className="btn sm danger">
