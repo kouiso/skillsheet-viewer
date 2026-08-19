@@ -12,6 +12,7 @@ import { flattenTech, formatMonthToken, formatPeriodDisplay, normalizeProcess, P
 import { sanitizeMarkdown, sanitizeScriptAndStyle } from './sanitize-html';
 // tech-area.ts はこのファイルから型のみを取り込むため、実行時の循環は発生しない。
 import { resolveProjectArea } from './tech-area';
+import { collapseSoftBreaks } from './text';
 
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
@@ -751,20 +752,20 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
       lines.push('');
       lines.push('**業務内容**');
       lines.push('');
-      lines.push(asInlineMarkdown(item.duties.trim()));
+      lines.push(asInlineMarkdown(collapseSoftBreaks(item.duties.trim())));
     }
     if (item.acquired.trim()) {
       lines.push('');
       lines.push('**習得スキル・実績**');
       lines.push('');
-      lines.push(asInlineMarkdown(item.acquired.trim()));
+      lines.push(asInlineMarkdown(collapseSoftBreaks(item.acquired.trim())));
     }
     // 案件コメント（ProjectItem.comment）。案件1件あたり数百文字の本文で、
     // 画面では InlineMarkdown で描画されているのに PDF には出力先が無く、
     // 最も情報量の多い文章が丸ごと欠落していた（#242）。
     if (item.comment?.trim()) {
       lines.push('');
-      lines.push(asInlineMarkdown(item.comment.trim()));
+      lines.push(asInlineMarkdown(collapseSoftBreaks(item.comment.trim())));
     }
     lines.push('');
   }

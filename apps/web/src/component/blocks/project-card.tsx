@@ -3,6 +3,7 @@
 import type { CompanyInfo, ProjectItem } from '@skillsheet/db/blocks';
 import { deriveDuration, formatPeriodDisplay, normalizeProcess } from '@skillsheet/db/process';
 import { resolveProjectArea } from '@skillsheet/db/tech-area';
+import { collapseSoftBreaks } from '@skillsheet/db/text';
 import { formatTeamSize } from '@/util/format-team-size';
 import { sanitizeHtml } from '@/util/sanitize-html';
 import { InlineMarkdown } from '../inline-markdown';
@@ -26,7 +27,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
   const area = resolveProjectArea(item.scope, item.tech);
 
   return (
-    <article className="flex min-w-0 flex-col gap-3.5 rounded-[var(--radius-lg)] border border-border bg-card px-[22px] py-5 transition-colors duration-150 hover:border-primary">
+    <article className="flex min-w-0 flex-col gap-6 rounded-[var(--radius-lg)] border border-border bg-card px-7 py-7 transition-colors duration-150 hover:border-primary">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
@@ -71,7 +72,10 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       </div>
 
       {summary && (
-        <InlineMarkdown content={summary} className="break-words text-[13.5px] leading-[1.85] text-muted-foreground" />
+        <InlineMarkdown
+          content={collapseSoftBreaks(summary)}
+          className="break-words text-[15px] leading-[1.9] text-muted-foreground"
+        />
       )}
 
       {tech.length > 0 && (
@@ -103,7 +107,10 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
       {item.acquired && (
         <div className="text-sm">
           <p className="mb-1 font-mono text-[10px] tracking-[0.1em] text-accent-text">≪習得スキル・実績≫</p>
-          <InlineMarkdown content={item.acquired} className="break-words leading-relaxed text-foreground/80" />
+          <InlineMarkdown
+            content={collapseSoftBreaks(item.acquired)}
+            className="break-words leading-relaxed text-foreground/80"
+          />
         </div>
       )}
 
@@ -111,7 +118,7 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
           引用の意味合いは左罫線だけで十分表現できているので italic は外す。 */}
       {item.comment && (
         <InlineMarkdown
-          content={item.comment}
+          content={collapseSoftBreaks(item.comment)}
           className="whitespace-pre-line break-words border-l-2 border-primary pl-3 text-sm text-muted-foreground"
         />
       )}

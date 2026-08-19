@@ -134,7 +134,7 @@ export function ProjectSection({
               total={itemsWithNo.length}
             />
           </div>
-          <div className="grid gap-4 [grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))]">
+          <div className="grid grid-cols-1 gap-5">
             {filtered.map(({ item, no, tech }) => (
               <ProjectCard
                 key={item.id}
