@@ -23,6 +23,10 @@ describe('collapseSoftBreaks', () => {
   it('リスト項目の折り返し行は項目に接続する', () => {
     expect(collapseSoftBreaks('1. 前半\n後半')).toBe('1. 前半 後半');
   });
+
+  it('Setext 見出しの下線はつなげない', () => {
+    expect(collapseSoftBreaks('Setext 見出し\n===\n本文')).toBe('Setext 見出し\n===\n本文');
+  });
 });
 
 describe('unwrapEmphasis', () => {

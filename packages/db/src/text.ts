@@ -1,6 +1,7 @@
 const LIST_LINE = /^\s*(?:[-*•]|\d+[.)])\s/;
+const SETEXT_UNDERLINE = /^\s*(?:={2,}|-{3,})\s*$/;
 
-/** 段落内の単独改行を空白に潰す。空行は段落、リスト行は行のまま残す。 */
+/** 段落内の単独改行を空白に潰す。空行は段落、リスト行と Setext 下線は行のまま残す。 */
 export function collapseSoftBreaks(text: string): string {
   return text
     .replace(/\r\n/g, '\n')
@@ -10,11 +11,12 @@ export function collapseSoftBreaks(text: string): string {
       for (const raw of para.split('\n')) {
         const line = raw.trim();
         if (line.length === 0) continue;
-        if (out.length === 0 || LIST_LINE.test(line)) {
+        const prev = out[out.length - 1] ?? '';
+        if (out.length === 0 || LIST_LINE.test(line) || SETEXT_UNDERLINE.test(line) || SETEXT_UNDERLINE.test(prev)) {
           out.push(line);
           continue;
         }
-        out[out.length - 1] = `${out[out.length - 1]} ${line}`;
+        out[out.length - 1] = `${prev} ${line}`;
       }
       return out.join('\n');
     })
