@@ -1,9 +1,8 @@
-import { TRPCError } from '@trpc/server';
 import { type NextRequest, NextResponse } from 'next/server';
 
 import { createTRPCContext } from '@/server/trpc/context';
 import { createCallerFactory } from '@/server/trpc/init';
-import { shouldLogTRPCError } from '@/server/trpc/log-error';
+import { trpcErrorToResponse } from '@/server/trpc/route-error';
 import { appRouter } from '@/server/trpc/router';
 
 const createCaller = createCallerFactory(appRouter);
@@ -19,12 +18,10 @@ export async function POST(req: NextRequest) {
     const result = await caller.auth.logout();
     return NextResponse.json(result, { headers: responseHeaders });
   } catch (error) {
-    if (error instanceof TRPCError && error.code === 'FORBIDDEN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-    if (!(error instanceof TRPCError) || shouldLogTRPCError(error.code)) {
-      console.error('POST /api/logout: unexpected error:', error);
-    }
-    return NextResponse.json({ error: 'Failed to log out' }, { status: 500 });
+    return trpcErrorToResponse(error, {
+      label: 'POST /api/logout',
+      fallbackMessage: 'Failed to log out',
+      map: { FORBIDDEN: { status: 403, message: 'Forbidden' } },
+    });
   }
 }

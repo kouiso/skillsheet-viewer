@@ -71,3 +71,7 @@ export const MARKDOWN_SANITIZE_SCHEMA = {
 // （実データで確認: 「すべて**.htaccess**で記載」が画面にアスタリスクごと出る、#138）。
 // CJK 向けに flanking 規則を緩めるプラグインを挟んで解決する。
 export const MARKDOWN_REMARK_PLUGINS = [remarkGfm, remarkBreaks, remarkCjkFriendly];
+
+// PDF は remark-breaks を入れない。単独改行を <br> にすると @react-pdf の Text 内 \n と
+// 重なって文字が重なる（D社本文で再現）。GFM と CJK 強調はビューアと同じにする。
+export const PDF_REMARK_PLUGINS = [remarkGfm, remarkCjkFriendly];

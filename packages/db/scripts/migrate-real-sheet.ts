@@ -8,8 +8,7 @@
  *   本番書き込み: pnpm --filter @skillsheet/db exec tsx scripts/migrate-real-sheet.ts --write
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
 import type {
   BlockInput,
@@ -21,32 +20,13 @@ import type {
   SkillEntry,
   SkillsBlockData,
 } from '../src/blocks';
+import { loadScriptEnv } from './env';
 
 const SHEET_TITLE = 'エンジニアスキルシート';
 
-function loadWebEnvLocal(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const envPath = resolve(here, '../../../apps/web/.env.local');
-  // テストからこのモジュールを import したときに throw しないよう、無ければ黙って返す。
-  // 実行に必要な環境変数が欠けている場合は main() 側で明示的に停止する。
-  if (!existsSync(envPath)) return;
-  const content = readFileSync(envPath, 'utf-8');
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-loadWebEnvLocal();
+loadScriptEnv();
 
-// loadWebEnvLocal() より後に評価する。SHEET_ID を先に定数化していると
+// loadScriptEnv() より後に評価する。SHEET_ID を先に定数化していると
 // apps/web/.env.local 側の SHEET_ID 上書きが process.env へ反映される前に
 // 読まれてしまい、無視される（レビュー指摘。--write時に誤ったシートを更新しうる）。
 const SHEET_ID = process.env.SHEET_ID ?? '18a79e66-75e2-47e8-922e-d61342bb5233';

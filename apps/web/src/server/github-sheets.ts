@@ -1,3 +1,9 @@
+// クライアントバンドルに巻き込まれた瞬間にビルドを失敗させる。
+// これまでは「Client Component から import しないこと」というコメントだけが頼りで、
+// 誤って読み込んでも誰も気づけなかった（秘密情報の露出・巨大ドライバの同梱に直結する）。
+// GitHub API 呼び出し。GITHUB_TOKEN を Authorization ヘッダに載せる。
+import 'server-only';
+
 import { Buffer } from 'node:buffer';
 
 export interface SheetMeta {

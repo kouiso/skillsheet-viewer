@@ -7,9 +7,15 @@ interface SelectOrCustomProps {
   options: string[];
   onChange: (next: string) => void;
   placeholder?: string;
+  /**
+   * 読み上げ用の名前。同じ行の他の入力欄には aria-label が付いているのに
+   * この欄だけ無名で、スクリーンリーダーが「コンボボックス」としか読めなかった。
+   * 呼び出し側が必ず渡せるよう必須にしている。
+   */
+  label: string;
 }
 
-export function SelectOrCustom({ value, options, onChange, placeholder }: SelectOrCustomProps) {
+export function SelectOrCustom({ value, options, onChange, placeholder, label }: SelectOrCustomProps) {
   const isKnownValue = value !== '' && options.includes(value);
   // 「その他」選択直後はonChange('')でvalueが空になるため、value由来の判定だけでは
   // 自由入力欄が即座に消えてしまう。選択操作そのものを別状態として保持する。
@@ -33,6 +39,7 @@ export function SelectOrCustom({ value, options, onChange, placeholder }: Select
       <select
         value={selectValue}
         onChange={handleSelectChange}
+        aria-label={label}
         className="min-h-11 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
       >
         <option value="">{placeholder ?? '選択してください'}</option>
@@ -48,6 +55,7 @@ export function SelectOrCustom({ value, options, onChange, placeholder }: Select
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          aria-label={`${label}（自由入力）`}
           placeholder="自由入力"
           className="min-h-11 rounded-md border border-input bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
         />

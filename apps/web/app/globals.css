@@ -93,7 +93,9 @@
   --head-weight: 600;
 
   /* editor/editor.css 由来。--destructive とは色相が違うのでエディタ側は danger を使う。 */
-  --danger: #c2483b;
+  /* #c2483b は bg-danger-soft(#fbf0ef) 上で 4.39:1 と AA(4.5:1) をわずかに割っていた
+     （.pv-hidden バッジ・sync-bar の切断表示が該当）。余裕を持たせて 4.86:1 まで暗くする。 */
+  --danger: #b64437;
   --danger-soft: #fbf0ef;
   --warn: #d4a017;
   --warn-soft: #fdf6e6;
