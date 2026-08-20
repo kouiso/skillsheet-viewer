@@ -50,7 +50,9 @@ interface ItemPatch {
   to: string;
 }
 
-// Q 社（自社サービス事業会社）: 2026 年 7 月末退職を終了月として入れる。
+// 会社期間の修正対象。
+// - Q 社（自社サービス事業会社）: 2026 年 7 月末退職を終了月として入れる。
+// - I 社: ドット表記 `2024.1` を他17社と同じ `YYYY 年 M 月` 形式へそろえる。
 const COMPANY_PATCHES: CompanyPatch[] = [
   {
     id: 'f45d4dc4-98d0-4828-9617-7cb895cd9400',
@@ -106,6 +108,10 @@ async function main(): Promise<void> {
       const patch = COMPANY_PATCHES.find((p) => p.id === company.id);
       if (!patch) return company;
       remainingCompanyIds.delete(patch.id);
+      if (company.period === patch.to) {
+        console.log(`  会社期間 ${patch.label}: すでに "${patch.to}" のため何もしません`);
+        return company;
+      }
       if (company.period !== patch.from) {
         console.warn(
           `  会社 ${patch.label} は現在値が想定と異なるため据え置き（期待 "${patch.from}" / 実際 "${company.period}"）`,
@@ -121,6 +127,10 @@ async function main(): Promise<void> {
       const patch = ITEM_PATCHES.find((p) => p.id === item.id);
       if (!patch) return item;
       remainingItemIds.delete(patch.id);
+      if (item.period === patch.to) {
+        console.log(`  案件期間 ${patch.label}: すでに "${patch.to}" のため何もしません`);
+        return item;
+      }
       if (item.period !== patch.from) {
         console.warn(
           `  案件 ${patch.label} は現在値が想定と異なるため据え置き（期待 "${patch.from}" / 実際 "${item.period}"）`,
