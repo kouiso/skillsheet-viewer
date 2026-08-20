@@ -171,7 +171,10 @@ const BuilderClient = ({
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
   // 競合検出後は自動保存を恒久停止する（競合スパム防止）。state と別に ref でも持ち、
   // 非同期コールバック内から最新値を同期参照できるようにする。
-  const autosaveStoppedRef = useRef(false);
+  // 読み込みに失敗したまま保存すると、sheetId が空のまま既定シートへ書き込まれ、
+  // 読めなかっただけの既存内容を「いま画面にある空同然の内容」で上書きしてしまう。
+  // 失敗が出ている間は自動保存も手動保存も行わない（再読み込みで復帰させる）。
+  const autosaveStoppedRef = useRef(loadFailure !== null);
   // 保存実行中フラグ（自動/手動で共有）。実行中に再度 dirty になった場合は
   // followUpRef を立て、完了後にちょうど 1 回だけ追撃保存する。
   const saveInFlightRef = useRef(false);
@@ -591,6 +594,10 @@ const BuilderClient = ({
   };
 
   const handleSave = () => {
+    if (loadFailure !== null) {
+      toast.error('読み込みに失敗したままなので保存できません。ページを再読み込みしてください。');
+      return;
+    }
     // 自動保存が実行中なら手動保存を開始しない（同じ expectedUpdatedAt を持つ 2 リクエストが
     // 競走して片方が誤 Conflict になる自己競合を防ぐ）。ボタンの disabled は次レンダーまで
     // 反映されないため、描画状態ではなく実行中フラグ自体をここで検査する。
@@ -710,8 +717,8 @@ const BuilderClient = ({
           className="border-b border-danger/40 bg-danger-soft px-4 py-2 text-center text-sm text-danger"
         >
           {loadFailure === 'config'
-            ? '保存済みのシートを読み込めませんでした（サーバー設定が未完了の可能性があります）。このまま編集して保存すると、既存の内容を上書きするおそれがあります。'
-            : '保存済みのシートを読み込めませんでした。このまま編集して保存すると、既存の内容を上書きするおそれがあります。ページを再読み込みしてください。'}
+            ? '保存済みのシートを読み込めませんでした（サーバー設定が未完了の可能性があります）。既存の内容を上書きしないよう、保存は止めてあります。'
+            : '保存済みのシートを読み込めませんでした。既存の内容を上書きしないよう、保存は止めてあります。ページを再読み込みしてください。'}
         </div>
       )}
       {/* テンプレート選択ダイアログ */}
