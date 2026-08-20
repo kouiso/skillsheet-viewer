@@ -701,6 +701,36 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('業務内容テスト');
   });
 
+  it('showDuration: false（既定）では稼働月数を出さない', () => {
+    expect(projectBlockToMarkdown(PROJECT)).toContain('| 期間 | 2020.01〜2022.12 |');
+  });
+
+  it('showDuration: true では稼働月数を期間の後ろに付ける', () => {
+    const md = projectBlockToMarkdown(PROJECT, { showDuration: true });
+    expect(md).toContain('| 期間 | 2020.01〜2022.12（3年） |');
+  });
+
+  it('showDuration: true でも手動入力 duration があればそちらを優先する', () => {
+    const withDuration: ProjectBlockData = {
+      ...PROJECT,
+      items: [{ ...PROJECT.items[0], duration: '手動入力9ヶ月' }],
+    };
+    const md = projectBlockToMarkdown(withDuration, { showDuration: true });
+    expect(md).toContain('（手動入力9ヶ月）');
+  });
+
+  // #245 CodeRabbit指摘: period が空でも手動 duration があれば PDF に出す
+  // （ProjectCard / Timeline は period の有無に関わらず duration を出すため、
+  // period の有無だけで期間行の出し分けを判定すると PDF だけ欠落する）。
+  it('showDuration: true で period が空でも手動 duration があれば期間行を出す', () => {
+    const noPeriod: ProjectBlockData = {
+      ...PROJECT,
+      items: [{ ...PROJECT.items[0], period: '', duration: '手動入力9ヶ月' }],
+    };
+    const md = projectBlockToMarkdown(noPeriod, { showDuration: true });
+    expect(md).toContain('| 期間 | (期間未入力)（手動入力9ヶ月） |');
+  });
+
   it('元シートから取り込んだ値は「担当領域」として出す（本人の言葉なので導出扱いにしない）', () => {
     expect(projectBlockToMarkdown(PROJECT)).toContain('| 担当領域 | 5名 |');
   });

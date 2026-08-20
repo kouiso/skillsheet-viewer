@@ -141,10 +141,12 @@ export function projectBlockToMarkdown(
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
     if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
-    if (item.period) {
-      // ビューア（project-card.tsx / timeline.tsx）と同じ導出ルール: 手動入力 duration があれば優先。
-      const duration = opts?.showDuration ? item.duration?.trim() || deriveDuration(item.period) : '';
-      const periodText = formatPeriodDisplay(item.period);
+    // ビューア（project-card.tsx / timeline.tsx）と同じ導出ルール: 手動入力 duration があれば優先。
+    // period が空でも duration だけ手入力されているケースがあるため、判定を duration 側にも広げる
+    // （period のみで判定すると、そのケースだけ PDF から稼働月数が欠落する）。
+    const duration = opts?.showDuration ? item.duration?.trim() || deriveDuration(item.period) : '';
+    if (item.period || duration) {
+      const periodText = formatPeriodDisplay(item.period) || '(期間未入力)';
       lines.push(`| 期間 | ${escapeCell(duration ? `${periodText}（${duration}）` : periodText)} |`);
     }
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
