@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { InlineMarkdown } from './inline-markdown';
 
@@ -56,5 +56,15 @@ describe('InlineMarkdown', () => {
     expect(container.textContent ?? '').not.toContain('alert(1)');
     expect(container.textContent ?? '').not.toContain('<script>');
     expect(container.textContent ?? '').toContain('A'.repeat(50));
+  });
+
+  it('リンクに HAST の node が DOM 属性として載らない（React の unknown prop 警告を出さない）', () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<InlineMarkdown content="[公式サイト](https://example.com)を参照。" />);
+    const link = screen.getByRole('link', { name: '公式サイト' });
+
+    expect(link.hasAttribute('node')).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

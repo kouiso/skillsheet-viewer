@@ -6,6 +6,14 @@ import { renderWithProviders } from '@/test/render-with-providers';
 
 import CodeBlock from './code-block';
 
+// コピー失敗の通知先。実際の toast は Toaster の描画に依存するので、呼ばれたことだけを見る。
+// renderWithProviders が同じモジュールの Toaster を描画するため、部分モックにする。
+const toastError = vi.fn();
+vi.mock('sonner', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('sonner')>();
+  return { ...actual, toast: { ...actual.toast, error: (...args: unknown[]) => toastError(...args) } };
+});
+
 // framer-motion をモック（CodeBlock 自体は未使用だが、依存の安全のため）
 vi.mock('framer-motion', () => ({
   motion: new Proxy(
@@ -75,6 +83,25 @@ describe('CodeBlock', () => {
       await waitFor(async () => {
         expect(await navigator.clipboard.readText()).toBe('const greeting = "Hello, World!";');
       });
+    });
+
+    it('クリップボードが使えないとき、失敗が toast で伝わりコピー済み表示にならない', async () => {
+      const user = userEvent.setup();
+      // 平文 HTTP 配信や権限拒否では writeText が reject する。捕捉していないと
+      // 未処理の rejection になり、利用者には「押しても何も起きない」だけが残る。
+      const writeText = vi
+        .spyOn(navigator.clipboard, 'writeText')
+        .mockRejectedValue(new DOMException('denied', 'NotAllowedError'));
+
+      renderCodeBlock();
+      await user.click(screen.getByRole('button', { name: 'コードをコピー' }));
+
+      await waitFor(() => {
+        expect(toastError).toHaveBeenCalledWith('コピーできませんでした。手動で選択してコピーしてください。');
+      });
+      // 失敗したのに「コピーしました」表示へ切り替わらない。
+      expect(screen.getByRole('button', { name: 'コードをコピー' })).toBeInTheDocument();
+      writeText.mockRestore();
     });
   });
 

@@ -25,6 +25,8 @@ function findTable(font: Buffer, wanted: string): { offset: number; length: numb
 }
 
 function readFormat4(font: Buffer, at: number, out: Set<number>): void {
+  // format 4 のヘッダは 14 バイト。ここが読めない時点で壊れているので何もしない。
+  if (at + 14 > font.length) return;
   const segCountX2 = font.readUInt16BE(at + 6);
   const segCount = segCountX2 / 2;
   const endAt = at + 14;
@@ -32,6 +34,10 @@ function readFormat4(font: Buffer, at: number, out: Set<number>): void {
   const deltaAt = startAt + segCountX2;
   const rangeAt = deltaAt + segCountX2;
   for (let seg = 0; seg < segCount; seg++) {
+    // segCountX2 は 16bit 生値なので、壊れたフォントでは実体より大きな配列を宣言できる。
+    // readUInt16BE は範囲外で例外を投げるため、readFormat12 と同じく黙って打ち切る
+    // （読める分だけ拾えれば収録表の突き合わせには足りる）。
+    if (rangeAt + seg * 2 + 2 > font.length) break;
     const end = font.readUInt16BE(endAt + seg * 2);
     const start = font.readUInt16BE(startAt + seg * 2);
     if (start > end) continue;

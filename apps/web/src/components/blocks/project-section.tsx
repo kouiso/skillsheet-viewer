@@ -90,7 +90,9 @@ export function ProjectSection({
         projectAreaText(item.scope, item.tech),
         item.role,
         company?.name ?? '',
-        item.summary ?? item.duties,
+        // 表示側（project-card.tsx）は `summary?.trim() || duties`。`??` だと空文字の
+        // summary が採用され、カードに出ている duties の語で検索してもヒットしない。
+        item.summary?.trim() || item.duties,
         ...tech,
       ]
         .join(' ')

@@ -92,6 +92,18 @@ describe('TechFilter', () => {
     expect(onToggle).toHaveBeenCalledWith(ALL[0].name);
   });
 
+  it('未選択から ArrowUp を押すと末尾の候補が選ばれる（末尾から2番目に飛ばない）', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} onToggle={onToggle} />);
+
+    const input = screen.getByLabelText('技術を選ぶ');
+    await user.click(input);
+    await user.keyboard('{ArrowUp}{Enter}');
+
+    expect(onToggle).toHaveBeenCalledWith(ALL[ALL.length - 1].name);
+  });
+
   it('矢印キーで移動中の候補を aria-activedescendant が指す', async () => {
     const user = userEvent.setup();
     render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);

@@ -1,5 +1,6 @@
 import type { Block } from '@skillsheet/db/blocks';
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +25,13 @@ vi.mock('framer-motion', () => ({
   ),
   AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
   useReducedMotion: () => false,
+}));
+
+// Lightbox 本体は jsdom で描画しても開いているスライドを機械的に読み取れないため、
+// 受け取った index と slides をそのまま属性に出すスタブに置き換える。
+vi.mock('yet-another-react-lightbox', () => ({
+  default: ({ open, slides, index }: { open: boolean; slides: { src: string }[]; index: number }) =>
+    open ? <div data-testid="lightbox" data-index={index} data-src={slides[index]?.src ?? ''} /> : null,
 }));
 
 const DETAILS_CONTENT = `## テストセクション
@@ -259,5 +267,20 @@ describe('SkillSheetViewer', () => {
     // 固定 240px の minmax だけだと 320px 幅で列自体がコンテナよりはみ出す
     // （実機/Playwright 計測で確認済み）。min() でコンテナ幅を上限にキャップする。
     expect(grid.className).toContain('minmax(min(240px,100%),1fr)');
+  });
+
+  it('相対パスの画像を押すと、押した画像そのものが Lightbox で開く', async () => {
+    const user = userEvent.setup();
+    // 画面の <img src> は絶対URLへ解決されるので、Markdown の生値（相対パス）と
+    // そのまま比較すると必ず -1 になり、別のスライドが開いていた。
+    const content = '![一枚目](/uploads/a.png)\n\n![二枚目](/uploads/b.png)\n';
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content }} />);
+
+    const second = await screen.findByAltText('二枚目');
+    await user.click(second);
+
+    const lightbox = await screen.findByTestId('lightbox');
+    expect(lightbox).toHaveAttribute('data-index', '1');
+    expect(lightbox.getAttribute('data-src')).toContain('/uploads/b.png');
   });
 });

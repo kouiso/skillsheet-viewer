@@ -109,7 +109,9 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             } else if (e.key === 'ArrowUp' && matches.length > 0) {
               e.preventDefault();
               setOpen(true);
-              setHi((hi - 1 + matches.length) % matches.length);
+              // 未選択は hi = -1。素直に剰余を取ると (-1-1+n)%n = n-2 で末尾から
+              // 2番目が選ばれる。WAI-ARIA の combobox は未選択からの ↑ で末尾へ行く。
+              setHi(hi < 0 ? matches.length - 1 : (hi - 1 + matches.length) % matches.length);
             } else if (e.key === 'Escape') {
               setOpen(false);
               setHi(-1);
