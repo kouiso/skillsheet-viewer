@@ -57,7 +57,7 @@ corepack enable
    pnpm dev
    ```
 
-   - `apps/web` の開発サーバーが起動します
+   - 開発サーバーが起動します
    - デフォルトでは `http://localhost:3000` でアクセス可能
 
 4. **本番ビルド**
@@ -71,13 +71,13 @@ corepack enable
 ## テスト・型チェック
 
 ```bash
-pnpm -r type-check            # 全パッケージ型チェック
-pnpm -r --if-present test     # 全テスト（vitest）
+pnpm type-check            # 全パッケージ型チェック
+pnpm test     # 全テスト（vitest）
 ```
 
 ## 技術スタック
 
-- **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
+- **構成**: リポジトリルート1本の Next.js アプリ（DB 層は `src/db`）
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
 - **言語**: TypeScript
 - **UI**: Tailwind CSS v4 + shadcn/ui（Radix UI）

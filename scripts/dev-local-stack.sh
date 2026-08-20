@@ -52,7 +52,7 @@ ensure_postgres() {
     PGPASSWORD="$PG_PASSWORD" psql -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" -c "create database $DB_NAME" >/dev/null
   # 失敗を握り潰すと、スキーマが欠けたまま "postgres ready" と出てしまう。
   # 「既にある」系のエラーだけは想定内なので、それ以外は止める。
-  for f in "$REPO_ROOT"/packages/db/drizzle/migrations/*.sql; do
+  for f in "$REPO_ROOT"/drizzle/migrations/*.sql; do
     if ! out=$(PGPASSWORD="$PG_PASSWORD" psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" -d "$DB_NAME" -f "$f" 2>&1); then
       if grep -qiE 'already exists' <<<"$out"; then
         continue
@@ -97,7 +97,7 @@ ensure_proxy() {
 }
 
 write_env() {
-  local target="$REPO_ROOT/apps/web/.env.local"
+  local target="$REPO_ROOT/.env.local"
   [ -f "$target" ] && { log ".env.local はあるので触らない"; return; }
   cat > "$target" <<ENV
 DATABASE_URL=postgresql://$PG_USER:$PG_PASSWORD@127.0.0.1:$PG_PORT/$DB_NAME?sslmode=disable
@@ -109,7 +109,7 @@ SKILLSHEET_OWNER_ID=owner
 APP_ENV=development
 REVALIDATE_SECRET=local_revalidate_secret
 ENV
-  log "wrote apps/web/.env.local"
+  log "wrote .env.local"
 }
 
 case "${1:-up}" in
@@ -119,7 +119,7 @@ case "${1:-up}" in
     ensure_proxy
     write_env
     log "done. 次はこれでアプリを起動する:"
-    echo "  cd apps/web && NODE_EXTRA_CA_CERTS=$CERT_DIR/ca-combined.crt npx next start -p 3210"
+    echo "  NODE_EXTRA_CA_CERTS=$CERT_DIR/ca-combined.crt npx next start -p 3210"
     ;;
   down)
     [ -f "$PROXY_PID" ] && kill "$(cat "$PROXY_PID")" 2>/dev/null && rm -f "$PROXY_PID" && log "proxy stopped"

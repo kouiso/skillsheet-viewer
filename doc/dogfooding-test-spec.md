@@ -47,7 +47,7 @@ skillsheet-viewer の全画面を実際に操作し、表示データが正本 D
 | `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_REPO` | GitHub 経由の表示（`/view/[path]`、必須） | B-10b・B-13b-2・B-15b が未実施のまま終わる。値に改行文字（`\n`）が literal に混入していないことも確認する |
 | `GITHUB_BRANCH` | 同上（任意。未設定時は `main`） | 同上 |
 
-`GITHUB_FILE_PATH` は `/view/[path]` の実行時には参照されない（`packages/db/src/skillsheet.ts` の
+`GITHUB_FILE_PATH` は `/view/[path]` の実行時には参照されない（`src/db/skillsheet.ts` の
 DB シード取り込みスクリプト専用）。「GitHub 経由の表示に必要」と誤って案内していたのを訂正（Codex レビュー指摘）。
 | `REVALIDATE_SECRET` | `POST /api/revalidate` の認証 | このエンドポイントの検証ができない |
 
@@ -108,7 +108,7 @@ project ブロック ─┬→ 画面: ProjectSection / project-card.tsx（構�
 PASS は次を全て満たしたときのみ。
 
 1. **データ一致** — 表示値が正本 DB と一致する（一次情報と正本の関係を参照。`skillsheet.md` との差は FAIL 理由にしない）。欠落・重複・順序狂い・文字化けなし。
-   ただし**正準ラベルへの変換が定義されている項目は、変換後の値で比較する**（工程が該当。`packages/db/src/process.ts` の
+   ただし**正準ラベルへの変換が定義されている項目は、変換後の値で比較する**（工程が該当。`src/db/process.ts` の
    `EXACT_MATCH_MAP` が DB の `実装` を表示の `実装・単体` に、`運用・保守` を `保守・運用` に写す）。
    生値で比較すると仕様どおりの変換を不一致として数えてしまうので、**変換前と変換後の両方を記録**して
    次の巡回者が同じ基準で判定できるようにする
@@ -145,12 +145,12 @@ PASS は次を全て満たしたときのみ。
 
 | ID | ケース | 検証内容 |
 |---|---|---|
-| B-1 | `/view` 一覧 | シート枚数・タイトル・更新日時が DB と一致。**3 つの分岐（検索 0 件 / シート 0 件 / 取得失敗）の文言をそれぞれ確認する**。空・取得失敗の分岐を測るときは **`apps/web/.next` を丸ごと消してから `pnpm build` → `pnpm start -p 3210` で単独起動する**（`.next` を消しただけで `pnpm start` するとビルド成果物が無く起動自体に失敗するため、必ず再ビルドを挟む。`.next/cache` だけでは前回の正常結果の控えが残る。Issue #199 / #204、CodeRabbit レビュー指摘で判明） — `getCachedDbSheets()` は引数なしの `unstable_cache`（固定キー）なので、一度正常な一覧を開いた後に `SKILLSHEET_OWNER_ID` / `DATABASE_URL` だけ変えて再起動しても、キャッシュ済みの正常結果が返り続けて**分岐に入っていないのに PASS 証跡が作れてしまう** |
+| B-1 | `/view` 一覧 | シート枚数・タイトル・更新日時が DB と一致。**3 つの分岐（検索 0 件 / シート 0 件 / 取得失敗）の文言をそれぞれ確認する**。空・取得失敗の分岐を測るときは **`.next` を丸ごと消してから `pnpm build` → `pnpm start -p 3210` で単独起動する**（`.next` を消しただけで `pnpm start` するとビルド成果物が無く起動自体に失敗するため、必ず再ビルドを挟む。`.next/cache` だけでは前回の正常結果の控えが残る。Issue #199 / #204、CodeRabbit レビュー指摘で判明） — `getCachedDbSheets()` は引数なしの `unstable_cache`（固定キー）なので、一度正常な一覧を開いた後に `SKILLSHEET_OWNER_ID` / `DATABASE_URL` だけ変えて再起動しても、キャッシュ済みの正常結果が返り続けて**分岐に入っていないのに PASS 証跡が作れてしまう** |
 | B-2 | `/view/db/:id` 初期表示 | トップバーに profile の**氏名と所属会社**が出る（会社名は `ProfileBlockData.company` 由来。取り込みが値を入れていないと `viewer-topbar.tsx` の `{company && …}` で黙って消えるので、DB の profile ブロックに `company` があるかまで見る）。4 ビュー全 ON。**閲覧者コンテキスト**（閲覧コードのみで認証）で、**一覧へ戻る導線があること**と**編集導線の表示可否**も確認する（U-3 / U-4 = #149 の回帰確認。会社名や横スクロールだけ直った後にここを素通りさせない） |
 | B-3 | profile 突合 | 氏名・肩書き・自己PR・強みに加え、**正本 DB の `profile.meta` に存在する全キー**（年齢・勤務形態・最寄り駅・学歴・所属会社・性別・保有資格・得意分野・得意業務の既知8項目に限らず、編集画面で追加された任意キーを含む）を突合する。DB の生キー集合をそのまま画面の表示側と比較すると必ず不一致になる（画面は既知キーを表示ラベルへ変換し、空値は表示しない。`orderedProfileMetaEntries` / `resolveProfileMetaLabel` 参照）ため、**DB 側にも同じ正規化（空値除外・既知キー→表示ラベル変換）を適用したうえで**、正規化後のキー集合・各値を任意キーも含めて全件突合する。**正規化後のキー集合が一致しない、またはいずれかの値が異なれば FAIL**（既知項目だけの部分確認で PASS にしない。DB に空値がある項目を画面に出さなくても欠落扱いにしない。CodeRabbit レビュー指摘）。`skillsheet.md` との差は FAIL 理由にしない（#193 で自由キー方式に変更済み。DB 側で編集画面から追加・削除された項目を欠落扱いにしない）。修正後の回帰でここを素通りさせない |
 | B-4 | stats 突合 | 4 枠の数値と単位が**正本 DB** の記述と矛盾しない |
 | B-5 | skills 突合 | 全カテゴリ × 全スキルの「名称・年数・習熟度」を**正本 DB** のスキル一覧と全件突合。件数も一致させる。`skillsheet.md` の技術スタック表から人が数え直した値との差（表記ゆれ・DB側での追加等）は FAIL 理由にしない（39 件 vs 46 件のような差を誤って欠落扱いにした事例が #199 にある） |
-| B-6 | 案件件数突合 | 画面の会社数・案件数を数え、**正本 DB** と突合する。件数だけでなく**タイトル文字列も全件突合**する（#160 のように件数一致のまま中身が短くなる欠落があるため）。案件タイトルの括弧書きが DB では `scope` に分けて保存され、画面ではタイトル直下に別行で出ることがあるが、情報は保持されているため欠落ではない（#199）。`scope` が空の案件でタイトル直下に「技術領域」行（例: `Web / バックエンド`）が出るのは、その案件の技術スタックからの導出表示であり DB に無い値の捏造ではない（`packages/db/src/tech-area.ts`。導出結果は保存しないので DB 側に対応する値は存在しない） |
+| B-6 | 案件件数突合 | 画面の会社数・案件数を数え、**正本 DB** と突合する。件数だけでなく**タイトル文字列も全件突合**する（#160 のように件数一致のまま中身が短くなる欠落があるため）。案件タイトルの括弧書きが DB では `scope` に分けて保存され、画面ではタイトル直下に別行で出ることがあるが、情報は保持されているため欠落ではない（#199）。`scope` が空の案件でタイトル直下に「技術領域」行（例: `Web / バックエンド`）が出るのは、その案件の技術スタックからの導出表示であり DB に無い値の捏造ではない（`src/db/tech-area.ts`。導出結果は保存しないので DB 側に対応する値は存在しない） |
 | B-7 | 案件詳細突合 | 全案件について 期間・役割・規模・チーム・技術スタック・担当工程・業務内容・習得スキル、**および `summary`（要約）と `comment`（コメント）**を**正本 DB** と突合（サンプリング禁止・全件）。要約とコメントを明示するのは、他の項目が全部合っていてもここだけ前置きが落ちる退行があるため（D-7 / #151） |
 | B-8 | 期間表記 | 期間・年数の表示が**正本 DB** と一致。「継続中」案件の表記 |
 | B-9 | ビュートグル | スキルマトリクス / 工程の俯瞰 / 案件詳細 / タイムライン を個別 OFF→ON。全 OFF 時の見た目 |
@@ -205,7 +205,7 @@ PASS は次を全て満たしたときのみ。
 | D-8 | 自由記述がレイアウトを壊さない | 案件の自由記述（`duties` / `acquired` / `comment`）に何を書いても、案件カードの分割制御が壊れないこと。特に**見出し記法**を書いた場合: PDF 側は「見出し+表とそれに続く内容」を1つの分割不可単位として集めており、自由記述の中に見出しが混ざるとそこで走査が打ち切られ、カード自身がページ境界で割れる（#147 / #194 の再発経路）。判定は「`projectBlockToMarkdown` の出力に、自由記述由来の見出し行が1行も無い」こと。閲覧画面は `h1`〜`h6` を地の文と同じ見た目へ潰しており見出しとして扱っていないため、**PDF だけが構造として扱うのが誤り**であり、修正は PDF 側の分割ロジックではなく markdown 生成側で行う |
 | D-9 | 危険なリンクを成果物に焼き付けない | 自由記述に `[x](javascript:...)` / `[x](file:///...)` を書いた場合、PDF のバイト列に当該 URI が現れないこと（`<Link src>` はそのまま PDF の URI アクションになる）。閲覧画面は rehype-sanitize が href を落とすので**画面だけ見ても検出できない**。逆に `https://` のリンクは注釈として残ること（許可リストが全部落としていない確認）。PDF は第三者へ渡す成果物なので、画面より緩い状態を許さない |
 
-**D-6 〜 D-9 の機械判定**: `apps/web/src/components/pdf/skill-sheet-document.render.node.test.tsx` の
+**D-6 〜 D-9 の機械判定**: `src/components/pdf/skill-sheet-document.render.node.test.tsx` の
 「projectBlockToMarkdown → PDF テキスト層（Issue #242）」が実バイト描画 + pdfjs 抽出で同じ観点を
 自動で見ている。手動ラウンドではこのテストが緑であることを前提に、実データ 1 シート分で
 D-6 の全件判定だけを追加で行う。
@@ -223,7 +223,7 @@ D-6 の全件判定だけを追加で行う。
 | E-3 | キーボード操作 | Tab でフォーカスが見え、主要操作に到達できる。**画面ごとに記録する**（`/login` / `/viewer-auth` / `/view` / `/view/db/:id` / `/builder` / `/builder/preview`）。ビューア 1 画面の結果で他画面を代表させない。測り方は「実キーボードの Tab で当て、ブラーも再フォーカスもせずに `:focus-visible` 時の `outline` / `box-shadow` を読む」。**`outline: auto` を「リング無し」と数えない**（Chromium の既定リングはこの値で出る）。フォーカス時とブラー時の計算値の差分、および要素だけを切り取った画素比較は、それぞれ transition の途中値・ボーダーボックス外のリングで誤判定するので使わない |
 | E-4 | コンソール | 全画面で `console.error` ゼロ。HTTP 404 応答そのものに由来するものは除外し、それ以外は理由を記録する。**E-1 で撮った全ルートの件数をルートごとに書く**（`/view` / `/view/db` / `/view/db/:id` / `/view/db/<存在しない UUID>` / `/builder` / `/builder/preview` / `/login` / `/viewer-auth` / `/view/[path]` / 404）。一部のルートだけ挙げて残りを省略しない（省略した画面で後から `console.error` が出ても緑のままになるため） |
 | E-5a | エラー画面（`error.tsx` / 404） | 意味のある文言で出る |
-| E-5b | DB 取得失敗フォールバック | **`apps/web/.next` を丸ごと消してから `pnpm build` → `pnpm start -p 3210` で単独起動する**（`.next` を消しただけで `pnpm start` するとビルド成果物が無く起動自体に失敗するため、必ず再ビルドを挟む。`.next/cache` だけでは前回取得した内容の控えが残り、DB 到達不能でも 200 のまま古い内容が返り続けて 500 を再現できない。Issue #199 / #204、CodeRabbit レビュー指摘で判明）。**3 経路とも見る** — `/view`（一覧 / `getCachedDbSheets()`）、`/view/db`（デフォルトシート本文 / `getCachedDbSheet()`）、**`/view/db/:id`（実在する詳細 URL / `getCachedDbSheetById()`）**。ログ行も別で、それぞれ `Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`。失敗の原因を分けて検証する。**(a) route-level の設定不備**：`DATABASE_URL` の書式ミス・未マイグレーション（`42P01` 等）にした場合（`SKILLSHEET_OWNER_ID` は含めない。理由は次項）、いずれの経路も `isConfigError()` 判定で `ConfigErrorNotice` を返して **200** になる（原因と対処が分かる文言がブラウザに出る）。**(b) 接続断**：env は present のまま接続先を到達不能にする。設定不備ではなく一時的な接続障害は 3 経路すべてで `console.error`（`Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`）を出した上で `throw err` し、`error.tsx` へ委ねて **500** になる。3 経路でこの 2 種類の応答が食い違っていたら FAIL。**ブラウザとサーバーのログを分けて記録する**（両ページとも catch で `console.error` を必ず出すため、ブラウザ 0 件だけを書くと系全体が無音だったように読める）。**`SKILLSHEET_OWNER_ID` 未設定は本ケースの対象外**：環境変数表（46行目）のとおり `app/layout.tsx` の `assertServerEnv()` が起動直後に throw し、route-level の `try/catch`（`isConfigError()`）には一切到達しない（全ルートが即クラッシュし、200 の `ConfigErrorNotice` にはならない）。この起動時失敗は E-5b の3経路個別検証ではなく、アプリ起動そのものが失敗することを別途 1 回確認すれば足りる（CodeRabbit レビュー指摘: 同じ未設定に対し 46 行目と本行が矛盾する結果を記載していた） |
+| E-5b | DB 取得失敗フォールバック | **`.next` を丸ごと消してから `pnpm build` → `pnpm start -p 3210` で単独起動する**（`.next` を消しただけで `pnpm start` するとビルド成果物が無く起動自体に失敗するため、必ず再ビルドを挟む。`.next/cache` だけでは前回取得した内容の控えが残り、DB 到達不能でも 200 のまま古い内容が返り続けて 500 を再現できない。Issue #199 / #204、CodeRabbit レビュー指摘で判明）。**3 経路とも見る** — `/view`（一覧 / `getCachedDbSheets()`）、`/view/db`（デフォルトシート本文 / `getCachedDbSheet()`）、**`/view/db/:id`（実在する詳細 URL / `getCachedDbSheetById()`）**。ログ行も別で、それぞれ `Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`。失敗の原因を分けて検証する。**(a) route-level の設定不備**：`DATABASE_URL` の書式ミス・未マイグレーション（`42P01` 等）にした場合（`SKILLSHEET_OWNER_ID` は含めない。理由は次項）、いずれの経路も `isConfigError()` 判定で `ConfigErrorNotice` を返して **200** になる（原因と対処が分かる文言がブラウザに出る）。**(b) 接続断**：env は present のまま接続先を到達不能にする。設定不備ではなく一時的な接続障害は 3 経路すべてで `console.error`（`Failed to fetch DB sheets:` / `Failed to load DB skill sheet:` / `Failed to load sheet:`）を出した上で `throw err` し、`error.tsx` へ委ねて **500** になる。3 経路でこの 2 種類の応答が食い違っていたら FAIL。**ブラウザとサーバーのログを分けて記録する**（両ページとも catch で `console.error` を必ず出すため、ブラウザ 0 件だけを書くと系全体が無音だったように読める）。**`SKILLSHEET_OWNER_ID` 未設定は本ケースの対象外**：環境変数表（46行目）のとおり `app/layout.tsx` の `assertServerEnv()` が起動直後に throw し、route-level の `try/catch`（`isConfigError()`）には一切到達しない（全ルートが即クラッシュし、200 の `ConfigErrorNotice` にはならない）。この起動時失敗は E-5b の3経路個別検証ではなく、アプリ起動そのものが失敗することを別途 1 回確認すれば足りる（CodeRabbit レビュー指摘: 同じ未設定に対し 46 行目と本行が矛盾する結果を記載していた） |
 
 ## 5. 記録フォーマット
 

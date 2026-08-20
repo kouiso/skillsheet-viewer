@@ -67,6 +67,6 @@ storybook-static/
 # Playwright
 playwright-report/
 test-results/
-apps/web/playwright/.auth/
+playwright/.auth/
 # Added by code-review-graph
 .code-review-graph/
