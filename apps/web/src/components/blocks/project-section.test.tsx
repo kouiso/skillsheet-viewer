@@ -82,3 +82,17 @@ describe('ProjectSection の検索', () => {
     expect(screen.queryByText('案件A')).not.toBeInTheDocument();
   });
 });
+
+describe('ProjectSection のレイアウト', () => {
+  it('案件カードは1列に並べる（多列だとカード1枚が窄まって本文が読めない）', () => {
+    const { container } = render(<ProjectSection data={DATA} showProcess={false} showTimeline={false} />);
+
+    const cards = container.querySelectorAll('article');
+    expect(cards).toHaveLength(2);
+
+    // カードの親がカード列の grid。ブレークポイント付きの多列指定が復活していないかも見る。
+    const grid = cards[0]?.parentElement;
+    expect(grid?.className).toContain('grid-cols-1');
+    expect(grid?.className).not.toMatch(/grid-cols-[2-9]/);
+  });
+});

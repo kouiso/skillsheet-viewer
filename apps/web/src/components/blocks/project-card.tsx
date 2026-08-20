@@ -25,50 +25,54 @@ export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCard
   const duration = sanitizeHtml(item.duration?.trim() || deriveDuration(item.period));
   const summary = item.summary?.trim() || item.duties;
   const area = resolveProjectArea(item.scope, item.tech);
+  const meta = [
+    item.role && sanitizeHtml(item.role),
+    sanitizeHtml(company?.name),
+    item.team && formatTeamSize(item.team),
+    duration,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
     <article className="flex min-w-0 flex-col gap-6 rounded-[var(--radius-lg)] border border-border bg-card px-7 py-7 transition-colors duration-150 hover:border-primary">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="mb-1 flex items-center gap-2">
-            {/* bg-primary は on-accent と組むとライトテーマで3.74と WCAG AA 未達（Issue #198）。 */}
-            <span className="rounded-[var(--radius)] bg-primary-dark px-1.5 py-px font-mono text-[11px] text-on-accent">
-              {String(no).padStart(2, '0')}
-            </span>
-            <span className="font-mono text-[11.5px] text-faint">
-              {formatPeriodDisplay(item.period) || '(期間未入力)'}
-            </span>
-          </div>
-          <h3 className="text-[17px] leading-snug text-foreground">{sanitizeHtml(item.title) || '(タイトル未入力)'}</h3>
-          {/* 導出値には必ず「技術領域」を添える。タイトル直下という位置だけで読み手は
+      <div className="min-w-0">
+        <div className="mb-1 flex items-center gap-2">
+          {/* bg-primary は on-accent と組むとライトテーマで3.74と WCAG AA 未達（Issue #198）。 */}
+          <span className="rounded-[var(--radius)] bg-primary-dark px-1.5 py-px font-mono text-[11px] text-on-accent">
+            {String(no).padStart(2, '0')}
+          </span>
+          <span className="font-mono text-[11.5px] text-faint">
+            {formatPeriodDisplay(item.period) || '(期間未入力)'}
+          </span>
+        </div>
+        <h3 className="text-[17px] leading-snug text-foreground">{sanitizeHtml(item.title) || '(タイトル未入力)'}</h3>
+        {/* 導出値には必ず「技術領域」を添える。タイトル直下という位置だけで読み手は
               「担当した領域」と受け取るが、技術スタックから言えるのは「その技術がどの領域か」まで。
               取り込んだ scope は本人の言葉なのでラベルを付けない（tech-area.ts 参照）。 */}
-          {area.text && (
-            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
-              {area.derived && <span className="kicker mr-1.5">技術領域</span>}
-              {sanitizeHtml(area.text)}
-            </p>
-          )}
-          {/* 会社概要文（CompanyInfo.note）。従来どこにも描画先が無く、ビューア・PDF・バックアップの
+        {area.text && (
+          <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+            {area.derived && <span className="kicker mr-1.5">技術領域</span>}
+            {sanitizeHtml(area.text)}
+          </p>
+        )}
+        {/* 役割・会社・人数・期間の1行。以前はヘッダーを flex-wrap の2カラムにして役割を
+              右上に置いていたが、タイトルが長い案件だけ右カラムが2行目へ落ち、役割の位置が
+              案件ごとに変わって見えていた。1カラムのメタ行に畳むと位置が構造的に固定される。 */}
+        {meta && (
+          <p className="mt-1 font-mono text-[11.5px] text-faint">
+            {item.role && <span className="kicker mr-1.5">役割</span>}
+            {meta}
+          </p>
+        )}
+        {/* 会社概要文（CompanyInfo.note）。従来どこにも描画先が無く、ビューア・PDF・バックアップの
               全経路で欠落していた（#139）。projectBlockToMarkdown 側も同じ位置づけで出力する。
               空白のみの値は projectBlockToMarkdown と同じく trim() 後に判定する。 */}
-          {company?.note?.trim() && (
-            <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/80">
-              {sanitizeHtml(company.note.trim())}
-            </p>
-          )}
-        </div>
-        {/* shrink-0 だと flex item の既定 min-width:auto（コンテンツの折返し前の幅が下限）が効き、
-            320px では役割・会社名の長文が折り返さずカード幅を押し広げていた（#143）。
-            min-w-0 に変えて行として折り返せるようにする。 */}
-        <div className="min-w-0 text-right">
-          {item.role && <div className="text-[12.5px] text-foreground">{sanitizeHtml(item.role)}</div>}
-          <div className="mt-0.5 font-mono text-[11.5px] text-faint">
-            {[sanitizeHtml(company?.name), item.team && formatTeamSize(item.team), duration]
-              .filter(Boolean)
-              .join(' · ')}
-          </div>
-        </div>
+        {company?.note?.trim() && (
+          <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground/80">
+            {sanitizeHtml(company.note.trim())}
+          </p>
+        )}
       </div>
 
       {summary && (
