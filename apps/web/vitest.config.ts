@@ -1,20 +1,16 @@
-import path from 'node:path';
+import { defineConfig, mergeConfig } from 'vitest/config';
 
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { sharedVitestConfig } from './vitest.shared';
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(import.meta.dirname, './src'),
+export default mergeConfig(
+  sharedVitestConfig,
+  defineConfig({
+    test: {
+      environment: 'jsdom',
+      setupFiles: './src/test/setup.ts',
+      css: true,
+      // PDF の実バイト描画は node 環境（vitest.config.pdf.ts）側で行う。
+      exclude: ['e2e/**', '**/node_modules/**', '**/dist/**', '**/*.node.test.tsx'],
     },
-  },
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    setupFiles: './src/test/setup.ts',
-    css: true,
-    exclude: ['e2e/**', '**/node_modules/**', '**/dist/**', '**/*.node.test.tsx'],
-  },
-});
+  }),
+);

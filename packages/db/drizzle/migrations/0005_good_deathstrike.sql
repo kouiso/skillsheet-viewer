@@ -1,0 +1,1 @@
+CREATE INDEX "viewer_login_attempt_expiry_idx" ON "viewer_login_attempt" USING btree ("locked_until","window_started_at");

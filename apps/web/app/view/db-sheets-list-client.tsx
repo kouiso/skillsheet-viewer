@@ -4,8 +4,8 @@ import type { SheetSummary } from '@skillsheet/db';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
-import Header from '@/component/header';
+import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/components/config-error-notice';
+import Header from '@/components/header';
 import { Input } from '@/components/ui/input';
 import type { ConfigErrorKind } from '@/util/is-config-error';
 
@@ -56,9 +56,14 @@ const DbSheetsListClient = ({
       <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
         <div className="mb-4 flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            />
+            {/* placeholder は入力すると消えるため読み上げ名にならない。閲覧側の技術フィルタと同じく aria-label を明示する。 */}
             <Input
               className="pl-9"
+              aria-label="シート名で検索"
               placeholder="シート名で検索..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}

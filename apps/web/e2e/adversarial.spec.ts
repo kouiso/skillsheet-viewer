@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { createRealVolumeDemoSheet, deleteSheet, getSkillSheetById, listSheets } from '@skillsheet/db';
+import { deleteSheet, getSkillSheetById, listSheets } from '@skillsheet/db';
+import { createRealVolumeDemoSheet } from '@skillsheet/db/fixtures';
 import { authFile, login } from './auth';
 
 test.use({ storageState: authFile });
@@ -55,6 +56,12 @@ async function capture(page: Page, fileName: string, fullPage = true) {
   fs.mkdirSync(path.dirname(target), { recursive: true });
   await page.screenshot({ path: target, fullPage });
   return target;
+}
+
+/** PNG の IHDR（先頭 8 バイトのシグネチャ直後）から幅・高さを読む。外部コマンドに依存しない。 */
+function pngSize(file: string): string {
+  const head = fs.readFileSync(file).subarray(0, 24);
+  return `${head.readUInt32BE(16)}x${head.readUInt32BE(20)}`;
 }
 
 function collectErrors(page: Page) {
@@ -406,11 +413,11 @@ test('F. PDF stress', async ({ browser }) => {
   const pngs = fs.readdirSync(tmpDir).filter((f) => f.startsWith(`stress-${RUN_ID}-`) && f.endsWith('.png'));
   expect(pngs.length).toBe(pageCount);
   // all same size
+  // ImageMagick(identify) は環境によって入っていないため、PNG の IHDR から直接読む。
   const sizes = new Set<string>();
   for (const f of pngs) {
     const imgPath = path.join(tmpDir, f);
-    const size = execSync(`identify -format '%wx%h' "${imgPath}"`, { encoding: 'utf-8' }).trim();
-    sizes.add(size);
+    sizes.add(pngSize(imgPath));
     fs.copyFileSync(imgPath, path.join(reportDir, f));
   }
   expect(sizes.size).toBe(1);
@@ -493,7 +500,10 @@ test('H. mobile tap target verification', async ({ browser }) => {
               w: r.width,
               h: r.height,
               visible,
-              small: visible && (r.width < 44 || r.height < 44),
+              // getBoundingClientRect はサブピクセルを返す。min-h-11（44px）の要素が
+              // 43.999755859375 のように丸め下がることがあり、厳密な `< 44` だと
+              // 実装が正しいのに落ちる（実測でこの値が出た）。0.5px の許容を置く。
+              small: visible && (r.width < 43.5 || r.height < 43.5),
             };
           })
           .filter((x) => x.small),

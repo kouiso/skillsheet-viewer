@@ -467,6 +467,30 @@ describe('BuilderClient 自動保存', () => {
     expect(mockSave).toHaveBeenCalledTimes(1);
   });
 
+  // 読み込みに失敗したまま保存すると、sheetId が空のまま既定シートを上書きしてしまう。
+  it('読み込みに失敗しているときは自動保存も手動保存もしない', async () => {
+    render(
+      <BuilderClient
+        initialBlocks={mdBlocks([''])}
+        initialTitle=""
+        sheets={[]}
+        activeSheetId=""
+        loadFailure="unknown"
+      />,
+    );
+    typeMarkdown('## 事故で入力してしまった1行');
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockSave).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockSave).not.toHaveBeenCalled();
+  });
+
   it('空ビルダーの自動保存は sheetId を省略して新規保存する', async () => {
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" sheets={[]} activeSheetId="" />);
     typeMarkdown('## B');

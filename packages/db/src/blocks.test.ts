@@ -320,6 +320,17 @@ describe('blockJoinSeparator — 連結セパレータの単一の真実', () =>
     // `|` 始まりの地の文（レビュー指摘: ASCII 表現やエスケープされたテーブルサンプル等）を
     // テーブルと誤認して \n\n に切り替えると、無損失ラウンドトリップの前提が崩れる。
     expect(blockJoinSeparator('markdown', 'markdown', '| これはテーブルではない普通の文章です')).toBe('\n');
+  });
+
+  // GFM は外側の `|` を省略できる。省略した表が段落へ飲み込まれると表として描画されない。
+  it('外側の `|` を省いた表も表として扱う', () => {
+    expect(blockJoinSeparator('markdown', 'markdown', 'a | b\n--- | ---')).toBe('\n\n');
+    expect(blockJoinSeparator('markdown', 'markdown', 'a | b\n--- | --- |')).toBe('\n\n');
+  });
+
+  // `a | b` の次が `---`（1セル）は Setext 見出しであって表ではない。
+  it('セル数が合わない `---` は Setext 見出しとして扱う', () => {
+    expect(blockJoinSeparator('markdown', 'markdown', 'a | b\n---')).toBe('\n');
     expect(blockJoinSeparator('markdown', 'markdown', '|not a table|\n次の行も普通の文章')).toBe('\n');
   });
 });
@@ -494,6 +505,16 @@ describe('isProfileBlockData', () => {
     expect(isProfileBlockData({ ...PROFILE, meta: null })).toBe(false);
   });
 
+  // meta の値まで見ないと、profileBlockToMarkdown の trim() が実行時に落ちる。
+  it('meta の値が文字列でなければ拒否', () => {
+    expect(isProfileBlockData({ ...PROFILE, meta: { age: 30 } })).toBe(false);
+    expect(isProfileBlockData({ ...PROFILE, meta: { age: null } })).toBe(false);
+  });
+
+  it('meta が配列なら拒否', () => {
+    expect(isProfileBlockData({ ...PROFILE, meta: [] })).toBe(false);
+  });
+
   it('null は拒否', () => {
     expect(isProfileBlockData(null)).toBe(false);
   });
@@ -528,6 +549,26 @@ describe('isProjectBlockData', () => {
 
   it('items が配列でなければ拒否', () => {
     expect(isProjectBlockData({ companies: [], items: 'bad' })).toBe(false);
+  });
+
+  // 必須フィールドを見落とすと、projectBlockToMarkdown の trim() が実行時に落ちる。
+  it('会社の必須項目が文字列でなければ拒否', () => {
+    const [company] = PROJECT.companies;
+    expect(isProjectBlockData({ ...PROJECT, companies: [{ ...company, kind: 1 }] })).toBe(false);
+    expect(isProjectBlockData({ ...PROJECT, companies: [{ ...company, period: null }] })).toBe(false);
+    expect(isProjectBlockData({ ...PROJECT, companies: [{ ...company, note: undefined }] })).toBe(false);
+  });
+
+  it('案件の必須項目が文字列でなければ拒否', () => {
+    const [item] = PROJECT.items;
+    expect(isProjectBlockData({ ...PROJECT, items: [{ ...item, title: 1 }] })).toBe(false);
+    expect(isProjectBlockData({ ...PROJECT, items: [{ ...item, duties: null }] })).toBe(false);
+    expect(isProjectBlockData({ ...PROJECT, items: [{ ...item, acquired: undefined }] })).toBe(false);
+  });
+
+  it('process の要素が文字列でなければ拒否', () => {
+    const [item] = PROJECT.items;
+    expect(isProjectBlockData({ ...PROJECT, items: [{ ...item, process: [1] }] })).toBe(false);
   });
 
   it('null は拒否', () => {
@@ -623,6 +664,20 @@ describe('profileBlockToMarkdown', () => {
     const md = profileBlockToMarkdown({ ...PROFILE, meta: { ...PROFILE.meta, 参考: 'Reference <URL> here' } });
     expect(md).toContain('Reference &lt;URL&gt; here');
     expect(md).not.toContain('Reference <URL> here');
+  });
+
+  // 構造化ビューアはセルを素のテキストとして出す。markdown/PDF 側だけリンクや強調に
+  // 化けると、同じデータの見え方が経路ごとに食い違う。
+  it('セルの markdown インライン記法をエスケープする', () => {
+    const md = profileBlockToMarkdown({
+      ...PROFILE,
+      meta: { ...PROFILE.meta, 参考: '[表示名](URL) *強調* `code` ~打消~ ![img](u)' },
+    });
+    expect(md).toContain('\\[表示名\\](URL)');
+    expect(md).toContain('\\*強調\\*');
+    expect(md).toContain('\\`code\\`');
+    expect(md).toContain('\\~打消\\~');
+    expect(md).toContain('\\!\\[img\\](u)');
   });
 });
 

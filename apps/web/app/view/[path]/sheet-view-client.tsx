@@ -4,9 +4,9 @@ import type { Block } from '@skillsheet/db/blocks';
 import { blocksToMarkdown } from '@skillsheet/db/blocks';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import Header from '@/component/header';
-import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
+import Header from '@/components/header';
+import SkillSheetViewer from '@/components/skill-sheet-viewer';
+import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
 
 interface SheetViewClientProps {
   title: string;
@@ -76,7 +76,7 @@ const SheetViewClient = ({
 
       const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
         import('@react-pdf/renderer'),
-        import('@/component/pdf-export'),
+        import('@/components/pdf-export'),
       ]);
 
       // 画面の稼働月数設定を PDF にも反映する。blocks があればそこから組み直し、
