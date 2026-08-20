@@ -331,6 +331,11 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
           {blocks ? (
             <div className={isDashboard ? 'space-y-8 sm:space-y-12' : 'space-y-0'}>
               {groupedBlocks.map((group) => {
+                // 1枚のシートに project ブロックが複数あると、案件詳細・タイムラインの見出し id が
+                // 重複して目次のスクロール先が壊れる。複数あるときだけブロック id で分ける
+                // （1つだけの通常ケースでは id を変えない）。
+                const multipleProjectBlocks =
+                  groupedBlocks.filter((g) => g.kind !== 'skills' && g.block.type === 'project').length > 1;
                 if (group.kind === 'skills') {
                   if (!showView('skills')) return null;
                   const key = group.blocks.map((b) => b.id).join('-');
@@ -369,6 +374,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
                     <ProjectSection
                       key={block.id}
                       data={block.data}
+                      headingIdSuffix={multipleProjectBlocks ? block.id : undefined}
                       showProcess={showView('process')}
                       showProjects={showView('projects')}
                       showTimeline={showView('timeline')}

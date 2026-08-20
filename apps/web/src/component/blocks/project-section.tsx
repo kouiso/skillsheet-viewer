@@ -13,6 +13,11 @@ import { Timeline } from './timeline';
 
 interface ProjectSectionProps {
   data: ProjectBlockData;
+  /**
+   * 1枚のシートに project ブロックが複数あるときに見出しの id を分けるための接尾辞。
+   * 省略すると kicker 由来の id をそのまま使う（ブロックが1つだけの通常ケース）。
+   */
+  headingIdSuffix?: string;
   /** 工程俯瞰セクションを表示するか（ビュートグル）。 */
   showProcess?: boolean;
   /** 案件詳細セクションを表示するか（ビュートグル）。 */
@@ -41,6 +46,7 @@ function FadeUpSection({ children }: { children: ReactNode }) {
 // ビュー層としてのみ実装する。
 export function ProjectSection({
   data,
+  headingIdSuffix,
   showProcess = true,
   showProjects = true,
   showTimeline = true,
@@ -114,14 +120,14 @@ export function ProjectSection({
     <div className="space-y-10">
       {showProcess && (
         <FadeUpSection key="process">
-          <SectionHead kicker="Process Coverage" title="担当工程の俯瞰" />
+          <SectionHead kicker="Process Coverage" title="担当工程の俯瞰" idSuffix={headingIdSuffix} />
           <ProcessOverview items={visible.items} />
         </FadeUpSection>
       )}
 
       {showProjects && (
         <FadeUpSection key="projects">
-          <SectionHead kicker="Projects" title="案件詳細" />
+          <SectionHead kicker="Projects" title="案件詳細" idSuffix={headingIdSuffix} />
           <div className="mb-5">
             <TechFilter
               all={allTech}
@@ -156,7 +162,7 @@ export function ProjectSection({
 
       {showTimeline && (
         <FadeUpSection key="timeline">
-          <SectionHead kicker="Career Timeline" title="案件タイムライン" />
+          <SectionHead kicker="Career Timeline" title="案件タイムライン" idSuffix={headingIdSuffix} />
           {/* Timeline は 0 件で null を返すため、見出しだけが残って下が真っ白になっていた。
               案件詳細と同じ空状態を出して「絞り込みの結果ゼロ件」だと分かるようにする。 */}
           {timelineItems.length === 0 ? (

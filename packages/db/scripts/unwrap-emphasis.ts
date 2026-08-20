@@ -5,38 +5,16 @@
  *   ドライラン: pnpm --filter @skillsheet/db exec tsx scripts/unwrap-emphasis.ts
  *   書き込み:   pnpm --filter @skillsheet/db exec tsx scripts/unwrap-emphasis.ts --write
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { isProjectBlockData, type ProjectItem } from '../src/blocks';
 import { unwrapEmphasis } from '../src/text';
+import { loadScriptEnv } from './env';
 
 const SHEET_ID = '18a79e66-75e2-47e8-922e-d61342bb5233';
 const FIELDS = ['summary', 'duties', 'acquired', 'comment'] as const;
 
-function loadWebEnvLocal(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [resolve(here, '../../../apps/web/.env.local'), resolve(here, '../../../.env.local')];
-  for (const envPath of candidates) {
-    if (!existsSync(envPath)) continue;
-    const content = readFileSync(envPath, 'utf-8');
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eqIndex = trimmed.indexOf('=');
-      if (eqIndex === -1) continue;
-      const key = trimmed.slice(0, eqIndex).trim();
-      let value = trimmed.slice(eqIndex + 1).trim();
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      if (process.env[key] === undefined) process.env[key] = value;
-    }
-    return;
-  }
-}
-loadWebEnvLocal();
+loadScriptEnv();
 
 function unwrapItem(item: ProjectItem): { item: ProjectItem; hits: string[] } {
   const hits: string[] = [];

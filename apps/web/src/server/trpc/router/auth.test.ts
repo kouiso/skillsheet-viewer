@@ -131,8 +131,8 @@ describe('閲覧コードの総当たり対策', () => {
     );
   }
 
-  it(`失敗が続くと ${MAX_FAILURES} 回目で TOO_MANY_REQUESTS になり、以降は照合にも進めない`, async () => {
-    for (let i = 1; i < MAX_FAILURES; i++) {
+  it(`照合できるのは ${MAX_FAILURES} 回までで、それを超えると TOO_MANY_REQUESTS になる`, async () => {
+    for (let i = 1; i <= MAX_FAILURES; i++) {
       const { caller } = attackerCaller();
       await expect(caller.login({ code: `wrong-${i}` })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     }
@@ -146,8 +146,22 @@ describe('閲覧コードの総当たり対策', () => {
     await expect(after.login({ code: 'correct-code' })).rejects.toMatchObject({ code: 'TOO_MANY_REQUESTS' });
   });
 
+  // 並列に投げても、コード照合まで進めるのは上限回数までであること。
+  it('同時に投げても照合まで進めるのは上限回数まで', async () => {
+    const results = await Promise.all(
+      Array.from({ length: MAX_FAILURES * 3 }, (_, i) =>
+        attackerCaller()
+          .caller.login({ code: `concurrent-${i}` })
+          .then(() => 'ok')
+          .catch((err: { code?: string }) => err.code ?? 'unknown'),
+      ),
+    );
+    expect(results.filter((code) => code === 'UNAUTHORIZED')).toHaveLength(MAX_FAILURES);
+    expect(results.filter((code) => code === 'TOO_MANY_REQUESTS')).toHaveLength(MAX_FAILURES * 2);
+  });
+
   it('別の送り元は巻き込まれない', async () => {
-    for (let i = 0; i < MAX_FAILURES; i++) {
+    for (let i = 0; i <= MAX_FAILURES; i++) {
       const { caller } = attackerCaller();
       await caller.login({ code: `wrong-${i}` }).catch(() => {});
     }

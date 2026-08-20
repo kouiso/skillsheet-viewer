@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   checkViewerLoginRateLimit,
   clearViewerLoginRateLimit,
-  recordViewerLoginFailureBoth,
+  reserveViewerLoginAttemptBoth,
   resetViewerLoginRateLimitMemory,
 } from './viewer-rate-limit';
 
@@ -27,13 +27,13 @@ describe('閲覧コードの回数制限（DB へ届かない場合のプロセ�
     expect(state.remainingAttempts).toBe(MAX_FAILURES);
   });
 
-  it(`失敗が ${MAX_FAILURES} 回に達するとロックする`, async () => {
+  it(`${MAX_FAILURES} 回までは照合に進め、それを超えると弾く`, async () => {
     const key = 'ip:1.2.3.4';
-    for (let i = 1; i < MAX_FAILURES; i++) {
-      const state = await recordViewerLoginFailureBoth(key);
-      expect(state.locked, `${i} 回目でロックされてはいけない`).toBe(false);
+    for (let i = 1; i <= MAX_FAILURES; i++) {
+      const state = await reserveViewerLoginAttemptBoth(key);
+      expect(state.locked, `${i} 回目は照合に進めるべき`).toBe(false);
     }
-    const locked = await recordViewerLoginFailureBoth(key);
+    const locked = await reserveViewerLoginAttemptBoth(key);
     expect(locked.locked).toBe(true);
     expect(locked.retryAfterSeconds).toBeGreaterThan(0);
 
@@ -41,8 +41,18 @@ describe('閲覧コードの回数制限（DB へ届かない場合のプロセ�
     await expect(checkViewerLoginRateLimit(key)).resolves.toMatchObject({ locked: true });
   });
 
+  // 「確認 → 照合 → 記録」の3段だと、並列リクエストが全部同じ「未ロック」を読んで
+  // 上限を超えた数の照合まで進んでしまう。枠の消費が1回で済んでいることを確かめる。
+  it('同時に投げても照合まで進めるのは上限回数まで', async () => {
+    const key = 'ip:9.9.9.9';
+    const results = await Promise.all(
+      Array.from({ length: MAX_FAILURES * 3 }, () => reserveViewerLoginAttemptBoth(key)),
+    );
+    expect(results.filter((r) => !r.locked)).toHaveLength(MAX_FAILURES);
+  });
+
   it('送り元が違えば互いに巻き込まない', async () => {
-    for (let i = 0; i < MAX_FAILURES; i++) await recordViewerLoginFailureBoth('ip:1.1.1.1');
+    for (let i = 0; i <= MAX_FAILURES; i++) await reserveViewerLoginAttemptBoth('ip:1.1.1.1');
 
     await expect(checkViewerLoginRateLimit('ip:1.1.1.1')).resolves.toMatchObject({ locked: true });
     await expect(checkViewerLoginRateLimit('ip:2.2.2.2')).resolves.toMatchObject({ locked: false });
@@ -50,8 +60,8 @@ describe('閲覧コードの回数制限（DB へ届かない場合のプロセ�
 
   it('認証に成功した相手は記録が消えて元に戻る', async () => {
     const key = 'ip:3.3.3.3';
-    await recordViewerLoginFailureBoth(key);
-    await recordViewerLoginFailureBoth(key);
+    await reserveViewerLoginAttemptBoth(key);
+    await reserveViewerLoginAttemptBoth(key);
     await clearViewerLoginRateLimit(key);
 
     await expect(checkViewerLoginRateLimit(key)).resolves.toMatchObject({
@@ -63,7 +73,7 @@ describe('閲覧コードの回数制限（DB へ届かない場合のプロセ�
   it('ロック時間が過ぎれば再び試せる', async () => {
     const key = 'ip:4.4.4.4';
     const now = 1_000_000;
-    for (let i = 0; i < MAX_FAILURES; i++) await recordViewerLoginFailureBoth(key, now);
+    for (let i = 0; i <= MAX_FAILURES; i++) await reserveViewerLoginAttemptBoth(key, now);
     await expect(checkViewerLoginRateLimit(key, now)).resolves.toMatchObject({ locked: true });
 
     // ロック（15分）と集計窓（10分）の両方を越えた時点。

@@ -62,12 +62,18 @@ export const realVolumeDemoFixtures = pgTable(
  * key は「送り元 IP のハッシュ」または IP を取れない場合の固定キー。生の IP は保存しない
  * （必要なのは同一送り元かどうかの判定だけで、IP そのものは要らない）。
  */
-export const viewerLoginAttempt = pgTable('viewer_login_attempt', {
-  key: text('key').primaryKey(),
-  failureCount: integer('failure_count').notNull().default(0),
-  windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull().default(sql`now()`),
-  lockedUntil: timestamp('locked_until', { withTimezone: true }),
-});
+export const viewerLoginAttempt = pgTable(
+  'viewer_login_attempt',
+  {
+    key: text('key').primaryKey(),
+    failureCount: integer('failure_count').notNull().default(0),
+    windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull().default(sql`now()`),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
+  },
+  // 攻撃側は送り元を変えられるので、放っておくと行が増え続ける。
+  // 期限切れ行の掃除（purgeExpiredViewerLoginAttempts）が全表走査にならないよう索引を張る。
+  (table) => [index('viewer_login_attempt_expiry_idx').on(table.lockedUntil, table.windowStartedAt)],
+);
 
 /**
  * Better Auth コアテーブル（user/session/account/verification）。

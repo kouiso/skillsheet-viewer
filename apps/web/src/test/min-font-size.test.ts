@@ -26,7 +26,10 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-const files = ROOTS.flatMap((root) => collectFiles(root));
+// テストファイル自身のコメントに例として書いた数値を拾わないよう除外する。
+const files = ROOTS.flatMap((root) => collectFiles(root)).filter(
+  (file) => !file.endsWith('.test.ts') && !file.endsWith('.test.tsx'),
+);
 
 /** `font-size: 9.5px;` と Tailwind の `text-[10px]` の両方を拾う。 */
 const PATTERNS = [/font-size:\s*(\d+(?:\.\d+)?)px/g, /text-\[(\d+(?:\.\d+)?)px\]/g];

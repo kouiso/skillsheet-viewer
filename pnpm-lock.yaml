@@ -21,6 +21,10 @@ patchedDependencies:
 importers:
 
   .:
+    dependencies:
+      ws:
+        specifier: ^8.18.0
+        version: 8.21.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.0

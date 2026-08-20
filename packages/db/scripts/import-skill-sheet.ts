@@ -1,37 +1,8 @@
-/**
- * kouiso/skill-sheet の skillsheet.md を Markdown ブロックとして DB にインポートする。
- *
- * 実行:
- *   GITHUB_TOKEN=... pnpm --filter @skillsheet/db exec tsx scripts/import-skill-sheet.ts
- *
- * 既存の `エンジニアスキルシート` タイトルがあれば削除して新規作成する。
- */
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
 import { isBlockInputEmpty, splitMarkdownIntoBlocks } from '../src/blocks';
 import { createSheet, deleteSheet, fetchMarkdownFromGitHub, getGitHubSeedConfig, listSheets } from '../src/skillsheet';
+import { loadScriptEnv } from './env';
 
-function loadWebEnvLocal(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const envPath = resolve(here, '../../../apps/web/.env.local');
-  if (!existsSync(envPath)) throw new Error(`apps/web/.env.local が見つかりません: ${envPath}`);
-  const content = readFileSync(envPath, 'utf-8');
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-loadWebEnvLocal();
+loadScriptEnv({ required: true });
 
 const SHEET_TITLE = 'エンジニアスキルシート';
 

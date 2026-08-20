@@ -50,8 +50,17 @@ ensure_postgres() {
   su postgres -c "$PG_BIN/pg_ctl -D $PGDATA reload" >/dev/null
   PGPASSWORD="$PG_PASSWORD" psql -h 127.0.0.1 -U "$PG_USER" -tAc "select 1 from pg_database where datname='$DB_NAME'" | grep -q 1 ||
     PGPASSWORD="$PG_PASSWORD" psql -h 127.0.0.1 -U "$PG_USER" -c "create database $DB_NAME" >/dev/null
+  # 失敗を握り潰すと、スキーマが欠けたまま "postgres ready" と出てしまう。
+  # 「既にある」系のエラーだけは想定内なので、それ以外は止める。
   for f in "$REPO_ROOT"/packages/db/drizzle/migrations/*.sql; do
-    PGPASSWORD="$PG_PASSWORD" psql -q -h 127.0.0.1 -U "$PG_USER" -d "$DB_NAME" -f "$f" >/dev/null 2>&1 || true
+    if ! out=$(PGPASSWORD="$PG_PASSWORD" psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$PG_USER" -d "$DB_NAME" -f "$f" 2>&1); then
+      if grep -qiE 'already exists' <<<"$out"; then
+        continue
+      fi
+      printf '%s\n' "$out" >&2
+      log "migration failed: $f"
+      return 1
+    fi
   done
   log "postgres ready ($DB_NAME)"
 }
@@ -76,6 +85,14 @@ ensure_proxy() {
   node "$REPO_ROOT/scripts/wss-pg-proxy.mjs" > "$PROXY_LOG" 2>&1 &
   echo $! > "$PROXY_PID"
   sleep 2
+  # 起動に失敗しても 2 秒後に「起動した」と出てしまうと、あとでアプリ側が
+  # 接続エラーになった理由が分からなくなる。生存確認してから成功とみなす。
+  if ! kill -0 "$(cat "$PROXY_PID")" 2>/dev/null; then
+    rm -f "$PROXY_PID"
+    cat "$PROXY_LOG" >&2
+    log "wss proxy failed to start"
+    return 1
+  fi
   log "wss proxy on 443 (log: $PROXY_LOG)"
 }
 

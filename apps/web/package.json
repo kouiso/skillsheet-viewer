@@ -12,7 +12,7 @@
     "test": "vitest run && vitest run --config vitest.config.pdf.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:playwright": "playwright test",
+    "test:playwright": "NODE_OPTIONS=--conditions=react-server playwright test",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },

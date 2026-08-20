@@ -1,46 +1,11 @@
-/**
- * 単一オーナー運用のオーナーアカウント（Better Auth の user / account）をブートストラップする。
- *
- * `apps/web/src/lib/auth.ts` は `emailAndPassword.disableSignUp: true` のため、
- * UI からのサインアップができない。新規環境では `/login` を一度も通せず `/builder` に
- * 到達できないため、このスクリプトで最初のオーナーアカウントを直接作成する（#153 X-1）。
- *
- * 実装は Better Auth 自身の `/sign-up/email` エンドポイント実装
- * （node_modules/better-auth/dist/api/routes/sign-up.mjs）と同じ手順を踏む:
- *   1. `auth.$context` から `AuthContext`（`ctx`）を取得する
- *   2. `ctx.password.hash(password)` でパスワードハッシュを生成する
- *   3. `ctx.internalAdapter.createUser(...)` で `user` 行を作る
- *   4. `ctx.internalAdapter.linkAccount({ providerId: 'credential', ... })` で
- *      `account` 行（`provider_id = 'credential'`）を作る
- *
- * 生SQLでの直接INSERTではなく `internalAdapter` 経由にしているのは、ID生成・
- * タイムスタンプ・将来の追加フィールドなど Better Auth 内部の規約に自動的に追従させるため。
- *
- * 実行（新規オーナー作成、リポジトリルートの `.env`（無ければ `apps/web/.env.local`）の
- * DATABASE_URL / BETTER_AUTH_SECRET を使用）:
- *   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=owner@example.com
- * `--password` を省略し対話端末（TTY）から実行すると、画面に表示されない対話プロンプトで
- * パスワードを読み取る（シェル履歴・`ps` への平文露出を避けるため、これが推奨経路）。
- *
- * CI 等の非対話環境向けに `--password=<password>` 引数や環境変数での指定も可
- * （CLI引数が優先。ただしどちらもシェル履歴・`ps` に残るリスクがある）:
- *   SKILLSHEET_OWNER_EMAIL=owner@example.com SKILLSHEET_OWNER_PASSWORD='Str0ng-Pass!' \
- *     pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts
- *
- * 既に同じ email のユーザーが存在する場合は「新規作成」ではなく「パスワードの再発行」を行う
- * （dogfooding 時に実際に必要になったユースケース。既存 user.id はそのまま維持される）。
- *
- * 出力される `user.id` を `.env`（および Vercel の環境変数）の `SKILLSHEET_OWNER_ID` に設定する。
- */
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
 import { createDb } from '../src/client';
 import { account, session, user, verification } from '../src/schema';
+import { loadScriptEnv, parseEnvFile } from './env';
 
 const USAGE = `使い方:
   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=<email> [--name=<name>]
@@ -52,23 +17,6 @@ const USAGE = `使い方:
   DATABASE_URL / BETTER_AUTH_SECRET はリポジトリルートの .env（無ければ apps/web/.env.local）から読み込む。
   どちらも無くても、実行環境の環境変数に既に設定済みなら（CI/Vercel 等）そのまま使う。`;
 
-export function parseEnvFile(content: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
-  }
-  return result;
-}
-
 // DATABASE_URL / BETTER_AUTH_SECRET を .env ファイルから読み込む。
 //
 // SETUP.md はリポジトリルートの `.env`（`cp .env.example .env`）を案内しているが、
@@ -78,17 +26,10 @@ export function parseEnvFile(content: string): Record<string, string> {
 // 値は上書きしない。どちらの候補ファイルも無くても、必須の環境変数が実行環境
 // （CI/Vercel 等）に既に設定済みなら、そのまま処理を継続する（ファイルが無いことだけを
 // 理由に fail-fast しない）。
-function loadBootstrapEnv(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [resolve(here, '../../../.env'), resolve(here, '../../../apps/web/.env.local')];
-  const envPath = candidates.find((p) => existsSync(p));
-  if (!envPath) return;
-  const parsed = parseEnvFile(readFileSync(envPath, 'utf-8'));
-  for (const [key, value] of Object.entries(parsed)) {
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-loadBootstrapEnv();
+// テストが読み込み口として使っているので、共通実装をそのまま公開する。
+export { parseEnvFile };
+
+loadScriptEnv();
 
 function parseArg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
@@ -301,12 +242,14 @@ async function main() {
 
   const ctx = await auth.$context;
   const { userId, action } = await provisionOwner(ctx, { email, password, name });
+  // CI から実行されうるので、メールアドレスはログに残さない（CI ログは長期に保存される）。
+  // 必要な user.id は下の案内でだけ出す。
   console.log(
     action === 'created'
-      ? `オーナーアカウントを作成しました: email=${email.toLowerCase()} user.id=${userId}`
+      ? 'オーナーアカウントを作成しました'
       : action === 'reissued'
-        ? `既存ユーザーのパスワードを再発行しました: email=${email.toLowerCase()} user.id=${userId}`
-        : `既存ユーザーに credential アカウントを作成しパスワードを設定しました: email=${email.toLowerCase()} user.id=${userId}`,
+        ? '既存ユーザーのパスワードを再発行しました'
+        : '既存ユーザーに credential アカウントを作成しパスワードを設定しました',
   );
 
   console.log('');

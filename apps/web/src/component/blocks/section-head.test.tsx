@@ -23,4 +23,19 @@ describe('SectionHead', () => {
     render(<SectionHead kicker="Projects" title="案件詳細" right="12 件" />);
     expect(screen.getByText('12 件')).toBeInTheDocument();
   });
+  // 1枚のシートに project ブロックが複数あると、同じ kicker の見出しが並んで
+  // 目次の key とスクロール先が衝突する。接尾辞で分けられること。
+  it('idSuffix を渡すと id が分かれる', () => {
+    const { rerender } = render(<SectionHead kicker="Projects" title="案件詳細" idSuffix="block-a" />);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveAttribute('id', 'section-projects-block-a');
+
+    rerender(<SectionHead kicker="Projects" title="案件詳細" idSuffix="block-b" />);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveAttribute('id', 'section-projects-block-b');
+  });
+
+  it('idSuffix が無ければ従来どおりの id を保つ', () => {
+    expect(sectionHeadId('Projects')).toBe('section-projects');
+    expect(sectionHeadId('Projects', '')).toBe('section-projects');
+    expect(sectionHeadId('Career Timeline', 'a1b2')).toBe('section-career-timeline-a1b2');
+  });
 });

@@ -25,7 +25,8 @@ for (const theme of ['light', 'dark']) {
     await page.goto(`${BASE}/viewer-auth?next=${encodeURIComponent(ROUTES[0])}`, { waitUntil: 'domcontentloaded' });
     await page.getByLabel('認証コード').fill(CODE);
     await page.getByRole('button', { name: '認証' }).click();
-    await page.waitForURL(`**${ROUTES[0]}`, { timeout: 20000 }).catch(() => {});
+    // ここで握り潰すと、認証に失敗したまま「認証コード入力画面」を対象画面のスクショとして保存してしまう。
+    await page.waitForURL(`**${ROUTES[0]}`, { timeout: 20000 });
     await page.evaluate((t) => localStorage.setItem('theme-mode', t), theme);
 
     for (const route of ROUTES) {

@@ -3,8 +3,9 @@ import {
   clearViewerLoginFailures,
   LOCK_MS,
   MAX_FAILURES,
+  purgeExpiredViewerLoginAttempts,
   type RateLimitState,
-  recordViewerLoginFailure,
+  reserveViewerLoginAttempt,
   WINDOW_MS,
 } from '@skillsheet/db/viewer-rate-limit';
 
@@ -50,18 +51,28 @@ function memoryCheck(key: string, now: number): RateLimitState {
   };
 }
 
-function memoryRecordFailure(key: string, now: number): RateLimitState {
+/** プロセス内側でも「枠を1つ消費する」意味に揃える（DB 側の reserve と同じ数え方）。 */
+function memoryReserve(key: string, now: number): RateLimitState {
   const existing = memory.get(key);
-  const inWindow = existing && now - existing.windowStartedAt <= WINDOW_MS;
+  const locked = existing?.lockedUntil != null && existing.lockedUntil > now;
+  const inWindow = existing && (locked || now - existing.windowStartedAt <= WINDOW_MS);
   const failureCount = inWindow ? existing.failureCount + 1 : 1;
   const windowStartedAt = inWindow ? existing.windowStartedAt : now;
-  const lockedUntil = failureCount >= MAX_FAILURES ? now + LOCK_MS : (existing?.lockedUntil ?? null);
+  const lockedUntil = failureCount > MAX_FAILURES ? now + LOCK_MS : (existing?.lockedUntil ?? null);
 
   if (!memory.has(key) && memory.size >= MEMORY_MAX_KEYS) {
     const oldest = memory.keys().next();
     if (!oldest.done) memory.delete(oldest.value);
   }
   memory.set(key, { failureCount, windowStartedAt, lockedUntil });
+
+  if (failureCount > MAX_FAILURES) {
+    return {
+      locked: true,
+      retryAfterSeconds: Math.max(1, Math.ceil(((lockedUntil ?? now + LOCK_MS) - now) / 1000)),
+      remainingAttempts: 0,
+    };
+  }
   return memoryCheck(key, now);
 }
 
@@ -84,12 +95,21 @@ export async function checkViewerLoginRateLimit(key: string, now = Date.now()): 
   }
 }
 
-export async function recordViewerLoginFailureBoth(key: string, now = Date.now()): Promise<RateLimitState> {
-  const inMemory = memoryRecordFailure(key, now);
+/**
+ * 試行枠を1つ消費する。**コードを照合する前に**呼ぶこと。
+ *
+ * 「確認 → 照合 → 失敗を記録」の3段だと、並列リクエストが全部「まだロックされていない」を
+ * 読んで上限を超えた数の照合まで進んでしまう。消費と判定を1回にまとめてそれを塞ぐ。
+ */
+export async function reserveViewerLoginAttemptBoth(key: string, now = Date.now()): Promise<RateLimitState> {
+  const inMemory = memoryReserve(key, now);
   try {
-    return strictest(inMemory, await recordViewerLoginFailure(key, new Date(now)));
+    const inDb = await reserveViewerLoginAttempt(key, new Date(now));
+    // 失敗が積まれたついでに、期限切れの記録を掃除する（行が増え続けるのを防ぐ）。
+    purgeExpiredViewerLoginAttempts(new Date(now)).catch(() => {});
+    return strictest(inMemory, inDb);
   } catch (err) {
-    console.warn('viewer rate limit: DB record failed, falling back to in-process counter', err);
+    console.warn('viewer rate limit: DB reserve failed, falling back to in-process counter', err);
     return inMemory;
   }
 }
