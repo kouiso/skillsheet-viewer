@@ -12,7 +12,20 @@
 
 ### テスト
 
-- `pnpm test` - 全パッケージのテストを実行（vitest）
+- `pnpm test` - 全テストを実行（vitest）
+
+  環境ごとに3本の設定へ分かれている。共通部分は `vitest.shared.ts` にあり、各設定は
+  `mergeConfig` でそれを取り込む。
+
+  | 設定 | 環境 | 対象 |
+  | --- | --- | --- |
+  | `vitest.config.ts` | jsdom | 画面（`app/` `src/` の `*.test.ts(x)`） |
+  | `vitest.config.node.ts` | node | `src/db/**` と `scripts/**` |
+  | `vitest.config.pdf.ts` | node | `*.node.test.tsx`（PDF の実バイト描画） |
+
+  `src/db` と `scripts` はサーバ／CLI で動くコードなので、jsdom に混ぜない。混ぜると
+  `window` / `document` が生えたうえブラウザ用 setup まで読み込まれ、本番と違う分岐を
+  通っても緑のままになる。
 - `pnpm test:watch` - 監視モードでテスト実行
 - `pnpm test:coverage` - カバレッジ付きでテスト実行
 

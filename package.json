@@ -20,7 +20,7 @@
     "lint": "biome check . --error-on-warnings && node scripts/check-jsdom-pdf-assertions.mjs && ./scripts/check-naming.sh",
     "format": "biome format --write .",
     "type-check": "tsc --noEmit",
-    "test": "vitest run && vitest run --config vitest.config.pdf.ts",
+    "test": "vitest run && vitest run --config vitest.config.node.ts && vitest run --config vitest.config.pdf.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:playwright": "NODE_OPTIONS=--conditions=react-server playwright test",

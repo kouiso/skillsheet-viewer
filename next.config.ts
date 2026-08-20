@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import bundleAnalyzer from '@next/bundle-analyzer';
 import type { NextConfig } from 'next';
 
@@ -8,12 +6,11 @@ const withBundleAnalyzer = bundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
-  // pnpm monorepo: ワークスペースルートを明示（複数 lockfile 誤検出の回避）
+  // リポジトリルートがそのままプロジェクトルート。明示しないと Turbopack が
+  // 上位ディレクトリまで lockfile を探しに行き、無関係な祖先をルートと誤検出する。
   turbopack: {
-    root: path.resolve(import.meta.dirname, '..', '..'),
+    root: import.meta.dirname,
   },
-  // 内部ワークスペースパッケージ（TS ソースのまま）を Next にトランスパイルさせる
-  transpilePackages: ['@/db'],
   // @react-pdf/renderer はサーババンドルから外部化する（ネイティブ require / RSC 干渉回避）
   serverExternalPackages: ['@react-pdf/renderer'],
   // pnpm dev -p 3210 で 127.0.0.1 からアクセスしたときに HMR WebSocket が

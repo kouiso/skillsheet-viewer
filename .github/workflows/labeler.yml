@@ -60,7 +60,10 @@ jobs:
               const name = file.filename;
               if (name.startsWith('.github/')) labels.add('ci');
               if (name.startsWith('doc/') || name.endsWith('.md')) labels.add('documentation');
-                                          if (/(^|\/)package\.json$|^pnpm-lock\.yaml$/.test(name)) labels.add('dependencies');
+              // src/db は src/ に含まれるので先に判定する。
+              if (name.startsWith('src/db/')) labels.add('db');
+              else if (name.startsWith('app/') || name.startsWith('src/')) labels.add('web');
+              if (/(^|\/)package\.json$|^pnpm-lock\.yaml$/.test(name)) labels.add('dependencies');
             }
 
             if (labels.size === 0) {

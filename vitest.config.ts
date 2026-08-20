@@ -9,8 +9,9 @@ export default mergeConfig(
       environment: 'jsdom',
       setupFiles: './src/test/setup.ts',
       css: true,
-      // PDF の実バイト描画は node 環境（vitest.config.pdf.ts）側で行う。
-      exclude: ['e2e/**', '**/node_modules/**', '**/dist/**', '**/*.node.test.tsx'],
+      // PDF の実バイト描画は vitest.config.pdf.ts、DB 層と CLI スクリプトは
+      // vitest.config.node.ts が、それぞれ node 環境で受け持つ。
+      exclude: ['e2e/**', '**/node_modules/**', '**/dist/**', '**/*.node.test.tsx', 'src/db/**', 'scripts/**'],
     },
   }),
 );

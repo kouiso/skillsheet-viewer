@@ -5,6 +5,7 @@ alwaysApply: true
 - 常に日本語で会話する
 - 常に[prompt](prompt/prompt.md) に従うこと
 - 常にプロジェクトの`doc`ディレクトリのドキュメントを前提に作業する
+- テストは環境ごとに3本の設定に分かれている。`vitest.config.ts`（jsdom / 画面）、`vitest.config.node.ts`（node / `src/db` と `scripts`）、`vitest.config.pdf.ts`（node / `*.node.test.tsx`）。共通設定は `vitest.shared.ts`。
 - PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。
 - コメントはインラインの「なぜそうしたか」を重視し、JSDoc/docstring を全関数に付けることは求めない。パッケージ境界を越える公開 API には必要に応じて docstring を書く。
 
@@ -25,7 +26,7 @@ alwaysApply: true
 - `pnpm dev` — 開発サーバー起動
 - `pnpm build` — 本番ビルド
 - `pnpm type-check` — 型チェック
-- `pnpm test` — テスト（vitest / jsdom + node の2本）
+- `pnpm test` — テスト（vitest 3本: jsdom / node[DB・スクリプト] / node[PDF]）
 - `pnpm db:generate` / `pnpm db:migrate` — Drizzle マイグレーション
 
 
