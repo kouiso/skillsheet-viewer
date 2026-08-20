@@ -3,9 +3,9 @@
 import type { Block } from '@skillsheet/db/blocks';
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import Header from '@/component/header';
-import SkillSheetViewer from '@/component/skill-sheet-viewer';
-import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
+import Header from '@/components/header';
+import SkillSheetViewer from '@/components/skill-sheet-viewer';
+import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
 
 interface SheetViewClientProps {
   title: string;
@@ -56,7 +56,7 @@ const SheetViewClient = ({
 
       const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
         import('@react-pdf/renderer'),
-        import('@/component/pdf-export'),
+        import('@/components/pdf-export'),
       ]);
 
       const blob = await pdf(<SkillSheetPDF title={title} content={content} />).toBlob();

@@ -11,7 +11,8 @@
     "./tech-area": "./src/tech-area.ts",
     "./sanitize-html": "./src/sanitize-html.ts",
     "./viewer-rate-limit": "./src/viewer-rate-limit.ts",
-    "./text": "./src/text.ts"
+    "./text": "./src/text.ts",
+    "./fixtures": "./src/fixtures/index.ts"
   },
   "scripts": {
     "db:generate": "drizzle-kit generate",

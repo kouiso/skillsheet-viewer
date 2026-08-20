@@ -17,20 +17,20 @@ vi.mock('sonner', () => ({
 // @react-pdf/renderer は jsdom で動かない上に読み込みが重いので、
 // handleDownloadPdf の分岐（成功/失敗）だけを制御できるモックに置き換える。
 vi.mock('@react-pdf/renderer', () => ({ pdf: () => ({ toBlob }) }));
-vi.mock('@/component/pdf-export', () => ({ SkillSheetPDF: () => null }));
+vi.mock('@/components/pdf-export', () => ({ SkillSheetPDF: () => null }));
 
 // 本体（ビューア）の描画は本テストの対象外。トップバーは
 // 「どちらが出たか」と「押したら onDownloadPdf が走るか」だけ見えれば十分。
-vi.mock('@/component/skill-sheet-viewer', () => ({ default: () => <div data-testid="viewer" /> }));
-vi.mock('@/component/header', () => ({
+vi.mock('@/components/skill-sheet-viewer', () => ({ default: () => <div data-testid="viewer" /> }));
+vi.mock('@/components/header', () => ({
   default: ({ onDownloadPdf, pdfLoading }: { onDownloadPdf?: () => void; pdfLoading?: boolean }) => (
     <button type="button" data-testid="legacy-header-pdf" data-loading={String(pdfLoading)} onClick={onDownloadPdf}>
       PDF
     </button>
   ),
 }));
-vi.mock('@/component/viewer-topbar', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/component/viewer-topbar')>();
+vi.mock('@/components/viewer-topbar', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/components/viewer-topbar')>();
   return {
     ...actual,
     ViewerTopbar: ({ onDownloadPdf, pdfLoading }: { onDownloadPdf?: () => void; pdfLoading?: boolean }) => (

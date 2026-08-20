@@ -1,20 +1,13 @@
-import path from 'node:path';
+import { defineConfig, mergeConfig } from 'vitest/config';
 
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { sharedVitestConfig } from './vitest.shared';
 
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(import.meta.dirname, './src'),
-      'server-only': path.resolve(import.meta.dirname, './src/test/server-only-stub.ts'),
+export default mergeConfig(
+  sharedVitestConfig,
+  defineConfig({
+    test: {
+      environment: 'node',
+      include: ['**/*.node.test.tsx'],
     },
-  },
-  test: {
-    globals: true,
-    environment: 'node',
-    include: ['**/*.node.test.tsx'],
-    exclude: ['e2e/**', '**/node_modules/**', '**/dist/**'],
-  },
-});
+  }),
+);

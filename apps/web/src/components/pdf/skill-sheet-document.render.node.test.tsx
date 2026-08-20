@@ -803,7 +803,7 @@ describe('SkillSheetDocument（実バイト描画）', () => {
       // splitForHyphenation() が挟んだ BREAK_MARKER が境界のどちら側に残るかが
       // 揃わず、和文の句点（。）の直後に本物の次シラブルが来て hyphenated:true に
       // なることがあった（DB上の実データ25ページ分で実測・再現済み。
-      // apps/web/scripts/repro-203-hyphen.tsx で再検証できる）。
+      // apps/web/scripts/manual-repro/repro-203-hyphen.tsx で再検証できる）。
       // この特定の marker 消失は react-pdf 内部のページ割り付けアルゴリズムの
       // 挙動に依存しており、この程度の合成データでは同一の消失を再現できなかった
       // （fix 適用前後どちらでもこのテストは pass する＝reflow 消失そのものの

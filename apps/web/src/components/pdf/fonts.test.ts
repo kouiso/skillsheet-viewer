@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { splitForHyphenation } from './fonts';
+import { splitForHyphenation, splitLongRun } from './fonts';
 
 // splitForHyphenation が CJK 文字境界に挟む改行マーカー。以前は ZWNBSP（U+FEFF、
 // 不可視文字）を使っていたが、@react-pdf/textkit がシラブル配列からPDFの実テキストを
@@ -94,5 +94,47 @@ describe('splitForHyphenation', () => {
     // かな結合濁点 / 異体字セレクタのみ）には含まれず、対策前は分離しうる。
     const kanjiWithEnclosingCircle = '漢\u{20DD}';
     expect(splitForHyphenation(kanjiWithEnclosingCircle)).toEqual([kanjiWithEnclosingCircle]);
+  });
+});
+
+/**
+ * 表セルの末尾クリップ（Issue #263 C）と段落のはみ出し（同 F）を防ぐ本体。
+ * 区切り記号優先・camelCase 境界・上限での強制分割・切った位置への巻き戻しという
+ * 分岐を持つのに、`splitForHyphenation` 側のテストは 16 文字以下の語しか通らず
+ * この経路を一度も踏んでいなかった。
+ */
+describe('splitLongRun', () => {
+  it('16文字以下の語はそのまま返す（ふつうの英文の見た目を変えない）', () => {
+    expect(splitLongRun('TypeScript')).toEqual(['TypeScript']);
+    expect(splitLongRun('a'.repeat(16))).toEqual(['a'.repeat(16)]);
+  });
+
+  it('区切り記号の直後で切る（URL）', () => {
+    expect(splitLongRun('https://example.com/some/path')).toEqual(['https://example.', 'com/some/path']);
+  });
+
+  it('区切り記号の直後で切る（ハイフン連結）', () => {
+    expect(splitLongRun('expo-router-native-stack')).toEqual(['expo-router-', 'native-stack']);
+  });
+
+  it('camelCase の境界で切る', () => {
+    expect(splitLongRun('TypeScriptJavaScriptPython')).toEqual(['TypeScriptJava', 'ScriptPython']);
+  });
+
+  it('区切りも大文字境界も無ければ上限位置で切る', () => {
+    expect(splitLongRun('a'.repeat(34))).toEqual(['a'.repeat(16), 'a'.repeat(16), 'aa']);
+  });
+
+  // 巻き戻し（fonts.ts の `if (cut <= i) i = cut - 1`）が off-by-one を起こすと
+  // 文字が落ちるか無限ループになる。長さと結合の両方で固定する。
+  it.each([
+    'https://example.com/very/long/path/segment/that/keeps/going',
+    'TypeScriptJavaScriptPythonRustGolangKotlinSwiftElixirHaskell',
+    'a'.repeat(200),
+    'x-'.repeat(60),
+  ])('分割しても元の語を1文字も失わず、どの塊も上限を超えない: %s', (run) => {
+    const chunks = splitLongRun(run);
+    expect(chunks.join('')).toBe(run);
+    for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(16);
   });
 });

@@ -123,14 +123,19 @@ function cellFlexGrow(columnIndex: number, columnCount: number): number {
   return 1;
 }
 
+/**
+ * 列数から flex 比の合計を出す。表全体の見積りと行単位の判定で必ず同じ値を使う。
+ * 2 か所に書き写すと、cellFlexGrow の比率を変えたとき片方だけ追従して静かに食い違う。
+ */
+function totalFlexGrow(columnCount: number): number {
+  return Array.from({ length: columnCount }, (_, i) => cellFlexGrow(i, columnCount)).reduce((a, b) => a + b, 0);
+}
+
 function tableHeight(node: MdNode, width: number): number {
   const rows = node.children ?? [];
   const columnCount = rows[0]?.children?.length ?? 0;
   if (columnCount === 0) return 0;
-  const flexTotal = Array.from({ length: columnCount }, (_, i) => cellFlexGrow(i, columnCount)).reduce(
-    (a, b) => a + b,
-    0,
-  );
+  const flexTotal = totalFlexGrow(columnCount);
   // 表全体の左枠線 1pt を引いた残りを flex 比で分配する。
   const innerWidth = Math.max(0, width - SPACING.TABLE_BORDER);
   let height = SPACING.TABLE_MARGIN_VERTICAL * 2 + SPACING.TABLE_BORDER;
@@ -155,12 +160,12 @@ export function tableRowHeight(row: MdNode, columnCount: number, flexTotal: numb
 
 /** 表 1 行分の高さを、markdown の table ノードと行から算出する便宜関数。 */
 export function estimateTableRowHeight(tableNode: MdNode, row: MdNode, width: number): number {
-  const columnCount = tableNode.children?.[0]?.children?.length ?? row.children?.length ?? 1;
-  const flexTotal = Array.from({ length: columnCount }, (_, i) => cellFlexGrow(i, columnCount)).reduce(
-    (a, b) => a + b,
-    0,
-  );
-  return tableRowHeight(row, columnCount, flexTotal, Math.max(0, width - SPACING.TABLE_BORDER));
+  // `length` は 0 になり得るので `??` では拾えない。0 のまま進むと flexTotal が 0 になり、
+  // share が Infinity になって高さを1行分に過小見積りする。過小見積りは wrap={false} を
+  // 許す方向に働くため、Issue #262（1ページより高い分割不可ノードで本文が消える）を
+  // 再発させかねない。
+  const columnCount = Math.max(1, tableNode.children?.[0]?.children?.length ?? row.children?.length ?? 1);
+  return tableRowHeight(row, columnCount, totalFlexGrow(columnCount), Math.max(0, width - SPACING.TABLE_BORDER));
 }
 
 function listHeight(node: MdNode, width: number): number {

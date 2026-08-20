@@ -1,11 +1,8 @@
-import { TRPCError } from '@trpc/server';
 import type { Metadata } from 'next';
-import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 
-import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
+import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
 import { createServerCaller } from '@/server/trpc/caller';
-import { classifyConfigError } from '@/util/is-config-error';
 
 import SheetViewClient from '../../[path]/sheet-view-client';
 
@@ -53,20 +50,8 @@ export default async function DbSheetByIdPage({ params }: Props) {
     // procedure の入力は id のみなので、ここに来るのは「UUID の形式でない id」の
     // 場合に限られる。存在しない UUID と同じ 404 に合流させる（Issue #196:
     // 直前まで形式検証が無く、DB 側の型エラーがそのまま 500 として抜けていた）。
-    if (err instanceof TRPCError && (err.code === 'NOT_FOUND' || err.code === 'BAD_REQUEST')) {
-      notFound();
-    }
-    // #157: 待っても直らない設定不備（未設定・未マイグレーション・接続文字列の書式ミス）は
-    // 200 ＋ 原因と対処を返す（Issue #195）。
-    const configErrorKind = classifyConfigError(err);
-    if (configErrorKind) {
-      return <ConfigErrorNotice {...CONFIG_ERROR_NOTICES[configErrorKind]} />;
-    }
-    // 接続先が到達不能等の一時的な障害は、設定不備と同じ 200 に丸めず error.tsx /
-    // 監視ツールへ委ねる（isConfigError の結果をログ抑止だけに使い、どちらの場合も
-    // 一律で ConfigErrorNotice を返すと、実際の障害発生中に「監視側は 200 で気付けず、
-    // 閲覧者には的外れな設定手順だけが表示される」ことになるため区別する）。
-    console.error('Failed to load sheet:', id, err);
-    throw err;
+    notFoundOnTrpcCodes(err, ['NOT_FOUND', 'BAD_REQUEST']);
+    // #157: 待っても直らない設定不備は 200 ＋ 原因と対処を返し、一時的な障害は再スローする。
+    return configErrorNoticeOrRethrow(err, `Failed to load sheet: ${id}`);
   }
 }

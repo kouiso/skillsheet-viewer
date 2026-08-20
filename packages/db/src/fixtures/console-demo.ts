@@ -7,8 +7,8 @@
  * 新規シートとして INSERT する（既存シートは一切変更しない）。確認後は削除する想定。
  */
 
-import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from './blocks';
-import { createSheet, listSheets } from './skillsheet';
+import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from '../blocks';
+import { createSheet, listSheets } from '../skillsheet';
 
 const newId = () => crypto.randomUUID();
 

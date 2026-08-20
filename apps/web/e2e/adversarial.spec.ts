@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { createRealVolumeDemoSheet, deleteSheet, getSkillSheetById, listSheets } from '@skillsheet/db';
+import { deleteSheet, getSkillSheetById, listSheets } from '@skillsheet/db';
+import { createRealVolumeDemoSheet } from '@skillsheet/db/fixtures';
 import { authFile, login } from './auth';
 
 test.use({ storageState: authFile });
@@ -499,7 +500,10 @@ test('H. mobile tap target verification', async ({ browser }) => {
               w: r.width,
               h: r.height,
               visible,
-              small: visible && (r.width < 44 || r.height < 44),
+              // getBoundingClientRect はサブピクセルを返す。min-h-11（44px）の要素が
+              // 43.999755859375 のように丸め下がることがあり、厳密な `< 44` だと
+              // 実装が正しいのに落ちる（実測でこの値が出た）。0.5px の許容を置く。
+              small: visible && (r.width < 43.5 || r.height < 43.5),
             };
           })
           .filter((x) => x.small),

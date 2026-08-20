@@ -10,7 +10,7 @@
  * true になってしまっていた（patches/@react-pdf__textkit@6.3.0.patch で修正）。
  *
  * 使い方:
- *   DATABASE_URL=... pnpm --filter @skillsheet/web exec tsx scripts/repro-203-hyphen.tsx <sheetId>
+ *   DATABASE_URL=... pnpm --filter @skillsheet/web exec tsx scripts/manual-repro/repro-203-hyphen.tsx <sheetId>
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -24,9 +24,9 @@ import React from 'react';
 
 import { Font, renderToBuffer } from '@react-pdf/renderer';
 
-import PDF_FONT_FAMILY from '../src/component/pdf/constants';
-import { splitForHyphenation } from '../src/component/pdf/fonts';
-import { SkillSheetDocument } from '../src/component/pdf/skill-sheet-document';
+import PDF_FONT_FAMILY from '../../src/components/pdf/constants';
+import { splitForHyphenation } from '../../src/components/pdf/fonts';
+import { SkillSheetDocument } from '../../src/components/pdf/skill-sheet-document';
 
 async function extractPdfText(buffer: Buffer): Promise<{ pageCount: number; text: string }> {
   const { getDocument } = await import('pdfjs-dist');

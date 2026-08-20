@@ -1,13 +1,12 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
+import { getSkillSheetById, isProjectBlockData } from '@skillsheet/db';
 import {
   createRealVolumeDemoSheet,
-  getSkillSheetById,
-  isProjectBlockData,
   REAL_VOLUME_COMPANY_COUNT,
   REAL_VOLUME_DEMO_TITLE,
   REAL_VOLUME_PROJECT_COUNT,
-} from '@skillsheet/db';
+} from '@skillsheet/db/fixtures';
 import { authFile, login } from './auth';
 
 test.use({ storageState: authFile });

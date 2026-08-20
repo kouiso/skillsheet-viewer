@@ -22,11 +22,11 @@
 
 import { eq, sql } from 'drizzle-orm';
 
-import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from './blocks';
-import { getDb } from './client';
+import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from '../blocks';
+import { getDb } from '../client';
+import { blocks as blocksTable, realVolumeDemoFixtures } from '../schema';
+import { createSheetInTx, getOwnerId } from '../skillsheet';
 import { buildConsoleDemoBlocks } from './console-demo';
-import { blocks as blocksTable, realVolumeDemoFixtures } from './schema';
-import { createSheetInTx, getOwnerId } from './skillsheet';
 
 const newId = () => crypto.randomUUID();
 
