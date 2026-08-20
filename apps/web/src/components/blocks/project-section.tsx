@@ -24,6 +24,8 @@ interface ProjectSectionProps {
   showProjects?: boolean;
   /** タイムラインセクションを表示するか（ビュートグル）。 */
   showTimeline?: boolean;
+  /** 稼働月数（deriveDuration）を出すか。セクションの出し分けとは別の表示設定。既定 true。 */
+  showDuration?: boolean;
 }
 
 // ビュートグルで再マウントされた際のフェードアップ（プロトタイプの .fadeup 相当）。
@@ -50,6 +52,7 @@ export function ProjectSection({
   showProcess = true,
   showProjects = true,
   showTimeline = true,
+  showDuration = true,
 }: ProjectSectionProps) {
   const [query, setQuery] = useState('');
   const [activeTech, setActiveTech] = useState<string[]>([]);
@@ -151,6 +154,7 @@ export function ProjectSection({
                 company={companyMap.get(item.companyId)}
                 activeTech={activeTech}
                 tech={tech}
+                showDuration={showDuration}
               />
             ))}
             {filtered.length === 0 && (
@@ -172,7 +176,12 @@ export function ProjectSection({
               条件に一致する案件がありません
             </p>
           ) : (
-            <Timeline items={timelineItems} companyMap={companyMap} activeTech={timelineActiveTech} />
+            <Timeline
+              items={timelineItems}
+              companyMap={companyMap}
+              activeTech={timelineActiveTech}
+              showDuration={showDuration}
+            />
           )}
         </FadeUpSection>
       )}

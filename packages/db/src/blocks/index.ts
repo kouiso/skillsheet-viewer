@@ -470,11 +470,11 @@ export function blockJoinSeparator(prevType: BlockType, curType: BlockType, curM
  * 直前ブロック判定（blockJoinSeparator / i === 0 の先頭判定）がスキップされた要素を
  * 指さないようにしている（ループ内 continue だとこれが壊れる）。
  */
-export function blocksToMarkdown(blocks: Block[]): string {
+export function blocksToMarkdown(blocks: Block[], opts?: { showDuration?: boolean }): string {
   const sorted = [...blocks].filter((b) => !isBlockInputEmpty(b)).sort((a, b) => a.order - b.order);
   let result = '';
   for (let i = 0; i < sorted.length; i++) {
-    const markdown = blockToMarkdown(sorted[i]);
+    const markdown = blockToMarkdown(sorted[i], opts);
     if (i === 0) {
       result = markdown;
       continue;

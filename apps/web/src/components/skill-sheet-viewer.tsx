@@ -48,6 +48,11 @@ interface SkillSheetViewerProps {
    * （ビルダープレビュー・比較ページは従来どおり全セクション表示）。
    */
   views?: ViewKey[];
+  /**
+   * 案件の稼働月数（deriveDuration）を出すか。セクション出し分け（views）とは別の
+   * 表示設定で、既定 true（省略時はビルダープレビュー等も含め従来どおり表示）。
+   */
+  showProjectDuration?: boolean;
 }
 
 // GFM の列 alignment（remark-rehype が th/td の properties.align に left/center/right で
@@ -214,7 +219,13 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
   return groups;
 }
 
-const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: SkillSheetViewerProps) => {
+const SkillSheetViewer = ({
+  skillSheet,
+  blocks,
+  compareMode = false,
+  views,
+  showProjectDuration = true,
+}: SkillSheetViewerProps) => {
   // views 未指定（ビルダープレビュー・比較・レガシー）は全ビューON扱い。
   const showView = useCallback((view: ViewKey) => !views || views.includes(view), [views]);
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
@@ -384,6 +395,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
                       showProcess={showView('process')}
                       showProjects={showView('projects')}
                       showTimeline={showView('timeline')}
+                      showDuration={showProjectDuration}
                     />
                   );
                 }

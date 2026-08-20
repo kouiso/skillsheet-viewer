@@ -31,6 +31,12 @@ interface ViewerTopbarProps {
   views: ViewKey[];
   /** ビューのON/OFFトグル。 */
   onToggleView: (view: ViewKey) => void;
+  /**
+   * 案件の稼働月数を出すか。views（セクションの出し分け）とは別軸の表示設定なので
+   * ViewKey には含めない。
+   */
+  durationVisible?: boolean;
+  onToggleDuration?: () => void;
   onDownloadPdf?: () => void | Promise<void>;
   pdfLoading?: boolean;
   /** 編集者ログイン済みか。false のときは編集導線（ビルダーリンク）を出さない。 */
@@ -47,6 +53,8 @@ export function ViewerTopbar({
   company,
   views,
   onToggleView,
+  durationVisible = true,
+  onToggleDuration,
   onDownloadPdf,
   pdfLoading = false,
   canEdit = true,
@@ -92,6 +100,19 @@ export function ViewerTopbar({
           </button>
         );
       })}
+      {onToggleDuration && (
+        // セクションの出し分け（ALL_VIEWS）とは別軸の表示設定。同じピル列に並べつつ、
+        // ViewKey には含めないことで「セクションを消す」トグルと意味を混同させない。
+        <button
+          type="button"
+          onClick={onToggleDuration}
+          aria-pressed={durationVisible}
+          className={`softbtn compact shrink-0 whitespace-nowrap ${durationVisible ? 'on' : ''}`}
+        >
+          <span aria-hidden className="sdot" />
+          稼働月数
+        </button>
+      )}
     </fieldset>
   );
 

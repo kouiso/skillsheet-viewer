@@ -1,7 +1,8 @@
 'use client';
 
 import type { Block } from '@skillsheet/db/blocks';
-import { useMemo, useState } from 'react';
+import { blocksToMarkdown } from '@skillsheet/db/blocks';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import Header from '@/components/header';
 import SkillSheetViewer from '@/components/skill-sheet-viewer';
@@ -24,6 +25,9 @@ interface SheetViewClientProps {
 
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
+/** 稼働月数表示のON/OFF設定を保存する localStorage キー。既定 ON（theme-context.tsx と同じ方式）。 */
+const DURATION_VISIBLE_STORAGE_KEY = 'project-duration-visible';
+
 const SheetViewClient = ({
   title,
   content,
@@ -39,6 +43,22 @@ const SheetViewClient = ({
   const isDashboard = useMemo(() => (blocks ?? []).some((b) => b.type === 'project'), [blocks]);
   // ビュー表示のON/OFF状態。初期値は全ビューON（トグルはダッシュボードのみ）。
   const [views, setViews] = useState<ViewKey[]>(() => [...ALL_VIEW_KEYS]);
+  // 稼働月数表示のON/OFF状態。SSR ではブラウザ API に触れないため既定 true 固定で、
+  // 実際の保存値はマウント後（useEffect）に読み込む（theme-context.tsx と同じ方式）。
+  const [durationVisible, setDurationVisible] = useState(true);
+
+  useEffect(() => {
+    const saved = localStorage.getItem(DURATION_VISIBLE_STORAGE_KEY);
+    if (saved !== null) setDurationVisible(saved === 'true');
+  }, []);
+
+  const toggleDuration = () => {
+    setDurationVisible((prev) => {
+      const next = !prev;
+      localStorage.setItem(DURATION_VISIBLE_STORAGE_KEY, String(next));
+      return next;
+    });
+  };
   // トップバーに出す氏名・会社名はプロフィールブロックから引く。
   const profile = useMemo(
     () => (blocks ?? []).find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile'),
@@ -59,7 +79,12 @@ const SheetViewClient = ({
         import('@/components/pdf-export'),
       ]);
 
-      const blob = await pdf(<SkillSheetPDF title={title} content={content} />).toBlob();
+      // 画面の稼働月数設定を PDF にも反映する。blocks があればそこから組み直し、
+      // 無い経路（レガシー/比較ページ等）はサーバ生成の content をそのまま使う。
+      // showDuration OFF 時は blocksToMarkdown(blocks) がサーバ生成 content と同一関数・
+      // 同一引数になるため 1 文字も異ならない（server: packages/db/src/skillsheet.ts）。
+      const pdfContent = blocks ? blocksToMarkdown(blocks, { showDuration: durationVisible }) : content;
+      const blob = await pdf(<SkillSheetPDF title={title} content={pdfContent} />).toBlob();
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -97,6 +122,8 @@ const SheetViewClient = ({
           company={profile?.data.company}
           views={views}
           onToggleView={toggleView}
+          durationVisible={durationVisible}
+          onToggleDuration={toggleDuration}
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
           canEdit={canEdit}
@@ -111,7 +138,12 @@ const SheetViewClient = ({
           backHref="/view"
         />
       )}
-      <SkillSheetViewer skillSheet={{ title, content }} blocks={blocks} views={isDashboard ? views : undefined} />
+      <SkillSheetViewer
+        skillSheet={{ title, content }}
+        blocks={blocks}
+        views={isDashboard ? views : undefined}
+        showProjectDuration={durationVisible}
+      />
     </div>
   );
 };

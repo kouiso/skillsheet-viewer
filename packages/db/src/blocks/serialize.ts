@@ -4,7 +4,14 @@
  * PDF(mdast→@react-pdf) も既存の描画パイプラインをそのまま再利用できる。
  */
 
-import { flattenTech, formatMonthToken, formatPeriodDisplay, normalizeProcess, PROCESS_LABELS } from '../process';
+import {
+  deriveDuration,
+  flattenTech,
+  formatMonthToken,
+  formatPeriodDisplay,
+  normalizeProcess,
+  PROCESS_LABELS,
+} from '../process';
 import { sanitizeMarkdown } from '../sanitize-html';
 // tech-area.ts はこのファイルから型のみを取り込むため、実行時の循環は発生しない。
 import { resolveProjectArea } from '../tech-area';
@@ -118,7 +125,10 @@ export function filterVisibleProjectData(data: ProjectBlockData): ProjectBlockDa
  * `includeHidden: true` は閲覧面ではないバックアップ書き出し用 — hidden も含めた全件を出力する
  * （バックアップが黙って hidden データを欠落させると、そこからの復元でデータが失われるため）。
  */
-export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeHidden?: boolean }): string {
+export function projectBlockToMarkdown(
+  data: ProjectBlockData,
+  opts?: { includeHidden?: boolean; showDuration?: boolean },
+): string {
   const visible = opts?.includeHidden ? data : filterVisibleProjectData(data);
   const companyMap = new Map(visible.companies.map((c) => [c.id, c]));
   const lines: string[] = [];
@@ -131,7 +141,14 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     lines.push('| 項目 | 内容 |');
     lines.push('| :--- | :--- |');
     if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
-    if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
+    // ビューア（project-card.tsx / timeline.tsx）と同じ導出ルール: 手動入力 duration があれば優先。
+    // period が空でも duration だけ手入力されているケースがあるため、判定を duration 側にも広げる
+    // （period のみで判定すると、そのケースだけ PDF から稼働月数が欠落する）。
+    const duration = opts?.showDuration ? item.duration?.trim() || deriveDuration(item.period) : '';
+    if (item.period || duration) {
+      const periodText = formatPeriodDisplay(item.period) || '(期間未入力)';
+      lines.push(`| 期間 | ${escapeCell(duration ? `${periodText}（${duration}）` : periodText)} |`);
+    }
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
     // 導出値は行名を「技術領域」にする。「この技術を使った」までしか根拠が無いため。
     // 取り込んだ scope は本人の言葉なので「担当領域」で出す（tech-area.ts 参照）。
@@ -179,14 +196,14 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
   return lines.join('\n');
 }
 
-export function blockToMarkdown(block: Block): string {
+export function blockToMarkdown(block: Block, opts?: { showDuration?: boolean }): string {
   if (block.type === 'markdown') return sanitizeMarkdown(block.data.markdown);
   if (block.type === 'table') return tableBlockToMarkdown(block.data);
   if (block.type === 'skills') return skillsBlockToMarkdown(block.data);
   if (block.type === 'experience') return experienceBlockToMarkdown(block.data);
   if (block.type === 'profile') return profileBlockToMarkdown(block.data);
   if (block.type === 'stats') return statsBlockToMarkdown(block.data);
-  if (block.type === 'project') return projectBlockToMarkdown(block.data);
+  if (block.type === 'project') return projectBlockToMarkdown(block.data, opts);
   // 型システム上は到達不能。DB 由来の未知 type は "" を返して他ブロックを壊さない。
   return '';
 }
