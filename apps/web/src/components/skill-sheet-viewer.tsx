@@ -304,8 +304,12 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
       .filter((img) => isSafeImageSrc(img.src));
     setLightboxImages(images);
 
-    const index = images.findIndex((img) => img.src === src);
-    setCurrentImageIndex(index);
+    // img.src は絶対URLに解決済み。src は Markdown の生値で相対パスもあり得るため、
+    // 揃えずに比較すると `/uploads/a.png` のような画像で必ず -1 になり、押したのとは
+    // 別のスライドが開く（Lightbox に -1 を渡すことにもなる）。
+    const resolved = new URL(src, window.location.href).href;
+    const index = images.findIndex((img) => img.src === resolved);
+    setCurrentImageIndex(index < 0 ? 0 : index);
     setLightboxOpen(true);
   }, []);
 

@@ -20,6 +20,7 @@ import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml';
 import SyntaxHighlighter from 'react-syntax-highlighter/dist/esm/prism-async-light';
 import vs from 'react-syntax-highlighter/dist/esm/styles/prism/vs';
 import vscDarkPlus from 'react-syntax-highlighter/dist/esm/styles/prism/vsc-dark-plus';
+import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -71,7 +72,16 @@ const CodeBlock = memo(function CodeBlock({ children, className }: CodeBlockProp
 
   const handleCopy = async () => {
     const code = String(children).replace(/\n$/, '');
-    await navigator.clipboard.writeText(code);
+    try {
+      // navigator.clipboard はセキュアコンテキスト（HTTPS / localhost）限定で、
+      // 平文 HTTP 配信では undefined になる。権限拒否でも reject する。
+      // 捕捉しないと未処理の rejection になり、利用者には「押しても何も起きない」
+      // だけが残る（成功時の状態変化にも到達しない）。
+      await navigator.clipboard.writeText(code);
+    } catch {
+      toast.error('コピーできませんでした。手動で選択してコピーしてください。');
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), COPIED_RESET_MS);
   };
