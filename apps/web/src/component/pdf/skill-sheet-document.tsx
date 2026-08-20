@@ -20,7 +20,7 @@ import {
   PAGE,
   SPACING,
 } from './layout-metrics';
-import type { MdNode } from './mdast';
+import { type MdNode, nodeText } from './mdast';
 
 export type { MdNode } from './mdast';
 
@@ -282,13 +282,8 @@ function headingStyle(depth: number): PdfStyle {
   return styles.h4;
 }
 
-function headingNodeText(node: MdNode): string {
-  if (typeof node.value === 'string') return node.value;
-  return (node.children ?? []).map(headingNodeText).join('');
-}
-
 function isProjectHeading(node: MdNode): boolean {
-  return headingNodeText(node).trimStart().startsWith('■');
+  return nodeText(node).trimStart().startsWith('■');
 }
 
 // 見出しの Text 部分のみを組み立てる。見出し単体描画 (renderHeading) と

@@ -1,5 +1,4 @@
 import { existsSync } from 'node:fs';
-import path from 'node:path';
 import { Font, renderToBuffer } from '@react-pdf/renderer';
 import { getDocument, OPS } from 'pdfjs-dist';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -7,10 +6,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import PDF_FONT_FAMILY from './constants';
 import { countEmbeddedFontFiles, extractEmbeddedTrueTypeFonts, inspectEmbeddedFont } from './embedded-font';
 import { SkillSheetDocument } from './skill-sheet-document';
-
-const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+import { BOLD_TTF, REGULAR_TTF } from './test-font-paths';
 
 // サブセットに含まれる「輪郭を持たないグリフ」は半角スペース程度しか出ない。
 // 本文の長さに依存しない不変条件にするため、絶対数ではなくこの余裕で見る。

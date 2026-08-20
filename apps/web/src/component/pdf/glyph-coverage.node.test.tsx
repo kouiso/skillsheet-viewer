@@ -4,16 +4,12 @@
 // 文字がそのまま PDF に落ちて Issue #263 E が再発するため、機械的に検出する。
 
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
 import { coverageRanges, isRenderableCodePoint, MISSING_GLYPH_PLACEHOLDER, toRenderableText } from './glyph-coverage';
+import { BOLD_TTF, REGULAR_TTF } from './test-font-paths';
 import { readCoveredCodePoints } from './truetype-cmap';
-
-const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
 
 function rangesToString(ranges: readonly (readonly [number, number])[]): string {
   return ranges.map(([start, end]) => `${start.toString(16)}-${end.toString(16)}`).join(',');

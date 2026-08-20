@@ -5,7 +5,6 @@
 // それらの検証は *.node.test.tsx（vitest.config.pdf.ts / environment: 'node'）側で行う。
 
 import { existsSync } from 'node:fs';
-import path from 'node:path';
 
 import { Font, renderToBuffer, View } from '@react-pdf/renderer';
 import { type ProjectBlockData, projectBlockToMarkdown } from '@skillsheet/db';
@@ -20,17 +19,7 @@ import PDF_FONT_FAMILY from './constants';
 import { splitForHyphenation } from './fonts';
 import type { MdNode } from './skill-sheet-document';
 import { isCardLikelyToFitOnePage, NUM, renderBlocks, SkillSheetDocument } from './skill-sheet-document';
-
-// public/ 配下の実フォントファイルへの絶対パス。
-// 本番（pdf/fonts.ts）はブラウザ向けに URL 参照（/fonts/...）で登録するが、
-// Node 上のバイト描画ではファイルシステムから読めないため、ここでは実ファイルパスで登録する。
-// ファミリ名は本番と同じ PDF_FONT_FAMILY を使うので、コンポーネントの参照と一致する。
-//
-// Noto Sans JP の CFF(OTF) 版を使うと @react-pdf/renderer の CFF サブセット化が
-// 壊れて豆腐表示・コンテンツ消失が起きる（Issue #172）。テストも TrueType 版を使う。
-const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+import { BOLD_TTF, REGULAR_TTF } from './test-font-paths';
 
 // PDF の先頭マジックバイト（%PDF-）。これが無ければ PDF として成立していない。
 const PDF_HEADER = '%PDF-';
@@ -195,17 +184,39 @@ function buildProjectCardMarkdown(heading: string, note: string, duties: string,
 // 高さ見積りに変わったため、件数ではなく「収まらなくなる件数」を実装に問い合わせて使う。
 // こうしておくと、余白やフォントサイズを変えても回帰テストの意味が保たれる。
 const SEARCH_LIMIT = 2000;
-function smallestCountThatOverflowsPage(build: (count: number) => string): number {
-  for (let count = 1; count <= SEARCH_LIMIT; count++) {
-    const nodes = parseMarkdown(build(count));
-    const heading = nodes[0];
-    const table = nodes[1];
-    if (heading?.type !== 'heading' || table?.type !== 'table') {
-      throw new Error('見出し+表で始まる markdown を組み立てること');
-    }
-    if (!isCardLikelyToFitOnePage(heading, table, nodes.slice(2))) return count;
+
+/** 件数 count のカードを実装（高さ見積り）が「1ページに収まる」と判断するか。 */
+function fitsAt(build: (count: number) => string, count: number): boolean {
+  const nodes = parseMarkdown(build(count));
+  const heading = nodes[0];
+  const table = nodes[1];
+  if (heading?.type !== 'heading' || table?.type !== 'table') {
+    throw new Error('見出し+表で始まる markdown を組み立てること');
   }
-  throw new Error(`${SEARCH_LIMIT} 件まで増やしても1ページに収まらない判定にならなかった`);
+  return isCardLikelyToFitOnePage(heading, table, nodes.slice(2));
+}
+
+function smallestCountThatOverflowsPage(build: (count: number) => string): number {
+  // estimateBlocksHeight は要素を増やしても高さが減らない（行数・行高・余白の和なので
+  // count に対して単調非減少）ため、「収まる → 収まらない」の境界はちょうど 1 箇所しかない。
+  // 1 ずつ試すと 600 件を超える build まで parseMarkdown が走るので、倍々で「収まらない
+  // 件数」を見つけ、そこから二分探索で境界を詰める（評価回数は O(log n)）。
+  // low = 収まることを確認済みの件数（0 は未確認の下限）、high = 収まらないことを確認済みの件数。
+  let low = 0;
+  let high = 1;
+  while (fitsAt(build, high)) {
+    low = high;
+    if (high >= SEARCH_LIMIT) {
+      throw new Error(`${SEARCH_LIMIT} 件まで増やしても1ページに収まらない判定にならなかった`);
+    }
+    high = Math.min(high * 2, SEARCH_LIMIT);
+  }
+  while (high - low > 1) {
+    const mid = Math.floor((low + high) / 2);
+    if (fitsAt(build, mid)) low = mid;
+    else high = mid;
+  }
+  return high;
 }
 
 describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', () => {

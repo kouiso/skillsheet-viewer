@@ -8,6 +8,8 @@
 
 const SFNT_HEADER_BYTES = 12;
 const TABLE_RECORD_BYTES = 16;
+/** Unicode のコードポイント上限。壊れた cmap の範囲指定をここで頭打ちにする。 */
+const MAX_CODE_POINT = 0x10ffff;
 
 function findTable(font: Buffer, wanted: string): { offset: number; length: number } | null {
   if (font.length < SFNT_HEADER_BYTES) return null;
@@ -56,7 +58,11 @@ function readFormat12(font: Buffer, at: number, out: Set<number>): void {
     const group = at + 16 + i * 12;
     if (group + 12 > font.length) break;
     const start = font.readUInt32BE(group);
-    const end = font.readUInt32BE(group + 4);
+    // start/end は 32bit 生値なので、壊れたフォントでは Unicode の上限を大きく超えた
+    // 値が入りうる。そのまま内側ループを回すと数十億回の反復でハングするため、
+    // 到達しうる最大コードポイントで頭を抑え、逆転したグループは読み飛ばす。
+    const end = Math.min(font.readUInt32BE(group + 4), MAX_CODE_POINT);
+    if (start > end) continue;
     const startGlyph = font.readUInt32BE(group + 8);
     for (let code = start; code <= end; code++) {
       if (startGlyph + (code - start) !== 0) out.add(code);

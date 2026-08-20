@@ -5,8 +5,6 @@
 // Issue #262 / #263 で実機再現した PDF の欠陥 A〜G の回帰防止。
 // いずれも「実際に renderToBuffer した PDF を読み直して」検証する。
 
-import path from 'node:path';
-
 import { Font, renderToBuffer } from '@react-pdf/renderer';
 import { type ProjectBlockData, projectBlockToMarkdown } from '@skillsheet/db';
 import { getDocument } from 'pdfjs-dist';
@@ -19,13 +17,19 @@ import { PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
 import { splitForHyphenation } from './fonts';
 import { MISSING_GLYPH_PLACEHOLDER } from './glyph-coverage';
-import { CONTENT_HEIGHT, CONTENT_WIDTH, estimateBlocksHeight, FONT_SIZE, PAGE } from './layout-metrics';
+import {
+  CONTENT_HEIGHT,
+  CONTENT_WIDTH,
+  estimateBlocksHeight,
+  FONT_SIZE,
+  LINE_HEIGHT,
+  PAGE,
+  SPACING,
+} from './layout-metrics';
 import { type MdNode, nodeText } from './mdast';
 import { SkillSheetDocument } from './skill-sheet-document';
+import { BOLD_TTF, REGULAR_TTF } from './test-font-paths';
 
-const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
 const RENDER_TIMEOUT_MS = 120_000;
 
 function registerNodeFonts(): void {
@@ -62,21 +66,29 @@ interface PdfPage {
 }
 
 async function readPdf(buffer: Buffer): Promise<PdfPage[]> {
-  const doc = await getDocument({ data: new Uint8Array(buffer) }).promise;
-  const pages: PdfPage[] = [];
-  for (let i = 1; i <= doc.numPages; i++) {
-    const page = await doc.getPage(i);
-    const content = await page.getTextContent();
-    const items: PdfTextItem[] = [];
-    let text = '';
-    for (const item of content.items) {
-      if (!('str' in item) || typeof item.str !== 'string') continue;
-      text += item.str;
-      items.push(item as unknown as PdfTextItem);
+  // getDocument が返す loadingTask はワーカーとバッファを抱えたままになる。このスイートは
+  // 1 ケースで何十回も PDF を読み直すので、破棄しないとワーカーが積み上がってメモリと
+  // ハンドルを食いつぶす。読み終えたら必ず destroy() する。
+  const loadingTask = getDocument({ data: new Uint8Array(buffer) });
+  try {
+    const doc = await loadingTask.promise;
+    const pages: PdfPage[] = [];
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      const items: PdfTextItem[] = [];
+      let text = '';
+      for (const item of content.items) {
+        if (!('str' in item) || typeof item.str !== 'string') continue;
+        text += item.str;
+        items.push(item as unknown as PdfTextItem);
+      }
+      pages.push({ text, items });
     }
-    pages.push({ text, items });
+    return pages;
+  } finally {
+    await loadingTask.destroy();
   }
-  return pages;
 }
 
 // splitForHyphenation は改行機会を独立したテキストアイテムとして残すため、pdf.js の
@@ -353,8 +365,15 @@ describe('PDF 欠陥 A〜G の回帰防止（Issue #262 / #263）', () => {
     'D: 通常見出しが本文と別ページに孤立しない（Issue #263 D）',
     async () => {
       const orphans: number[] = [];
-      // 1 ページに入る 1 行段落の数より少し多めまで動かせば、ページ末の残余は一巡する。
-      const maxFiller = Math.ceil(CONTENT_HEIGHT / (FONT_SIZE.BODY * 1.6)) + 2;
+      // 詰め物は 1 行の段落なので、1 つ増えるたびにページ末の残余が
+      // FILLER_BLOCK_HEIGHT ずつ減る。ページが 1 枚埋まるまで動かせば残余は一巡し、
+      // 刻み幅（= 本文 1 段落の高さ）は「見出しは入るが本文は入らない」余白帯の幅と
+      // 等しいので、その帯を飛び越すことはない ―― 1 周ぶん走査すれば孤立は必ず 1 回
+      // 現れる。CONTENT_HEIGHT は表題のぶん実際のページ 1 容量より大きいので、この
+      // 見積りは常に一巡ぶんを上回る（+1 は端数の保険）。これ以上広げても同じ残余を
+      // なぞるだけで、renderToBuffer の回数が増えるだけになる。
+      const FILLER_BLOCK_HEIGHT = FONT_SIZE.BODY * LINE_HEIGHT + SPACING.PARAGRAPH_MARGIN_BOTTOM;
+      const maxFiller = Math.ceil(CONTENT_HEIGHT / FILLER_BLOCK_HEIGHT) + 1;
       for (let filler = 1; filler <= maxFiller; filler++) {
         const markdown = [
           ...Array.from({ length: filler }, (_, i) => `詰め物${i}行目。\n`),
