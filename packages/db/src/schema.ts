@@ -54,6 +54,22 @@ export const realVolumeDemoFixtures = pgTable(
 );
 
 /**
+ * 閲覧コード（VIEWER_CODE）の失敗試行の記録。総当たりを止めるために使う。
+ *
+ * Vercel の serverless はインスタンスが使い捨てで水平に増えるため、プロセス内の
+ * カウンタでは並列アクセスに対して事実上ノーガードになる。回数の正本を DB に置く。
+ *
+ * key は「送り元 IP のハッシュ」または IP を取れない場合の固定キー。生の IP は保存しない
+ * （必要なのは同一送り元かどうかの判定だけで、IP そのものは要らない）。
+ */
+export const viewerLoginAttempt = pgTable('viewer_login_attempt', {
+  key: text('key').primaryKey(),
+  failureCount: integer('failure_count').notNull().default(0),
+  windowStartedAt: timestamp('window_started_at', { withTimezone: true }).notNull().default(sql`now()`),
+  lockedUntil: timestamp('locked_until', { withTimezone: true }),
+});
+
+/**
  * Better Auth コアテーブル（user/session/account/verification）。
  * better-auth v1.6 のデフォルト Drizzle スキーマ（単数形テーブル名）に準拠。
  * email/password 認証で使用する。drizzleAdapter はスキーマのキー名でモデルを

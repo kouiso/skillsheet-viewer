@@ -38,7 +38,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { createInternalAdapter } from 'better-auth/db';
 
 import { createDb } from '../src/client';
 import { account, session, user, verification } from '../src/schema';
@@ -165,6 +164,89 @@ export function promptHiddenPassword(promptText: string, stdin: NodeJS.ReadStrea
 export const EMAIL_PATTERN =
   /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+.-]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
+/** provisionOwner の結果。呼び出し側のログ文言を分岐するために何をしたかを返す。 */
+export type ProvisionOwnerResult = {
+  userId: string;
+  action: 'created' | 'reissued' | 'linked';
+};
+
+/**
+ * オーナーアカウントを用意する（新規作成 / パスワード再発行 / credential 行の補完）。
+ *
+ * main() から切り出してあるのは、この経路そのものをテストで動かすため。
+ * 以前は純粋なヘルパ（parseEnvFile 等）しかテストしておらず、better-auth の
+ * バージョン差でこの経路が丸ごと落ちても誰も気づけなかった（新規環境で
+ * オーナーを作れず /builder に入れない状態が残った）。
+ */
+export async function provisionOwner(
+  ctx: Awaited<ReturnType<ReturnType<typeof betterAuth>['$context']>>,
+  params: { email: string; password: string; name: string },
+): Promise<ProvisionOwnerResult> {
+  const { password, name } = params;
+  const normalizedEmail = params.email.toLowerCase();
+  const minLen = ctx.password.config.minPasswordLength;
+  const maxLen = ctx.password.config.maxPasswordLength;
+  if (password.length < minLen || password.length > maxLen) {
+    throw new Error(`パスワードの長さが不正です（${minLen}〜${maxLen}文字である必要があります）`);
+  }
+
+  const hash = await ctx.password.hash(password);
+  // includeAccounts を付けないと existing.accounts が常に空配列になり、credential
+  // アカウントの有無を判定できない（デフォルトで account は join されない）。
+  const existing = await ctx.internalAdapter.findUserByEmail(normalizedEmail, { includeAccounts: true });
+
+  if (existing?.user) {
+    const userId = existing.user.id;
+    const hasCredentialAccount = existing.accounts.some((a) => a.providerId === 'credential');
+    if (hasCredentialAccount) {
+      // 既存オーナーのパスワード再発行（dogfooding で実際に使ったユースケース）。
+      // user.id は変わらないため SKILLSHEET_OWNER_ID の再設定は不要。
+      await ctx.internalAdapter.updatePassword(userId, hash);
+      return { userId, action: 'reissued' };
+    }
+    // user 行はあるが credential アカウントが無い（過去の実行が linkAccount で
+    // 失敗したまま残った等）。updatePassword は対象の credential 行が無いと
+    // 黙って0行更新のまま成功したように返るため、ここで判定して linkAccount で
+    // 新規作成する。
+    await ctx.internalAdapter.linkAccount({
+      userId,
+      providerId: 'credential',
+      accountId: userId,
+      password: hash,
+    });
+    return { userId, action: 'linked' };
+  }
+
+  // createUser と linkAccount を同一トランザクションで実行し、どちらかが失敗したら
+  // 両方ロールバックする（以前は linkAccount 失敗時に user を補償削除していたが、
+  // その削除自体が失敗すると credential の無い user だけが残る事故があった）。
+  //
+  // 以前はここで createInternalAdapter(tx, ctx) を組み立て直していたが、
+  // better-auth 1.6.25 の `auth.$context` は `hooks` を公開しなくなったため
+  // getWithHooks(adapter, ctx) の中で `ctx.hooks` が undefined になり
+  // 「hooksEntries is not iterable」で必ず落ちていた（＝新規環境でオーナーを作れない）。
+  // better-auth 側は AsyncLocalStorage で「いま有効なアダプタ」を解決する作りなので
+  // （db/with-hooks の getCurrentAdapter(adapter)）、transaction の中では
+  // ctx.internalAdapter をそのまま呼べばトランザクション用アダプタが使われる。
+  const userId = await ctx.adapter.transaction(async () => {
+    const createdUser = await ctx.internalAdapter.createUser({
+      email: normalizedEmail,
+      name,
+      image: null,
+      // 単一オーナー運用でありメール確認フローが存在しないため、最初から検証済みにする。
+      emailVerified: true,
+    });
+    await ctx.internalAdapter.linkAccount({
+      userId: createdUser.id,
+      providerId: 'credential',
+      accountId: createdUser.id,
+      password: hash,
+    });
+    return createdUser.id;
+  });
+  return { userId, action: 'created' };
+}
+
 async function main() {
   const email = parseArg('email') ?? process.env.SKILLSHEET_OWNER_EMAIL;
   let password = parseArg('password') ?? process.env.SKILLSHEET_OWNER_PASSWORD;
@@ -218,69 +300,14 @@ async function main() {
   });
 
   const ctx = await auth.$context;
-
-  const normalizedEmail = email.toLowerCase();
-  const minLen = ctx.password.config.minPasswordLength;
-  const maxLen = ctx.password.config.maxPasswordLength;
-  if (password.length < minLen || password.length > maxLen) {
-    throw new Error(`パスワードの長さが不正です（${minLen}〜${maxLen}文字である必要があります）`);
-  }
-
-  const hash = await ctx.password.hash(password);
-  // includeAccounts を付けないと existing.accounts が常に空配列になり、credential
-  // アカウントの有無を判定できない（デフォルトで account は join されない）。
-  const existing = await ctx.internalAdapter.findUserByEmail(normalizedEmail, { includeAccounts: true });
-
-  let userId: string;
-  if (existing?.user) {
-    userId = existing.user.id;
-    const hasCredentialAccount = existing.accounts.some((a) => a.providerId === 'credential');
-    if (hasCredentialAccount) {
-      // 既存オーナーのパスワード再発行（dogfooding で実際に使ったユースケース）。
-      // user.id は変わらないため SKILLSHEET_OWNER_ID の再設定は不要。
-      await ctx.internalAdapter.updatePassword(userId, hash);
-      console.log(`既存ユーザーのパスワードを再発行しました: email=${normalizedEmail} user.id=${userId}`);
-    } else {
-      // user 行はあるが credential アカウントが無い（過去の実行が linkAccount で
-      // 失敗したまま残った等）。updatePassword は対象の credential 行が無いと
-      // 黙って0行更新のまま成功したように返るため、ここで判定して linkAccount で
-      // 新規作成する（このまま updatePassword を呼ぶと「再発行成功」の出力が出るのに
-      // 実際はパスワードが設定されずログインできない）。
-      await ctx.internalAdapter.linkAccount({
-        userId,
-        providerId: 'credential',
-        accountId: userId,
-        password: hash,
-      });
-      console.log(
-        `既存ユーザーに credential アカウントを作成しパスワードを設定しました: email=${normalizedEmail} user.id=${userId}`,
-      );
-    }
-  } else {
-    // createUser と linkAccount を同一トランザクションで実行し、どちらかが失敗したら
-    // 両方ロールバックする（以前は linkAccount 失敗時に user を補償削除していたが、
-    // その削除自体が失敗すると credential の無い user だけが残る事故があった）。
-    // ctx.adapter.transaction はトランザクションスコープのアダプタを渡すコールバックを
-    // 取る公式 API（better-auth/db の createInternalAdapter と組み合わせて使う）。
-    userId = await ctx.adapter.transaction(async (tx) => {
-      const txInternalAdapter = createInternalAdapter(tx, ctx);
-      const createdUser = await txInternalAdapter.createUser({
-        email: normalizedEmail,
-        name,
-        image: null,
-        // 単一オーナー運用でありメール確認フローが存在しないため、最初から検証済みにする。
-        emailVerified: true,
-      });
-      await txInternalAdapter.linkAccount({
-        userId: createdUser.id,
-        providerId: 'credential',
-        accountId: createdUser.id,
-        password: hash,
-      });
-      return createdUser.id;
-    });
-    console.log(`オーナーアカウントを作成しました: email=${normalizedEmail} user.id=${userId}`);
-  }
+  const { userId, action } = await provisionOwner(ctx, { email, password, name });
+  console.log(
+    action === 'created'
+      ? `オーナーアカウントを作成しました: email=${email.toLowerCase()} user.id=${userId}`
+      : action === 'reissued'
+        ? `既存ユーザーのパスワードを再発行しました: email=${email.toLowerCase()} user.id=${userId}`
+        : `既存ユーザーに credential アカウントを作成しパスワードを設定しました: email=${email.toLowerCase()} user.id=${userId}`,
+  );
 
   console.log('');
   console.log('この user.id を .env（および Vercel の環境変数）の SKILLSHEET_OWNER_ID に設定してください:');

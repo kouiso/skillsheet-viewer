@@ -1,7 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
+import { MAX_FAILURES } from '@skillsheet/db/viewer-rate-limit';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetViewerLoginRateLimitMemory } from '@/server/viewer-rate-limit';
 import { createCallerFactory } from '../init';
 import { createTestContext } from '../test-context';
+
 import { authRouter } from './auth';
 
 const createCaller = createCallerFactory(authRouter);
@@ -31,6 +33,9 @@ beforeEach(() => {
   process.env.SESSION_SECRET = 'test-session-secret';
   process.env.VIEWER_CODE = 'correct-code';
   delete process.env.VITE_VIEWER_CODE;
+  // 回数制限はプロセス内カウンタを持つため、テスト間で持ち越さない。
+  resetViewerLoginRateLimitMemory();
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -112,5 +117,61 @@ describe('auth.logout', () => {
 
     await expect(caller.logout()).resolves.toEqual({ ok: true });
     expect(responseHeaders?.get('set-cookie')).toContain('session=; Max-Age=0');
+  });
+});
+// 閲覧コードは共有の1本きりなので、回数制限が無いと総当たりで破れる
+// （対策前は実測で毎秒 337 回通った）。
+describe('閲覧コードの総当たり対策', () => {
+  function attackerCaller() {
+    return callerFor(
+      new Request('https://example.com/api/trpc/auth.login', {
+        method: 'POST',
+        headers: { origin: 'https://example.com', host: 'example.com', 'x-forwarded-for': '203.0.113.9' },
+      }),
+    );
+  }
+
+  it(`失敗が続くと ${MAX_FAILURES} 回目で TOO_MANY_REQUESTS になり、以降は照合にも進めない`, async () => {
+    for (let i = 1; i < MAX_FAILURES; i++) {
+      const { caller } = attackerCaller();
+      await expect(caller.login({ code: `wrong-${i}` })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    }
+
+    const { caller, responseHeaders } = attackerCaller();
+    await expect(caller.login({ code: 'wrong-last' })).rejects.toMatchObject({ code: 'TOO_MANY_REQUESTS' });
+    expect(responseHeaders?.get('retry-after')).toMatch(/^\d+$/);
+
+    // ロック後は、たとえ正しいコードでも通さない（総当たりの当たりを拾わせない）。
+    const { caller: after } = attackerCaller();
+    await expect(after.login({ code: 'correct-code' })).rejects.toMatchObject({ code: 'TOO_MANY_REQUESTS' });
+  });
+
+  it('別の送り元は巻き込まれない', async () => {
+    for (let i = 0; i < MAX_FAILURES; i++) {
+      const { caller } = attackerCaller();
+      await caller.login({ code: `wrong-${i}` }).catch(() => {});
+    }
+
+    const { caller, responseHeaders } = callerFor(
+      new Request('https://example.com/api/trpc/auth.login', {
+        method: 'POST',
+        headers: { origin: 'https://example.com', host: 'example.com', 'x-forwarded-for': '198.51.100.7' },
+      }),
+    );
+    await expect(caller.login({ code: 'correct-code' })).resolves.toEqual({ ok: true });
+    expect(responseHeaders?.has('set-cookie')).toBe(true);
+  });
+
+  it('成功すると失敗の記録が消え、次に間違えても即ロックにならない', async () => {
+    const headers = { origin: 'https://example.com', host: 'example.com', 'x-forwarded-for': '192.0.2.55' };
+    const make = () => callerFor(new Request('https://example.com/api/trpc/auth.login', { method: 'POST', headers }));
+
+    for (let i = 0; i < MAX_FAILURES - 1; i++) {
+      await make()
+        .caller.login({ code: `wrong-${i}` })
+        .catch(() => {});
+    }
+    await expect(make().caller.login({ code: 'correct-code' })).resolves.toEqual({ ok: true });
+    await expect(make().caller.login({ code: 'wrong-again' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 });
