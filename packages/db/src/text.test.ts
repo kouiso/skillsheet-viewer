@@ -48,4 +48,16 @@ describe('unwrapEmphasis', () => {
     expect(unwrapEmphasis('未完 **強調')).toBe('未完 強調');
     expect(unwrapEmphasis('**開いたまま **閉じた** 続き')).toBe('開いたまま 閉じた 続き');
   });
+
+  // 実データの comment は「**バックエンド**」を段落の頭に置いて話題を切り替えとる。
+  // ここまで平文にすると、見出しと本文が同じ見た目になって段落の切れ目が消える。
+  it('行まるごとの小見出しは太字のまま残す', () => {
+    const text = '前置きの一文。\n**バックエンド**\n本文がここに続く。';
+    expect(unwrapEmphasis(text)).toBe(text);
+  });
+
+  it('小見出しを残しても、同じ本文中のインライン強調は外す', () => {
+    const text = '**モバイル**\n仕様を**指摘**した。\n  **Web・LP**  \n次の話題。';
+    expect(unwrapEmphasis(text)).toBe('**モバイル**\n仕様を指摘した。\n  **Web・LP**  \n次の話題。');
+  });
 });
