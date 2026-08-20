@@ -48,5 +48,8 @@
     "patchedDependencies": {
       "@react-pdf/textkit@6.3.0": "patches/@react-pdf__textkit@6.3.0.patch"
     }
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
   }
 }

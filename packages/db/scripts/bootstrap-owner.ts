@@ -1,47 +1,12 @@
-/**
- * 単一オーナー運用のオーナーアカウント（Better Auth の user / account）をブートストラップする。
- *
- * `apps/web/src/lib/auth.ts` は `emailAndPassword.disableSignUp: true` のため、
- * UI からのサインアップができない。新規環境では `/login` を一度も通せず `/builder` に
- * 到達できないため、このスクリプトで最初のオーナーアカウントを直接作成する（#153 X-1）。
- *
- * 実装は Better Auth 自身の `/sign-up/email` エンドポイント実装
- * （node_modules/better-auth/dist/api/routes/sign-up.mjs）と同じ手順を踏む:
- *   1. `auth.$context` から `AuthContext`（`ctx`）を取得する
- *   2. `ctx.password.hash(password)` でパスワードハッシュを生成する
- *   3. `ctx.internalAdapter.createUser(...)` で `user` 行を作る
- *   4. `ctx.internalAdapter.linkAccount({ providerId: 'credential', ... })` で
- *      `account` 行（`provider_id = 'credential'`）を作る
- *
- * 生SQLでの直接INSERTではなく `internalAdapter` 経由にしているのは、ID生成・
- * タイムスタンプ・将来の追加フィールドなど Better Auth 内部の規約に自動的に追従させるため。
- *
- * 実行（新規オーナー作成、リポジトリルートの `.env`（無ければ `apps/web/.env.local`）の
- * DATABASE_URL / BETTER_AUTH_SECRET を使用）:
- *   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=owner@example.com
- * `--password` を省略し対話端末（TTY）から実行すると、画面に表示されない対話プロンプトで
- * パスワードを読み取る（シェル履歴・`ps` への平文露出を避けるため、これが推奨経路）。
- *
- * CI 等の非対話環境向けに `--password=<password>` 引数や環境変数での指定も可
- * （CLI引数が優先。ただしどちらもシェル履歴・`ps` に残るリスクがある）:
- *   SKILLSHEET_OWNER_EMAIL=owner@example.com SKILLSHEET_OWNER_PASSWORD='Str0ng-Pass!' \
- *     pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts
- *
- * 既に同じ email のユーザーが存在する場合は「新規作成」ではなく「パスワードの再発行」を行う
- * （dogfooding 時に実際に必要になったユースケース。既存 user.id はそのまま維持される）。
- *
- * 出力される `user.id` を `.env`（および Vercel の環境変数）の `SKILLSHEET_OWNER_ID` に設定する。
- */
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
+import { runWithTransaction } from '@better-auth/core/context';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { createInternalAdapter } from 'better-auth/db';
 
 import { createDb } from '../src/client';
 import { account, session, user, verification } from '../src/schema';
+import { loadScriptEnv, parseEnvFile } from './env';
 
 const USAGE = `使い方:
   pnpm --filter @skillsheet/db exec tsx scripts/bootstrap-owner.ts --email=<email> [--name=<name>]
@@ -53,23 +18,6 @@ const USAGE = `使い方:
   DATABASE_URL / BETTER_AUTH_SECRET はリポジトリルートの .env（無ければ apps/web/.env.local）から読み込む。
   どちらも無くても、実行環境の環境変数に既に設定済みなら（CI/Vercel 等）そのまま使う。`;
 
-export function parseEnvFile(content: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
-  }
-  return result;
-}
-
 // DATABASE_URL / BETTER_AUTH_SECRET を .env ファイルから読み込む。
 //
 // SETUP.md はリポジトリルートの `.env`（`cp .env.example .env`）を案内しているが、
@@ -79,17 +27,10 @@ export function parseEnvFile(content: string): Record<string, string> {
 // 値は上書きしない。どちらの候補ファイルも無くても、必須の環境変数が実行環境
 // （CI/Vercel 等）に既に設定済みなら、そのまま処理を継続する（ファイルが無いことだけを
 // 理由に fail-fast しない）。
-function loadBootstrapEnv(): void {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const candidates = [resolve(here, '../../../.env'), resolve(here, '../../../apps/web/.env.local')];
-  const envPath = candidates.find((p) => existsSync(p));
-  if (!envPath) return;
-  const parsed = parseEnvFile(readFileSync(envPath, 'utf-8'));
-  for (const [key, value] of Object.entries(parsed)) {
-    if (process.env[key] === undefined) process.env[key] = value;
-  }
-}
-loadBootstrapEnv();
+// テストが読み込み口として使っているので、共通実装をそのまま公開する。
+export { parseEnvFile };
+
+loadScriptEnv();
 
 function parseArg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
@@ -165,6 +106,92 @@ export function promptHiddenPassword(promptText: string, stdin: NodeJS.ReadStrea
 export const EMAIL_PATTERN =
   /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+.-]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
+/** provisionOwner の結果。呼び出し側のログ文言を分岐するために何をしたかを返す。 */
+export type ProvisionOwnerResult = {
+  userId: string;
+  action: 'created' | 'reissued' | 'linked';
+};
+
+/**
+ * オーナーアカウントを用意する（新規作成 / パスワード再発行 / credential 行の補完）。
+ *
+ * main() から切り出してあるのは、この経路そのものをテストで動かすため。
+ * 以前は純粋なヘルパ（parseEnvFile 等）しかテストしておらず、better-auth の
+ * バージョン差でこの経路が丸ごと落ちても誰も気づけなかった（新規環境で
+ * オーナーを作れず /builder に入れない状態が残った）。
+ */
+export async function provisionOwner(
+  ctx: Awaited<ReturnType<ReturnType<typeof betterAuth>['$context']>>,
+  params: { email: string; password: string; name: string },
+): Promise<ProvisionOwnerResult> {
+  const { password, name } = params;
+  const normalizedEmail = params.email.toLowerCase();
+  const minLen = ctx.password.config.minPasswordLength;
+  const maxLen = ctx.password.config.maxPasswordLength;
+  if (password.length < minLen || password.length > maxLen) {
+    throw new Error(`パスワードの長さが不正です（${minLen}〜${maxLen}文字である必要があります）`);
+  }
+
+  const hash = await ctx.password.hash(password);
+  // includeAccounts を付けないと existing.accounts が常に空配列になり、credential
+  // アカウントの有無を判定できない（デフォルトで account は join されない）。
+  const existing = await ctx.internalAdapter.findUserByEmail(normalizedEmail, { includeAccounts: true });
+
+  if (existing?.user) {
+    const userId = existing.user.id;
+    const hasCredentialAccount = existing.accounts.some((a) => a.providerId === 'credential');
+    if (hasCredentialAccount) {
+      // 既存オーナーのパスワード再発行（dogfooding で実際に使ったユースケース）。
+      // user.id は変わらないため SKILLSHEET_OWNER_ID の再設定は不要。
+      await ctx.internalAdapter.updatePassword(userId, hash);
+      return { userId, action: 'reissued' };
+    }
+    // user 行はあるが credential アカウントが無い（過去の実行が linkAccount で
+    // 失敗したまま残った等）。updatePassword は対象の credential 行が無いと
+    // 黙って0行更新のまま成功したように返るため、ここで判定して linkAccount で
+    // 新規作成する。
+    await ctx.internalAdapter.linkAccount({
+      userId,
+      providerId: 'credential',
+      accountId: userId,
+      password: hash,
+    });
+    return { userId, action: 'linked' };
+  }
+
+  // createUser と linkAccount を同一トランザクションで実行し、どちらかが失敗したら
+  // 両方ロールバックする（以前は linkAccount 失敗時に user を補償削除していたが、
+  // その削除自体が失敗すると credential の無い user だけが残る事故があった）。
+  //
+  // 以前はここで createInternalAdapter(tx, ctx) を組み立て直していたが、
+  // better-auth 1.6.25 の `auth.$context` は `hooks` を公開しなくなったため
+  // getWithHooks(adapter, ctx) の中で `ctx.hooks` が undefined になり
+  // 「hooksEntries is not iterable」で必ず落ちていた（＝新規環境でオーナーを作れない）。
+  //
+  // ここは runWithTransaction を使う。`ctx.adapter.transaction(fn)` は fn にトランザクション
+  // 用アダプタを引数で渡すだけで AsyncLocalStorage には積まないため、その中で
+  // ctx.internalAdapter を呼んでも getCurrentAdapter() は素のアダプタへフォールバックし、
+  // ロールバックが効かない（linkAccount が失敗すると user 行だけ残る）。
+  // runWithTransaction は als.run でトランザクション用アダプタを積んでから fn を走らせる。
+  const userId = await runWithTransaction(ctx.adapter, async () => {
+    const createdUser = await ctx.internalAdapter.createUser({
+      email: normalizedEmail,
+      name,
+      image: null,
+      // 単一オーナー運用でありメール確認フローが存在しないため、最初から検証済みにする。
+      emailVerified: true,
+    });
+    await ctx.internalAdapter.linkAccount({
+      userId: createdUser.id,
+      providerId: 'credential',
+      accountId: createdUser.id,
+      password: hash,
+    });
+    return createdUser.id;
+  });
+  return { userId, action: 'created' };
+}
+
 async function main() {
   const email = parseArg('email') ?? process.env.SKILLSHEET_OWNER_EMAIL;
   let password = parseArg('password') ?? process.env.SKILLSHEET_OWNER_PASSWORD;
@@ -218,69 +245,16 @@ async function main() {
   });
 
   const ctx = await auth.$context;
-
-  const normalizedEmail = email.toLowerCase();
-  const minLen = ctx.password.config.minPasswordLength;
-  const maxLen = ctx.password.config.maxPasswordLength;
-  if (password.length < minLen || password.length > maxLen) {
-    throw new Error(`パスワードの長さが不正です（${minLen}〜${maxLen}文字である必要があります）`);
-  }
-
-  const hash = await ctx.password.hash(password);
-  // includeAccounts を付けないと existing.accounts が常に空配列になり、credential
-  // アカウントの有無を判定できない（デフォルトで account は join されない）。
-  const existing = await ctx.internalAdapter.findUserByEmail(normalizedEmail, { includeAccounts: true });
-
-  let userId: string;
-  if (existing?.user) {
-    userId = existing.user.id;
-    const hasCredentialAccount = existing.accounts.some((a) => a.providerId === 'credential');
-    if (hasCredentialAccount) {
-      // 既存オーナーのパスワード再発行（dogfooding で実際に使ったユースケース）。
-      // user.id は変わらないため SKILLSHEET_OWNER_ID の再設定は不要。
-      await ctx.internalAdapter.updatePassword(userId, hash);
-      console.log(`既存ユーザーのパスワードを再発行しました: email=${normalizedEmail} user.id=${userId}`);
-    } else {
-      // user 行はあるが credential アカウントが無い（過去の実行が linkAccount で
-      // 失敗したまま残った等）。updatePassword は対象の credential 行が無いと
-      // 黙って0行更新のまま成功したように返るため、ここで判定して linkAccount で
-      // 新規作成する（このまま updatePassword を呼ぶと「再発行成功」の出力が出るのに
-      // 実際はパスワードが設定されずログインできない）。
-      await ctx.internalAdapter.linkAccount({
-        userId,
-        providerId: 'credential',
-        accountId: userId,
-        password: hash,
-      });
-      console.log(
-        `既存ユーザーに credential アカウントを作成しパスワードを設定しました: email=${normalizedEmail} user.id=${userId}`,
-      );
-    }
-  } else {
-    // createUser と linkAccount を同一トランザクションで実行し、どちらかが失敗したら
-    // 両方ロールバックする（以前は linkAccount 失敗時に user を補償削除していたが、
-    // その削除自体が失敗すると credential の無い user だけが残る事故があった）。
-    // ctx.adapter.transaction はトランザクションスコープのアダプタを渡すコールバックを
-    // 取る公式 API（better-auth/db の createInternalAdapter と組み合わせて使う）。
-    userId = await ctx.adapter.transaction(async (tx) => {
-      const txInternalAdapter = createInternalAdapter(tx, ctx);
-      const createdUser = await txInternalAdapter.createUser({
-        email: normalizedEmail,
-        name,
-        image: null,
-        // 単一オーナー運用でありメール確認フローが存在しないため、最初から検証済みにする。
-        emailVerified: true,
-      });
-      await txInternalAdapter.linkAccount({
-        userId: createdUser.id,
-        providerId: 'credential',
-        accountId: createdUser.id,
-        password: hash,
-      });
-      return createdUser.id;
-    });
-    console.log(`オーナーアカウントを作成しました: email=${normalizedEmail} user.id=${userId}`);
-  }
+  const { userId, action } = await provisionOwner(ctx, { email, password, name });
+  // CI から実行されうるので、メールアドレスはログに残さない（CI ログは長期に保存される）。
+  // 必要な user.id は下の案内でだけ出す。
+  console.log(
+    action === 'created'
+      ? 'オーナーアカウントを作成しました'
+      : action === 'reissued'
+        ? '既存ユーザーのパスワードを再発行しました'
+        : '既存ユーザーに credential アカウントを作成しパスワードを設定しました',
+  );
 
   console.log('');
   console.log('この user.id を .env（および Vercel の環境変数）の SKILLSHEET_OWNER_ID に設定してください:');

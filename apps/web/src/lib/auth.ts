@@ -1,3 +1,9 @@
+// クライアントバンドルに巻き込まれた瞬間にビルドを失敗させる。
+// これまでは「Client Component から import しないこと」というコメントだけが頼りで、
+// 誤って読み込んでも誰も気づけなかった（秘密情報の露出・巨大ドライバの同梱に直結する）。
+// Better Auth の構成。BETTER_AUTH_SECRET を読む。
+import 'server-only';
+
 /**
  * Better Auth サーバー設定。
  * email/password 認証のみ有効。DB は既存の Neon（Drizzle）を共用。

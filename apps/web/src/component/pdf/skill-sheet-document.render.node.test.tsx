@@ -5,7 +5,6 @@
 // それらの検証は *.node.test.tsx（vitest.config.pdf.ts / environment: 'node'）側で行う。
 
 import { existsSync } from 'node:fs';
-import path from 'node:path';
 
 import { Font, renderToBuffer, View } from '@react-pdf/renderer';
 import { type ProjectBlockData, projectBlockToMarkdown } from '@skillsheet/db';
@@ -19,18 +18,8 @@ import { PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
 import { splitForHyphenation } from './fonts';
 import type { MdNode } from './skill-sheet-document';
-import { NUM, renderBlocks, SkillSheetDocument } from './skill-sheet-document';
-
-// public/ 配下の実フォントファイルへの絶対パス。
-// 本番（pdf/fonts.ts）はブラウザ向けに URL 参照（/fonts/...）で登録するが、
-// Node 上のバイト描画ではファイルシステムから読めないため、ここでは実ファイルパスで登録する。
-// ファミリ名は本番と同じ PDF_FONT_FAMILY を使うので、コンポーネントの参照と一致する。
-//
-// Noto Sans JP の CFF(OTF) 版を使うと @react-pdf/renderer の CFF サブセット化が
-// 壊れて豆腐表示・コンテンツ消失が起きる（Issue #172）。テストも TrueType 版を使う。
-const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+import { isCardLikelyToFitOnePage, NUM, renderBlocks, SkillSheetDocument } from './skill-sheet-document';
+import { BOLD_TTF, REGULAR_TTF } from './test-font-paths';
 
 // PDF の先頭マジックバイト（%PDF-）。これが無ければ PDF として成立していない。
 const PDF_HEADER = '%PDF-';
@@ -190,10 +179,50 @@ function buildProjectCardMarkdown(heading: string, note: string, duties: string,
   ].join('\n');
 }
 
+// 「このカードは1ページに収まらない」と実装（高さ見積り）が判断するまで要素数を増やす。
+// 旧テストは NUM.CARD_MAX_ROWS のような件数の閾値を直接参照していたが、判定が pt 単位の
+// 高さ見積りに変わったため、件数ではなく「収まらなくなる件数」を実装に問い合わせて使う。
+// こうしておくと、余白やフォントサイズを変えても回帰テストの意味が保たれる。
+const SEARCH_LIMIT = 2000;
+
+/** 件数 count のカードを実装（高さ見積り）が「1ページに収まる」と判断するか。 */
+function fitsAt(build: (count: number) => string, count: number): boolean {
+  const nodes = parseMarkdown(build(count));
+  const heading = nodes[0];
+  const table = nodes[1];
+  if (heading?.type !== 'heading' || table?.type !== 'table') {
+    throw new Error('見出し+表で始まる markdown を組み立てること');
+  }
+  return isCardLikelyToFitOnePage(heading, table, nodes.slice(2));
+}
+
+function smallestCountThatOverflowsPage(build: (count: number) => string): number {
+  // estimateBlocksHeight は要素を増やしても高さが減らない（行数・行高・余白の和なので
+  // count に対して単調非減少）ため、「収まる → 収まらない」の境界はちょうど 1 箇所しかない。
+  // 1 ずつ試すと 600 件を超える build まで parseMarkdown が走るので、倍々で「収まらない
+  // 件数」を見つけ、そこから二分探索で境界を詰める（評価回数は O(log n)）。
+  // low = 収まることを確認済みの件数（0 は未確認の下限）、high = 収まらないことを確認済みの件数。
+  let low = 0;
+  let high = 1;
+  while (fitsAt(build, high)) {
+    low = high;
+    if (high >= SEARCH_LIMIT) {
+      throw new Error(`${SEARCH_LIMIT} 件まで増やしても1ページに収まらない判定にならなかった`);
+    }
+    high = Math.min(high * 2, SEARCH_LIMIT);
+  }
+  while (high - low > 1) {
+    const mid = Math.floor((low + high) / 2);
+    if (fitsAt(build, mid)) low = mid;
+    else high = mid;
+  }
+  return high;
+}
+
 describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', () => {
   it('1ページに収まる見込みの小さな表（案件カード相当）は見出し+表を1つのViewにまとめ wrap={false} にする', () => {
     // projectBlockToMarkdown 相当（期間/役割/規模/技術スタック/担当工程 程度で最大6行前後）を想定した
-    // 小さな表。CARD_MAX_ROWS を下回るため、見出し+表がまとめて分割不可になるべき。
+    // 小さな表。1ページ分の高さを大きく下回るため、見出し+表がまとめて分割不可になるべき。
     const nodes = parseMarkdown(buildCardMarkdown('### 株式会社テスト — テストシステム開発', 4));
     const rendered = renderBlocks(nodes) as unknown[];
 
@@ -218,11 +247,12 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain('内容0');
   });
 
-  it('1ページに収まらない見込みの表（行数が多いスキルカテゴリ相当）は wrap={true} のままクリップを防ぐ', () => {
-    // CARD_MAX_ROWS を超える行数の表。文字数自体は短くても行数超過で
-    // 「収まらない見込み」と判定され、見出し+表を丸ごと不可分にはしない
-    // （renderTable 内の行単位 wrap 制御に委ねてクリップを防ぐ）。
-    const nodes = parseMarkdown(buildCardMarkdown('### 多い項目のカテゴリ', 20));
+  it('1ページに収まらない高さの表（行数が多いスキルカテゴリ相当）は wrap={true} のままクリップを防ぐ', () => {
+    // 実装の高さ見積りが「収まらない」と言い出す行数まで増やした表。見出し+表を
+    // 丸ごと不可分にすると、1ページより大きい分割不可ノードになって中身が消える
+    // （Issue #262 の欠落経路）ので、分割を許容していること。
+    const rowCount = smallestCountThatOverflowsPage((n) => buildCardMarkdown('### 多い項目のカテゴリ', n));
+    const nodes = parseMarkdown(buildCardMarkdown('### 多い項目のカテゴリ', rowCount));
     const rendered = renderBlocks(nodes) as unknown[];
 
     expect(rendered).toHaveLength(1);
@@ -232,7 +262,7 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     };
 
     expect(merged.type).toBe(View);
-    // 収まらない見込みなので分割を許容する（wrap=true）。
+    // 収まらないので分割を許容する（wrap=true）。
     expect(merged.props.wrap).toBe(true);
     // 収まらない場合でも見出し単独残留を防ぐ minPresenceAhead は維持される。
     expect(merged.props.minPresenceAhead).toBeGreaterThan(0);
@@ -245,10 +275,23 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
 
     // 見出しと段落、それぞれ独立した要素として出力される（結合されない）。
     expect(rendered).toHaveLength(2);
-    const heading = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown } };
+    const heading = rendered[0] as { type: unknown; props: { wrap?: boolean; minPresenceAhead?: number } };
     expect(heading.type).toBe(View);
     // 表と結合されていないので wrap は明示設定されない（結合ケースのように boolean が入らない）。
     expect(heading.props.wrap).toBeUndefined();
+  });
+
+  // Issue #263 D の回帰防止。旧実装は案件見出し（■接頭辞）のときだけ minPresenceAhead を
+  // 設定し、通常の `##` 見出しは 0 だったため、本文と切り離されてページ末尾に取り残された。
+  it('■ を持たない通常の見出しにも minPresenceAhead を設定する（Issue #263 D）', () => {
+    const plain = parseMarkdown('## 概要\n\n本文。\n') as MdNode[];
+    const project = parseMarkdown('## ■ 案件A\n\n本文。\n') as MdNode[];
+    const plainHeading = (renderBlocks(plain) as unknown[])[0] as { props: { minPresenceAhead?: number } };
+    const projectHeading = (renderBlocks(project) as unknown[])[0] as { props: { minPresenceAhead?: number } };
+
+    expect(plainHeading.props.minPresenceAhead).toBe(NUM.MIN_PRESENCE_HEADING);
+    // 案件見出しと同じ扱いになっていること（片方だけ 0 に戻る退行を検出する）。
+    expect(plainHeading.props.minPresenceAhead).toBe(projectHeading.props.minPresenceAhead);
   });
 
   it('表の直後に続く会社概要文・業務内容・習得スキル・実績も同じ分割制御単位にまとめる（Issue #194）', () => {
@@ -269,7 +312,7 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
       props: { wrap?: boolean; minPresenceAhead?: number; children: unknown[] };
     };
     expect(merged.type).toBe(View);
-    // 表4行+短い段落3つは CARD_TOTAL_CHAR_LIMIT を大きく下回るので分割不可（wrap=false）。
+    // 表4行+短い段落3つは1ページ分の高さを大きく下回るので分割不可（wrap=false）。
     expect(merged.props.wrap).toBe(false);
     // 見出し+表(2) + 後続段落5つ（会社概要文 / 「業務内容」見出し / 本文 /
     // 「習得スキル・実績」見出し / 本文。太字見出しも独立した paragraph になる）= 7要素。
@@ -314,26 +357,24 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain('Kubernetes');
   });
 
-  // chatgpt-codex-connector レビュー指摘: primary の表だけに課していた行単位のチェック
-  // （CARD_MAX_ROWS / ROW_UNBREAKABLE_CHAR_LIMIT）が trailing 中の表・リストには
-  // 及んでおらず、短い項目/セルが多数並ぶケースでは合計文字数だけ閾値内に収まり
-  // 誤って wrap={false}（分割不可）になりクリップしうる欠陥があった。
-  it('trailing のリスト項目数が多い場合は合計文字数が閾値内でも wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
-    // primary の表の行数（buildCardMarkdown 側で固定4行）に関わらず、リスト単独でも
-    // CARD_MAX_ROWS を超えるようにする（CodeRabbit レビュー指摘: ハードコードした個数だと
-    // 実装側の閾値変更にテストが追従しない）。
-    const itemCount = NUM.CARD_MAX_ROWS + 1;
-    const manyShortItems = Array.from({ length: itemCount }, (_, i) => `- 項目${i}`).join('\n');
-    const nodes = parseMarkdown(
-      buildProjectCardMarkdown('### 株式会社テスト — 項目多数案件', '会社概要文です。', manyShortItems, '短い実績。'),
-    );
-    const rendered = renderBlocks(nodes) as unknown[];
+  // 「表の行」以外の要素（trailing のリスト・表・引用）も高さに数えないと、
+  // 短い項目が大量に並ぶカードが誤って wrap={false} になりクリップしうる。
+  it('trailing のリスト項目が1ページ分を超えるほど多い場合は wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
+    const build = (count: number) =>
+      buildProjectCardMarkdown(
+        '### 株式会社テスト — 項目多数案件',
+        '会社概要文です。',
+        Array.from({ length: count }, (_, i) => `- 項目${i}`).join('\n'),
+        '短い実績。',
+      );
+    const itemCount = smallestCountThatOverflowsPage(build);
+    const rendered = renderBlocks(parseMarkdown(build(itemCount))) as unknown[];
 
     expect(rendered).toHaveLength(1);
     const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
     expect(merged.type).toBe(View);
-    // リスト項目数だけで CARD_MAX_ROWS を超えるため、合計文字数（十分に小さい）に
-    // 関わらず分割を許容する。
+    // 短い項目でも件数が増えれば高さは 1 ページを超える。合計文字数だけを見ていた
+    // 旧実装はここをすり抜けて内容を落としていた。
     expect(merged.props.wrap).toBe(true);
 
     const text = flattenText(merged);
@@ -342,44 +383,44 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain('短い実績。');
   });
 
-  it('trailing の表に1行あたりの文字数が閾値を超える行がある場合は wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
-    const oversizedCell = 'あ'.repeat(NUM.ROW_UNBREAKABLE_CHAR_LIMIT + 1);
-    const oversizedRow = `| 項目 | ${oversizedCell} |`;
-    const trailingTable = ['| 項目 | 内容 |', '| :--- | :--- |', oversizedRow].join('\n');
-    const nodes = parseMarkdown(
-      buildProjectCardMarkdown('### 株式会社テスト — 長大セル案件', '会社概要文です。', trailingTable, '短い実績。'),
-    );
-    const rendered = renderBlocks(nodes) as unknown[];
+  it('trailing の表に1ページに収まらない高さの行がある場合は wrap={true} のままにする（trailing 版 #147/#172 再発防止）', () => {
+    // 1 行だけで 1 ページを超える高さになるセルを作る（何文字必要かは見積りに聞く）。
+    const build = (count: number) =>
+      buildProjectCardMarkdown(
+        '### 株式会社テスト — 長大セル案件',
+        '会社概要文です。',
+        ['| 項目 | 内容 |', '| :--- | :--- |', `| 項目 | ${'あ'.repeat(count)} |`].join('\n'),
+        '短い実績。',
+      );
+    const cellLength = smallestCountThatOverflowsPage(build);
+    const rendered = renderBlocks(parseMarkdown(build(cellLength))) as unknown[];
 
     expect(rendered).toHaveLength(1);
     const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
     expect(merged.type).toBe(View);
-    // trailing の表の1行が ROW_UNBREAKABLE_CHAR_LIMIT を超えるため分割を許容する。
     expect(merged.props.wrap).toBe(true);
 
     const text = flattenText(merged);
-    expect(text).toContain(oversizedCell);
+    expect(text).toContain('あ'.repeat(cellLength));
   });
 
-  // chatgpt-codex-connector レビュー指摘: トップレベルの list 項目数だけを数えると、
-  // 1項目の中にネストした箇条書きが多数ぶら下がっているケース（見た目は1項目でも
-  // renderList は再帰的に全ネスト項目を描画する）で行数チェックをすり抜け、合計文字数も
-  // 閾値内に収まって誤って wrap={false} になりうる欠陥があった。
-  it('trailing のリストがトップレベル1項目でもネストした項目数が多ければ wrap={true} のままにする（ネストリスト版 #147/#172 再発防止）', () => {
-    // トップレベル項目自身(1) + ネスト項目数だけで CARD_MAX_ROWS を超えるようにする
-    // （primary の表の行数には依存しない）。
-    const nestedCount = NUM.CARD_MAX_ROWS + 1;
-    const nestedItems = Array.from({ length: nestedCount }, (_, i) => `  - サブ項目${i}`).join('\n');
-    const nestedList = `- 案件A\n${nestedItems}`;
-    const nodes = parseMarkdown(
-      buildProjectCardMarkdown('### 株式会社テスト — ネストリスト案件', '会社概要文です。', nestedList, '短い実績。'),
-    );
-    const rendered = renderBlocks(nodes) as unknown[];
+  // トップレベルの list 項目数だけを数えると、1項目の中にネストした箇条書きが多数
+  // ぶら下がっているケース（見た目は1項目でも renderList は再帰的に全ネスト項目を描画する）
+  // を取りこぼす。高さ見積りも同じく再帰的にたどれていること。
+  it('trailing のリストがトップレベル1項目でもネストした項目が多ければ wrap={true} のままにする（ネストリスト版 #147/#172 再発防止）', () => {
+    const build = (count: number) =>
+      buildProjectCardMarkdown(
+        '### 株式会社テスト — ネストリスト案件',
+        '会社概要文です。',
+        `- 案件A\n${Array.from({ length: count }, (_, i) => `  - サブ項目${i}`).join('\n')}`,
+        '短い実績。',
+      );
+    const nestedCount = smallestCountThatOverflowsPage(build);
+    const rendered = renderBlocks(parseMarkdown(build(nestedCount))) as unknown[];
 
     expect(rendered).toHaveLength(1);
     const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
     expect(merged.type).toBe(View);
-    // トップレベル項目自身(1) + ネスト項目(nestedCount) だけで CARD_MAX_ROWS を超える。
     expect(merged.props.wrap).toBe(true);
 
     const text = flattenText(merged);
@@ -388,22 +429,23 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain(`サブ項目${nestedCount - 1}`);
   });
 
-  // CodeRabbit レビュー指摘: rowLikeLengths は table/list しか見ておらず、blockquote に
-  // 入れ子になった表・リストは行数・行文字数チェックをすり抜けていた（trailing の表・
-  // リスト自体を塞いだのと同じ穴が blockquote 経由で残っていた）。
+  // blockquote に入れ子になった表・リストも、描画されるからには高さに数えられていること。
   it('trailing の blockquote に入れ子の表があり行数が多い場合も wrap={true} のままにする（blockquote 版 #147/#172 再発防止）', () => {
-    const rowCount = NUM.CARD_MAX_ROWS + 1;
-    const rows = Array.from({ length: rowCount }, (_, i) => `| 項目${i} | 内容${i} |`);
-    const blockquoteTable = ['| 項目 | 内容 |', '| :--- | :--- |', ...rows].map((line) => `> ${line}`).join('\n');
-    const nodes = parseMarkdown(
-      buildProjectCardMarkdown('### 株式会社テスト — 引用表案件', '会社概要文です。', blockquoteTable, '短い実績。'),
-    );
-    const rendered = renderBlocks(nodes) as unknown[];
+    const build = (count: number) =>
+      buildProjectCardMarkdown(
+        '### 株式会社テスト — 引用表案件',
+        '会社概要文です。',
+        ['| 項目 | 内容 |', '| :--- | :--- |', ...Array.from({ length: count }, (_, i) => `| 項目${i} | 内容${i} |`)]
+          .map((line) => `> ${line}`)
+          .join('\n'),
+        '短い実績。',
+      );
+    const rowCount = smallestCountThatOverflowsPage(build);
+    const rendered = renderBlocks(parseMarkdown(build(rowCount))) as unknown[];
 
     expect(rendered).toHaveLength(1);
     const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
     expect(merged.type).toBe(View);
-    // blockquote 内の表の行数だけで CARD_MAX_ROWS を超えるため分割を許容する。
     expect(merged.props.wrap).toBe(true);
 
     const text = flattenText(merged);
@@ -411,7 +453,7 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(text).toContain(`項目${rowCount - 1}`);
   });
 
-  it('カード全体の合計文字数が大きすぎる場合は wrap={true} のままクリップを防ぐ（Issue #147/#172 の再発防止）', () => {
+  it('カード全体の高さが1ページを超える場合は wrap={true} のままクリップを防ぐ（Issue #147/#172 の再発防止）', () => {
     const longParagraph = '長文段落です。'.repeat(200); // 十分に長い段落
     const nodes = parseMarkdown(
       buildProjectCardMarkdown('### 株式会社テスト — 長文案件', longParagraph, longParagraph, longParagraph),
@@ -421,9 +463,38 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(rendered).toHaveLength(1);
     const merged = rendered[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
     expect(merged.type).toBe(View);
-    // 合計文字数が閾値を超えるため分割を許容する（内容のクリップを防ぐ）。
+    // 高さが1ページを超えるため分割を許容する（内容の消失を防ぐ）。
     expect(merged.props.wrap).toBe(true);
     expect(merged.props.children).toHaveLength(7);
+  });
+
+  // Issue #262 の核心。旧実装は「カード全体の合計文字数 <= 1400」で分割不可を決めていた
+  // ため、1 段落 8 文字 × 150 段落 = 1200 文字（実高さ 3000pt 超）が閾値を通過し、
+  // 分割不可のまま 1 ページへ押し込まれて本文が丸ごと PDF から消えていた。
+  // 文字数ではなく高さで見ていることを、構造レベルでも固定しておく。
+  it('短い段落が大量に並ぶカードは合計文字数が小さくても wrap={true} にする（Issue #262）', () => {
+    const build = (count: number) =>
+      [
+        '### 株式会社テスト — 短い段落多数案件',
+        '',
+        '| 項目 | 内容 |',
+        '| :--- | :--- |',
+        '| 期間 | 2020-04〜2021-03 |',
+        '',
+        Array.from({ length: count }, (_, i) => `段落${i}`).join('\n\n'),
+        '',
+      ].join('\n');
+    const paragraphCount = smallestCountThatOverflowsPage(build);
+    const nodes = parseMarkdown(build(paragraphCount));
+    // 旧実装の閾値（合計 1400 文字）を下回る文字数のまま、高さだけが 1 ページを超える
+    // ケースであることを明示する。ここが 1400 文字を超えてしまうと、この回帰テストは
+    // 「文字数でも弾ける」ケースになってしまい #262 を守れない。
+    const totalChars = nodes.slice(2).reduce((sum, node) => sum + flattenText(renderBlocks([node])).length, 0);
+    expect(totalChars).toBeLessThan(1400);
+
+    const rendered = renderBlocks(nodes) as unknown[];
+    const merged = rendered[0] as { type: unknown; props: { wrap?: boolean } };
+    expect(merged.props.wrap).toBe(true);
   });
 });
 

@@ -19,8 +19,11 @@ interface TableOfContentsProps {
 }
 
 export const SIDEBAR_WIDTH = 280;
-/** 折りたたみ時の幅。ドットだけが縦に並ぶ（現在位置は分かるが本文の邪魔をしない）。 */
-export const SIDEBAR_COLLAPSED_WIDTH = 52;
+/**
+ * 折りたたみ時の幅。ドットだけが縦に並ぶ（現在位置は分かるが本文の邪魔をしない）。
+ * 左右 padding 8px を引いても押下領域が 44px を下回らない幅にしてある。
+ */
+export const SIDEBAR_COLLAPSED_WIDTH = 60;
 
 interface TocListProps {
   headings: Heading[];
@@ -49,7 +52,8 @@ const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps
               borderColor: isActive ? 'color-mix(in srgb, var(--primary) 35%, transparent)' : 'transparent',
             }}
             className={cn(
-              'flex w-full items-center gap-[9px] rounded-[var(--radius)] border text-left leading-[1.5] transition-all duration-150',
+              // 44px 未満だと押しづらく、e2e の tap target 検査にも引っかかる。
+              'flex min-h-11 w-full items-center gap-[9px] rounded-[var(--radius)] border text-left leading-[1.5] transition-all duration-150',
               'focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-primary',
               collapsed ? 'justify-center px-0 py-[9px]' : 'px-2.5 py-[7px]',
               // 3階層目は 1 段下げて、見出しの入れ子が分かるようにする
@@ -129,7 +133,7 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
           onClick={() => setIsCollapsed((v) => !v)}
           aria-label={isCollapsed ? '目次を開く' : '目次を折りたたむ'}
           aria-expanded={!isCollapsed}
-          className="grid size-6 shrink-0 place-items-center rounded-[var(--radius)] border border-border bg-card font-mono text-[11px] text-faint transition-all duration-150 hover:border-primary hover:text-accent-text"
+          className="grid size-11 shrink-0 place-items-center rounded-[var(--radius)] border border-border bg-card font-mono text-[11px] text-faint transition-all duration-150 hover:border-primary hover:text-accent-text"
         >
           {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
         </button>

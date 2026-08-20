@@ -58,25 +58,34 @@ const css = fs.readFileSync(GLOBALS_CSS_PATH, 'utf-8');
 const lightBlock = extractBlock(css, ':root');
 const darkBlock = extractBlock(css, '.dark');
 
-const light = {
-  background: extractToken(lightBlock, 'background'),
-  card: extractToken(lightBlock, 'card'),
-  foreground: extractToken(lightBlock, 'foreground'),
-  mutedForeground: extractToken(lightBlock, 'muted-foreground'),
-  faint: extractToken(lightBlock, 'faint'),
-  muted: extractToken(lightBlock, 'muted'),
-  track: extractToken(lightBlock, 'track'),
-};
+/** 両テーマで同じキー集合を取り出す。片方だけ検査対象から漏れる事故を防ぐ。 */
+function readTokens(block: string) {
+  return {
+    background: extractToken(block, 'background'),
+    card: extractToken(block, 'card'),
+    foreground: extractToken(block, 'foreground'),
+    mutedForeground: extractToken(block, 'muted-foreground'),
+    faint: extractToken(block, 'faint'),
+    muted: extractToken(block, 'muted'),
+    track: extractToken(block, 'track'),
+    primaryDark: extractToken(block, 'primary-dark'),
+    primaryHover: extractToken(block, 'primary-hover'),
+    primaryForeground: extractToken(block, 'primary-foreground'),
+    onAccent: extractToken(block, 'on-accent'),
+    accentText: extractToken(block, 'accent-text'),
+    accentSoft: extractToken(block, 'accent-soft'),
+    chipText: extractToken(block, 'chip-text'),
+    chipBg: extractToken(block, 'chip-bg'),
+    danger: extractToken(block, 'danger'),
+    dangerSoft: extractToken(block, 'danger-soft'),
+    warnStrong: extractToken(block, 'warn-strong'),
+    warnSoft: extractToken(block, 'warn-soft'),
+    surface2: extractToken(block, 'surface2'),
+  };
+}
 
-const dark = {
-  background: extractToken(darkBlock, 'background'),
-  card: extractToken(darkBlock, 'card'),
-  foreground: extractToken(darkBlock, 'foreground'),
-  mutedForeground: extractToken(darkBlock, 'muted-foreground'),
-  faint: extractToken(darkBlock, 'faint'),
-  muted: extractToken(darkBlock, 'muted'),
-  track: extractToken(darkBlock, 'track'),
-};
+const light = readTokens(lightBlock);
+const dark = readTokens(darkBlock);
 
 const AA_NORMAL_TEXT = 4.5;
 
@@ -101,4 +110,46 @@ describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () =>
     expect(contrastRatio(dark.faint, dark.background)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     expect(contrastRatio(dark.faint, dark.card)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
   });
+
+  // ここから下は Issue #198 の直し漏れ（bg-primary を選択中の背景に使い 3.74:1 だった箇所が
+  // 3 か所残っていた）を二度と通さないための検査。以前は --muted-foreground と --faint しか
+  // 見ていなかったため、この種の退行を機械で検出できなかった。
+  for (const [themeName, t] of [
+    ['light', light],
+    ['dark', dark],
+  ] as const) {
+    it(`${themeName}: 選択中の背景 --primary-dark / --primary-hover が --primary-foreground に対し AA を満たす`, () => {
+      expect(contrastRatio(t.primaryForeground, t.primaryDark)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(t.primaryForeground, t.primaryHover)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it(`${themeName}: --on-accent が --primary-dark に対し AA を満たす`, () => {
+      expect(contrastRatio(t.onAccent, t.primaryDark)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it(`${themeName}: --accent-text が --accent-soft / --background / --card に対し AA を満たす`, () => {
+      expect(contrastRatio(t.accentText, t.accentSoft)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(t.accentText, t.background)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(t.accentText, t.card)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it(`${themeName}: --chip-text が --chip-bg に対し AA を満たす`, () => {
+      expect(contrastRatio(t.chipText, t.chipBg)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it(`${themeName}: --danger が --danger-soft / --background / --card に対し AA を満たす`, () => {
+      expect(contrastRatio(t.danger, t.dangerSoft)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(t.danger, t.background)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(t.danger, t.card)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it(`${themeName}: --warn-strong が --warn-soft に対し AA を満たす`, () => {
+      expect(contrastRatio(t.warnStrong, t.warnSoft)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it(`${themeName}: --foreground / --muted-foreground が --surface2 に対し AA を満たす`, () => {
+      expect(contrastRatio(t.foreground, t.surface2)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+      expect(contrastRatio(t.mutedForeground, t.surface2)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+  }
 });

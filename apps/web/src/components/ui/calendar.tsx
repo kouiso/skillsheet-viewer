@@ -34,8 +34,10 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         week: 'flex w-full mt-2',
         day: 'relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected])]:rounded-md',
         day_button: cn(buttonVariants({ variant: 'ghost' }), 'h-8 w-8 p-0 font-normal aria-selected:opacity-100'),
+        // shadcn 既定の bg-primary は白文字と組むとライトテーマで 3.74:1 と WCAG AA 未達
+        // （Issue #198 と同じ問題。日付ピッカーの選択日だけ直し漏れていた）。
         selected:
-          'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground rounded-md',
+          'bg-primary-dark text-primary-foreground hover:bg-primary-hover hover:text-primary-foreground focus:bg-primary-hover focus:text-primary-foreground rounded-md',
         today: 'bg-accent text-accent-foreground rounded-md',
         outside: 'text-muted-foreground opacity-50',
         disabled: 'text-muted-foreground opacity-50',

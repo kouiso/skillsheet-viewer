@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { connection } from 'next/server';
 
 import { createServerCaller } from '@/server/trpc/caller';
+import { classifyConfigError } from '@/util/is-config-error';
 
 import BuilderClient from './builder-client';
 
@@ -21,6 +22,9 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
   let initialTitle = '';
   let activeSheetId = '';
   let sheets: SheetSummary[] = [];
+  // 読み込みに失敗したのか、まだ何も作っていないから空なのかを画面で区別できるようにする。
+  // 以前はどちらも「空の編集画面」になり、利用者は自分の書いたものが消えたと誤解した。
+  let loadFailure: 'config' | 'unknown' | null = null;
 
   try {
     const caller = await createServerCaller();
@@ -33,7 +37,9 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
     if (err instanceof TRPCError && err.code === 'UNAUTHORIZED') {
       redirect('/login?next=/builder');
     }
-    // DB/GitHub 未設定や疎通失敗時は空のビルダーから開始する（保存で作成できる）。
+    // DB/GitHub 未設定や疎通失敗時も編集画面自体は開く（保存で作成できる）。
+    // ただし「読めなかった」ことは必ず画面に出す。黙って空にしない。
+    loadFailure = classifyConfigError(err) ? 'config' : 'unknown';
     console.error('Failed to load sheet for builder:', err);
   }
 
@@ -47,6 +53,7 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
       initialTitle={initialTitle}
       sheets={sheets}
       activeSheetId={activeSheetId}
+      loadFailure={loadFailure}
     />
   );
 }

@@ -53,7 +53,7 @@ export function ProcessOverview({ items }: ProcessOverviewProps) {
                 {doneCount}
               </span>
             </div>
-            <span className="font-mono text-[10px] text-faint">/{total}</span>
+            <span className="font-mono text-[11px] text-faint">/{total}</span>
           </div>
         );
       })}

@@ -10,6 +10,7 @@
     "./process": "./src/process.ts",
     "./tech-area": "./src/tech-area.ts",
     "./sanitize-html": "./src/sanitize-html.ts",
+    "./viewer-rate-limit": "./src/viewer-rate-limit.ts",
     "./text": "./src/text.ts"
   },
   "scripts": {
@@ -19,8 +20,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/core": "^1.6.25",
     "@neondatabase/serverless": "^1.1.0",
     "drizzle-orm": "^0.45.2",
+    "server-only": "^0.0.1",
     "ws": "^8.18.0"
   },
   "devDependencies": {

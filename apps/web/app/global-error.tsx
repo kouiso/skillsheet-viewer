@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 
 import { ConfigErrorNotice } from '@/component/config-error-notice';
+import { THEME_INIT_SCRIPT } from '@/lib/theme-init-script';
 
 import './globals.css';
 
@@ -18,8 +19,9 @@ import './globals.css';
  * エラー画面になっていた）、ここに来た場合は常に設定不備として案内する。
  *
  * global-error.tsx はルートレイアウト全体を置き換えるため、html/body タグを
- * 自前で持つ必要がある（Providers・テーマ初期化スクリプトは意図的に省略:
- * ここに来る時点で layout.tsx 自体が動いていない）。
+ * 自前で持つ必要がある（Providers は意図的に省略: ここに来る時点で layout.tsx 自体が動いていない）。
+ * ただしテーマ初期化だけは省略しない。省くと暗いテーマの利用者に突然まぶしい白画面が出て、
+ * 「アプリが壊れた」という印象がエラー内容より先に伝わってしまう。
  */
 export default function GlobalError({ error: err }: { error: Error & { digest?: string } }) {
   useEffect(() => {
@@ -28,7 +30,12 @@ export default function GlobalError({ error: err }: { error: Error & { digest?: 
 
   return (
     <html lang="ja">
-      <body>
+      <head>
+        {/* layout.tsx と同じ FOUC 防止スクリプト。Providers 抜きでも配色だけは揃える。 */}
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: 定数スクリプト。外部入力を含まない。 */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="bg-background text-foreground">
         <ConfigErrorNotice
           title="サーバー設定が完了していません"
           message="必須の環境変数が設定されていない可能性があります。管理者に設定を依頼してください。"
