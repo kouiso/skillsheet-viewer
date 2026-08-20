@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { type Browser, expect, type Page, test } from '@playwright/test';
-import { buildConsoleDemoBlocks, createSheet, deleteSheet, listSheets } from '@skillsheet/db';
+import { createSheet, deleteSheet, listSheets } from '@skillsheet/db';
+import { buildConsoleDemoBlocks } from '@skillsheet/db/fixtures';
 import { getDocument } from 'pdfjs-dist';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';

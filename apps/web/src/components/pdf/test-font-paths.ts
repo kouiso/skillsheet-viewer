@@ -10,7 +10,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** apps/web/public/fonts（このファイルは apps/web/src/component/pdf にある）。 */
+/** apps/web/public/fonts（このファイルは apps/web/src/components/pdf にある）。 */
 export const FONTS_DIR = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '..',

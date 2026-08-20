@@ -1,9 +1,8 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
-import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
+import { configErrorNoticeOrRethrow } from '@/components/view-error';
 import { createServerCaller } from '@/server/trpc/caller';
-import { classifyConfigError } from '@/util/is-config-error';
 
 import SheetViewClient from '../[path]/sheet-view-client';
 
@@ -33,17 +32,8 @@ export default async function DbSheetPage() {
       />
     );
   } catch (err) {
-    // #157: 待っても直らない設定不備（未設定・未マイグレーション・接続文字列の書式ミス）は
-    // 200 ＋ 原因と対処を返す。書式ミス（Issue #195）は従来 isConfigError の判定対象に
-    // 入っておらず 500 まで抜けていたため、classifyConfigError() の対象へ加えている。
-    const configErrorKind = classifyConfigError(err);
-    if (configErrorKind) {
-      return <ConfigErrorNotice {...CONFIG_ERROR_NOTICES[configErrorKind]} />;
-    }
-    // 接続先が到達不能等の一時的な障害は、/view/db/[id] と同じ基準で error.tsx /
-    // 監視ツールへ委ねる（一律で ConfigErrorNotice を返すと、実際の障害発生中に監視側が
-    // 200 で気付けず、閲覧者には的外れな設定手順だけが表示されるため区別する）。
-    console.error('Failed to load DB skill sheet:', err);
-    throw err;
+    // #157: 待っても直らない設定不備は 200 ＋ 原因と対処を返し、一時的な障害は再スローする。
+    // 判定と案内は 4 ページ共通なので configErrorNoticeOrRethrow に集約している。
+    return configErrorNoticeOrRethrow(err, 'Failed to load DB skill sheet:');
   }
 }

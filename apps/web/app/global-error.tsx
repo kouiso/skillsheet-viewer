@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-import { ConfigErrorNotice } from '@/component/config-error-notice';
+import { ConfigErrorNotice } from '@/components/config-error-notice';
 import { THEME_INIT_SCRIPT } from '@/lib/theme-init-script';
 
 import './globals.css';

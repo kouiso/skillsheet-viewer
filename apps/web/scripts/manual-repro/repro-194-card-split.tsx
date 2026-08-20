@@ -12,7 +12,7 @@
  * いないか）を確認する。
  *
  * 使い方:
- *   DATABASE_URL=... pnpm --filter @skillsheet/web exec tsx scripts/repro-194-card-split.tsx <sheetId>
+ *   DATABASE_URL=... pnpm --filter @skillsheet/web exec tsx scripts/manual-repro/repro-194-card-split.tsx <sheetId>
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -23,9 +23,9 @@ import React from 'react';
 
 import { Font, renderToBuffer } from '@react-pdf/renderer';
 
-import PDF_FONT_FAMILY from '../src/component/pdf/constants';
-import { splitForHyphenation } from '../src/component/pdf/fonts';
-import { SkillSheetDocument } from '../src/component/pdf/skill-sheet-document';
+import PDF_FONT_FAMILY from '../../src/components/pdf/constants';
+import { splitForHyphenation } from '../../src/components/pdf/fonts';
+import { SkillSheetDocument } from '../../src/components/pdf/skill-sheet-document';
 
 async function extractPerPageText(buffer: Buffer): Promise<string[]> {
   const { getDocument } = await import('pdfjs-dist');

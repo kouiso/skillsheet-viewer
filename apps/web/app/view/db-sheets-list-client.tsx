@@ -4,8 +4,8 @@ import type { SheetSummary } from '@skillsheet/db';
 import { Search } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
-import Header from '@/component/header';
+import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/components/config-error-notice';
+import Header from '@/components/header';
 import { Input } from '@/components/ui/input';
 import type { ConfigErrorKind } from '@/util/is-config-error';
 
