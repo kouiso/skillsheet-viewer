@@ -27,10 +27,25 @@ describe('collapseSoftBreaks', () => {
   it('Setext 見出しの下線はつなげない', () => {
     expect(collapseSoftBreaks('Setext 見出し\n===\n本文')).toBe('Setext 見出し\n===\n本文');
   });
+
+  // `+` も Markdown の箇条書き記号（CodeRabbit 指摘 / PR #247）。
+  it('`+` の箇条書きを1行に連結しない', () => {
+    expect(collapseSoftBreaks('+ 項目1\n+ 項目2\n+ 項目3')).toBe('+ 項目1\n+ 項目2\n+ 項目3');
+  });
+
+  it('`+` の箇条書きの直前にある段落は今までどおり潰す', () => {
+    expect(collapseSoftBreaks('前段の\n途中改行\n+ 項目1\n+ 項目2')).toBe('前段の 途中改行\n+ 項目1\n+ 項目2');
+  });
 });
 
 describe('unwrapEmphasis', () => {
   it('対になった ** だけ外す', () => {
     expect(unwrapEmphasis('出来るできないを**指摘**し')).toBe('出来るできないを指摘し');
+  });
+
+  // 対にならない ** が残ると画面にも PDF にも記号がそのまま出る（CodeRabbit 指摘 / PR #247）。
+  it('閉じ忘れた ** も残さない', () => {
+    expect(unwrapEmphasis('未完 **強調')).toBe('未完 強調');
+    expect(unwrapEmphasis('**開いたまま **閉じた** 続き')).toBe('開いたまま 閉じた 続き');
   });
 });

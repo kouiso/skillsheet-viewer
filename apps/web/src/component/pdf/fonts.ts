@@ -78,8 +78,70 @@ function isCombiningOrVariationSelector(ch: string): boolean {
   );
 }
 
+// 空白を含まない非 CJK の連なり（技術名の連結や URL）を、これ以上は分割せずに 1 行へ
+// 置いてよいと見なす最大文字数。@react-pdf/textkit は改行機会が 1 つも無い語を
+// 1 行に押し込むため、列幅より長い語は overflow:hidden のセルで黙って末尾を失う
+// （Issue #263 C）し、段落では右マージンを越えて紙面からはみ出す（同 F）。
+// 10.5pt のラテン文字は平均 5〜6pt 幅なので、16 文字なら約 90pt。もっとも狭い
+// 2 列表のラベル列（内寸 約143pt）にも収まる。
+const MAX_UNBREAKABLE_RUN = 16;
+
+// この文字の「直後」を改行機会にしてよい区切り記号。URL のパス区切りや
+// ハイフン連結の識別子で、人間が見ても自然な位置で折り返せるようにする。
+const BREAK_AFTER = new Set(['/', '-', '_', '.', '?', '&', '=', ':', ',', ';', '+', '~', '@', '#', '%', '|', '\\']);
+
+function isAsciiLower(ch: string): boolean {
+  return ch >= 'a' && ch <= 'z';
+}
+
+function isAsciiUpper(ch: string): boolean {
+  return ch >= 'A' && ch <= 'Z';
+}
+
+function isAsciiDigit(ch: string): boolean {
+  return ch >= '0' && ch <= '9';
+}
+
 /**
- * 日本語は単語区切りが無いため、ASCII の連なりは保ちつつ、
+ * 非 CJK の連なりを、必要なときだけ改行可能な塊へ切り分ける。
+ *
+ * MAX_UNBREAKABLE_RUN 以下の語（＝通常の英単語）はそのまま返すので、ふつうの英文の
+ * 見た目は変わらない。長すぎる語だけを、区切り記号の直後か camelCase の境界で
+ * 優先的に切り、どちらも無ければ最後の手段として MAX_UNBREAKABLE_RUN 文字で切る。
+ * 返した塊の間には BREAK_MARKER が挟まれる（呼び出し元 splitForHyphenation）ため、
+ * 実際の PDF テキストには文字が一切追加されない。
+ */
+export function splitLongRun(run: string): string[] {
+  if (run.length <= MAX_UNBREAKABLE_RUN) return [run];
+  const chunks: string[] = [];
+  let chunkStart = 0;
+  // 「ここで切れる」と分かっている直近の位置（chunk 内の相対 index ではなく run 上の絶対 index）。
+  let candidate = -1;
+  for (let i = 0; i < run.length; i++) {
+    const ch = run[i];
+    const next = run[i + 1];
+    if (BREAK_AFTER.has(ch) && next !== undefined && !BREAK_AFTER.has(next)) {
+      candidate = i + 1;
+    } else if (next !== undefined && isAsciiUpper(next) && (isAsciiLower(ch) || isAsciiDigit(ch))) {
+      // camelCase / PascalCase の連結（TypeScriptJavaScriptPython…）の境界。
+      candidate = i + 1;
+    }
+    const length = i - chunkStart + 1;
+    if (length < MAX_UNBREAKABLE_RUN) continue;
+    // 上限に達した。候補があればそこで、無ければ上限位置で強制的に切る。
+    const cut = candidate > chunkStart ? candidate : i + 1;
+    chunks.push(run.slice(chunkStart, cut));
+    chunkStart = cut;
+    candidate = -1;
+    // 候補位置で切った場合、i は cut より先に進んでいることがあるので巻き戻す。
+    if (cut <= i) i = cut - 1;
+  }
+  if (chunkStart < run.length) chunks.push(run.slice(chunkStart));
+  return chunks;
+}
+
+/**
+ * 日本語は単語区切りが無いため、ASCII の連なりは（長すぎない限り）保ちつつ、
  * 全角・CJK 文字の境界で改行を許可するように語を分割する。
  *
  * 各 CJK 文字の前後に BREAK_MARKER（空文字列）を挟んで返す。@react-pdf/textkit 側は
@@ -88,16 +150,27 @@ function isCombiningOrVariationSelector(ch: string): boolean {
  * 扱われてしまう。BREAK_MARKER を挟むことで改行点はその空要素側に付き、CJK 文字は
  * 崩れずそのまま出力される。CJK→ASCII の境界（例:「連携React」の携/R間）にも
  * 挟まないと、その境界だけ改行機会が無くなる。
+ *
+ * 非 CJK の連なりも MAX_UNBREAKABLE_RUN を超えたら同じ仕組みで改行機会を挟む
+ * （Issue #263 C/F: 空白なしの技術名連結や長い URL が表セルでクリップされ、
+ * 段落では右マージンからはみ出していた）。
  */
 export function splitForHyphenation(word: string): string[] {
   const parts: string[] = [];
   let buffer = '';
   let prevWasCjk = false;
   const flush = (): void => {
-    if (buffer) {
-      parts.push(buffer);
-      buffer = '';
+    if (!buffer) return;
+    const chunks = splitLongRun(buffer);
+    for (let i = 0; i < chunks.length; i++) {
+      if (i > 0 || parts.length > 0) {
+        // 直前の要素との間に改行機会を作る。先頭の連なりでも、CJK 側から
+        // すでに BREAK_MARKER が積まれているケースは二重に挟まない。
+        if (parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
+      }
+      parts.push(chunks[i]);
     }
+    buffer = '';
   };
   for (const ch of word) {
     if (isCombiningOrVariationSelector(ch)) {
@@ -114,13 +187,13 @@ export function splitForHyphenation(word: string): string[] {
       continue;
     }
     if (!isCjk(ch)) {
-      if (prevWasCjk && parts.length > 0) parts.push(BREAK_MARKER);
+      if (prevWasCjk && parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
       buffer += ch;
       prevWasCjk = false;
       continue;
     }
     flush();
-    if (parts.length > 0) parts.push(BREAK_MARKER);
+    if (parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
     parts.push(ch);
     prevWasCjk = true;
   }

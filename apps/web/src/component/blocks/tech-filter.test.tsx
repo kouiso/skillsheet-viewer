@@ -64,4 +64,49 @@ describe('TechFilter', () => {
     await user.click(chip);
     expect(onToggle).toHaveBeenCalledWith('TypeScript');
   });
+  // 候補の「選ぶ」経路（クリック / 矢印キー + Enter）が壊れてもテストが気づけなかったため追加。
+  it('候補をクリックすると onToggle が呼ばれ、パネルが閉じる', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} onToggle={onToggle} />);
+
+    const input = screen.getByLabelText('技術を選ぶ');
+    await user.click(input);
+    await user.type(input, 'Only');
+    await user.click(screen.getByRole('option', { name: /OnlyOnce/ }));
+
+    expect(onToggle).toHaveBeenCalledWith('OnlyOnce');
+    // 選んだ直後に候補が絞り込み結果を覆い隠さないこと。
+    expect(screen.queryByRole('listbox')).toBeNull();
+  });
+
+  it('ArrowDown + Enter で先頭の候補を選べる', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} onToggle={onToggle} />);
+
+    const input = screen.getByLabelText('技術を選ぶ');
+    await user.click(input);
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(onToggle).toHaveBeenCalledWith(ALL[0].name);
+  });
+
+  it('矢印キーで移動中の候補を aria-activedescendant が指す', async () => {
+    const user = userEvent.setup();
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);
+
+    const input = screen.getByLabelText('技術を選ぶ');
+    await user.click(input);
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await user.keyboard('{ArrowDown}');
+    const activeId = input.getAttribute('aria-activedescendant');
+    expect(activeId).toBeTruthy();
+
+    const listbox = screen.getByRole('listbox');
+    expect(input).toHaveAttribute('aria-controls', listbox.id);
+    expect(document.getElementById(activeId as string)).toHaveAttribute('role', 'option');
+    expect(document.getElementById(activeId as string)).toHaveAttribute('aria-selected', 'true');
+  });
 });

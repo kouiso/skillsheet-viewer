@@ -69,7 +69,7 @@ const ViewerAuthPage = () => {
               className="mb-4 flex justify-center"
             >
               <div className="flex size-20 items-center justify-center rounded-full bg-linear-to-br from-primary to-secondary shadow-elevation-4">
-                <LockKeyhole className="size-10 text-white" />
+                <LockKeyhole aria-hidden="true" className="size-10 text-white" />
               </div>
             </motion.div>
 

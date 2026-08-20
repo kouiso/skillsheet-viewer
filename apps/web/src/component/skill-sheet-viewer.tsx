@@ -1,6 +1,7 @@
 'use client';
 
 import { motion, useReducedMotion } from 'framer-motion';
+import dynamic from 'next/dynamic';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
@@ -18,7 +19,14 @@ import { ProjectSection } from './blocks/project-section';
 import { SectionHead } from './blocks/section-head';
 import { SkillMatrix } from './blocks/skill-matrix';
 import { StatRow } from './blocks/stat-row';
-import CodeBlock from './code-block';
+
+// コードの色付けは refractor を伴い、まとめると初回ロードに 120KB 超が常時乗る。
+// コード例を1つも含まないスキルシートが大半なので、実際に描画されるときだけ読み込む。
+// SSR は残す（ssr:false にすると本文がサーバ側の HTML から消える）。
+const CodeBlock = dynamic(() => import('./code-block'), {
+  loading: () => <div className="mb-6 h-24 animate-pulse rounded-lg border border-border bg-muted" />,
+});
+
 import TableOfContents from './table-of-contents';
 import type { ViewKey } from './viewer-topbar';
 
@@ -211,6 +219,13 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
   const showView = useCallback((view: ViewKey) => !views || views.includes(view), [views]);
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
   const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
+  // 1枚のシートに project ブロックが複数あると、案件詳細・タイムラインの見出し id が
+  // 重複して目次のスクロール先が壊れる。複数あるときだけブロック id で分ける
+  // （1つだけの通常ケースでは id を変えない）。ブロックごとに変わる値ではないのでループ外で1回だけ求める。
+  const multipleProjectBlocks = useMemo(
+    () => groupedBlocks.filter((g) => g.kind !== 'skills' && g.block.type === 'project').length > 1,
+    [groupedBlocks],
+  );
   // project ブロックを含むシートは「外枠カード無し・セクションが縦に並ぶダッシュボード」レイアウトにする。
   // markdown/table/skills のみの既存シートは従来の単一カード＋max-w-4xlを維持する。
   // 意図的に raw blocks（中身が空でも）で判定する — ダッシュボードテンプレはレイアウトの
@@ -361,6 +376,7 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
                     <ProjectSection
                       key={block.id}
                       data={block.data}
+                      headingIdSuffix={multipleProjectBlocks ? block.id : undefined}
                       showProcess={showView('process')}
                       showProjects={showView('projects')}
                       showTimeline={showView('timeline')}

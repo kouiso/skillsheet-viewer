@@ -1,3 +1,9 @@
+// クライアントバンドルに巻き込まれた瞬間にビルドを失敗させる。
+// これまでは「Client Component から import しないこと」というコメントだけが頼りで、
+// 誤って読み込んでも誰も気づけなかった（秘密情報の露出・巨大ドライバの同梱に直結する）。
+// DB / GitHub 取得のキャッシュ層。
+import 'server-only';
+
 import { listSheets as dbListSheets, getSkillSheet, getSkillSheetById } from '@skillsheet/db';
 import { unstable_cache } from 'next/cache';
 

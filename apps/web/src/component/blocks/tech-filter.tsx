@@ -1,7 +1,7 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 
 export interface TechCount {
   name: string;
@@ -27,6 +27,10 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
   const [techQuery, setTechQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
+  // combobox は入力と listbox を id で結び、いま矢印キーで選んでいる option を
+  // aria-activedescendant で指し示さないと、スクリーンリーダーが移動先を読み上げられない。
+  const listboxId = useId();
+  const optionId = (index: number) => `${listboxId}-option-${index}`;
 
   const activeSet = useMemo(() => new Set(active), [active]);
   const selected = useMemo(() => all.filter((t) => activeSet.has(t.name)), [all, activeSet]);
@@ -42,7 +46,9 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
     onToggle(name);
     setTechQuery('');
     setHi(-1);
-    setOpen(true);
+    // 選んだ直後に見たいのは絞り込まれた案件カード。開いたままだと候補パネルが
+    // その結果を覆い隠し、毎回クリックか Escape で閉じる操作を強いていた。
+    setOpen(false);
   };
 
   return (
@@ -85,6 +91,8 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
           aria-label="技術を選ぶ"
           aria-expanded={open}
           aria-autocomplete="list"
+          aria-controls={listboxId}
+          aria-activedescendant={open && hi >= 0 && matches[hi] ? optionId(hi) : undefined}
           placeholder="技術を選ぶ…"
           onChange={(e) => {
             setTechQuery(e.target.value);
@@ -119,11 +127,14 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
         {open && matches.length > 0 && (
           <div
             role="listbox"
+            id={listboxId}
+            aria-label="技術の候補"
             className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-[var(--radius)] border border-border bg-card py-1 shadow-md"
           >
             {matches.map((tech, i) => (
               <button
                 key={tech.name}
+                id={optionId(i)}
                 type="button"
                 role="option"
                 aria-selected={i === hi}
@@ -156,7 +167,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
               className="chip max-w-[220px] gap-1.5 on"
             >
               <span className="overflow-hidden text-ellipsis">{tech.name}</span>
-              <span className="text-[10px]">{tech.count}</span>
+              <span className="text-[11px]">{tech.count}</span>
             </button>
           ))}
         </div>
