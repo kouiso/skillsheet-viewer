@@ -59,4 +59,48 @@ describe('glyph-coverage（Noto Sans JP の収録表）', () => {
     // 改行・タブは cmap に無いがレイアウトに必要なのでそのまま残す。
     expect(toRenderableText('あ\nい\tう')).toBe('あ\nい\tう');
   });
+
+  it('改行・タブ・CR 以外の C0 制御文字は落とす（紙面に見えないゴミを残さない）', () => {
+    // NUL / BEL / ESC などはフォントに字形が無く、cmap 判定にも掛からないまま
+    // そのまま PDF に載っていた。ASCII だけの文字列は早期リターンに入るため、
+    // 早期リターン側の判定も同時に固定する。
+    expect(toRenderableText('a\u0000b')).toBe('ab');
+    expect(toRenderableText('\u0007警告\u001b')).toBe('警告');
+    expect(toRenderableText('DEL\u007f')).toBe('DEL');
+    // レイアウトに必要な3文字は残る（上と同じ経路を通っても消えない）。
+    expect(toRenderableText('a\u0000b\nc\td\re')).toBe('ab\nc\td\re');
+  });
+});
+
+describe('truetype-cmap（壊れたフォントの読み取り）', () => {
+  /** cmap の format 4 サブテーブルだけを持つ最小の sfnt を組み立てる。 */
+  function buildFontWithFormat4(segCountX2: number, subtableBytes: number): Buffer {
+    const cmapAt = 12 + 16;
+    const subtableAt = cmapAt + 4 + 8;
+    const font = Buffer.alloc(subtableAt + subtableBytes);
+    font.writeUInt16BE(1, 4); // numTables
+    font.write('cmap', 12, 'latin1');
+    font.writeUInt32BE(cmapAt, 12 + 8); // table offset
+    font.writeUInt32BE(4 + 8 + subtableBytes, 12 + 12); // table length
+    font.writeUInt16BE(1, cmapAt + 2); // numSubtables
+    font.writeUInt16BE(3, cmapAt + 4); // platform: Windows
+    font.writeUInt16BE(1, cmapAt + 6); // encoding: BMP
+    font.writeUInt32BE(subtableAt - cmapAt, cmapAt + 8); // subtable offset（cmap 先頭から）
+    font.writeUInt16BE(4, subtableAt); // format
+    if (subtableBytes >= 8) font.writeUInt16BE(segCountX2, subtableAt + 6);
+    return font;
+  }
+
+  it('segCount が実体より大きくても RangeError にならず、読める分で打ち切る', () => {
+    // 壊れた（あるいは切り詰められた）フォントは segCountX2 に実体より大きな値を書ける。
+    // 境界チェックが無いと readUInt16BE が RangeError を投げ、収録表の検証ごと落ちる。
+    const font = buildFontWithFormat4(0x1000, 32);
+    expect(() => readCoveredCodePoints(font)).not.toThrow();
+    expect(readCoveredCodePoints(font).size).toBe(0);
+  });
+
+  it('format 4 のヘッダすら入っていないサブテーブルでも落ちない', () => {
+    const font = buildFontWithFormat4(2, 4);
+    expect(() => readCoveredCodePoints(font)).not.toThrow();
+  });
 });

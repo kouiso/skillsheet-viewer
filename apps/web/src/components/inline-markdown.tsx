@@ -49,7 +49,9 @@ export function InlineMarkdown({ content, className, linksTabbable = true }: Inl
           img: ({ alt }) => (alt ? alt : null),
           // Tailwind preflight がリンクの色・下線をリセットするため明示的に指定しないと、
           // 周囲の地の文と見分けが付かず発見性が無くなる（レビュー指摘）。
-          a: ({ children, ...props }) => (
+          // react-markdown 10 はカスタムコンポーネントへ HAST の `node` を渡す。
+          // そのまま spread すると DOM 属性として <a> に載り、React の警告になる。
+          a: ({ children, node: _node, ...props }) => (
             <a
               {...props}
               tabIndex={linksTabbable ? undefined : -1}

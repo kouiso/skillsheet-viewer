@@ -287,16 +287,24 @@ export const MISSING_GLYPH_PLACEHOLDER = '\u3013';
 // 有無では防げないので、補助面は一律で代替表記に倒す。
 const SUPPLEMENTARY_PLANE_START = 0x10000;
 
+/** 改行・タブ・CR だけは Text 側が扱うので残す。それ以外の C0 制御文字は落とす。 */
+function isLayoutControl(codePoint: number): boolean {
+  return codePoint === 0x09 || codePoint === 0x0a || codePoint === 0x0d;
+}
+
 /**
  * PDF に載せる前に、登録フォントが描けない文字を安全な代替へ置き換える。
  * 描ける文字しか残らないため、無関係なグリフが重なって直後の文字まで潰す
- * （Issue #263 E）ことが構造的に起こらなくなる。
+ * （Issue #263 E）ことが構造的に起こらなくなる。制御文字は改行・タブ・CR だけを
+ * 通し、残り（NUL 等）は落とす。
  */
 export function toRenderableText(text: string): string {
   // ASCII だけの文字列が大半なので、走査前に安価な判定で早期リターンする。
+  // `> 0x7e` だけを見ると NUL 等の C0 制御文字が素通りする（安全化の契約が崩れる）。
   let needsWork = false;
   for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) > 0x7e) {
+    const code = text.charCodeAt(i);
+    if (code > 0x7e || (code < 0x20 && !isLayoutControl(code))) {
       needsWork = true;
       break;
     }
@@ -306,16 +314,18 @@ export function toRenderableText(text: string): string {
   let out = '';
   for (const ch of text) {
     const codePoint = ch.codePointAt(0) ?? 0;
+    // 改行・タブ・CR は Text 側で扱うのでそのまま通す（cmap には載らない）。
+    if (isLayoutControl(codePoint)) {
+      out += ch;
+      continue;
+    }
+    // それ以外の C0 制御文字は、置換文字にすると見えないゴミが紙面に出るので落とす。
+    if (codePoint < 0x20 || codePoint === 0x7f) continue;
     if (codePoint < SUPPLEMENTARY_PLANE_START && isRenderableCodePoint(codePoint)) {
       out += ch;
       continue;
     }
     if (isInvisibleFormatCodePoint(codePoint)) continue;
-    // 改行・タブは Text 側で扱うのでそのまま通す（cmap には載らない）。
-    if (ch === '\n' || ch === '\t' || ch === '\r') {
-      out += ch;
-      continue;
-    }
     out += MISSING_GLYPH_PLACEHOLDER;
   }
   return out;
