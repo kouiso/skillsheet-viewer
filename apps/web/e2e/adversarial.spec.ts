@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { createRealVolumeDemoSheet, deleteSheet, getSkillSheetById, listSheets } from '@skillsheet/db';
+import { deleteSheet, getSkillSheetById, listSheets } from '@skillsheet/db';
+import { createRealVolumeDemoSheet } from '@skillsheet/db/fixtures';
 import { authFile, login } from './auth';
 
 test.use({ storageState: authFile });

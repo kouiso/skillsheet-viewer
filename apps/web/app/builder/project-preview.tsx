@@ -5,7 +5,7 @@ import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@skillsheet/db/pr
 import { projectAreaText } from '@skillsheet/db/tech-area';
 import { useRef, useState } from 'react';
 
-import { InlineMarkdown } from '@/component/inline-markdown';
+import { InlineMarkdown } from '@/components/inline-markdown';
 import { formatTeamSize } from '@/util/format-team-size';
 
 interface ProjectPreviewProps {

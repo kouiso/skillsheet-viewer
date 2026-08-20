@@ -1,11 +1,9 @@
-import { TRPCError } from '@trpc/server';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { CONFIG_ERROR_NOTICES, ConfigErrorNotice } from '@/component/config-error-notice';
+import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
 import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/github-sheets';
 import { createServerCaller } from '@/server/trpc/caller';
-import { classifyConfigError } from '@/util/is-config-error';
 
 import DeferredEditSheetView from './deferred-edit-sheet-view';
 
@@ -45,20 +43,14 @@ export default async function SheetViewPage({ params }: PageProps) {
     // tRPC procedure は throw を無条件で TRPCError にラップするため、元の SheetNotFoundError
     // ではなく code: 'NOT_FOUND' で判定する（githubSheet.byPath 側のコメント参照）。
     // ファイル不在のみ 404。
-    if (err instanceof TRPCError && err.code === 'NOT_FOUND') notFound();
+    notFoundOnTrpcCodes(err, ['NOT_FOUND']);
     // GitHub 連携の設定不備（未設定・トークン拒否）は待っても直らないので、200 で
     // 原因と対処を返す。未設定とトークン拒否（401）は原因も対処も違うため、
     // classifyConfigError() の種類ごとに別の案内文を出す（Issue #195: 従来はどちらも
     // 「未設定」の文面で案内しており、トークン拒否のときに調査を誤誘導していた）。
     // console.error は出さない（一時的な障害ではないため）（#157）。
-    const configErrorKind = classifyConfigError(err);
-    if (configErrorKind) {
-      return <ConfigErrorNotice {...CONFIG_ERROR_NOTICES[configErrorKind]} />;
-    }
-    // それ以外（レートリミットやネットワーク等の一時的なシステムエラー）は
-    // error.tsx / 監視ツールに委ねるため再スローする。
-    console.error('Failed to load sheet:', path, err);
-    throw err;
+    // 設定不備は 200 ＋ 原因と対処、一時的なシステムエラーは error.tsx / 監視へ委ねる。
+    return configErrorNoticeOrRethrow(err, `Failed to load sheet: ${path}`);
   }
 
   // key={path}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー

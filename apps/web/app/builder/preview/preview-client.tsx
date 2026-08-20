@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import SkillSheetViewer from '@/component/skill-sheet-viewer';
+import SkillSheetViewer from '@/components/skill-sheet-viewer';
 
 import { SyncBar, type SyncState } from './sync-bar';
 

@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 
 import { createTRPCContext } from '@/server/trpc/context';
 import { createCallerFactory } from '@/server/trpc/init';
-import { shouldLogTRPCError } from '@/server/trpc/log-error';
+import { trpcErrorToResponse } from '@/server/trpc/route-error';
 import { appRouter } from '@/server/trpc/router';
 import { isSameOriginRequest, VIEWER_AUTH_NOT_CONFIGURED_MESSAGE } from '@/server/trpc/router/auth';
 
@@ -37,24 +37,21 @@ export async function POST(req: NextRequest) {
     const result = await caller.auth.login(input as { code: string });
     return NextResponse.json(result, { headers: responseHeaders });
   } catch (error) {
-    if (error instanceof TRPCError) {
-      if (error.code === 'FORBIDDEN') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
-      if (error.code === 'BAD_REQUEST') {
-        return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
-      }
-      if (error.code === 'UNAUTHORIZED') {
-        return NextResponse.json({ error: 'Invalid code' }, { status: 401 });
-      }
-      if (error.code === 'INTERNAL_SERVER_ERROR' && error.message === VIEWER_AUTH_NOT_CONFIGURED_MESSAGE) {
-        console.error('POST /api/auth: unexpected error:', error);
-        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-      }
-    }
-    if (!(error instanceof TRPCError) || shouldLogTRPCError(error.code)) {
+    // 設定不備だけは 500 でも本文を分ける（呼び出し側が「コードが違う」と誤解しないため）。
+    // コードではなく message で判別するので、共通変換の前に見る。
+    if (error instanceof TRPCError && error.message === VIEWER_AUTH_NOT_CONFIGURED_MESSAGE) {
       console.error('POST /api/auth: unexpected error:', error);
+      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
     }
-    return NextResponse.json({ error: 'Failed to authenticate' }, { status: 500 });
+    return trpcErrorToResponse(error, {
+      label: 'POST /api/auth',
+      fallbackMessage: 'Failed to authenticate',
+      map: {
+        FORBIDDEN: { status: 403, message: 'Forbidden' },
+        BAD_REQUEST: { status: 400, message: 'Invalid request body' },
+        UNAUTHORIZED: { status: 401, message: 'Invalid code' },
+        TOO_MANY_REQUESTS: { status: 429, message: 'Too many attempts' },
+      },
+    });
   }
 }

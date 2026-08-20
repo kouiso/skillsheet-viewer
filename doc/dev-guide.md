@@ -35,7 +35,7 @@
 │   └── web/                 # Next.js 16 アプリ（App Router）
 │       ├── app/             # ルーティング（App Router: page.tsx / layout.tsx / route.ts）
 │       └── src/
-│           ├── component/   # 機能コンポーネント（PDF 含む）
+│           ├── components/  # 機能コンポーネント（PDF 含む）
 │           ├── components/  # shadcn/ui ベースの UI 部品
 │           ├── context/     # React Context
 │           ├── hooks/       # カスタムフック

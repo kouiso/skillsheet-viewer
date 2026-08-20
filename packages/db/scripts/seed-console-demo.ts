@@ -4,7 +4,7 @@
  *
  * 実行: pnpm --filter @skillsheet/db exec tsx scripts/seed-console-demo.ts
  */
-import { createConsoleDemoSheet } from '../src/console-demo';
+import { createConsoleDemoSheet } from '../src/fixtures/console-demo';
 // .env.local のパース規則が2箇所に分かれると片方だけ直す退行が入るため、共通実装を使う。
 import { loadWebEnvLocal } from './block-write';
 
