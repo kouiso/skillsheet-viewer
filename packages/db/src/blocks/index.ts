@@ -398,18 +398,23 @@ export function splitMarkdownIntoBlocks(markdown: string): MarkdownBlockData[] {
   return segments.map((markdown) => ({ markdown }));
 }
 
-/**
- * `|` で始まる行が GFM テーブルの区切り行（例 `| --- | :---: |`）かを判定する。
- */
-function isTableDelimiterRow(line: string): boolean {
+/** GFM テーブルの区切り行（例 `| --- | :---: |`）としてのセル数。区切り行でなければ 0。 */
+function tableDelimiterCellCount(line: string): number {
   const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
   const cells = trimmed.split('|');
-  return cells.length > 0 && cells.every((cell) => /^:?-+:?$/.test(cell.trim()));
+  if (cells.length === 0 || !cells.every((cell) => /^:?-+:?$/.test(cell.trim()))) return 0;
+  return cells.length;
+}
+
+/** ヘッダ行のセル数。外側の `|` は省略できる（GFM）。 */
+function headerCellCount(line: string): number {
+  const trimmed = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  return trimmed.split('|').length;
 }
 
 /**
- * 与えられた markdown が GFM テーブルで始まるかを判定する（先頭「非空行」が `|` 始まり、
- * かつヘッダ行の直後の行がテーブル区切り行であることまで確認する）。
+ * 与えられた markdown が GFM テーブルで始まるかを判定する（先頭「非空行」がヘッダ行で、
+ * かつその直後の行がテーブル区切り行であることまで確認する）。
  * lazy continuation でテーブルが直前段落へ飲み込まれるのは、後続ブロックの先頭が
  * テーブル行のときだけなので、この 1 点で連結セパレータを切り替える。
  * `|` 始まりだけを見ると、区切り行を伴わない通常の markdown（先頭が `|` の地の文や
@@ -425,10 +430,18 @@ function startsWithTableRow(markdown: string): boolean {
     firstContentIndex = i;
     break;
   }
-  if (firstContentIndex === -1 || !/^\s*\|/.test(lines[firstContentIndex])) return false;
+  if (firstContentIndex === -1) return false;
 
+  const headerLine = lines[firstContentIndex];
   const nextLine = lines[firstContentIndex + 1];
-  return nextLine !== undefined && isTableDelimiterRow(nextLine);
+  if (nextLine === undefined) return false;
+
+  const delimiterCells = tableDelimiterCellCount(nextLine);
+  if (delimiterCells === 0) return false;
+  // 外側の `|` を省いたヘッダ（`a | b` / `--- | ---`）も GFM のテーブル。
+  // ただし `a | b` の次が `---`（1セル）だと Setext 見出しなので、セル数の一致まで見る。
+  if (/^\s*\|/.test(headerLine)) return true;
+  return headerLine.includes('|') && headerCellCount(headerLine) === delimiterCells;
 }
 
 /**

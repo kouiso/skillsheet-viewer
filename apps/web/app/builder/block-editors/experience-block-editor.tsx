@@ -18,7 +18,7 @@ export const ExperienceBlockEditor = ({
         onChange={(e) => set('company', e.target.value)}
         placeholder="会社名"
         aria-label="会社名"
-        className="w-full rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
+        className="min-h-11 w-full rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <div className="flex items-center gap-1.5">
         <DateTokenPicker value={data.startDate} onChange={(v) => set('startDate', v)} placeholder="開始年月日" />

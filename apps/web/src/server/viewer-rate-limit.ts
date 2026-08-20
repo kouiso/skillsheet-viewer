@@ -55,10 +55,16 @@ function memoryCheck(key: string, now: number): RateLimitState {
 function memoryReserve(key: string, now: number): RateLimitState {
   const existing = memory.get(key);
   const locked = existing?.lockedUntil != null && existing.lockedUntil > now;
-  const inWindow = existing && (locked || now - existing.windowStartedAt <= WINDOW_MS);
-  const failureCount = inWindow ? existing.failureCount + 1 : 1;
-  const windowStartedAt = inWindow ? existing.windowStartedAt : now;
-  const lockedUntil = failureCount > MAX_FAILURES ? now + LOCK_MS : (existing?.lockedUntil ?? null);
+  // ロック中は一切書き換えない。書き換えるとロック中の要求のたびに期限が伸び、
+  // 共有 IP の利用者が攻撃者の試行に巻き込まれて永久に入れなくなる（DB 側と同じ方針）。
+  const inWindow = existing && now - existing.windowStartedAt <= WINDOW_MS;
+  const failureCount = locked ? (existing?.failureCount ?? 1) : inWindow ? existing.failureCount + 1 : 1;
+  const windowStartedAt = locked ? (existing?.windowStartedAt ?? now) : inWindow ? existing.windowStartedAt : now;
+  const lockedUntil = locked
+    ? (existing?.lockedUntil ?? null)
+    : failureCount > MAX_FAILURES
+      ? now + LOCK_MS
+      : (existing?.lockedUntil ?? null);
 
   if (!memory.has(key) && memory.size >= MEMORY_MAX_KEYS) {
     const oldest = memory.keys().next();

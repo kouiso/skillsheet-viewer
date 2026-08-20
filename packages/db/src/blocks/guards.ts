@@ -81,7 +81,9 @@ export function isProfileBlockData(data: unknown): data is ProfileBlockData {
   if (typeof d.title !== 'string') return false;
   if (typeof d.pr !== 'string') return false;
   if (!Array.isArray(d.strengths) || !d.strengths.every((s) => typeof s === 'string')) return false;
-  if (typeof d.meta !== 'object' || d.meta === null) return false;
+  // meta の値まで見る。ここを通すと index.ts の trim() が実行時に落ちる。
+  if (typeof d.meta !== 'object' || d.meta === null || Array.isArray(d.meta)) return false;
+  if (!Object.values(d.meta).every((v) => v === undefined || typeof v === 'string')) return false;
   // 後方互換: company は存在するなら string（欠如は許容）。
   if (d.company !== undefined && typeof d.company !== 'string') return false;
   return true;
@@ -124,6 +126,9 @@ export function isProjectBlockData(data: unknown): data is ProjectBlockData {
       c !== null &&
       typeof (c as CompanyInfo).id === 'string' &&
       typeof (c as CompanyInfo).name === 'string' &&
+      typeof (c as CompanyInfo).kind === 'string' &&
+      typeof (c as CompanyInfo).period === 'string' &&
+      typeof (c as CompanyInfo).note === 'string' &&
       optionalTypeOk((c as CompanyInfo).hidden, 'boolean'),
   );
   if (!companiesOk) return false;
@@ -133,8 +138,17 @@ export function isProjectBlockData(data: unknown): data is ProjectBlockData {
       item !== null &&
       typeof (item as ProjectItem).id === 'string' &&
       typeof (item as ProjectItem).companyId === 'string' &&
+      typeof (item as ProjectItem).title === 'string' &&
+      typeof (item as ProjectItem).scope === 'string' &&
+      typeof (item as ProjectItem).period === 'string' &&
+      typeof (item as ProjectItem).role === 'string' &&
+      typeof (item as ProjectItem).team === 'string' &&
+      typeof (item as ProjectItem).duties === 'string' &&
+      typeof (item as ProjectItem).acquired === 'string' &&
+      typeof (item as ProjectItem).comment === 'string' &&
       isProjectTech((item as ProjectItem).tech) &&
       Array.isArray((item as ProjectItem).process) &&
+      (item as ProjectItem).process.every((v) => typeof v === 'string') &&
       optionalTypeOk((item as ProjectItem).hidden, 'boolean') &&
       optionalTypeOk((item as ProjectItem).periodStart, 'string') &&
       optionalTypeOk((item as ProjectItem).periodEnd, 'string') &&

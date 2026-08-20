@@ -70,6 +70,20 @@ describe('閲覧コードの回数制限（DB へ届かない場合のプロセ�
     });
   });
 
+  // ロック中の要求でロック期限が伸びると、共有 IP の正しい利用者が永久に入れなくなる。
+  it('ロック中に試し続けてもロック期限は伸びない', async () => {
+    const key = 'ip:5.5.5.5';
+    const now = 1_000_000;
+    for (let i = 0; i <= MAX_FAILURES; i++) await reserveViewerLoginAttemptBoth(key, now);
+    await expect(checkViewerLoginRateLimit(key, now)).resolves.toMatchObject({ locked: true });
+
+    // ロックが切れる直前まで試行を続ける。
+    for (let t = 1; t <= 14; t++) await reserveViewerLoginAttemptBoth(key, now + t * 60 * 1000);
+
+    // 最初のロックから 16 分後（ロック15分 + 集計窓10分の両方を越える）には解除されている。
+    await expect(checkViewerLoginRateLimit(key, now + 16 * 60 * 1000)).resolves.toMatchObject({ locked: false });
+  });
+
   it('ロック時間が過ぎれば再び試せる', async () => {
     const key = 'ip:4.4.4.4';
     const now = 1_000_000;

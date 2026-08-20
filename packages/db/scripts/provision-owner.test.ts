@@ -15,11 +15,38 @@ import { provisionOwner } from './bootstrap-owner';
  * 実DBを用意しなくても壊れを検知できるよう、better-auth 同梱のメモリアダプタで
  * 本物の internalAdapter / transaction / パスワードハッシュを通す。
  */
-function createAuth() {
-  const db: Record<string, unknown[]> = { user: [], session: [], account: [], verification: [] };
+function emptyDb(): Record<string, unknown[]> {
+  return { user: [], session: [], account: [], verification: [] };
+}
+
+/**
+ * メモリアダプタに「本物のトランザクション」を足す。
+ *
+ * better-auth 同梱のメモリアダプタは transaction がコールバックへ自分自身を渡すだけで、
+ * ロールバックが起きない。それだと「トランザクション用アダプタが実際に使われているか」を
+ * 検証できないため、複製した別ストアに対する専用アダプタを渡し、成功時だけ書き戻す。
+ * こうすると、トランザクション外のアダプタへ書いてしまう実装では巻き戻しが効かず落ちる。
+ */
+function transactionalMemoryAdapter(db: Record<string, unknown[]>) {
+  const base = memoryAdapter(db);
+  return (options: Parameters<ReturnType<typeof memoryAdapter>>[0]) => {
+    const adapter = base(options);
+    return {
+      ...adapter,
+      transaction: async (cb: (trx: unknown) => Promise<unknown>) => {
+        const staging = structuredClone(db);
+        const result = await cb(memoryAdapter(staging)(options));
+        for (const key of Object.keys(staging)) db[key] = staging[key];
+        return result;
+      },
+    };
+  };
+}
+
+function createAuth(db: Record<string, unknown[]> = emptyDb()) {
   return betterAuth({
     secret: 'test-secret-value-at-least-32-characters-long',
-    database: memoryAdapter(db),
+    database: transactionalMemoryAdapter(db) as unknown as ReturnType<typeof memoryAdapter>,
     emailAndPassword: { enabled: true, requireEmailVerification: false, disableSignUp: true },
   });
 }
@@ -72,6 +99,23 @@ describe('provisionOwner', () => {
     await expect(ctx.password.verify({ hash: credential?.password ?? '', password: 'First-Pass!2026' })).resolves.toBe(
       false,
     );
+  });
+
+  // createUser と linkAccount が同じトランザクションに乗っていないと、linkAccount 失敗時に
+  // 「パスワードを持たない user 行」だけが残り、以後どの経路でもログインできなくなる。
+  it('linkAccount が失敗したら user 行も残さない', async () => {
+    const db = emptyDb();
+    const ctx = await createAuth(db).$context;
+    ctx.internalAdapter.linkAccount = async () => {
+      throw new Error('linkAccount failed');
+    };
+
+    await expect(
+      provisionOwner(ctx, { email: 'owner@example.com', password: 'Str0ng-Pass!2026', name: 'Owner' }),
+    ).rejects.toThrow(/linkAccount failed/);
+
+    expect(db.user).toEqual([]);
+    expect(db.account).toEqual([]);
   });
 
   it('短すぎるパスワードは作成前に弾く', async () => {

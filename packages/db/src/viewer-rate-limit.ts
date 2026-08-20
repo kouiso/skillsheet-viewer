@@ -78,8 +78,13 @@ export async function reserveViewerLoginAttempt(
   const lockUntil = new Date(now.getTime() + LOCK_MS).toISOString();
   const nowIso = now.toISOString();
 
-  // 窓を過ぎていれば数え直し、そうでなければ加算する。加算後が上限に達したらロック時刻を入れる。
-  const nextCount = sql`case when ${viewerLoginAttempt.windowStartedAt} < ${windowStart}::timestamptz and (${viewerLoginAttempt.lockedUntil} is null or ${viewerLoginAttempt.lockedUntil} <= ${nowIso}::timestamptz) then 1 else ${viewerLoginAttempt.failureCount} + 1 end`;
+  // ロック中かどうか。ロック中は一切書き換えない。
+  // 書き換えると、ロック中に来た要求のたびにロック期限が伸び、共有 IP の利用者が
+  // 攻撃者の試行に巻き込まれて永久に入れなくなる。
+  const isLocked = sql`(${viewerLoginAttempt.lockedUntil} is not null and ${viewerLoginAttempt.lockedUntil} > ${nowIso}::timestamptz)`;
+  // 窓を過ぎていれば数え直す（ロックが切れている場合のみ）。
+  const windowExpired = sql`(${viewerLoginAttempt.windowStartedAt} < ${windowStart}::timestamptz and (${viewerLoginAttempt.lockedUntil} is null or ${viewerLoginAttempt.lockedUntil} <= ${nowIso}::timestamptz))`;
+  const nextCount = sql`case when ${isLocked} then ${viewerLoginAttempt.failureCount} when ${windowExpired} then 1 else ${viewerLoginAttempt.failureCount} + 1 end`;
 
   const [row] = await db
     .insert(viewerLoginAttempt)
@@ -88,8 +93,8 @@ export async function reserveViewerLoginAttempt(
       target: viewerLoginAttempt.key,
       set: {
         failureCount: nextCount,
-        windowStartedAt: sql`case when ${viewerLoginAttempt.windowStartedAt} < ${windowStart}::timestamptz and (${viewerLoginAttempt.lockedUntil} is null or ${viewerLoginAttempt.lockedUntil} <= ${nowIso}::timestamptz) then ${nowIso}::timestamptz else ${viewerLoginAttempt.windowStartedAt} end`,
-        lockedUntil: sql`case when (${nextCount}) > ${MAX_FAILURES} then ${lockUntil}::timestamptz else ${viewerLoginAttempt.lockedUntil} end`,
+        windowStartedAt: sql`case when ${isLocked} then ${viewerLoginAttempt.windowStartedAt} when ${windowExpired} then ${nowIso}::timestamptz else ${viewerLoginAttempt.windowStartedAt} end`,
+        lockedUntil: sql`case when ${isLocked} then ${viewerLoginAttempt.lockedUntil} when (${nextCount}) > ${MAX_FAILURES} then ${lockUntil}::timestamptz else ${viewerLoginAttempt.lockedUntil} end`,
       },
     })
     .returning();

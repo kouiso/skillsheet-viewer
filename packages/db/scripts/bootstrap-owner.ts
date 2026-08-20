@@ -1,5 +1,6 @@
 import { pathToFileURL } from 'node:url';
 
+import { runWithTransaction } from '@better-auth/core/context';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 
@@ -166,10 +167,13 @@ export async function provisionOwner(
   // better-auth 1.6.25 の `auth.$context` は `hooks` を公開しなくなったため
   // getWithHooks(adapter, ctx) の中で `ctx.hooks` が undefined になり
   // 「hooksEntries is not iterable」で必ず落ちていた（＝新規環境でオーナーを作れない）。
-  // better-auth 側は AsyncLocalStorage で「いま有効なアダプタ」を解決する作りなので
-  // （db/with-hooks の getCurrentAdapter(adapter)）、transaction の中では
-  // ctx.internalAdapter をそのまま呼べばトランザクション用アダプタが使われる。
-  const userId = await ctx.adapter.transaction(async () => {
+  //
+  // ここは runWithTransaction を使う。`ctx.adapter.transaction(fn)` は fn にトランザクション
+  // 用アダプタを引数で渡すだけで AsyncLocalStorage には積まないため、その中で
+  // ctx.internalAdapter を呼んでも getCurrentAdapter() は素のアダプタへフォールバックし、
+  // ロールバックが効かない（linkAccount が失敗すると user 行だけ残る）。
+  // runWithTransaction は als.run でトランザクション用アダプタを積んでから fn を走らせる。
+  const userId = await runWithTransaction(ctx.adapter, async () => {
     const createdUser = await ctx.internalAdapter.createUser({
       email: normalizedEmail,
       name,

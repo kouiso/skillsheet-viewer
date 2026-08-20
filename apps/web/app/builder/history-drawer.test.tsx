@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
+import type { HistoryEntry } from './history';
 import { HistoryDrawer } from './history-drawer';
 
 // jsdom は showModal()/close() を実装していないので、open 属性だけ動かす最小の代替を入れる。
@@ -18,7 +19,9 @@ beforeAll(() => {
   };
 });
 
-const entries = [{ id: 'a', at: Date.now(), label: '案件を編集', snapshot: { items: [] } }] as never;
+const entries: HistoryEntry[] = [
+  { id: 'a', at: Date.now(), label: '案件を編集', snapshot: { companies: [], items: [] } },
+];
 
 describe('HistoryDrawer', () => {
   // showModal() は dialog 以外を inert にする。背景に重ねたボタンは押せないので残してはいけない。

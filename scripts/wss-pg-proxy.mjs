@@ -16,10 +16,20 @@ const server = createServer({
 });
 const wss = new WebSocketServer({ server });
 
+// 接続先はローカルの PostgreSQL 1 つに固定する。address をそのまま net.connect へ渡すと、
+// 誰でも使える無認証の TCP プロキシになり、ローカルの別サービスや外部へ中継できてしまう。
+const PG_PORT = Number(process.env.PG_PORT ?? 5432);
+
 wss.on('connection', (ws, req) => {
   const address = new URL(req.url, 'https://localhost').searchParams.get('address') ?? '';
   const [host, portStr] = address.split(':');
-  const socket = net.connect({ host: host || '127.0.0.1', port: Number(portStr) || 5432 });
+  const port = Number(portStr) || PG_PORT;
+  if ((host && host !== '127.0.0.1' && host !== 'localhost') || port !== PG_PORT) {
+    console.error(`rejected target: ${address}`);
+    ws.close();
+    return;
+  }
+  const socket = net.connect({ host: '127.0.0.1', port: PG_PORT });
   socket.on('data', (d) => ws.readyState === ws.OPEN && ws.send(d));
   socket.on('error', () => ws.close());
   socket.on('close', () => ws.close());

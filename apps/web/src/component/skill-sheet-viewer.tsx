@@ -219,6 +219,13 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
   const showView = useCallback((view: ViewKey) => !views || views.includes(view), [views]);
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
   const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
+  // 1枚のシートに project ブロックが複数あると、案件詳細・タイムラインの見出し id が
+  // 重複して目次のスクロール先が壊れる。複数あるときだけブロック id で分ける
+  // （1つだけの通常ケースでは id を変えない）。ブロックごとに変わる値ではないのでループ外で1回だけ求める。
+  const multipleProjectBlocks = useMemo(
+    () => groupedBlocks.filter((g) => g.kind !== 'skills' && g.block.type === 'project').length > 1,
+    [groupedBlocks],
+  );
   // project ブロックを含むシートは「外枠カード無し・セクションが縦に並ぶダッシュボード」レイアウトにする。
   // markdown/table/skills のみの既存シートは従来の単一カード＋max-w-4xlを維持する。
   // 意図的に raw blocks（中身が空でも）で判定する — ダッシュボードテンプレはレイアウトの
@@ -331,11 +338,6 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
           {blocks ? (
             <div className={isDashboard ? 'space-y-8 sm:space-y-12' : 'space-y-0'}>
               {groupedBlocks.map((group) => {
-                // 1枚のシートに project ブロックが複数あると、案件詳細・タイムラインの見出し id が
-                // 重複して目次のスクロール先が壊れる。複数あるときだけブロック id で分ける
-                // （1つだけの通常ケースでは id を変えない）。
-                const multipleProjectBlocks =
-                  groupedBlocks.filter((g) => g.kind !== 'skills' && g.block.type === 'project').length > 1;
                 if (group.kind === 'skills') {
                   if (!showView('skills')) return null;
                   const key = group.blocks.map((b) => b.id).join('-');

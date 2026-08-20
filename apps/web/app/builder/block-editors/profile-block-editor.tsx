@@ -234,6 +234,8 @@ export const ProfileBlockEditor = ({
             // レビュー指摘）。行単位でも実際のブロック理由を出す。
             const isEmptyLabelWithValue = row.label.trim() === '' && row.value.trim() !== '';
             const hasRowError = isConflicting || isEmptyLabelWithValue;
+            // aria-invalid だけでは「無効」としか読まれない。理由の文言を id で結び付ける。
+            const errorId = `${row.id}-error`;
             return (
               <div key={row.id} className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -243,6 +245,7 @@ export const ProfileBlockEditor = ({
                     placeholder="項目名（例: 得意分野）"
                     aria-label="項目名"
                     aria-invalid={hasRowError}
+                    aria-describedby={hasRowError ? errorId : undefined}
                     className={`w-28 shrink-0 min-h-11 rounded border bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring ${
                       hasRowError ? 'border-destructive' : 'border-input'
                     }`}
@@ -264,12 +267,12 @@ export const ProfileBlockEditor = ({
                   </button>
                 </div>
                 {isConflicting && (
-                  <p className="text-xs text-destructive">
+                  <p id={errorId} className="text-xs text-destructive">
                     項目名が他の項目と重複しているため、この項目は保存されません。項目名を変更してください。
                   </p>
                 )}
                 {!isConflicting && isEmptyLabelWithValue && (
-                  <p className="text-xs text-destructive">
+                  <p id={errorId} className="text-xs text-destructive">
                     項目名が未入力のため、この項目は保存されません。項目名を入力してください。
                   </p>
                 )}

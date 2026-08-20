@@ -30,7 +30,16 @@ export const ALIGN_MARKER: Record<TableAlign, string> = {
  */
 export function escapeCell(value: string): string {
   const sanitized = sanitizeScriptAndStyle(value);
-  const single = sanitized.replace(/\r?\n/g, ' ').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const single = sanitized
+    // 既存のバックスラッシュを先に処理する（後から足すエスケープ用の `\` と混ざらないように）。
+    .replace(/\\/g, '\\\\')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\|/g, '\\|')
+    // 構造化ビューアはセルを素のテキストとして出す。markdown/PDF 側だけ `[表示名](URL)` が
+    // リンクに、`![...]()` が画像に化けると、同じデータの見え方が経路ごとに食い違う。
+    .replace(/[![\]*_`~]/g, '\\$&')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   return single.length > 0 ? single : ' ';
 }
 

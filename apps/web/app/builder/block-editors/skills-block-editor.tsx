@@ -34,6 +34,7 @@ export const SkillsBlockEditor = ({
         value={category}
         onChange={(e) => setCategory(e.target.value)}
         placeholder="カテゴリ（例: プログラミング言語）"
+        aria-label="スキルカテゴリ"
         className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
       {/* w-full だけだと table-layout:auto がコンテナ幅に収めようと各列を圧縮し、320px では
@@ -70,7 +71,7 @@ export const SkillsBlockEditor = ({
                     min={0}
                     max={50}
                     value={s.years}
-                    onChange={(e) => setSkill(i, 'years', Math.max(0, Number(e.target.value)))}
+                    onChange={(e) => setSkill(i, 'years', Math.min(50, Math.max(0, Number(e.target.value) || 0)))}
                     aria-label={`スキル${i + 1}の経験年数`}
                     className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
                   />

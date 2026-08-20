@@ -48,12 +48,12 @@ ensure_postgres() {
   fi
   sed -i 's/^host\(.*\)trust$/host\1password/' "$PGDATA/pg_hba.conf"
   su postgres -c "$PG_BIN/pg_ctl -D $PGDATA reload" >/dev/null
-  PGPASSWORD="$PG_PASSWORD" psql -h 127.0.0.1 -U "$PG_USER" -tAc "select 1 from pg_database where datname='$DB_NAME'" | grep -q 1 ||
-    PGPASSWORD="$PG_PASSWORD" psql -h 127.0.0.1 -U "$PG_USER" -c "create database $DB_NAME" >/dev/null
+  PGPASSWORD="$PG_PASSWORD" psql -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" -tAc "select 1 from pg_database where datname='$DB_NAME'" | grep -q 1 ||
+    PGPASSWORD="$PG_PASSWORD" psql -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" -c "create database $DB_NAME" >/dev/null
   # 失敗を握り潰すと、スキーマが欠けたまま "postgres ready" と出てしまう。
   # 「既にある」系のエラーだけは想定内なので、それ以外は止める。
   for f in "$REPO_ROOT"/packages/db/drizzle/migrations/*.sql; do
-    if ! out=$(PGPASSWORD="$PG_PASSWORD" psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -U "$PG_USER" -d "$DB_NAME" -f "$f" 2>&1); then
+    if ! out=$(PGPASSWORD="$PG_PASSWORD" psql -q -v ON_ERROR_STOP=1 -h 127.0.0.1 -p "$PG_PORT" -U "$PG_USER" -d "$DB_NAME" -f "$f" 2>&1); then
       if grep -qiE 'already exists' <<<"$out"; then
         continue
       fi
@@ -82,7 +82,7 @@ ensure_proxy() {
     log "wss proxy already running"
     return
   fi
-  node "$REPO_ROOT/scripts/wss-pg-proxy.mjs" > "$PROXY_LOG" 2>&1 &
+  PG_PORT="$PG_PORT" node "$REPO_ROOT/scripts/wss-pg-proxy.mjs" > "$PROXY_LOG" 2>&1 &
   echo $! > "$PROXY_PID"
   sleep 2
   # 起動に失敗しても 2 秒後に「起動した」と出てしまうと、あとでアプリ側が

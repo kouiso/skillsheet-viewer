@@ -40,11 +40,15 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-const files = collectFiles(ROOTS[0]).concat(collectFiles(ROOTS[1]));
+const files = ROOTS.flatMap((root) => collectFiles(root));
 
 /** `import type { X } from '...'` と `import { type X } from '...'` だけの行は値を持ち込まない。 */
 function isTypeOnlyImport(statement: string): boolean {
   if (/^import\s+type\b/.test(statement)) return true;
+  // 既定 import と名前空間 import は値。波括弧の中身が全部 type でも見逃してはいけない
+  // （`import db, { type X } from '...'` が素通りしていた）。
+  const clause = statement.replace(/^import\s+/, '').replace(/\s+from[\s\S]*$/, '');
+  if (/^(?:\*\s+as\s+\w+|\w+)\s*(?:,|$)/.test(clause)) return false;
   const braces = statement.match(/\{([^}]*)\}/);
   if (!braces) return false;
   const names = braces[1]
@@ -67,6 +71,14 @@ describe("'use client' のファイルがサーバ専用モジュールを値と
         if (!specifier || !SERVER_ONLY_SPECIFIERS.includes(specifier)) continue;
         if (isTypeOnlyImport(statement)) continue;
         violations.push(`${path.relative(process.cwd(), file)} → ${specifier}`);
+      }
+
+      // 副作用 import（`import '@skillsheet/db';`）も値を持ち込む。from が無いので上の正規表現に当たらない。
+      for (const match of source.matchAll(/^import\s+['"]([^'"]+)['"];?$/gm)) {
+        const specifier = match[1];
+        if (specifier && SERVER_ONLY_SPECIFIERS.includes(specifier)) {
+          violations.push(`${path.relative(process.cwd(), file)} → ${specifier}`);
+        }
       }
     }
     expect(
