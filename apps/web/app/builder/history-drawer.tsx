@@ -56,14 +56,18 @@ export const HistoryDrawer = ({ entries, onClose, onRestore }: HistoryDrawerProp
 
   return (
     <div className="hist-overlay">
-      {/* 背景を閉じるための実ボタン。div に onClick を付けるとキーボードから閉じられないため、
-          全面を覆うボタンにしてある（見た目は透明）。Escape でも閉じる。 */}
-      <button type="button" className="hist-overlay-close" aria-label="変更履歴を閉じる" onClick={onClose} />
       {/* open 属性は付けない。付けると非モーダルになる（上の useEffect で showModal する）。 */}
+      {/* biome-ignore lint/a11y/useKeyWithClickEvents: 背景クリックはポインタ専用の補助操作で、
+          キーボードからは Escape（onCancel）と見出し右の閉じるボタンで閉じられる。 */}
       <dialog
         ref={dialogRef}
         className="hist-drawer"
         aria-label="変更履歴"
+        onClick={(e) => {
+          // showModal() は dialog 以外を inert にするため、背景に別ボタンを重ねても押せない。
+          // 背景（::backdrop）へのクリックは dialog 自身が target になるので、それで判定する。
+          if (e.target === e.currentTarget) onCloseRef.current();
+        }}
         onCancel={(e) => {
           // Escape はブラウザが dialog を閉じるが、親の開閉状態も合わせないと再度開けなくなる。
           e.preventDefault();

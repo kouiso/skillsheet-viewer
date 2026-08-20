@@ -1224,17 +1224,6 @@
 .dark .hist-overlay {
   background: rgba(0, 0, 0, 0.55);
 }
-/* 背景を閉じるための透明ボタン。全面を覆うが、上に載るドロワーより下に置く。 */
-.hist-overlay-close {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  cursor: default;
-}
 /* dialog 要素は UA 既定の余白・枠・最大幅を持つので、ここで全部打ち消す。 */
 .hist-drawer {
   position: absolute;
