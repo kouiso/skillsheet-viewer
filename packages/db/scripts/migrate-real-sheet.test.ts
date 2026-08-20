@@ -261,6 +261,28 @@ describe('parseCareerMarkdown', () => {
   });
 });
 
+describe('parseCareerMarkdown（会社見出しの期間）', () => {
+  it('会社の期間は原文のまま保持する（範囲区切りが 〜 の通常ケース）', () => {
+    const md = careerMarkdown().replace(
+      '### 株式会社サンプル - 2020年4月 - 現在',
+      '### 株式会社サンプル - 2020年4月〜現在',
+    );
+    const { companies } = parseCareerMarkdown(md);
+
+    expect(companies[0].period).toBe('2020年4月〜現在');
+  });
+
+  it('単月表記（範囲区切りが無い）でも "2024.1" のようなドット表記へ化けない（#245 回帰）', () => {
+    // I社は "2024年1月" の単月のみで、範囲を表す区切り文字を含まない。
+    // normalizePeriod（item.period 用）を誤って会社の期間にも適用すると、
+    // normalizeDateToken の単一トークン正規表現にそのままマッチして "2024.1" になっていた。
+    const md = careerMarkdown().replace('### 株式会社サンプル - 2020年4月 - 現在', '### 株式会社サンプル - 2024年1月');
+    const { companies } = parseCareerMarkdown(md);
+
+    expect(companies[0].period).toBe('2024年1月');
+  });
+});
+
 describe('parseCareerMarkdown（プロジェクト概要の重複）', () => {
   it('単一値フィールドが重複したとき、上書きで失われる先行値を検出する（Codexレビュー）', () => {
     const md = careerMarkdown().replace(

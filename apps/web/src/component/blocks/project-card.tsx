@@ -17,11 +17,13 @@ interface ProjectCardProps {
   activeTech: string[];
   /** flattenTech 済みの技術一覧。 */
   tech: string[];
+  /** 稼働月数（deriveDuration）を出すか（表示設定のトグル）。既定 true。 */
+  showDuration?: boolean;
 }
 
-export const ProjectCard = ({ item, no, company, activeTech, tech }: ProjectCardProps) => {
+export const ProjectCard = ({ item, no, company, activeTech, tech, showDuration = true }: ProjectCardProps) => {
   const normalized = normalizeProcess(item.process);
-  const duration = sanitizeHtml(item.duration?.trim() || deriveDuration(item.period));
+  const duration = showDuration ? sanitizeHtml(item.duration?.trim() || deriveDuration(item.period)) : '';
   const summary = item.summary?.trim() || item.duties;
   const area = resolveProjectArea(item.scope, item.tech);
 

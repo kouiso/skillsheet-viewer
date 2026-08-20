@@ -390,13 +390,19 @@ function parseProjectHeading(text: string): { title: string; scope: string } {
 }
 
 // --- 会社見出し "◆ 会社名 - 期間" のパース -----------------------------------------------
+// 会社の期間は原文のまま保持する（normalizePeriod を掛けない）。normalizePeriod は
+// process.ts の item.period（"YYYY.M — YYYY.M" 形式）向けの変換で、会社の期間セルには
+// 表示側の整形関数が無く原文表示のため通す必要が無い。むしろ単月表記（"2024年1月" のように
+// 範囲区切りの "-" を含まない）は normalizeDateToken の単一トークン正規表現にそのまま
+// マッチしてしまい "2024.1" に化けてしまう（他17社は範囲区切りが "〜" のため
+// normalizeDateToken が非対応形式として素通しし、結果的に原文のまま残っていた）。
 function parseCompanyHeading(text: string): { name: string; period: string } {
   const withoutMarker = text.replace(/^◆\s*/, '').trim();
   const idx = withoutMarker.lastIndexOf('-');
   if (idx === -1) return { name: withoutMarker, period: '' };
   const after = withoutMarker.slice(idx + 1).trim();
   const before = withoutMarker.slice(0, idx).trim();
-  if (/年|現在/.test(after)) return { name: before, period: normalizePeriod(after) };
+  if (/年|現在/.test(after)) return { name: before, period: after };
   return { name: withoutMarker, period: '' };
 }
 
