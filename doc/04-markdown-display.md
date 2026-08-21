@@ -8,7 +8,7 @@
 
 ## Part 1: react-markdown パイプライン
 
-本文描画の中心は `apps/web/src/components/skill-sheet-viewer.tsx`（クライアントコンポーネント）。`ReactMarkdown` に remark / rehype プラグインを固定配列で渡す。
+本文描画の中心は `src/components/skill-sheet-viewer.tsx`（クライアントコンポーネント）。`ReactMarkdown` に remark / rehype プラグインを固定配列で渡す。
 
 ```tsx
 // skill-sheet-viewer.tsx（抜粋）

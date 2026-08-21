@@ -12,7 +12,7 @@
 
 ## 技術スタック
 
-- **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
+- **構成**: リポジトリルート1本の Next.js アプリ（DB 層は `src/db`）
 - **言語**: TypeScript
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
 - **UI**: Tailwind CSS v4 + shadcn/ui（Radix UI）
@@ -77,13 +77,13 @@ pnpm dev
 
 | コマンド | 説明 |
 |---------|------|
-| `pnpm dev` | 開発サーバー起動（`apps/web`） |
+| `pnpm dev` | 開発サーバー起動 |
 | `pnpm build` | 本番ビルド |
 | `pnpm start` | ビルド後のサーバー起動 |
 | `pnpm lint` | Biome でチェック（`biome check .`） |
 | `pnpm format` | Biome でフォーマット（`biome format --write .`） |
-| `pnpm -r type-check` | 全パッケージの型チェック |
-| `pnpm -r --if-present test` | 全テスト（Vitest） |
+| `pnpm type-check` | 全パッケージの型チェック |
+| `pnpm test` | 全テスト（Vitest） |
 | `pnpm test:e2e` | 本番ビルドを Chrome/Chromium で検証し、`test-results/e2e/` に証跡を保存 |
 | `pnpm db:generate` | スキーマからマイグレーション生成（Drizzle） |
 | `pnpm db:migrate` | マイグレーション適用 |
