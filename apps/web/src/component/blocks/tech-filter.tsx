@@ -2,6 +2,7 @@
 
 import { Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { parseProjectQuery, SEARCH_HINT_AND, SEARCH_HINT_OR } from './project-search';
 
 export interface TechCount {
   name: string;
@@ -38,6 +39,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
   // 選択中のチップは 1 案件だけの技術でも隠さないので、共通タグの数から引くとズレる。
   // 実際に描画している数との差で数える。
   const hiddenCount = all.length - shown.length;
+  const searchHint = parseProjectQuery(query).requireAll ? SEARCH_HINT_AND : SEARCH_HINT_OR;
 
   return (
     <div className="flex flex-col gap-3.5">
@@ -59,7 +61,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             // focus-visible:ring-2 を追加してキーボード操作時にリングが見えるようにする。
             // placeholder の色指定が無いと UA 既定（currentColor 50%）にフォールバックし、
             // ライトテーマで 3.35:1（WCAG AA 未達）になっていた（#152 S-4）。
-            className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="min-h-11 w-full rounded-[var(--radius)] border border-border-strong bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
         </div>
         <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
@@ -72,6 +74,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
           </button>
         )}
       </div>
+      <p className="text-[12px] leading-relaxed text-muted-foreground">{searchHint}</p>
 
       {/* 既定は約3行で頭打ちにし、下端のグラデーションで「まだ続く」ことを示す。 */}
       <div className={showAll ? 'relative' : 'relative max-h-[146px] overflow-hidden'}>
@@ -96,7 +99,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
                   基準を満たしていた組み合わせでも実効コントラストが4.5を割っていた
                   （Issue #198: 技術チップの件数 4.33/4.26）。active時は薄めず .chip.on の
                   色をそのまま使う。 */}
-              <span className={`text-[10px] ${active.includes(tech.name) ? '' : 'text-faint'}`}>{tech.count}</span>
+              <span className={`text-[11px] ${active.includes(tech.name) ? '' : 'text-faint'}`}>{tech.count}</span>
             </button>
           ))}
         </div>
@@ -108,7 +111,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
           {!showAll && hiddenCount > 0 && <span className="font-mono text-[11px] text-faint">+{hiddenCount}</span>}
         </button>
         {!showAll && hiddenCount > 0 && (
-          <span className="font-mono text-[10.5px] text-faint">
+          <span className="font-mono text-[11px] text-faint">
             1案件のみで使った技術は隠しています（検索欄では全件ヒットします）
           </span>
         )}

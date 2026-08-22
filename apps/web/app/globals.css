@@ -85,10 +85,10 @@
   --track: #e6ecec;
   --chip-bg: #eef3f3;
   --chip-text: #34424a;
-  --accent-text: #0b7d72;
-  --accent-soft: #ecfaf8;
+  --accent-text: #08665e;
+  --accent-soft: #ddf0ed;
   --on-accent: #ffffff;
-  --border-strong: #c8d2d4;
+  --border-strong: #7f9298;
   --bar-round: 1px;
   --head-weight: 600;
 
@@ -134,7 +134,7 @@
   /* destructive ボタンの hover（opacity-90 で 4.36:1 に低下）。#ef4444 より明るい赤で
      opacity を使わず不透明のまま 7.05:1 を確保する。 */
   --destructive-hover: #f87171;
-  --border: #1d262b;
+  --border: #232d33;
   --input: #1d262b;
   --ring: #14b8a6;
 
@@ -151,7 +151,7 @@
   --accent-text: #5eead4;
   --accent-soft: #0c2320;
   --on-accent: #03110f;
-  --border-strong: #2b363c;
+  --border-strong: #526771;
 
   --danger: #e9695c;
   --danger-soft: #2a1715;
@@ -449,7 +449,7 @@ body {
   font-size: 13px;
   line-height: 1.4;
   padding: 7px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   background-color: var(--card);
   color: var(--foreground);

@@ -66,6 +66,7 @@ const light = {
   faint: extractToken(lightBlock, 'faint'),
   muted: extractToken(lightBlock, 'muted'),
   track: extractToken(lightBlock, 'track'),
+  borderStrong: extractToken(lightBlock, 'border-strong'),
 };
 
 const dark = {
@@ -76,9 +77,11 @@ const dark = {
   faint: extractToken(darkBlock, 'faint'),
   muted: extractToken(darkBlock, 'muted'),
   track: extractToken(darkBlock, 'track'),
+  borderStrong: extractToken(darkBlock, 'border-strong'),
 };
 
 const AA_NORMAL_TEXT = 4.5;
+const AA_NON_TEXT = 3.0;
 
 describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () => {
   it('light: --muted-foreground が --background / --card に対し AA(4.5:1) を満たす', () => {
@@ -100,5 +103,15 @@ describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () =>
   it('dark: --faint が --background / --card に対し AA(4.5:1) を満たす', () => {
     expect(contrastRatio(dark.faint, dark.background)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     expect(contrastRatio(dark.faint, dark.card)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+  });
+
+  it('light: --border-strong が --background / --card に対し 非テキスト 3:1 を満たす', () => {
+    expect(contrastRatio(light.borderStrong, light.background)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    expect(contrastRatio(light.borderStrong, light.card)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  it('dark: --border-strong が --background / --card に対し 非テキスト 3:1 を満たす', () => {
+    expect(contrastRatio(dark.borderStrong, dark.background)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    expect(contrastRatio(dark.borderStrong, dark.card)).toBeGreaterThanOrEqual(AA_NON_TEXT);
   });
 });

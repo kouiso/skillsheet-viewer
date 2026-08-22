@@ -8,6 +8,7 @@
     "./schema": "./src/schema.ts",
     "./blocks": "./src/blocks.ts",
     "./process": "./src/process.ts",
+    "./group-by-company": "./src/group-by-company.ts",
     "./tech-area": "./src/tech-area.ts",
     "./sanitize-html": "./src/sanitize-html.ts"
   },
