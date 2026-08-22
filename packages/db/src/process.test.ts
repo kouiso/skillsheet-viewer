@@ -9,6 +9,7 @@ import {
   formatPeriodRange,
   labelsForProcessIndex,
   normalizeProcess,
+  parsePeriodBounds,
   parsePeriodToRange,
   parseStart,
   parseTokenToDate,
@@ -107,6 +108,34 @@ describe('deriveDuration', () => {
 describe('parseStart', () => {
   it('YYYY.MM 形式を解釈できる', () => {
     expect(parseStart('2025.11 — 現在')).toBeCloseTo(2025 + 10 / 12);
+  });
+});
+
+describe('parsePeriodBounds', () => {
+  it('開始・終了とも解釈できる period は両端を返す', () => {
+    const bounds = parsePeriodBounds('2020.04 — 2023.03');
+    expect(bounds).not.toBeNull();
+    expect(bounds?.start).toBeCloseTo(2020 + 3 / 12);
+    expect(bounds?.end).toBeCloseTo(2023 + 2 / 12);
+  });
+
+  it('終端が「現在」なら開始は parseStart と同じで終了は欠落しない', () => {
+    const bounds = parsePeriodBounds('2025.11 — 現在');
+    expect(bounds).not.toBeNull();
+    expect(bounds?.start).toBeCloseTo(parseStart('2025.11 — 現在') ?? Number.NaN);
+    expect(bounds?.end).toBeGreaterThanOrEqual(bounds?.start ?? Number.POSITIVE_INFINITY);
+  });
+
+  it('単独トークンは点期間として解釈する', () => {
+    const bounds = parsePeriodBounds('2020.06');
+    expect(bounds).not.toBeNull();
+    expect(bounds?.start).toBeCloseTo(2020 + 5 / 12);
+    expect(bounds?.end).toBeCloseTo(2020 + 5 / 12);
+  });
+
+  it('空文字・解釈不能は null', () => {
+    expect(parsePeriodBounds('')).toBeNull();
+    expect(parsePeriodBounds('期間未定')).toBeNull();
   });
 });
 

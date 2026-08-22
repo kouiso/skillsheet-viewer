@@ -170,6 +170,31 @@ export function parseStart(period: string): number | null {
   return parseYearMonth(startToken);
 }
 
+export interface PeriodBounds {
+  start: number;
+  end: number;
+}
+
+/**
+ * period の開始・終了を parseYearMonth と同じ数値尺度で返す。
+ * 終端「現在」は実行時点の年月。解釈できない入力は null（新規パーサは持たない）。
+ */
+export function parsePeriodBounds(period: string): PeriodBounds | null {
+  if (typeof period !== 'string' || period.length === 0) return null;
+  const [startToken, endToken] = splitPeriodRange(period);
+  const start = parseYearMonth(startToken);
+  if (start === null) return null;
+  if (/現在/.test(endToken)) {
+    const now = new Date();
+    const end = now.getFullYear() + now.getMonth() / 12;
+    return { start, end: Math.max(end, start) };
+  }
+  if (!endToken) return { start, end: start };
+  const end = parseYearMonth(endToken);
+  if (end === null) return null;
+  return { start, end: Math.max(end, start) };
+}
+
 /**
  * period の期間表現から表示用の duration 文字列を導出する（"現在" 終端のみ「継続中」）。
  * 終了が単に未記載（"2020.06" / "2020" 等）の場合は継続中とみなさず空文字を返す —
@@ -287,7 +312,16 @@ export function deriveCompanyPeriod(periods: string[]): string {
   return `${minStartToken} — ${maxEndToken}`;
 }
 
-const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
+export const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
+
+export const TECH_BUCKET_LABELS: Record<keyof ProjectTech, string> = {
+  lang: '言語',
+  fw: 'フレームワーク',
+  db: 'DB',
+  infra: 'インフラ',
+  tools: 'ツール',
+  collab: 'コラボレーションツール',
+};
 
 // 元データの「該当なし」プレースホルダ。技術名として取り込まれても描画時点で除外する。
 const EMPTY_TECH_PLACEHOLDERS = new Set(['-', 'ー', '—']);

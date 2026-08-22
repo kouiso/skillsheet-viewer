@@ -63,6 +63,11 @@ describe('TechFilter', () => {
     expect(screen.getByRole('button', { name: /OnlyOnce/ })).toBeTruthy();
   });
 
+  it('検索欄の下に OR/AND のヒントを出す', () => {
+    render(<TechFilter all={[{ name: 'TypeScript', count: 3 }]} active={[]} count={3} total={3} {...noop} />);
+    expect(screen.getByText(/スペース区切りはどれかを含む案件/)).toBeInTheDocument();
+  });
+
   it('選択中の技術は1案件のみでも隠さない（隠れると解除できなくなるため）', () => {
     render(
       <TechFilter

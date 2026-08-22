@@ -17,6 +17,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@skillsheet/db/blocks';
+import { groupProjectsByCompany } from '@skillsheet/db/group-by-company';
 import { Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
@@ -220,11 +221,8 @@ export const ProjectNav = ({
 
   const byCompany = useMemo(() => {
     const map = new Map<string, ProjectItem[]>();
-    for (const c of data.companies) map.set(c.id, []);
-    for (const p of data.items) {
-      const list = map.get(p.companyId);
-      if (list) list.push(p);
-      else map.set(p.companyId, [p]);
+    for (const group of groupProjectsByCompany(data.companies, data.items)) {
+      map.set(group.companyId, group.items);
     }
     return map;
   }, [data]);
