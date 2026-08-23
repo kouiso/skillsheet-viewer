@@ -81,6 +81,7 @@ function readTokens(block: string) {
     warnStrong: extractToken(block, 'warn-strong'),
     warnSoft: extractToken(block, 'warn-soft'),
     surface2: extractToken(block, 'surface2'),
+    borderStrong: extractToken(block, 'border-strong'),
   };
 }
 
@@ -88,6 +89,10 @@ const light = readTokens(lightBlock);
 const dark = readTokens(darkBlock);
 
 const AA_NORMAL_TEXT = 4.5;
+// WCAG 1.4.11（非テキストのコントラスト）。操作要素（検索欄・ボタン・ジャンプナビ・
+// 空状態の破線）の枠線に使う --border-strong はここを満たす必要がある。文字色と違い
+// 3:1 で足りる。旧値（ダーク1.51:1 / ライト1.54:1）はここが無かったため誰にも検知されなかった。
+const AA_NON_TEXT = 3.0;
 
 describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () => {
   it('light: --muted-foreground が --background / --card に対し AA(4.5:1) を満たす', () => {
@@ -150,6 +155,11 @@ describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () =>
     it(`${themeName}: --foreground / --muted-foreground が --surface2 に対し AA を満たす`, () => {
       expect(contrastRatio(t.foreground, t.surface2)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
       expect(contrastRatio(t.mutedForeground, t.surface2)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    });
+
+    it(`${themeName}: --border-strong が --background / --card に対し 非テキストAA(3:1, WCAG 1.4.11) を満たす`, () => {
+      expect(contrastRatio(t.borderStrong, t.background)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+      expect(contrastRatio(t.borderStrong, t.card)).toBeGreaterThanOrEqual(AA_NON_TEXT);
     });
   }
 });

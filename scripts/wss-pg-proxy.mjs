@@ -4,9 +4,8 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:https';
 import net from 'node:net';
 import process from 'node:process';
-import wsPkg from 'ws';
-
-const { WebSocketServer } = wsPkg;
+// ws は default export ではなく named export で WebSocketServer を出す（default はWebSocket本体）。
+import { WebSocketServer } from 'ws';
 
 const STATE_DIR = process.env.SKILLSHEET_LOCAL_STACK_DIR ?? '/var/lib/postgresql/skillsheet-local-stack';
 

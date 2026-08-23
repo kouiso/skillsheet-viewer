@@ -18,12 +18,24 @@ interface TechFilterProps {
   onClear: () => void;
   count: number;
   total: number;
+  /** 検索欄の下に出すヒント文。 */
+  hint?: string;
 }
 
 const SUGGESTION_LIMIT = 40;
 
 // 案件テキスト検索と、技術の検索選択は別コントロール。チップ雲は出さない。
-export function TechFilter({ all, active, query, onQueryChange, onToggle, onClear, count, total }: TechFilterProps) {
+export function TechFilter({
+  all,
+  active,
+  query,
+  onQueryChange,
+  onToggle,
+  onClear,
+  count,
+  total,
+  hint,
+}: TechFilterProps) {
   const [techQuery, setTechQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [hi, setHi] = useState(-1);
@@ -83,6 +95,8 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
           </button>
         )}
       </div>
+
+      {hint && <p className="text-[11.5px] leading-relaxed text-muted-foreground">{hint}</p>}
 
       <div className="relative min-w-[220px] max-w-[420px]">
         <input

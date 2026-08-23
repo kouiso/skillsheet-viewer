@@ -9,6 +9,7 @@ import {
   formatPeriodRange,
   labelsForProcessIndex,
   normalizeProcess,
+  parsePeriodBounds,
   parsePeriodToRange,
   parseStart,
   parseTokenToDate,
@@ -145,6 +146,35 @@ describe('sortByStartDesc', () => {
     const items = [{ p: '2020.1' }, { p: '2025.1' }, { p: '不明' }, { p: '2023.1' }];
     const sorted = sortByStartDesc(items, (i) => i.p);
     expect(sorted.map((i) => i.p)).toEqual(['2025.1', '2023.1', '2020.1', '不明']);
+  });
+});
+
+describe('parsePeriodBounds', () => {
+  it('範囲表記を開始・終了の小数年へ変換する', () => {
+    expect(parsePeriodBounds('2020.04〜2023.03')).toEqual({ start: 2020 + 3 / 12, end: 2023 + 2 / 12 });
+  });
+
+  it('「現在」終端は現在時刻を終端にする', () => {
+    const now = new Date();
+    const result = parsePeriodBounds('2020.04 — 現在');
+    expect(result).not.toBeNull();
+    expect(result?.end).toBeCloseTo(now.getFullYear() + now.getMonth() / 12, 5);
+  });
+
+  it('単月表記（区切りなし）は start === end の1点区間にする', () => {
+    expect(parsePeriodBounds('2024.01')).toEqual({ start: 2024, end: 2024 });
+  });
+
+  it('終了が空欄（区切りはあるが未入力）も start === end にする', () => {
+    expect(parsePeriodBounds('2024.01〜')).toEqual({ start: 2024, end: 2024 });
+  });
+
+  it('開始が読めなければ null', () => {
+    expect(parsePeriodBounds('不明な期間')).toBeNull();
+  });
+
+  it('空文字は null', () => {
+    expect(parsePeriodBounds('')).toBeNull();
   });
 });
 

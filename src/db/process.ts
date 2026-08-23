@@ -90,6 +90,27 @@ export function hasPeriodRangeSeparator(period: string): boolean {
   return RANGE_SEPARATORS.some((sep) => period.includes(sep));
 }
 
+/**
+ * period を会社レーン図用の数値区間へ変換する。単位は parseYearMonth と同じ「小数年」
+ * （年 + (月-1)/12）。終了トークンが「現在」を含む場合は現在時刻を終端にする
+ * （deriveDuration の「継続中」判定と同じ規則）。終了トークンが無い単月表記は
+ * start === end の1点区間として扱う。どちらのトークンも読めなければ null。
+ * 新しいパーサは書かず、既存の splitPeriodRange / parseYearMonth をそのまま使う。
+ */
+export function parsePeriodBounds(period: string): { start: number; end: number } | null {
+  const [startToken, endToken] = splitPeriodRange(period);
+  const start = parseYearMonth(startToken);
+  if (start === null) return null;
+  if (/現在/.test(endToken)) {
+    const now = new Date();
+    return { start, end: now.getFullYear() + now.getMonth() / 12 };
+  }
+  if (!endToken) return { start, end: start };
+  const end = parseYearMonth(endToken);
+  if (end === null) return null;
+  return { start, end: Math.max(end, start) };
+}
+
 // YYYY-MM-DD / YYYY.MM / YYYY年M月 / YYYY-MM / YYYY の順で試す。すべて失敗したら null。
 function parseYearMonth(token: string): number | null {
   if (!token) return null;
