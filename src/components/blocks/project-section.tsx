@@ -55,13 +55,16 @@ function normalizeSearchText(s: string): string {
  * 演算子語（and/or、大小問わず）自体は検索語から除く。
  */
 function parseQuery(raw: string): { terms: string[]; matchAll: boolean } {
+  // 演算子判定の前に正規化する。日本語入力のまま打つと全角の「ＡＮＤ」になりやすく、
+  // 正規化前に判定すると演算子と認識されず、黙って OR 検索になる。
   const tokens = raw
     .trim()
     .split(/[\s　]+/)
-    .filter(Boolean);
-  const isOperator = (t: string) => /^(and|or)$/i.test(t);
-  const terms = tokens.filter((t) => !isOperator(t)).map(normalizeSearchText);
-  const matchAll = tokens.some((t) => /^and$/i.test(t));
+    .filter(Boolean)
+    .map(normalizeSearchText);
+  const isOperator = (t: string) => t === 'and' || t === 'or';
+  const terms = tokens.filter((t) => !isOperator(t));
+  const matchAll = tokens.some((t) => t === 'and');
   return { terms, matchAll };
 }
 

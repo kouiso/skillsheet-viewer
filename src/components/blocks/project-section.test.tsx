@@ -190,6 +190,24 @@ describe('ProjectSection の検索（AND/OR・全角正規化）', () => {
     expect(screen.queryByText('案件B')).not.toBeInTheDocument();
   });
 
+  // 日本語入力のまま打つと演算子も全角になる。正規化前に判定していたころは
+  // 「ＡＮＤ」が演算子と認識されず、黙って OR 検索になっていた。
+  it('全角の「ＡＮＤ」も演算子として扱う', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSection data={DATA2} showProcess={false} showTimeline={false} />);
+    await user.type(screen.getByLabelText('案件・技術・役割を検索'), '決済基盤　ＡＮＤ　管理画面');
+    expect(screen.queryByText('案件A')).not.toBeInTheDocument();
+    expect(screen.queryByText('案件B')).not.toBeInTheDocument();
+  });
+
+  it('全角の「ＯＲ」は検索語ではなく演算子として捨てる', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSection data={DATA2} showProcess={false} showTimeline={false} />);
+    await user.type(screen.getByLabelText('案件・技術・役割を検索'), '決済基盤　ＯＲ　管理画面');
+    expect(screen.getByText('案件A')).toBeInTheDocument();
+    expect(screen.getByText('案件B')).toBeInTheDocument();
+  });
+
   it('全角英数字でも半角データにヒットする（NFKC 正規化）', async () => {
     const user = userEvent.setup();
     render(<ProjectSection data={DATA2} showProcess={false} showTimeline={false} />);

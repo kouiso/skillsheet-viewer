@@ -63,7 +63,9 @@ export function CompanySection({
     <section
       id={id}
       tabIndex={-1}
-      aria-label={period ? `${name}（${period}）` : name}
+      // 表示テキストと同じ sanitizeHtml を通す。素通しだと、名前に生タグが混ざった
+      // シートで見出しの読みと支援技術に渡る名前が食い違う。
+      aria-label={period ? `${sanitizeHtml(name)}（${sanitizeHtml(period)}）` : sanitizeHtml(name)}
       className="flex flex-col gap-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
       style={{ scrollMarginTop: 'calc(var(--viewer-topbar-h, 4rem) + 16px)' }}
     >

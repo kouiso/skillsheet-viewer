@@ -9,9 +9,9 @@
   Console デザイントークン。
   ティール単色 / radius 4px(lg 6px) / 影なしヘアライン / IBM Plex Sans JP。
   ライト: bg #f6f8f8, surface #fff, surface2 #f0f3f3, text #10171a, muted #4a565c,
-          border #dce3e4, accent #0d9488, accentSoft #ecfaf8.
+          border #dce3e4, border-strong #76898f, accent #0d9488, accentSoft #ddf0ed.
   ダーク: bg #0a0d0f, surface #0f1316, surface2 #141a1e, text #e6edf0, muted #98a3aa,
-          border #1d262b, accent #14b8a6, accentSoft #0c2320.
+          border #232d33, border-strong #5a6f79, accent #14b8a6, accentSoft #0c2320.
   WCAG AA:
     muted-text/bg 7.1:1 ✅  primary-dark(link)/bg 5.8:1 ✅  accent-dark/dark-surface 7.8:1 ✅
     primary(btn)/white-text 3.7:1 ⚠ ボタン大テキスト用許容 (large-text 3:1 OK)
