@@ -20,7 +20,8 @@ interface CompanyJumpNavProps {
 // 閲覧画面から / へ飛ばされてシートを見失う。実機で踏んだ。
 // そのため既存の目次（skill-sheet-viewer.tsx の scrollToHeading）と同じく
 // button + 自前スクロールにする。
-// 見出しが sticky topbar に潜らないよう空ける余白。topbar の実測高さは
+
+// 飛んだ先の見出しが sticky topbar に潜らないよう空ける余白。topbar の実測高さは
 // viewer-topbar.tsx が --viewer-topbar-h として公開している（SP では2段になり倍近く変わる）。
 const HEADROOM = 16;
 const FALLBACK_TOPBAR_HEIGHT = 64;

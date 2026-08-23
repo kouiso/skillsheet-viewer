@@ -16,6 +16,13 @@ interface CompanyLaneProps {
   items: LaneItem[];
 }
 
+// 1ヶ月に満たない案件でも「そこに何かある」と分かる最小幅。
+const MIN_SEGMENT_WIDTH = 4;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 /**
  * 会社の在籍期間を 100% とした帯に、配下の案件を区間として配置するレーン図。
  * 「同じ会社の中での案件の重なり・順番」を文章で説明せず図で見せる
@@ -24,13 +31,6 @@ interface CompanyLaneProps {
  * 装飾目的の可視化であり、内容は上のカード一覧に numは同じ番号で既に文字で出ているため、
  * レーン自体は aria-hidden にしてスクリーンリーダーの読み上げ対象から外す。
  */
-// 1ヶ月に満たない案件でも「そこに何かある」と分かる最小幅。
-const MIN_SEGMENT_WIDTH = 4;
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
 export function CompanyLane({ companyPeriod, items }: CompanyLaneProps) {
   const bounds = parsePeriodBounds(companyPeriod);
   if (!bounds) return null;
