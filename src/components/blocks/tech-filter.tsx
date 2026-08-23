@@ -83,7 +83,15 @@ export function TechFilter({
             // focus-visible:ring-2 を追加してキーボード操作時にリングが見えるようにする。
             // placeholder の色指定が無いと UA 既定（currentColor 50%）にフォールバックし、
             // ライトテーマで 3.35:1（WCAG AA 未達）になっていた（#152 S-4）。
-            className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            // 枠線は --border（対 surface2 で 1.17:1）だと「そこに入力欄がある」と分からない。
+            // 操作要素なので WCAG 1.4.11 の 3:1 を満たす --border-strong を使う。
+            // border-* ユーティリティではなく inline style なのは、globals.css の
+            // `* { border-color: var(--border) }` が Tailwind のレイヤー外にあり、
+            // 詳細度に関係なくレイヤー内のユーティリティを打ち負かすため（実機で確認）。
+            // 同じ理由で以前からここの focus:border-primary は一度も効いていなかったので外した。
+            // フォーカスの視認は focus-visible:ring-2 と focus:bg-card が担う。
+            className="min-h-11 w-full rounded-[var(--radius)] border bg-surface2 py-[9px] pl-[30px] pr-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            style={{ borderColor: 'var(--border-strong)' }}
           />
         </div>
         <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">
@@ -138,7 +146,8 @@ export function TechFilter({
             setOpen(false);
             setHi(-1);
           }}
-          className="min-h-11 w-full rounded-[var(--radius)] border border-border bg-surface2 py-[9px] px-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:border-primary focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="min-h-11 w-full rounded-[var(--radius)] border bg-surface2 py-[9px] px-3 text-[13px] text-foreground placeholder:text-muted-foreground outline-none focus:bg-card focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          style={{ borderColor: 'var(--border-strong)' }}
         />
         {open && matches.length > 0 && (
           <div

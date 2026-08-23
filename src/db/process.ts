@@ -317,7 +317,7 @@ const EMPTY_TECH_PLACEHOLDERS = new Set(['-', 'ー', '—']);
 // 非文字列が紛れた場合は trim() で例外にする代わりに「該当なし」と同じ扱いで除外する
 // （文字列以外を技術名としてそのままチップ表示に流すと、React の子要素として
 // 描画できず落ちる可能性がある）。
-function isEmptyTechValue(value: unknown): boolean {
+export function isEmptyTechValue(value: unknown): boolean {
   if (typeof value !== 'string') return true;
   const trimmed = value.trim();
   return trimmed === '' || EMPTY_TECH_PLACEHOLDERS.has(trimmed);

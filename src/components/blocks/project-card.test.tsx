@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ProjectItem } from '@/db/blocks';
 
@@ -93,12 +93,32 @@ describe('ProjectCard', () => {
     expect(screen.getByRole('button', { name: '閉じる' })).toBeInTheDocument();
   });
 
-  it('技術スタックは6バケットのラベル付きで出す', () => {
+  // ラベルと参照するデータキーの対応を入れ替えても、ラベルの存在と技術名の存在を
+  // 別々に見るだけのテストは緑のまま通ってしまう。行ごとに中を見て対応を固定する。
+  it('技術スタックは6バケットのラベル付きで、ラベルとデータキーの対応が合っている', () => {
     const tech = { ...EMPTY_TECH, lang: ['TypeScript'], fw: ['Next.js'] };
     render(<ProjectCard item={buildItem({ tech })} no={1} activeTech={[]} />);
-    expect(screen.getByText('使用言語')).toBeInTheDocument();
-    expect(screen.getByText('フレームワーク・ライブラリ')).toBeInTheDocument();
+
+    const langRow = screen.getByText('使用言語').parentElement as HTMLElement;
+    expect(within(langRow).getByText('TypeScript')).toBeInTheDocument();
+    expect(within(langRow).queryByText('Next.js')).not.toBeInTheDocument();
+
+    const fwRow = screen.getByText('フレームワーク・ライブラリ').parentElement as HTMLElement;
+    expect(within(fwRow).getByText('Next.js')).toBeInTheDocument();
+    expect(within(fwRow).queryByText('TypeScript')).not.toBeInTheDocument();
+  });
+
+  // 元データの「該当なし」プレースホルダ。実データでは 9 個の `-` チップが画面に出ていた。
+  it('技術スタックの「該当なし」プレースホルダ（- / ー / —）はチップにしない', () => {
+    const tech = { ...EMPTY_TECH, lang: ['TypeScript'], tools: ['-'], collab: ['ー'], db: ['—'], infra: ['  '] };
+    render(<ProjectCard item={buildItem({ tech })} no={1} activeTech={[]} />);
+
     expect(screen.getByText('TypeScript')).toBeInTheDocument();
+    // ラベル行ごと出さない（空のラベルだけが残るのも同じくノイズ）。
+    expect(screen.queryByText('開発ツール')).not.toBeInTheDocument();
+    expect(screen.queryByText('コラボレーションツール')).not.toBeInTheDocument();
+    expect(screen.queryByText('データベース')).not.toBeInTheDocument();
+    expect(screen.queryByText('クラウド・インフラ')).not.toBeInTheDocument();
   });
 
   it('本文の色はすべて foreground に統一し、muted-foreground を本文色として使わない（見づらさの原因2の再発防止）', () => {

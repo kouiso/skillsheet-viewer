@@ -82,6 +82,7 @@ function readTokens(block: string) {
     warnSoft: extractToken(block, 'warn-soft'),
     surface2: extractToken(block, 'surface2'),
     borderStrong: extractToken(block, 'border-strong'),
+    chipBgToken: extractToken(block, 'chip-bg'),
   };
 }
 
@@ -89,10 +90,16 @@ const light = readTokens(lightBlock);
 const dark = readTokens(darkBlock);
 
 const AA_NORMAL_TEXT = 4.5;
-// WCAG 1.4.11（非テキストのコントラスト）。操作要素（検索欄・ボタン・ジャンプナビ・
-// 空状態の破線）の枠線に使う --border-strong はここを満たす必要がある。文字色と違い
-// 3:1 で足りる。旧値（ダーク1.51:1 / ライト1.54:1）はここが無かったため誰にも検知されなかった。
+// WCAG 1.4.11（非テキストのコントラスト）。操作要素・境界の枠線に使う --border-strong は
+// ここを満たす必要がある。文字色と違い 3:1 で足りる。
+// 旧値（ダーク1.51:1 / ライト1.54:1）はこの検査が無かったため誰にも検知されなかった。
 const AA_NON_TEXT = 3.0;
+
+// --border-strong が実際に載る面を全部列挙する。--background / --card だけ見ていたときは
+// app/builder/editor.css の .scope-opt（background: var(--surface2) の上に border-strong）が
+// 2.9:1 で漏れていた。track / chip-bg は現状 border-strong を載せていないが、
+// 「どの面に置いても 3:1 を割らない」を不変条件にしておく方が事故が起きない。
+const BORDER_STRONG_SURFACES = ['background', 'card', 'surface2', 'muted', 'track', 'chipBgToken'] as const;
 
 describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () => {
   it('light: --muted-foreground が --background / --card に対し AA(4.5:1) を満たす', () => {
@@ -157,9 +164,13 @@ describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () =>
       expect(contrastRatio(t.mutedForeground, t.surface2)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
     });
 
-    it(`${themeName}: --border-strong が --background / --card に対し 非テキストAA(3:1, WCAG 1.4.11) を満たす`, () => {
-      expect(contrastRatio(t.borderStrong, t.background)).toBeGreaterThanOrEqual(AA_NON_TEXT);
-      expect(contrastRatio(t.borderStrong, t.card)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+    it(`${themeName}: --border-strong が枠線の載る面すべてに対し 非テキストAA(3:1, WCAG 1.4.11) を満たす`, () => {
+      for (const surface of BORDER_STRONG_SURFACES) {
+        expect({ surface, ratio: contrastRatio(t.borderStrong, t[surface]) >= AA_NON_TEXT }).toEqual({
+          surface,
+          ratio: true,
+        });
+      }
     });
   }
 });

@@ -57,14 +57,26 @@ export function CompanySection({
   const showLane = kind !== NO_TENURE_KIND && laneItems.length >= 2 && !!period;
 
   return (
-    <section id={id} aria-label={period ? `${name}（${period}）` : name} className="flex flex-col gap-4 scroll-mt-20">
-      {/* topbar（sticky top-0 z-40）の下に潜らないよう top-16（既存の目次と同じオフセット）。
-          topbar の実測高さが変わった場合はここも合わせて調整する（実機確認手順参照）。 */}
+    // tabIndex={-1}: ジャンプナビは <base> の都合でアンカーではなく button + 自前スクロール
+    // （company-jump-nav.tsx 参照）。ネイティブのアンカー移動なら付いてきたフォーカスを
+    // 自前で送れるよう、プログラム的なフォーカス先にしておく。
+    <section
+      id={id}
+      tabIndex={-1}
+      aria-label={period ? `${name}（${period}）` : name}
+      className="flex flex-col gap-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+      style={{ scrollMarginTop: 'calc(var(--viewer-topbar-h, 4rem) + 16px)' }}
+    >
       <div
-        className="sticky top-16 z-20 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 bg-background py-2.5 shadow-[var(--sticky-shadow,0_8px_14px_-12px_rgba(16,23,26,0.35))]"
-        style={{ borderBottom: '1px solid var(--border)' }}
+        className="sticky z-20 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 bg-background py-2.5 shadow-[var(--sticky-shadow,0_8px_14px_-12px_rgba(16,23,26,0.35))]"
+        // top は topbar（sticky top-0 z-40）の実測高さに追従させる。viewer-topbar.tsx が
+        // ResizeObserver で --viewer-topbar-h を出している。SP では topbar が2段になり
+        // 126px まで伸びるため、固定の top-16（64px）だと見出しが topbar の下に隠れた。
+        style={{ top: 'var(--viewer-topbar-h, 4rem)', borderBottom: '1px solid var(--border)' }}
       >
-        <h2 className="text-[19px] font-semibold leading-snug text-foreground text-pretty">{sanitizeHtml(name)}</h2>
+        {/* SectionHead（「案件詳細」）が h2。会社はその子、案件カードのタイトルはさらに子（h4）。
+            全部 h2 だとスクリーンリーダーの見出しジャンプで親子関係が消える。 */}
+        <h3 className="text-[19px] font-semibold leading-snug text-foreground text-pretty">{sanitizeHtml(name)}</h3>
         {kind && (
           <span
             className="whitespace-nowrap rounded text-[11px] leading-relaxed"

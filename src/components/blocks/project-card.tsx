@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { ProjectItem } from '@/db/blocks';
-import { deriveDuration, formatPeriodDisplay, normalizeProcess } from '@/db/process';
+import { deriveDuration, formatPeriodDisplay, isEmptyTechValue, normalizeProcess } from '@/db/process';
 import { resolveProjectArea } from '@/db/tech-area';
 import { collapseSoftBreaks } from '@/db/text';
 import { formatTeamSize } from '@/util/format-team-size';
@@ -57,9 +57,13 @@ export const ProjectCard = ({ item, no, activeTech }: ProjectCardProps) => {
     commentOpen ? commentParagraphs : commentParagraphs.slice(0, COMMENT_PREVIEW_PARAGRAPHS)
   ).join('\n\n');
 
+  // flattenTech（検索・レーン用）と同じ除外規則を通す。ここを filter(Boolean) だけにすると
+  // 元データの「該当なし」プレースホルダ（`-` / `ー` / `—`）がそのまま技術チップとして並び、
+  // DB の JSON に非文字列が紛れていれば React の子要素として描画できず落ちる。
+  // 実データでは 9 個の `-` チップが画面に出ていた。
   const techGroups = TECH_BUCKET_LABELS.map(({ key, label }) => ({
     label,
-    items: item.tech[key].filter(Boolean),
+    items: (item.tech[key] ?? []).filter((value) => !isEmptyTechValue(value)),
   })).filter((g) => g.items.length > 0);
 
   return (
@@ -77,7 +81,7 @@ export const ProjectCard = ({ item, no, activeTech }: ProjectCardProps) => {
             {formatPeriodDisplay(item.period) || '(期間未入力)'}
           </span>
         </div>
-        <h3 className="text-[17px] leading-snug text-foreground">{sanitizeHtml(item.title) || '(タイトル未入力)'}</h3>
+        <h4 className="text-[17px] leading-snug text-foreground">{sanitizeHtml(item.title) || '(タイトル未入力)'}</h4>
         {/* 導出値には必ず「技術領域」を添える。タイトル直下という位置だけで読み手は
             「担当した領域」と受け取るが、技術スタックから言えるのは「その技術がどの領域か」まで。
             取り込んだ scope は本人の言葉なのでラベルを付けない（tech-area.ts 参照）。 */}

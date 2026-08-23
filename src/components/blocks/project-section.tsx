@@ -129,6 +129,10 @@ export function ProjectSection({
 
   // クエリに一致した技術は、選択中（activeTech）でなくてもカードのチップを強調する
   // （何が検索語に当たったのかカード内で分かるようにする）。
+  // 部分一致なのは意図的。上の絞り込み（haystack.includes）も部分一致で、`java` は
+  // JavaScript の案件を拾う。ここだけ完全一致にすると「ヒットしたのに何も光らない」
+  // カードが出て、強調が「なぜ当たったか」を説明する役目を果たさなくなる。
+  // 部分一致の是非は絞り込み側の仕様なので、変えるならセットで別途変える。
   const queryMatchedTech = useMemo(() => {
     if (terms.length === 0) return new Set<string>();
     return new Set(

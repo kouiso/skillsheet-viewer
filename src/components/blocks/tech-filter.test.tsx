@@ -121,4 +121,14 @@ describe('TechFilter', () => {
     expect(document.getElementById(activeId as string)).toHaveAttribute('role', 'option');
     expect(document.getElementById(activeId as string)).toHaveAttribute('aria-selected', 'true');
   });
+  // globals.css の `* { border-color: var(--border) }` は Tailwind のレイヤー外にあり、
+  // border-border-strong のようなユーティリティを詳細度に関係なく打ち負かす（実機で確認）。
+  // クラスに戻すと枠線は --border（対 surface2 で 1.17:1）へ静かに戻り、
+  // WCAG 1.4.11 の 3:1 を割ったまま誰も気付かない。inline style であることを固定する。
+  it('検索欄の枠線は inline style で --border-strong を指定する（クラスでは効かない）', () => {
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);
+    for (const label of ['案件・技術・役割を検索', '技術を選ぶ']) {
+      expect(screen.getByLabelText(label).style.borderColor).toBe('var(--border-strong)');
+    }
+  });
 });

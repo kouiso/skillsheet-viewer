@@ -109,7 +109,7 @@ describe('ProjectSection の会社グルーピング', () => {
 
   it('会社ごとに見出しが出て、data.companies の順で並ぶ', () => {
     render(<ProjectSection data={TWO_COMPANY_DATA} showProcess={false} showTimeline={false} />);
-    const headings = screen.getAllByRole('heading', { level: 2, name: /A社|B社/ });
+    const headings = screen.getAllByRole('heading', { level: 3, name: /A社|B社/ });
     expect(headings.map((h) => h.textContent)).toEqual(['A社', 'B社']);
   });
 
@@ -122,8 +122,8 @@ describe('ProjectSection の会社グルーピング', () => {
     const user = userEvent.setup();
     render(<ProjectSection data={TWO_COMPANY_DATA} showProcess={false} showTimeline={false} />);
     await user.type(screen.getByLabelText('案件・技術・役割を検索'), 'A社の1件目');
-    expect(screen.getByRole('heading', { level: 2, name: 'A社' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { level: 2, name: 'B社' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'A社' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: 'B社' })).not.toBeInTheDocument();
   });
 
   it('companies に無い companyId の案件は「(不明な会社)」としてまとまる', () => {
@@ -135,14 +135,23 @@ describe('ProjectSection の会社グルーピング', () => {
       ],
     };
     render(<ProjectSection data={data} showProcess={false} showTimeline={false} />);
-    expect(screen.getByRole('heading', { level: 2, name: '(不明な会社)' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: '(不明な会社)' })).toBeInTheDocument();
     expect(screen.getByText('案件不明')).toBeInTheDocument();
+  });
+
+  // 全部 h2 だと、スクリーンリーダーの見出しジャンプで「案件詳細」と各社が同列に並び、
+  // 視覚的な親子関係が読み取れなくなる。案件詳細(h2) > 会社(h3) > 案件(h4) を固定する。
+  it('見出しの階層が 案件詳細(h2) > 会社(h3) > 案件(h4) になっている', () => {
+    render(<ProjectSection data={TWO_COMPANY_DATA} showProcess={false} showTimeline={false} />);
+    expect(screen.getByRole('heading', { level: 2, name: '案件詳細' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'A社' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 4, name: '案件A-1' })).toBeInTheDocument();
   });
 
   it('会社から探すジャンプナビが会社ごとのリンクを出す', () => {
     render(<ProjectSection data={TWO_COMPANY_DATA} showProcess={false} showTimeline={false} />);
-    expect(screen.getByRole('link', { name: /A社/ })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /B社/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /A社/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /B社/ })).toBeInTheDocument();
   });
 });
 

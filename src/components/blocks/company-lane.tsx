@@ -24,6 +24,13 @@ interface CompanyLaneProps {
  * 装飾目的の可視化であり、内容は上のカード一覧に numは同じ番号で既に文字で出ているため、
  * レーン自体は aria-hidden にしてスクリーンリーダーの読み上げ対象から外す。
  */
+// 1ヶ月に満たない案件でも「そこに何かある」と分かる最小幅。
+const MIN_SEGMENT_WIDTH = 4;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 export function CompanyLane({ companyPeriod, items }: CompanyLaneProps) {
   const bounds = parsePeriodBounds(companyPeriod);
   if (!bounds) return null;
@@ -31,12 +38,20 @@ export function CompanyLane({ companyPeriod, items }: CompanyLaneProps) {
   if (total <= 0) return null;
 
   const segments = items.map((item) => {
-    const itemBounds = parsePeriodBounds(item.period) ?? bounds;
-    const start = Math.max(itemBounds.start, bounds.start);
-    const end = Math.min(Math.max(itemBounds.end, start), bounds.end);
-    const left = ((start - bounds.start) / total) * 100;
-    const width = Math.max(((end - start) / total) * 100, 4);
-    return { no: item.no, duration: item.duration, left, width: Math.min(width, 100 - left) };
+    const itemBounds = parsePeriodBounds(item.period);
+    // 期間が読めない案件に会社の在籍期間を代入すると「在籍期間まるごと担当した」と
+    // 読める帯になってしまう。読めないものは帯を描かず、番号と長さだけ残す。
+    if (!itemBounds) return { no: item.no, duration: item.duration, bar: null };
+
+    // start も会社期間の終端で止める。ここを止めないと、会社期間の外から始まる案件
+    // （データ入力ミスや、退職後も続いた案件）で end < start となり width が負になり、
+    // width: "-43.48%" という不正な CSS が出て帯が消える。
+    const start = clamp(itemBounds.start, bounds.start, bounds.end);
+    const end = clamp(itemBounds.end, start, bounds.end);
+    const width = Math.min(Math.max(((end - start) / total) * 100, MIN_SEGMENT_WIDTH), 100);
+    // 最小幅を足したぶん右にはみ出さないよう left 側を戻す。
+    const left = Math.min(((start - bounds.start) / total) * 100, 100 - width);
+    return { no: item.no, duration: item.duration, bar: { left, width } };
   });
 
   const [startToken, endToken] = splitPeriodRange(companyPeriod);
@@ -56,10 +71,12 @@ export function CompanyLane({ companyPeriod, items }: CompanyLaneProps) {
           >
             <span className="font-mono text-[11px] text-accent-text">{String(seg.no).padStart(2, '0')}</span>
             <div className="relative h-2.5 rounded-full bg-chip-bg">
-              <div
-                className="absolute inset-y-0 rounded-full bg-primary-dark"
-                style={{ left: `${seg.left.toFixed(2)}%`, width: `${seg.width.toFixed(2)}%` }}
-              />
+              {seg.bar && (
+                <div
+                  className="absolute inset-y-0 rounded-full bg-primary-dark"
+                  style={{ left: `${seg.bar.left.toFixed(2)}%`, width: `${seg.bar.width.toFixed(2)}%` }}
+                />
+              )}
             </div>
             <span className="whitespace-nowrap font-mono text-[11px] text-faint">{seg.duration}</span>
           </div>

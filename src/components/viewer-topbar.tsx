@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { ArrowLeft, FileDown, Loader2, Moon, PencilLine, Sun } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useRef } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -53,6 +54,27 @@ export function ViewerTopbar({
   reserveEditSlot = false,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
+  const headerRef = useRef<HTMLElement>(null);
+
+  // 会社セクションの sticky 見出し（company-section.tsx）は、この topbar の実測高さぶん
+  // 下げないと下に潜る。高さは幅と内容で変わり（実測: 1280px 幅で 64px、375px 幅では
+  // 2段になって 126px）、固定値の top-16 では SP で 62px ぶん隠れていた。
+  // 実測値を CSS 変数で公開して追従させる。
+  useEffect(() => {
+    const element = headerRef.current;
+    if (!element) return;
+    const apply = () => {
+      document.documentElement.style.setProperty('--viewer-topbar-h', `${element.offsetHeight}px`);
+    };
+    apply();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(apply);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty('--viewer-topbar-h');
+    };
+  }, []);
 
   const editButton = canEdit ? (
     <Tooltip>
@@ -150,6 +172,7 @@ export function ViewerTopbar({
 
   return (
     <motion.header
+      ref={headerRef}
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
