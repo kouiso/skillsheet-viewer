@@ -12,7 +12,7 @@
 
 目次は正規表現ではなく **描画済み DOM から見出しを抽出**する。`rehype-slug`（[04](04-markdown-display.md)）が付与した id をそのまま利用できるため、目次のリンク先と本文アンカーが確実に一致する。
 
-`apps/web/src/component/skill-sheet-viewer.tsx` の `useEffect` が本文コンテナ（`contentRef`）配下を走査する。
+`src/components/skill-sheet-viewer.tsx` の `useEffect` が本文コンテナ（`contentRef`）配下を走査する。
 
 ```tsx
 // skill-sheet-viewer.tsx（抜粋・要約）
@@ -33,7 +33,7 @@ observer.observe(container, { childList: true, subtree: true });
 
 ### アクティブ見出しの追跡（IntersectionObserver）
 
-現在スクロール位置にある見出しは `apps/web/src/hooks/use-active-heading.ts` の `useActiveHeading` が `IntersectionObserver` で追跡する。
+現在スクロール位置にある見出しは `src/hooks/use-active-heading.ts` の `useActiveHeading` が `IntersectionObserver` で追跡する。
 
 ```ts
 // use-active-heading.ts（抜粋）
@@ -48,7 +48,7 @@ const observer = new IntersectionObserver(
 
 ### 表示（TableOfContents コンポーネント）
 
-`apps/web/src/component/table-of-contents.tsx` が目次 UI を描画する。
+`src/components/table-of-contents.tsx` が目次 UI を描画する。
 
 - **デスクトップ**: `sticky top-16` の左サイドバー（幅 `SIDEBAR_WIDTH = 280`）。`position: fixed` ＋固定 margin ではなく flex で隣接させ、折りたたみ時・印刷時にメインが自動で幅を詰める。折りたたみボタンを備える。
 - **モバイル**（`max-width: 899px`）: 右下の FAB と、左から出る Sheet（Radix Dialog）で表示。項目クリックで自動的に閉じる。
@@ -68,7 +68,7 @@ const observer = new IntersectionObserver(
 - Vercel プロジェクトを GitHub リポジトリに接続する。
 - **本番デプロイ**: デフォルトブランチへの push。
 - **プレビューデプロイ**: プルリクエスト（PR）ごとに preview URL が発行され、Neon と組み合わせて検証できる。
-- Framework Preset は Next.js。ビルドは `pnpm build`（`apps/web` の `next build`）。
+- Framework Preset は Next.js。ビルドは `pnpm build`（`next build`）。Root Directory は空（リポジトリルート）。
 
 ### 環境変数
 
@@ -107,6 +107,6 @@ Vercel のプロジェクト設定に、`SETUP.md` に列挙した変数を登�
 
 baseline の具体手順（確認用 SQL・登録 SQL・hash の出し方・推奨運用）は次のドキュメントにまとめてある:
 
-- `packages/db/drizzle/MIGRATION-BASELINE.md`
+- `drizzle/MIGRATION-BASELINE.md`
 
 baseline 後は、新規・既存どちらも `pnpm db:migrate` を通常のデプロイ手順として実行できる（新しいマイグレーションがある場合のみ適用される）。破壊的操作を含むため、本番 DB への実行前は Neon ブランチ等でバックアップを取ること。

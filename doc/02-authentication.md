@@ -23,7 +23,7 @@ skillsheet-viewer は用途の異なる 2 つの認証系統を持つ。**編集
 
 ### 設定
 
-`apps/web/src/lib/auth.ts` が Better Auth サーバーを構成する。DB は既存の Neon（Drizzle）を共用し、`drizzleAdapter` で `user` / `session` / `account` / `verification` テーブル（スキーマは `packages/db/src/schema.ts`）へマッピングする。
+`src/lib/auth.ts` が Better Auth サーバーを構成する。DB は既存の Neon（Drizzle）を共用し、`drizzleAdapter` で `user` / `session` / `account` / `verification` テーブル（スキーマは `src/db/schema.ts`）へマッピングする。
 
 ```ts
 // src/lib/auth.ts（抜粋）
@@ -55,7 +55,7 @@ betterAuth({
 
 ### 認可のチェックポイント（DAL）
 
-編集者認可の単一チェックポイントは `apps/web/src/server/auth-gate.ts`。
+編集者認可の単一チェックポイントは `src/server/auth-gate.ts`。
 
 ```ts
 // src/server/auth-gate.ts（抜粋）
@@ -110,7 +110,7 @@ appendSessionCookie(ctx.responseHeaders);
 
 ### セッショントークンの署名と検証
 
-`apps/web/src/server/session.ts` が HMAC トークンを生成・検証する。
+`src/server/session.ts` が HMAC トークンを生成・検証する。
 
 - **トークン形式**: `base64url(payload).base64url(HMAC-SHA256(payload))`。payload は `{ iat, exp }`（有効期間 7 日）。
 - 署名鍵は `SESSION_SECRET`。
@@ -138,7 +138,7 @@ tRPC の `auth.logout` が `session` cookie を `maxAge: 0` で失効させる�
 
 ## 閲覧ゲート（requireViewer）
 
-`/view` 配下の閲覧認可の単一チェックポイントは `apps/web/src/server/viewer-gate.ts`。
+`/view` 配下の閲覧認可の単一チェックポイントは `src/server/viewer-gate.ts`。
 
 ```ts
 // src/server/viewer-gate.ts（抜粋）
@@ -172,7 +172,7 @@ export async function requireViewer(): Promise<void> {
 - 旧来の「HMAC cookie を編集者認可にフォールバック」する挙動は廃止（権限混同の解消）。
 
 ### owner_id の源（個人名リテラルの排除）
-- `packages/db` の `OWNER_ID = 'kouiso'` ベタ書きを廃止し、`SKILLSHEET_OWNER_ID` 環境変数から取得する。
+- `src/db` の `OWNER_ID = 'kouiso'` ベタ書きを廃止し、`SKILLSHEET_OWNER_ID` 環境変数から取得する。
 - 単一オーナー運用では、Better Auth で作成したオーナーアカウントに対応する安定IDを設定する。
 - 書き込みは `isEditor()`（Better Auth セッション必須）でゲートし、認証されたオーナーのみが保存できる。
 

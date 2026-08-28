@@ -87,11 +87,11 @@ jobs:
 
       - name: Install Playwright browsers
         if: matrix.check-type == 'e2e'
-        run: pnpm --filter @skillsheet/web exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium
 
-      - name: Install PDF/image utilities for E2E
+      - name: Install PDF utilities for E2E
         if: matrix.check-type == 'e2e'
-        run: sudo apt-get update && sudo apt-get install -y poppler-utils imagemagick
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
       - name: Headless browser E2E
         if: matrix.check-type == 'e2e'
@@ -116,6 +116,6 @@ jobs:
           name: headless-e2e-evidence
           path: |
             test-results/e2e/
-            apps/web/test-results/playwright/
+            test-results/playwright/
           if-no-files-found: error
           retention-days: 14

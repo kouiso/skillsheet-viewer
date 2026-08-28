@@ -1,0 +1,59 @@
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+
+import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
+import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/github-sheets';
+import { createServerCaller } from '@/server/trpc/caller';
+
+import DeferredEditSheetView from './deferred-edit-sheet-view';
+
+interface PageProps {
+  params: Promise<{ path: string }>;
+}
+
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  // App Router の params は既にデコード済み（再 decodeURIComponent は % を含む名前で URIError を招く）。
+  const { path } = await params;
+  if (!isValidSheetPath(path) || !isSheetFileName(path)) return {};
+  try {
+    const caller = await createServerCaller();
+    const sheet = await caller.githubSheet.byPath({ path });
+    return {
+      title: `${sheet.title} | エンジニアスキルシート`,
+      openGraph: { title: sheet.title, type: 'profile' },
+    };
+  } catch {
+    // メタデータ生成失敗はページ描画を妨げない。詳細ログは下のページ本体で出す。
+    return {};
+  }
+}
+
+export default async function SheetViewPage({ params }: PageProps) {
+  const { path } = await params;
+  if (!isValidSheetPath(path) || !isSheetFileName(path)) notFound();
+
+  let sheet: SheetContent;
+  try {
+    const caller = await createServerCaller();
+    // HMAC cookie を持つ閲覧者は、本文表示をローカル検証だけで進める。
+    // 編集者判定はクライアント側で遅延し、Better Auth / DB の遅延や障害で
+    // 閲覧者向けの本文まで待たせない。
+    sheet = await caller.githubSheet.byPath({ path });
+  } catch (err) {
+    // tRPC procedure は throw を無条件で TRPCError にラップするため、元の SheetNotFoundError
+    // ではなく code: 'NOT_FOUND' で判定する（githubSheet.byPath 側のコメント参照）。
+    // ファイル不在のみ 404。
+    notFoundOnTrpcCodes(err, ['NOT_FOUND']);
+    // GitHub 連携の設定不備（未設定・トークン拒否）は待っても直らないので、200 で
+    // 原因と対処を返す。未設定とトークン拒否（401）は原因も対処も違うため、
+    // classifyConfigError() の種類ごとに別の案内文を出す（Issue #195: 従来はどちらも
+    // 「未設定」の文面で案内しており、トークン拒否のときに調査を誤誘導していた）。
+    // console.error は出さない（一時的な障害ではないため）（#157）。
+    // 設定不備は 200 ＋ 原因と対処、一時的なシステムエラーは error.tsx / 監視へ委ねる。
+    return configErrorNoticeOrRethrow(err, `Failed to load sheet: ${path}`);
+  }
+
+  // key={path}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー
+  // ON/OFF トグルの state（初回マウント時に決まる）を新しいシートへ持ち越さない。
+  return <DeferredEditSheetView key={path} title={sheet.title} content={sheet.content} />;
+}
