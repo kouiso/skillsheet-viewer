@@ -8,7 +8,7 @@
 
 ## Part 1: react-markdown パイプライン
 
-本文描画の中心は `apps/web/src/component/skill-sheet-viewer.tsx`（クライアントコンポーネント）。`ReactMarkdown` に remark / rehype プラグインを固定配列で渡す。
+本文描画の中心は `src/components/skill-sheet-viewer.tsx`（クライアントコンポーネント）。`ReactMarkdown` に remark / rehype プラグインを固定配列で渡す。
 
 ```tsx
 // skill-sheet-viewer.tsx（抜粋）
@@ -72,7 +72,7 @@ const SANITIZE_SCHEMA = {
 
 ### コード
 
-`code` は言語クラスまたは改行の有無でブロック/インラインを判定し、ブロックのみ `CodeBlock`（`src/component/code-block.tsx`）で描画する。`CodeBlock` は `react-syntax-highlighter`（Prism）でシンタックスハイライトし、テーマ（`useThemeMode`）に応じて配色を切り替え、コピー ボタンを備える。
+`code` は言語クラスまたは改行の有無でブロック/インラインを判定し、ブロックのみ `CodeBlock`（`src/components/code-block.tsx`）で描画する。`CodeBlock` は `react-syntax-highlighter`（Prism）でシンタックスハイライトし、テーマ（`useThemeMode`）に応じて配色を切り替え、コピー ボタンを備える。
 
 ```tsx
 code(props) {
@@ -113,7 +113,7 @@ PDF はクライアントで動的 import して生成する。重い `@react-pd
 const handleDownloadPdf = async () => {
   const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
     import('@react-pdf/renderer'),
-    import('@/component/pdf-export'),
+    import('@/components/pdf-export'),
   ]);
   const blob = await pdf(<SkillSheetPDF title={title} content={content} />).toBlob();
   const url = URL.createObjectURL(blob);
@@ -122,8 +122,8 @@ const handleDownloadPdf = async () => {
 ```
 
 - `@react-pdf/renderer` の `pdf(...).toBlob()` でドキュメントを Blob 化し、`URL.createObjectURL` + 一時 `<a download>` でダウンロードさせる。ObjectURL は少し遅延させて `revokeObjectURL` する。
-- `SkillSheetPDF`（`src/component/pdf-export.tsx`）は描画前に `registerPdfFonts()` でバンドル済み日本語フォント（Noto Sans JP）を登録し、純粋描画の `SkillSheetDocument`（`src/component/pdf/skill-sheet-document.tsx`）を返す。
-- PDF 側も Web と同じ Markdown を入力とし、mdast → `@react-pdf` プリミティブへ変換して描画する（表レイアウトは `src/component/pdf/table-layout.ts`）。Web と PDF で描画元の Markdown を共有するため、二重メンテナンスを避けられる。
+- `SkillSheetPDF`（`src/components/pdf-export.tsx`）は描画前に `registerPdfFonts()` でバンドル済み日本語フォント（Noto Sans JP）を登録し、純粋描画の `SkillSheetDocument`（`src/components/pdf/skill-sheet-document.tsx`）を返す。
+- PDF 側も Web と同じ Markdown を入力とし、mdast → `@react-pdf` プリミティブへ変換して描画する（表レイアウトは `src/components/pdf/table-layout.ts`）。Web と PDF で描画元の Markdown を共有するため、二重メンテナンスを避けられる。
 
 ---
 

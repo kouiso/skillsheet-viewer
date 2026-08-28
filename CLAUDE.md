@@ -5,16 +5,17 @@ alwaysApply: true
 - 常に日本語で会話する
 - 常に[prompt](prompt/prompt.md) に従うこと
 - 常にプロジェクトの`doc`ディレクトリのドキュメントを前提に作業する
+- テストは環境ごとに3本の設定に分かれている。`vitest.config.ts`（jsdom / 画面）、`vitest.config.node.ts`（node / `src/db` と `scripts`）、`vitest.config.pdf.ts`（node / `*.node.test.tsx`）。共通設定は `vitest.shared.ts`。
 - PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。
 - コメントはインラインの「なぜそうしたか」を重視し、JSDoc/docstring を全関数に付けることは求めない。パッケージ境界を越える公開 API には必要に応じて docstring を書く。
 
 ## プロジェクト技術スタック
 
 このプロジェクトは以下の技術スタックを使用しています:
-- **構成**: pnpm workspaces モノレポ（`apps/web` + `packages/db`）
+- **構成**: リポジトリルート1本の Next.js アプリ（DB 層は `src/db`）
 - **言語**: TypeScript
 - **フレームワーク**: Next.js 16（App Router / React Server Components）
-- **データ層**: tRPC v11 + @trpc/react-query + @tanstack/react-query（`apps/web/src/server/trpc/`）
+- **データ層**: tRPC v11 + @trpc/react-query + @tanstack/react-query（`src/server/trpc/`）
 - **UIライブラリ**: Tailwind CSS v4 + shadcn/ui（Radix UI）
 - **Markdownレンダリング**: react-markdown
 - **DB/ORM**: Drizzle ORM + Neon serverless Postgres（正本データ源）
@@ -22,10 +23,10 @@ alwaysApply: true
 - **バージョン管理**: mise（Node 22.x）/ パッケージマネージャ: pnpm
 
 ### 主要コマンド（リポジトリルートで実行）
-- `pnpm dev` — 開発サーバー起動（apps/web）
+- `pnpm dev` — 開発サーバー起動
 - `pnpm build` — 本番ビルド
-- `pnpm -r type-check` — 全パッケージ型チェック
-- `pnpm -r --if-present test` — 全テスト（vitest）
+- `pnpm type-check` — 型チェック
+- `pnpm test` — テスト（vitest 3本: jsdom / node[DB・スクリプト] / node[PDF]）
 - `pnpm db:generate` / `pnpm db:migrate` — Drizzle マイグレーション
 
 
