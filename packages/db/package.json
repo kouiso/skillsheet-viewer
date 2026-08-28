@@ -9,6 +9,7 @@
     "./blocks": "./src/blocks.ts",
     "./process": "./src/process.ts",
     "./group-by-company": "./src/group-by-company.ts",
+    "./project-detail-level": "./src/project-detail-level.ts",
     "./tech-area": "./src/tech-area.ts",
     "./sanitize-html": "./src/sanitize-html.ts"
   },
