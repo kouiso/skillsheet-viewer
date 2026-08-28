@@ -79,6 +79,27 @@ function isCombiningOrVariationSelector(ch: string): boolean {
 }
 
 /**
+ * 行頭に置いてはいけない文字（行頭禁則）。句読点・閉じ括弧・小書き仮名・繰り返し記号など。
+ * ここに載っている文字の直前では改行マーカーを挟まない。
+ */
+const NO_LINE_START = new Set(
+  [
+    '、。，．・：；？！',
+    'ヽヾゝゞ々ー',
+    '）〕］｝〉》」』】〙〗〟’”｠»',
+    'ぁぃぅぇぉっゃゅょゎゕゖ',
+    'ァィゥェォッャュョヮヵヶ',
+    ')]},.:;?!',
+  ].join(''),
+);
+
+/**
+ * 行末に置いてはいけない文字（行末禁則）。開き括弧など。
+ * ここに載っている文字の直後では改行マーカーを挟まない。
+ */
+const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{'].join(''));
+
+/**
  * 日本語は単語区切りが無いため、ASCII の連なりは保ちつつ、
  * 全角・CJK 文字の境界で改行を許可するように語を分割する。
  *
@@ -93,12 +114,21 @@ export function splitForHyphenation(word: string): string[] {
   const parts: string[] = [];
   let buffer = '';
   let prevWasCjk = false;
+  let prevChar = '';
   const flush = (): void => {
     if (buffer) {
       parts.push(buffer);
       buffer = '';
     }
   };
+  /**
+   * 禁則処理。改行マーカーを挟んでよい境界かを判定する。
+   *
+   * @react-pdf/textkit は日本語の禁則を知らないので、境界を無条件に挟むと
+   * 句点や閉じ括弧だけが次行の頭に落ちる（実測: 「クエリ最適化」→改行→「。」）。
+   * 提出書類として明確に体裁の崩れなので、マーカーを挟む側で防ぐ。
+   */
+  const canBreakBefore = (next: string): boolean => !NO_LINE_START.has(next) && !NO_LINE_END.has(prevChar);
   for (const ch of word) {
     if (isCombiningOrVariationSelector(ch)) {
       // 直前の基底文字がどちらに格納されていても（ASCII連なりの buffer か、
@@ -114,15 +144,17 @@ export function splitForHyphenation(word: string): string[] {
       continue;
     }
     if (!isCjk(ch)) {
-      if (prevWasCjk && parts.length > 0) parts.push(BREAK_MARKER);
+      if (prevWasCjk && parts.length > 0 && canBreakBefore(ch)) parts.push(BREAK_MARKER);
       buffer += ch;
       prevWasCjk = false;
+      prevChar = ch;
       continue;
     }
     flush();
-    if (parts.length > 0) parts.push(BREAK_MARKER);
+    if (parts.length > 0 && canBreakBefore(ch)) parts.push(BREAK_MARKER);
     parts.push(ch);
     prevWasCjk = true;
+    prevChar = ch;
   }
   flush();
   return parts.length > 0 ? parts : [word];

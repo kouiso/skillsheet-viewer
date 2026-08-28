@@ -59,7 +59,9 @@ const SheetViewClient = ({
         import('@/component/pdf-export'),
       ]);
 
-      const blob = await pdf(<SkillSheetPDF title={title} content={content} />).toBlob();
+      // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
+      // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
+      const blob = await pdf(<SkillSheetPDF title={title} content={content} blocks={blocks} views={views} />).toBlob();
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
