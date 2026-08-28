@@ -23,6 +23,14 @@
  * F. カードの中に置いた `fixed` は、そのカードが占める全ページに出る。
  *    ページ跨ぎの継続ヘッダーはこれで作る。
  * G. `gap` は横並びの間隔として実際に効く（`marginRight` での代替は不要）。
+ * H. `wrap` を外した（既定 = true の）View に `borderLeftWidth` を付けてページを跨がせると、
+ *    左罫線はページ断片ごとに再描画される。`wrap={false}` は不要。会社セクションを囲む
+ *    「レール」はこれ 1 本で作れる（company-grouping 作業で実測。会社見出し・会社グルーピング参照）。
+ * I. 折り返す View の内側に `fixed` + `position:'absolute'` を置いたとき、`top`/`left` の基準は
+ *    Page ではなく**直近の親 View 自身の断片ボックス**（かつ親の padding は無視する = 親の
+ *    border box が基準）。続きページでは親の断片が必ずページ本文の先頭から始まるため、
+ *    `top:0` は「本文 1 行目と同じ高さ」になる。会社の「つづき」見出しはこれを使い、
+ *    `headerTop - padTop`（負値）で本文の上の余白帯まで引き上げている。
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -231,5 +239,81 @@ describe('@react-pdf/renderer の前提挙動', () => {
     if (!a || !b || !c) return;
     expect(Math.round(b.x - a.x)).toBe(CELL + GAP);
     expect(Math.round(c.x - b.x)).toBe(CELL + GAP);
+  });
+});
+
+const RAIL_STYLES = StyleSheet.create({
+  page: { paddingTop: 42, paddingBottom: 46, paddingHorizontal: 40, fontFamily: PDF_FONT_FAMILY, fontSize: 11 },
+  line: { fontSize: 11, lineHeight: 1.6 },
+  // H の検証: wrap の既定（true）のまま borderLeftWidth を付けた枠。
+  rail: { borderLeftWidth: 4, borderLeftColor: '#E4002B', paddingLeft: 12 },
+  // I の検証: rail の内側に置いた絶対配置。top:0 が「ページ」と「親（rail）」のどちらを
+  // 基準にするかを、ダミー数行ぶん rail の開始位置をずらした状態で見る。
+  anchor: { position: 'absolute', top: 0, left: 0 },
+});
+
+function RailProbe() {
+  const lines = Array.from({ length: 150 }, (_, i) => `本文行${i + 1}。`);
+  return (
+    <Document title="rail + anchor probe">
+      <Page size="A4" style={RAIL_STYLES.page}>
+        <Text style={RAIL_STYLES.line}>ダミー1行目。</Text>
+        <Text style={RAIL_STYLES.line}>ダミー2行目。</Text>
+        <View style={RAIL_STYLES.rail}>
+          <DynamicText
+            fixed
+            style={RAIL_STYLES.anchor}
+            render={({ pageNumber, subPageNumber }) =>
+              subPageNumber !== undefined ? `ANCHOR-p${pageNumber}` : undefined
+            }
+          />
+          {lines.map((line) => (
+            <Text key={line} style={RAIL_STYLES.line}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      </Page>
+    </Document>
+  );
+}
+
+describe('会社レール（company-grouping）が前提にする挙動', () => {
+  let railPages: Item[][];
+
+  beforeAll(async () => {
+    railPages = await extract(await renderToBuffer(<RailProbe />));
+  }, 180_000);
+
+  it('H: borderLeftWidth を持つ View は wrap={false} が無くてもページ断片ごとに継続する', () => {
+    // pdfjs の getTextContent は文字しか返さず、罫線（ベクター図形）を直接は検証できない。
+    // 罫線そのものの目視確認は .evidence/pdf-print-redesign/border-probe/*.png で実施済み
+    // （4 ページとも左端に赤い罫線が続いていることを確認した）。ここでは自動回帰の代わりに、
+    // 「rail を持つ View の内側に置いた fixed 要素が全ページ断片で呼ばれ続けること」を見る。
+    // これが崩れる（= 断片化が壊れる）と、会社の「つづき」見出し（同じ仕組みを使う）も壊れる。
+    expect(railPages.length).toBeGreaterThanOrEqual(4);
+    for (const page of railPages) {
+      expect(page.some((it) => it.str.startsWith('ANCHOR-p'))).toBe(true);
+    }
+  });
+
+  it('I: 入れ子の fixed+absolute の top:0 は Page ではなく親 View 自身の断片ボックスが基準', () => {
+    const anchorByPage = new Map<number, number>();
+    for (const page of railPages) {
+      const anchor = page.find((it) => it.str.startsWith('ANCHOR-p'));
+      if (anchor) anchorByPage.set(Number(anchor.str.slice('ANCHOR-p'.length)), anchor.y);
+    }
+    // 1 ページ目: rail はダミー 2 行ぶん下がった位置から始まるので、
+    // anchor の y はページ最上段（ダミー行の y、最大値）より低い。
+    // CJK と数字が混ざる行は pdfjs が字種の境界で run を分けて返す（実測、和文の直後に
+    // 半角文字が来ると分割される）ため、前方一致で拾う。
+    const page1DummyTop = Math.max(...railPages[0].filter((it) => it.str.startsWith('ダミー')).map((it) => it.y));
+    expect(Number.isFinite(page1DummyTop)).toBe(true);
+    expect(anchorByPage.get(1)).toBeLessThan(page1DummyTop);
+    // 2 ページ目以降: rail の断片は必ずページ本文の先頭から始まるため、
+    // どのページでも anchor の y は同じ値（本文 1 行目と同じ高さ）になる。
+    const continuationYs = [...anchorByPage.entries()].filter(([p]) => p > 1).map(([, y]) => y);
+    expect(continuationYs.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(continuationYs.map((y) => y.toFixed(1))).size).toBe(1);
   });
 });

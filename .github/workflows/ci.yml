@@ -58,7 +58,10 @@ jobs:
 
       - name: Install system dependencies for PDF rasterization
         if: matrix.check-type == 'test'
-        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+        # ghostscript / imagemagick: print-quality-raster.node.test.tsx が PDF ページを
+        # ビットマップへ変換し、pdfjs のテキスト層に映らない図形（文字を伴わないチップの
+        # 断片等）を検出するために使う（poppler-utils の pdftoppm は使わない設計）。
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
 
       - name: Lint
         if: matrix.check-type == 'lint'

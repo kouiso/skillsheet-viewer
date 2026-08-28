@@ -78,11 +78,10 @@ describe('buildTechGroups', () => {
     expect(groups[0].chips.map((c) => c.emphasis)).toEqual(['solid', 'outline']);
   });
 
-  it('上限を超えた分は「他 N 件」に畳む', () => {
+  it('件数の上限を持たない（元データを全件表示する — 他 N 件で畳まない）', () => {
     const many = Array.from({ length: 9 }, (_, i) => `tool${i}`);
     const groups = buildTechGroups({ ...emptyTech, tools: many });
-    expect(groups[0].chips).toHaveLength(6);
-    expect(groups[0].overflowCount).toBe(3);
+    expect(groups[0].chips).toHaveLength(9);
   });
 
   it('中身が無い分類は行ごと出さない', () => {

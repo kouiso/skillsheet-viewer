@@ -10,7 +10,7 @@
 
 import { StyleSheet, View } from '@react-pdf/renderer';
 
-import { Paragraph, PrintText } from './print-primitives';
+import { DynamicView, type PageRenderProps, Paragraph, PrintText } from './print-primitives';
 import { PRINT_COLOR, PRINT_SIZE, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
 import type { PrintCompany } from './print-view-model';
 
@@ -106,7 +106,18 @@ const styles = StyleSheet.create({
   note: { paddingTop: 6, paddingHorizontal: 10 },
 });
 
-export function CompanyHeading({ company }: { company: PrintCompany }) {
+export function CompanyHeading({
+  company,
+  onFirstPage,
+}: {
+  company: PrintCompany;
+  /**
+   * この見出しが実際に乗ったページ番号を通知する（会社の「つづき」見出しの判定に使う）。
+   * 見出し自体は `wrap={false}` で 1 ページに収まる保証があるので、確定パス
+   * （`subPageNumber` を持つ呼び出し）を 1 回拾えば「会社の開始ページ」が確定する。
+   */
+  onFirstPage?: (pageProps: PageRenderProps) => void;
+}) {
   const isLatest = company.isLatest;
   // デザインの右端「詳細版 ×N」は出さない。内部の分類結果で、読む側には意味が無い。
   const summary = [`${company.projectCount} 案件`, company.roles, company.teamRange].filter(Boolean).join(' ／ ');
@@ -126,6 +137,16 @@ export function CompanyHeading({ company }: { company: PrintCompany }) {
     // 上にもう 1 枚 View を挟むと、残り高さが 54〜14pt のときページ送りではなく圧縮が
     // 走り、帯の余白が潰れて 2 行目がフッター（下から 46pt）に食い込む（実測）。
     <View wrap={false} minPresenceAhead={MIN_PRESENCE_AHEAD}>
+      {onFirstPage && (
+        <DynamicView
+          render={(pageProps) => {
+            // 分割中の呼び出しは subPageNumber を持たない。確定パスだけを見る
+            // （project-card-detail.tsx の markFirstContent と同じ理由）。
+            if (pageProps.subPageNumber !== undefined) onFirstPage(pageProps);
+            return null;
+          }}
+        />
+      )}
       <View style={[styles.band, isLatest ? styles.bandLatest : styles.bandEarlier]}>
         <View style={styles.bandLeft}>
           <PrintText style={isLatest ? styles.nameLatest : styles.nameEarlier}>{company.name}</PrintText>

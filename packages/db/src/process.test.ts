@@ -133,6 +133,17 @@ describe('parsePeriodBounds', () => {
     expect(bounds?.end).toBeCloseTo(2020 + 5 / 12);
   });
 
+  it('実データの会社 period（"YYYY 年 M 月〜YYYY 年 M 月"、年月の前後に半角スペース）も解釈できる', () => {
+    // 空白無しの「2020年6月」は既存カバレッジ（parsePeriodToRange のテスト）にあるが、
+    // CompanyInfo.period の実データはスペース入り（実測: "2025 年 11 月〜2026 年 9 月"）。
+    // これが解釈できないと、会社の最新判定（isLatest）が実データで全社「解釈不能」になる
+    // （company-grouping 作業で発見した回帰）。
+    const bounds = parsePeriodBounds('2025 年 11 月〜2026 年 9 月');
+    expect(bounds).not.toBeNull();
+    expect(bounds?.start).toBeCloseTo(2025 + 10 / 12);
+    expect(bounds?.end).toBeCloseTo(2026 + 8 / 12);
+  });
+
   it('空文字・解釈不能は null', () => {
     expect(parsePeriodBounds('')).toBeNull();
     expect(parsePeriodBounds('期間未定')).toBeNull();
