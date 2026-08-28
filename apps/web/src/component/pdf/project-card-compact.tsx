@@ -1,21 +1,28 @@
 /**
  * 簡約版の案件カード（デザイン artboard 1d「D — 案件カード（簡約版）」）。
  *
- * デザインは 1 案件 = 1 行に畳んでいるが、**本文（業務内容 / 習得スキル・実績 / コメント）を
- * PDF から落とすことは提出書類として許されない**（本人の要件）。そのため 2 段構成にしている。
+ * デザインは 1 案件 = 1 行に畳んでいるが、**詳細版が持つ事実を 1 個も落とすことは
+ * 提出書類として許されない**（本人の要件「簡易表記はあかん」、`no-abbreviated-rendering`
+ * skill）。詳細版（`project-card-detail.tsx`）が出す役割・技術領域・担当工程（メタ表）と
+ * 技術チップを、簡約版はこれまで丸ごと描画しておらず、完全性検査
+ * （`print-completeness.node.ts`）で 234 件の欠落として実測された。そのため 2 段構成にしている。
  *
- *  - 1 段目: デザインどおりの 1 行（期間 88pt ／ 案件名 + 技術・一言 ／ チーム 44pt）。
+ *  - 1 段目: デザインどおりの 1 行（期間 88pt ／ 案件名 + 一言 ／ チーム 44pt）。
  *    ここだけ `wrap={false}` にして、1 行が改ページで割れないようにする。
- *  - 2 段目: 期間列の幅ぶんインデントして案件名の真下に本文を流す。
- *    こちらは `wrap={false}` を付けない。長文が 1 ページに収まらないとき、
+ *  - 2 段目: 期間列の幅ぶんインデントして案件名の真下に本文を流す。メタ情報（役割・
+ *    技術領域・担当工程）は表ではなく 1 行の密な文字列に、技術チップは詳細版のような
+ *    分類ラベル列を持たず 1 本の折り返し行にまとめる（分類は付加情報、技術名そのものが
+ *    本体という判断）。件数の上限は無い — 全件をチップに入れる。
+ *    こちらは `wrap={false}` を付けない。長文・大量のチップが 1 ページに収まらないとき、
  *    @react-pdf は分割できないブロックを丸ごと次ページへ送るか溢れさせるため、
- *    本文は必ず分割可能にしておく必要がある。
+ *    2 段目は必ず分割可能にしておく必要がある。
  */
 
 import { StyleSheet, View } from '@react-pdf/renderer';
+import type { ReactNode } from 'react';
 
 import { PrintMarkdown } from './print-markdown';
-import { PrintText, SectionLabel } from './print-primitives';
+import { Chip, DynamicView, type PageRenderProps, PrintText, SectionLabel } from './print-primitives';
 import { PRINT_COLOR, PRINT_SIZE, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
 import type { PrintProject } from './print-view-model';
 
@@ -99,6 +106,8 @@ const styles = StyleSheet.create({
     paddingRight: ROW_PAD_HORIZONTAL,
   },
   bodySection: { flexDirection: 'column', gap: 3 },
+  // 詳細版の techChips（print-primitives.tsx）と同じ折り返し行。分類ラベル列は持たない。
+  techChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: PRINT_SIZE.chipGap },
 });
 
 /** 簡約表の列見出し（artboard 1d の帯）。列幅と右寄せは 1 行側と同じ値を使う。 */
@@ -112,29 +121,92 @@ export function CompactTableHeader() {
   );
 }
 
-export function ProjectCardCompact({ project }: { project: PrintProject }) {
-  // 技術と一言はどちらか片方だけのこともある。空の側で区切り記号が浮かないよう先に落とす。
-  const summaryLine = [project.compactTech, project.compactNote].filter(Boolean).join(' ／ ');
+export function ProjectCardCompact({
+  project,
+  leadingHeader,
+  onLeadingHeaderPage,
+}: {
+  project: PrintProject;
+  /**
+   * この案件が「区間の先頭」（列ヘッダー直後の 1 件目）のときだけ渡す。
+   * 渡された場合、列ヘッダーとこの案件の 1 行目を 1 つの `wrap={false}` 単位に束ねる。
+   * これが無いと、実行時点で残り高さが少ないページに列ヘッダーだけが乗り、
+   * データ行 0 件のまま改ページする（実測: p19→p20 / p25→p26 境界）。
+   * 本文（2 段目）は束ねない — 長文が 1 ページに収まらないとき、@react-pdf は
+   * 分割できないブロックを丸ごと次ページへ送るか溢れさせるため、本文は分割可能なままにする。
+   */
+  leadingHeader?: ReactNode;
+  /** leadingHeader が乗ったページ番号を通知する（会社セクション側の「つづき」判定と同じ形）。 */
+  onLeadingHeaderPage?: (pageProps: PageRenderProps) => void;
+}) {
   const sections = [
     { label: '業務内容', text: project.duties },
     { label: '習得スキル・実績', text: project.acquired },
     { label: 'コメント', text: project.comment },
   ].filter((section) => section.text.length > 0);
 
+  // 詳細版のメタ表（役割・技術領域・担当工程）に対応する情報を、簡約版では表ではなく
+  // 1 行の密な文字列にまとめる。「チーム」はチーム列に既に出ているのでここでは重複させない。
+  const metaLine = project.metaRows
+    .filter((metaRow) => metaRow.label !== 'チーム')
+    .map((metaRow) => `${metaRow.label}：${metaRow.value}`)
+    .join(' ／ ');
+  // 詳細版の技術チップと同じ全件（件数上限は無い）。分類ラベルの列を持たず 1 本にまとめる。
+  const techChips = project.techGroups.flatMap((group) => group.chips);
+  const hasMetaOrTech = metaLine.length > 0 || techChips.length > 0;
+
+  const row = (
+    <View style={styles.row} wrap={false}>
+      <PrintText style={styles.period}>{project.compactPeriodText}</PrintText>
+      <View style={styles.main}>
+        <PrintText style={styles.title}>{project.title}</PrintText>
+        {project.compactNote.length > 0 && <PrintText style={styles.note}>{project.compactNote}</PrintText>}
+      </View>
+      <View style={styles.teamCell}>
+        {project.team.length > 0 && <PrintText style={styles.teamText}>{project.team}</PrintText>}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.projectGroup}>
-      <View style={styles.row} wrap={false}>
-        <PrintText style={styles.period}>{project.compactPeriodText}</PrintText>
-        <View style={styles.main}>
-          <PrintText style={styles.title}>{project.title}</PrintText>
-          {summaryLine.length > 0 && <PrintText style={styles.note}>{summaryLine}</PrintText>}
+      {leadingHeader ? (
+        <View wrap={false} minPresenceAhead={PRINT_SIZE.compactHeaderMinPresenceAhead}>
+          {onLeadingHeaderPage && (
+            <DynamicView
+              render={(pageProps) => {
+                if (pageProps.subPageNumber !== undefined) onLeadingHeaderPage(pageProps);
+                return null;
+              }}
+            />
+          )}
+          {leadingHeader}
+          {row}
         </View>
-        <View style={styles.teamCell}>
-          {project.team.length > 0 && <PrintText style={styles.teamText}>{project.team}</PrintText>}
-        </View>
-      </View>
-      {sections.length > 0 && (
+      ) : (
+        row
+      )}
+      {(hasMetaOrTech || sections.length > 0) && (
         <View style={styles.body}>
+          {hasMetaOrTech && (
+            // 詳細版の techGroup（print-primitives.tsx）と同じ理由で wrap={false} にする。
+            // 分割可能なまま改ページを跨ぐと、チップの折り返し行が途中で切れて「文字の無い
+            // 枠線チップ」が下端に残る（実測: p20、E社の継続ページで CloudSQL の手前に
+            // 空チップ 5 個が出た）。全件を 1 本の行にまとめた分、詳細版の分類単位より
+            // 塊が大きくなるが、メタ行 + チップ折り返しは 1 ページ全体の高さに対して
+            // 十分小さいため、wrap={false} の「収まらなければ次ページへ」だけで解決する。
+            <View style={styles.bodySection} wrap={false}>
+              {metaLine.length > 0 && <PrintText style={styles.note}>{metaLine}</PrintText>}
+              {techChips.length > 0 && (
+                <View style={styles.techChipsRow}>
+                  {techChips.map((chip, i) => (
+                    // biome-ignore lint/suspicious/noArrayIndexKey: 分類をまたいで結合しており、同じ技術名が別分類にも重複登録され得る（label だけでは一意にならない）。
+                    <Chip key={`${chip.label}-${i}`} chip={chip} />
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
           {sections.map((section) => (
             <View key={section.label} style={styles.bodySection}>
               <SectionLabel>{section.label}</SectionLabel>

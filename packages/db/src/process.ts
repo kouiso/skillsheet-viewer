@@ -91,13 +91,18 @@ export function hasPeriodRangeSeparator(period: string): boolean {
 }
 
 // YYYY-MM-DD / YYYY.MM / YYYY年M月 / YYYY-MM / YYYY の順で試す。すべて失敗したら null。
+//
+// 「YYYY年M月」は空白の有無を問わない。実データの会社 period（CompanyInfo.period）は
+// 「2025 年 11 月〜2026 年 9 月」のように年・月の前後に半角スペースが入る表記で、
+// 空白無し限定の正規表現だとこの表記が一件も解釈できず、`parsePeriodBounds` に依存する
+// 判定（会社の最新判定など）が全社「解釈不能」で機能しなくなる（実測、company-grouping 作業）。
 function parseYearMonth(token: string): number | null {
   if (!token) return null;
   let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
   m = token.match(/^(\d{4})\.(\d{1,2})$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
-  m = token.match(/^(\d{4})年(\d{1,2})月$/);
+  m = token.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
   m = token.match(/^(\d{4})-(\d{1,2})$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;

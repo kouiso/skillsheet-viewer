@@ -233,9 +233,25 @@ export function runQualityChecks(
     }
 
     // 3. 空ページ（最終ページは本文が尽きて短くなるので除外）
+    //
+    // 例外がもう 1 つある。「1 案件がページを跨いで途中で切れるくらいなら、丸ごと
+    // 次ページへ送って現在のページを空白のまま残す」（オーナーの指示、company-grouping
+    // 作業）を実装すると、会社見出しの直後でカードが丸ごと次ページへ送られ、見出しだけの
+    // 薄いページが正規に生まれる（実測: p30、見出し + 概要のみで 81 文字）。
+    // 「このページ自身」と「次のページ」の両方が見出しから始まっているときだけ、これを
+    // 意図した空白として除外する。両方を要求するのは、本文が途中で千切れて消えた本物の
+    // 欠落（次ページが見出しでなく、途切れた本文の続きから始まる）を従来どおり検出する
+    // ため——閾値（200 文字）自体は変えない。
     const chars = normalize(pageText(page)).length;
     if (pageNumber < pages.length && chars < options.minCharsPerPage) {
-      findings.push({ check: 'sparse-page', page: pageNumber, detail: `本文が ${chars} 文字しかない` });
+      const next = pages[index + 1];
+      const isDeliberateWhitespace =
+        startsWithHeading(page, input.headings, options) &&
+        next !== undefined &&
+        startsWithHeading(next, input.headings, options);
+      if (!isDeliberateWhitespace) {
+        findings.push({ check: 'sparse-page', page: pageNumber, detail: `本文が ${chars} 文字しかない` });
+      }
     }
 
     // 6. 本文幅からの溢れ

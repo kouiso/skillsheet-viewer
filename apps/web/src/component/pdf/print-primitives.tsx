@@ -80,6 +80,65 @@ export function createFirstPageTracker() {
   };
 }
 
+/**
+ * ある単位（会社・案件）が「指定ページの先頭で、まだ閉じずに続いているか」を、
+ * 開始・終了マーカーの記録から判定する器。
+ *
+ * 素朴に「開始 < 対象ページ ≦ 終了」で判定すると 2 通りの実測の壊れ方をした
+ * （zz-pagelevel-span-probe.node.test.tsx）:
+ *  1. 終了を「見た最大値」で記録すると、3 ページ以上に跨る単位の**中間ページ**では
+ *     終了マーカーにまだ到達しておらず（@react-pdf の確定パスはページを文書順に
+ *     確定させるため、未来のページの内容はまだ評価されていない）、終了が開始と
+ *     同じ値のまま＝「同じページで閉じた」と誤判定した。
+ *  2. 「今どの単位が開いているか」という 1 個のポインタを開始で立て・終了で下ろす
+ *     方式に変えると 1. は直るが、**同じページの中で前の単位が終わり次の単位が
+ *     始まる**とポインタが新しい方に付け替わり、そのページの先頭（実際は前の単位の
+ *     続き）を新しい単位の名前で誤表示した。また、文書末尾の単位は「次に開始する
+ *     ものが無い」ため、自分自身の最終ページでポインタが下りたまま照会され、
+ *     続き表示が消えた。
+ *
+ * 正しい形: 終了は「見た値」をそのまま使わず、**未確定（undefined）と確定した値を
+ * 区別する**。対象ページより前に開始した単位のうち最後に開始したものを選び、
+ * その終了が「まだ未確定」または「対象ページ以上」なら開いていると判定する。
+ * 未確定はまだ終了マーカーに到達していない＝続いている可能性を残す、という
+ * 文書順の確定パスの性質にそのまま対応する。
+ */
+export function createSpanTracker() {
+  interface Span {
+    label: string;
+    start: number;
+    /** 終了マーカーにまだ到達していなければ undefined（＝まだ続いている可能性がある）。 */
+    end: number | undefined;
+  }
+  const byId = new Map<string, Span>();
+  const order: Span[] = [];
+  return {
+    /** 単位の最初の内容が乗ったところで呼ぶ（確定パスのみ）。1 つの id につき最初の 1 回だけ記録する。 */
+    markStart(id: string, label: string, props: PageRenderProps): void {
+      if (props.subPageNumber === undefined || byId.has(id)) return;
+      const span: Span = { label, start: props.pageNumber, end: undefined };
+      byId.set(id, span);
+      order.push(span);
+    },
+    /** 単位の最後の内容が乗ったところで呼ぶ（確定パスのみ）。まだ未確定なら終了ページを確定する。 */
+    markEnd(id: string, props: PageRenderProps): void {
+      if (props.subPageNumber === undefined) return;
+      const span = byId.get(id);
+      if (span && span.end === undefined) span.end = props.pageNumber;
+    },
+    /** 指定ページの先頭で開いている単位のラベルを返す（無ければ undefined）。 */
+    openLabel(pageNumber: number): string | undefined {
+      let latest: Span | undefined;
+      for (const span of order) {
+        if (span.start < pageNumber && (latest === undefined || span.start > latest.start)) latest = span;
+      }
+      if (!latest) return undefined;
+      if (latest.end !== undefined && latest.end < pageNumber) return undefined;
+      return latest.label;
+    },
+  };
+}
+
 const styles = StyleSheet.create({
   page: {
     paddingTop: PRINT_SIZE.padTop,
@@ -132,7 +191,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: PRINT_SIZE.chipPadHorizontal,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: PRINT_SIZE.chipGap },
-  chipOverflow: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label, paddingVertical: PRINT_SIZE.chipPadVertical },
 
   techGroup: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
   techGroups: { flexDirection: 'column', gap: 5 },
@@ -209,21 +267,25 @@ export function ChipRow({ chips }: { chips: PrintChip[] }) {
   );
 }
 
-/** 技術スタック（分類ラベル + チップ + 「他 N 件」）。 */
+/**
+ * 技術スタック（分類ラベル + チップ）。
+ *
+ * 件数の上限は無い（元データを全件表示する標準指示）。1 分類のチップ行は
+ * `wrap={false}` にして、ページ跨ぎでチップが半端に切れた塊が下端に残らないようにする
+ * （実測: 塗りチップ 1 個 + 文字の無い枠線チップ 2 個が下端に残り、次ページで表全体が
+ * 再度描かれていた）。分類が複数あるときは分類同士の間でだけページを送ってよい。
+ */
 export function TechChipGroups({ groups }: { groups: PrintTechGroup[] }) {
   if (groups.length === 0) return null;
   return (
     <View style={styles.techGroups}>
       {groups.map((group) => (
-        <View key={group.label} style={styles.techGroup}>
+        <View key={group.label} style={styles.techGroup} wrap={false}>
           <PrintText style={styles.techLabel}>{group.label}</PrintText>
           <View style={styles.techChips}>
             {group.chips.map((chip) => (
               <Chip key={chip.label} chip={chip} />
             ))}
-            {group.overflowCount > 0 && (
-              <PrintText style={styles.chipOverflow}>{`他 ${group.overflowCount} 件`}</PrintText>
-            )}
           </View>
         </View>
       ))}

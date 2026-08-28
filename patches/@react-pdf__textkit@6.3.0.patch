@@ -11,7 +11,7 @@ index 2eaa79173d292c08dd8117a4af0e798f0c73dfb5..c19d5c830b2785b793c28dc65e387793
 -export { type Attachment, type AttributedString, type Attributes, type Container, type Coordinate, type DecorationLine, type Fragment, type Glyph, type LayoutOptions, type Paragraph, type Position, type Rect, type Run, bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, justification, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
 +export { type Attachment, type AttributedString, type Attributes, type Container, type Coordinate, type DecorationLine, type Fragment, type Glyph, type LayoutOptions, type Paragraph, type Position, type Rect, type Run, bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, isSingleCjkSyllable, justification, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
 diff --git a/lib/textkit.js b/lib/textkit.js
-index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..aa2bbd870ef8ac914e814cd64a0b7cb0d610a31d 100644
+index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..60ec9e2b213da38126c58b7010daee9b154a011b 100644
 --- a/lib/textkit.js
 +++ b/lib/textkit.js
 @@ -2612,6 +2612,64 @@ const breakLines = (attributedString, nodes, breaks) => {
@@ -79,36 +79,42 @@ index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..aa2bbd870ef8ac914e814cd64a0b7cb0
  /**
   * Return Knuth & Plass nodes based on line and previously calculated syllables
   *
-@@ -2635,7 +2693,27 @@ const getNodes = (attributedString, { align }, options) => {
+@@ -2635,7 +2693,33 @@ const getNodes = (attributedString, { align }, options) => {
              acc.push(linebreak.glue(width, start, end, stretch, shrink));
          }
          else {
 -            const hyphenated = syllables[index + 1] !== ' ';
-+            // 元実装は次シラブルが厳密に半角スペース(' ')でなければ常に hyphenated:true を
-+            // 立てる。ZWNBSP（trim()===''になる非表示の区切り文字）を挟んで改行点を作る
-+            // 呼び出し側（skillsheet-viewer の splitForHyphenation）では、次シラブルが
-+            // ' ' と一致しないためこの判定に該当してしまい、breakLines() が実際に選ばれた
-+            // ブレークポイントへハイフン記号を挿入してしまう（アプリ側のIssue #171）。
-+            // 次シラブルが「空白として扱われるべきもの」かどうかは trim()==='' で判定する
-+            // のが本来の意図（このファイル上部の s.trim()==='' によるglue判定と同じ基準）
-+            // であり、' ' 単体への厳密一致は本来のケース（半角スペース区切り）を含みつつ
-+            // ZWNBSP 等の非表示区切りも正しく非ハイフン化対象にする。
++            // 元実装は「次シラブルが厳密に半角スペース(' ')でなければ常に hyphenated:true」
++            // → のちに「次シラブルが trim()===''（空白扱い）でなければ true」→
++            // 「現在のシラブル自身が単一CJK文字なら常に false」と段階的に直してきた
++            // （Issue #171, #203）。だがそのいずれも「次のシラブルが何か」を見る発想を
++            // 引きずっており、根本的に誤っていた。
 +            //
-+            // 追記（Issue #203）: 上記の「次シラブルを見る」判定だけでは不十分だった。
-+            // 長文の和文段落がページ／行の境界で reflow されると、syllables 配列中の
-+            // BREAK_MARKER が境界のどちら側にあるかによって生き残ったり消えたりし、
-+            // 現在のシラブルの直後に「本物の」次の文字シラブルが来てしまうことがある
-+            // （実データで実測・再現済み）。この場合 next 側だけを見ると和文の直後にも
-+            // hyphenated:true が立ち、実際に行末へハイフンが描画されてしまう。
-+            // 現在のシラブル自身が単一の CJK 文字であれば、reflow で next 側の状態が
-+            // どうなっていようと常に非ハイフン化する（和文は本来ハイフンで区切らない）。
-+            const nextSyllable = syllables[index + 1];
-+            const hyphenated =
-+                !isSingleCjkSyllable(s) && nextSyllable !== undefined && nextSyllable.trim() !== '';
++            // skillsheet-viewer の呼び出し側（splitForHyphenation）は、真の英語辞書式
++            // ハイフネーション（"some-" + "thing" のように語の途中を割る）を一切行わない
++            // （fonts.test.ts の「ASCII の連なりは分割しない」で固定）。ASCII の連なりは
++            // 常に1シラブルのまま保持し、改行してよい境界にだけ空文字列の BREAK_MARKER を
++            // glue として挟む設計であり、ハイフン記号を伴う改行点はそもそも一切存在しない
++            // はずの呼び出し元である。
++            //
++            // 追記（Issue #227）: ASCII の連なり（例: "OpenNext"）の直後に行頭禁則文字
++            // （）、、。・ 等）が続く場合、splitForHyphenation() は禁則を守るために
++            // BREAK_MARKER を意図的に挟まない。すると次シラブルは「空白でない実文字」に
++            // なり、上記のどの版の判定でも（isSingleCjkSyllable は CJK 単独文字にしか
++            // 効かないため）このASCIIシラブルが hyphenated:true になってしまい、禁則で
++            // 改行を禁じたはずの位置にハイフン付きの改行候補が生まれ、狭い列幅で実際に
++            // 選ばれるとソースに存在しない U+002D が出力される
++            // （実測: 「…エッジデプロイ、-アクセス解析は…」）。
++            //
++            // 「次に何が来るか」を見る限り、CJK 側・ASCII 側どちらの分岐でも同じ穴が
++            // 開く。呼び出し側が真の辞書式ハイフネーションを行わない以上、hyphenated は
++            // 次シラブルの形に関係なく常に false であるべきで、これで両方のIssueの
++            // 根本原因を一度に塞ぐ。
++            const hyphenated = false;
              const end = start + s.length;
              // Add box node. Box nodes are used to represent words.
              acc.push(linebreak.box(width, start, end, hyphenated));
-@@ -3106,4 +3184,4 @@ const fontSubstitution = () => ({ string, runs }) => {
+@@ -3106,4 +3190,4 @@ const fontSubstitution = () => ({ string, runs }) => {
      return { string, runs: res };
  };
  

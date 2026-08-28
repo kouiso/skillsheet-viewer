@@ -29,6 +29,7 @@ import {
   formatPeriodDisplay,
   normalizeProcess,
   PROCESS_LABELS,
+  parsePeriodBounds,
   splitPeriodRange,
   TECH_BUCKET_ORDER,
 } from '@skillsheet/db/process';
@@ -36,7 +37,13 @@ import type { DetailLevel } from '@skillsheet/db/project-detail-level';
 import { resolveDetailLevels } from '@skillsheet/db/project-detail-level';
 import { resolveProjectArea } from '@skillsheet/db/tech-area';
 
-import { PRINT_CHIP_LIMIT, PRINT_TECH_LABEL, PRINT_TOP_SKILL_LIMIT } from './print-tokens';
+import {
+  PRINT_SIZE,
+  PRINT_TECH_LABEL,
+  PRINT_TOP_SKILL_LIMIT,
+  PRINT_TYPE,
+  PRINT_YEAR_VISIBLE_CATEGORIES,
+} from './print-tokens';
 
 /** 画面側のビュートグルと同じキー。PDF もこの ON/OFF に従う。 */
 export type PrintViewKey = 'skills' | 'process' | 'projects' | 'timeline';
@@ -47,12 +54,17 @@ export interface PrintChip {
   emphasis: 'solid' | 'outline';
 }
 
-/** 技術スタックの 1 分類（ラベル + チップ + 畳んだ件数）。 */
+/**
+ * 技術スタックの 1 分類（ラベル + チップ）。
+ *
+ * かつては 1 分類 6 件（`PRINT_CHIP_LIMIT`）を超えた分を「他 N 件」に畳んでいたが、
+ * 27 案件中 16 案件・合計 68 個の技術名が紙面のどこにも出なくなっていた
+ * （オーナーの標準指示「元データを全件表示したい」に反する、`no-abbreviated-rendering`
+ * skill の origin）。**件数の上限は無い。全件を chips に入れる。**
+ */
 export interface PrintTechGroup {
   label: string;
   chips: PrintChip[];
-  /** PRINT_CHIP_LIMIT を超えて「他 N 件」に畳んだ数。0 なら表示しない。 */
-  overflowCount: number;
 }
 
 /** ラベル + 値の 1 行。値が空の行はそもそも作らない。 */
@@ -88,11 +100,27 @@ export interface PrintProject {
   duties: string;
   acquired: string;
   comment: string;
-  /** 簡約版の 1 行に出す代表技術（先頭 5 個をカンマ区切り）。 */
-  compactTech: string;
-  /** 簡約版の 1 行に出す一言（duties → comment の順で先頭 1 文）。 */
+  /**
+   * 簡約版の 1 行に出す一言（duties → comment の順で先頭 1 文）。
+   *
+   * 技術名は以前ここに先頭 5 個だけカンマ区切りで同居させていたが、6 個目以降が
+   * 紙面のどこにも出なくなる省略だった（`no-abbreviated-rendering` skill 違反）。
+   * 簡約版カードは `techGroups` を全件そのままチップで出すので、この一言に技術名を
+   * 混ぜる必要はない。
+   */
   compactNote: string;
   level: DetailLevel;
+  /**
+   * 詳細版カードが 1 ページに収まると見積れるか。
+   *
+   * true なら描画側はカード全体を `wrap={false}` にしてよい（1 案件がページを跨いで
+   * 途中で切れることを防ぐ）。false（見積り高さが `PRINT_SIZE.cardMaxSinglePageHeight`
+   * を超える）のカードは、区切り単位（メタ表・チップ分類・本文ブロック）ごとに
+   * 分割できる形のまま描画する — カード全体を `wrap={false}` にすると、1 ページを
+   * 超える内容は改ページではなく文字の圧縮・重なりを起こす（実測）。
+   * 見積りは `estimateProjectCardHeight` 参照。
+   */
+  fitsOnePage: boolean;
 }
 
 export interface PrintCompany {
@@ -123,8 +151,16 @@ export interface PrintCompany {
 
 export interface PrintSkill {
   name: string;
+  /** ソートにだけ使う生の経験年数。表示するかどうかは yearsLabel が既に判定済み。 */
   years: number;
   level: string;
+  /**
+   * チップに添える経験年数の表示文字列（例: "8 年"）。表示しない場合は空文字。
+   * 分類（`PRINT_YEAR_VISIBLE_CATEGORIES`）とスキルビュートグルで既に判定済みの値を
+   * 持たせることで、1 ページ目のチップ・スキル一覧ページのチップのどちらも
+   * このフィールドをそのまま使うだけでよくする（判定をコンポーネント側で重複させない）。
+   */
+  yearsLabel: string;
 }
 
 export interface PrintSkillGroup {
@@ -180,6 +216,18 @@ const SOLID_LEVELS = new Set(['上級', '★★★']);
 
 export function chipEmphasis(level: string): PrintChip['emphasis'] {
   return SOLID_LEVELS.has(trimmed(level)) ? 'solid' : 'outline';
+}
+
+/**
+ * スキルの経験年数を表示してよいか判定し、表示用文字列を返す（判定はここ 1 箇所だけ）。
+ *
+ * `showSkills` が OFF のときは分類を問わず出さない（「スキルを消す」がスキル一覧ページだけ
+ * 消して 1 ページ目の主力スタックに年数が残る、では OFF の意味が無いため）。
+ */
+export function skillYearsLabel(category: string, years: number, showSkills: boolean): string {
+  if (!showSkills) return '';
+  if (!PRINT_YEAR_VISIBLE_CATEGORIES.has(trimmed(category))) return '';
+  return years > 0 ? `${years} 年` : '';
 }
 
 /**
@@ -275,7 +323,7 @@ export function formatProcessForPrint(process: string[]): string {
  *
  * 各分類の**配列先頭 1 個を塗りチップ**にする。DB に「主役技術」のフラグは無く、
  * 配列順は本人がエディタで入れた順（＝重要度順）として扱えるため。
- * PRINT_CHIP_LIMIT を超えた分は「他 N 件」に畳む（30 個並べるとスキャンできない）。
+ * 件数は畳まない（PrintTechGroup のコメント参照）。チップ行は必要なだけ折り返す。
  */
 export function buildTechGroups(tech: ProjectTech | undefined): PrintTechGroup[] {
   if (!tech) return [];
@@ -283,11 +331,9 @@ export function buildTechGroups(tech: ProjectTech | undefined): PrintTechGroup[]
   for (const key of TECH_BUCKET_ORDER) {
     const all = flattenTech({ ...emptyTech(), [key]: tech[key] ?? [] });
     if (all.length === 0) continue;
-    const shown = all.slice(0, PRINT_CHIP_LIMIT);
     groups.push({
       label: PRINT_TECH_LABEL[key],
-      chips: shown.map((label, i) => ({ label, emphasis: i === 0 ? 'solid' : 'outline' })),
-      overflowCount: all.length - shown.length,
+      chips: all.map((label, i) => ({ label, emphasis: i === 0 ? 'solid' : 'outline' })),
     });
   }
   return groups;
@@ -317,6 +363,128 @@ function emptyTech(): ProjectTech {
 
 // --- 組み立て -------------------------------------------------------------
 
+// --- 案件カードの高さ見積り（1 ページに収まるかの判定用） -----------------------
+//
+// @react-pdf に実レイアウトさせずに概算するので、荒い近似を使う。文字幅は「全角相当
+// （CJK 等）は 1 文字 ≒ フォントサイズと同じ pt 幅、半角（英数記号）は 0.55 倍」で
+// 見積る。全部を全角換算で見積ると、技術チップ（ほぼ英数字の技術名）の折り返し行数を
+// 実際の 2 倍近く多く見積り、1 ページに収まるはずのカードまで分割方針に倒してしまう
+// （実測: 全角換算のみだと実データの詳細版 14 件中 11 件が「分割」判定になった）。
+//
+// 見積りが外れて「1 ページに収まる」はずが実際は超える方向の誤りは致命的
+// （`wrap={false}` は 1 ページを超える中身を改ページせず圧縮して重ねる。実測、
+// company-grouping 作業の zz-wrapfalse-overflow-probe）。見積りが逆向きに外れる
+// （実際は収まるのに「超える」と判定する）方向の誤りは、分割可能な形のまま描画される
+// だけで崩れない。だから半角の 0.55 倍という値自体は狭め（安全側）に取ってある。
+
+/** 半角相当とみなす文字（ASCII 全般・半角カナ）か。それ以外は全角として扱う。 */
+function isHalfWidthChar(codePoint: number): boolean {
+  return codePoint <= 0xff || (codePoint >= 0xff61 && codePoint <= 0xffdc);
+}
+
+/** 文字列の概算幅（pt）。全角 1em・半角 0.55em として積み上げる。 */
+function estimateTextWidth(text: string, fontSizePt: number): number {
+  let width = 0;
+  for (const ch of text) {
+    const isHalf = isHalfWidthChar(ch.codePointAt(0) ?? 0);
+    width += fontSizePt * (isHalf ? 0.55 : 1);
+  }
+  return width;
+}
+
+function estimateWrappedLines(text: string, columnWidthPt: number, fontSizePt: number): number {
+  if (!text) return 0;
+  const totalWidth = estimateTextWidth(text, fontSizePt);
+  if (totalWidth <= 0) return 0;
+  return Math.max(1, Math.ceil(totalWidth / Math.max(1, columnWidthPt)));
+}
+
+/** duties / acquired / comment 1 本ぶんの見積り高さ（pt）。行ごとに折り返しを見積る。 */
+function estimateMarkdownHeight(text: string, columnWidthPt: number): number {
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) return 0;
+  const bodyLineHeight = PRINT_TYPE.body.fontSize * PRINT_TYPE.body.lineHeight;
+  // 箇条書き記号・見出し記号ぶんの実効幅の目減りを安全側に一律 12pt 見る。
+  const effectiveWidth = Math.max(40, columnWidthPt - 12);
+  let total = 0;
+  for (const line of lines) {
+    total += estimateWrappedLines(line, effectiveWidth, PRINT_TYPE.body.fontSize) * bodyLineHeight;
+  }
+  // 段落間の gap（PrintMarkdown の段落間隔。厳密値ではなく行間 1 個分の安全マージン）。
+  return total + Math.max(0, lines.length - 1) * 4;
+}
+
+/** カード本文の実効幅（カードの左右パディングを引いた分）。 */
+const CARD_CONTENT_WIDTH = PRINT_SIZE.contentWidth - PRINT_SIZE.cardPadHorizontal * 2;
+
+/**
+ * 詳細版カード 1 枚の見積り高さ（pt）。project-card-detail.tsx の実レイアウト
+ * （ヘッダー・メタ表・技術チップ・業務内容/習得スキル/コメント）に対応させる。
+ */
+export function estimateProjectCardHeight(fields: {
+  title: string;
+  companyLabel: string;
+  metaRows: PrintMetaRow[];
+  techGroups: PrintTechGroup[];
+  duties: string;
+  acquired: string;
+  comment: string;
+}): number {
+  let height = 0;
+
+  // ヘッダー: 上下パディング(10*2) + 見出し列内の gap(3) + タイトル行 + 会社行。
+  // タイトルは headerRight（期間バッジ等）と横並びなので、見積りの実効幅は保守的に狭めに取る。
+  const titleLineHeight = PRINT_TYPE.projectTitle.fontSize * PRINT_TYPE.projectTitle.lineHeight;
+  height +=
+    20 +
+    3 +
+    estimateWrappedLines(fields.title, 320, PRINT_TYPE.projectTitle.fontSize) * titleLineHeight +
+    (fields.companyLabel ? PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight : 0);
+
+  // メタ表: 2 列。行数は列あたり ceil(件数/2)。
+  if (fields.metaRows.length > 0) {
+    const rowsPerColumn = Math.ceil(fields.metaRows.length / 2);
+    const metaRowHeight = PRINT_SIZE.metaRowPadVertical * 2 + PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight;
+    height += rowsPerColumn * metaRowHeight;
+  }
+
+  // 技術チップ: 分類ごとにチップの概算幅を積んで折り返し行数を見積る。
+  if (fields.techGroups.length > 0) {
+    height += PRINT_SIZE.cardPadVertical * 2;
+    const chipsAreaWidth = CARD_CONTENT_WIDTH - PRINT_SIZE.labelColTech - 8;
+    const chipLineHeight = PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight + PRINT_SIZE.chipPadVertical * 2;
+    for (const group of fields.techGroups) {
+      let used = 0;
+      let rows = 1;
+      for (const chip of group.chips) {
+        const chipTextWidth = estimateTextWidth(chip.label, PRINT_TYPE.meta.fontSize);
+        const chipWidth = chipTextWidth + PRINT_SIZE.chipPadHorizontal * 2 + PRINT_SIZE.chipGap;
+        if (used > 0 && used + chipWidth > chipsAreaWidth) {
+          rows += 1;
+          used = chipWidth;
+        } else {
+          used += chipWidth;
+        }
+      }
+      height += rows * chipLineHeight;
+    }
+  }
+
+  // 業務内容 / 習得スキル・実績 / コメント: それぞれ paddingVertical(9*2) + ラベル 1 行 + 本文。
+  const sectionLabelHeight = PRINT_TYPE.sectionLabel.fontSize * PRINT_TYPE.sectionLabel.lineHeight;
+  for (const text of [fields.duties, fields.acquired, fields.comment]) {
+    if (!text) continue;
+    height += PRINT_SIZE.cardPadVertical * 2 + 4 + sectionLabelHeight;
+    height += estimateMarkdownHeight(text, CARD_CONTENT_WIDTH);
+  }
+
+  // 外枠罫線・ブロック仕切り・丸め誤差ぶんの安全マージン。
+  return height + 24;
+}
+
 function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level: DetailLevel): PrintProject {
   const area = resolveProjectArea(item.scope, item.tech);
   const processText = formatProcessForPrint(item.process ?? []);
@@ -327,25 +495,66 @@ function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level
   if (trimmed(item.team)) metaRows.push({ label: 'チーム', value: trimmed(item.team) });
   if (processText) metaRows.push({ label: '担当工程', value: processText });
 
-  const allTech = flattenTech(item.tech);
+  const title = trimmed(item.title) || '（タイトル未入力）';
+  const companyLabel = companyLabelOf(companyDisplayName(company), trimmed(company?.kind));
+  const techGroups = buildTechGroups(item.tech);
+  const duties = trimmed(item.duties);
+  const acquired = trimmed(item.acquired);
+  const comment = trimmed(item.comment);
+  const fitsOnePage =
+    estimateProjectCardHeight({ title, companyLabel, metaRows, techGroups, duties, acquired, comment }) <=
+    PRINT_SIZE.cardMaxSinglePageHeight;
+
   return {
     id: item.id,
-    title: trimmed(item.title) || '（タイトル未入力）',
+    title,
     companyName: companyDisplayName(company),
-    companyLabel: companyLabelOf(companyDisplayName(company), trimmed(company?.kind)),
+    companyLabel,
     periodText: formatPeriodDisplay(item.period),
     compactPeriodText: compactPeriod(item.period),
     durationText: trimmed(item.duration) || deriveDuration(item.period),
     team: trimmed(item.team),
     metaRows,
-    techGroups: buildTechGroups(item.tech),
-    duties: trimmed(item.duties),
-    acquired: trimmed(item.acquired),
-    comment: trimmed(item.comment),
-    compactTech: allTech.slice(0, 5).join(', '),
+    techGroups,
+    duties,
+    acquired,
+    comment,
     compactNote: firstSentence(item.summary || item.duties || item.comment),
     level,
+    fitsOnePage,
   };
+}
+
+/** 会社の実効 period 文字列。`buildCompany` の periodText と同じ導出だが、表示整形前の生値。 */
+function companyRawPeriod(company: CompanyInfo | undefined, items: ProjectItem[]): string {
+  return trimmed(company?.period) || deriveCompanyPeriod(items.map((i) => i.period));
+}
+
+/**
+ * 「最新の会社」の index を判定する。
+ *
+ * 以前は配列の先頭（`index === 0`）を最新として扱っていたが、`groupProjectsByCompany` の
+ * 順序は「エディタでの会社の並び順」であって期間の新しさではない
+ * （group-by-company.ts のコメント: 「companies 順を正とし」）。エディタで会社の並びを
+ * 変えると、期間上は最新でない会社に塗り帯が付いたままになる欠陥だった（レビュー指摘）。
+ * 期間の終了年月（`parsePeriodBounds` — 「現在」は実行時点扱い）が最大の会社を選ぶ。
+ * 同着は開始が遅い方を優先し、それも同着なら先に見つかった方（配列順）を保つ。
+ * 期間を解釈できない会社は最新候補にしない。
+ */
+function resolveLatestIndex(groups: { company: CompanyInfo | undefined; items: ProjectItem[] }[]): number {
+  let latest = -1;
+  let latestEnd = -Infinity;
+  let latestStart = -Infinity;
+  groups.forEach((g, index) => {
+    const bounds = parsePeriodBounds(companyRawPeriod(g.company, g.items));
+    if (!bounds) return;
+    if (bounds.end > latestEnd || (bounds.end === latestEnd && bounds.start > latestStart)) {
+      latest = index;
+      latestEnd = bounds.end;
+      latestStart = bounds.start;
+    }
+  });
+  return latest;
 }
 
 function buildCompany(
@@ -355,9 +564,25 @@ function buildCompany(
   levelById: Map<string, DetailLevel>,
   isLatest: boolean,
 ): PrintCompany {
-  // 役割名自体が `・` や ` / ` を含む（例: バックエンドリード・インフラエンジニア）ため、
+  // 役割名自体が `・` を含む（例: バックエンドリード・インフラエンジニア）ため、
   // 区切りは読点にする。中黒で繋ぐと 1 つの役割名に見えて読めない。
-  const roles = [...new Set(items.map((i) => trimmed(i.role)).filter(Boolean))].join('、');
+  //
+  // 案件の `role` は 1 件に複数の役割が入ることがある（例: `フルスタックエンジニア / EM`）。
+  // 文字列のまま重複を除くと、`フルスタックエンジニア` と
+  // `フルスタックエンジニア / EM` が別物として残り、会社の行に同じ役割が 2 回並ぶ
+  // （実測: 2 ページ目「フルスタックエンジニア、フルスタックエンジニア / エンジニアリング
+  // マネージャー」）。役割 1 つずつに割ってから重複を除く。
+  // 割るのは列挙に使われる区切りだけで、役割名の一部である `・` は割らない。
+  const roles = [
+    ...new Set(
+      items.flatMap((i) =>
+        trimmed(i.role)
+          .split(/\s*[/,、]\s*/)
+          .map(trimmed)
+          .filter(Boolean),
+      ),
+    ),
+  ].join('、');
   const sizes = items.map((i) => parseTeamSize(i.team)).filter((n): n is number => n !== null);
   const min = sizes.length > 0 ? Math.min(...sizes) : null;
   const max = sizes.length > 0 ? Math.max(...sizes) : null;
@@ -402,7 +627,9 @@ function buildSummary(
     .sort((a, b) => b.years - a.years || a.order - b.order)
     .slice(0, PRINT_TOP_SKILL_LIMIT)
     .map((s) => ({
-      label: s.years > 0 ? `${s.name} ${s.years} 年` : s.name,
+      // 年数を出すかどうかは skillYearsLabel が既に判定済み（分類許可リスト + スキル
+      // ビュートグル）。ここでは組み立てるだけで、判定をこの部品側で繰り返さない。
+      label: s.yearsLabel ? `${s.name} ${s.yearsLabel}` : s.name,
       emphasis: chipEmphasis(s.level),
     }));
 
@@ -449,21 +676,30 @@ export function buildPrintViewModel(
   const stats = blocks.find((b): b is Extract<Block, { type: 'stats' }> => b.type === 'stats')?.data;
   const skillGroups: PrintSkillGroup[] = blocks
     .filter((b): b is Extract<Block, { type: 'skills' }> => b.type === 'skills')
-    .map((b) => ({
-      category: trimmed(b.data.category),
-      skills: (b.data.skills ?? [])
-        .filter((s) => trimmed(s.name))
-        .map((s) => ({ name: trimmed(s.name), years: s.years, level: trimmed(s.level) })),
-    }))
+    .map((b) => {
+      const category = trimmed(b.data.category);
+      return {
+        category,
+        skills: (b.data.skills ?? [])
+          .filter((s) => trimmed(s.name))
+          .map((s) => ({
+            name: trimmed(s.name),
+            years: s.years,
+            level: trimmed(s.level),
+            yearsLabel: skillYearsLabel(category, s.years, on('skills')),
+          })),
+      };
+    })
     .filter((g) => g.skills.length > 0);
 
   const projectBlock = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')?.data;
   const visible = projectBlock ? filterVisibleProjectData(projectBlock) : { companies: [], items: [] };
   const { levelById } = resolveDetailLevels(visible.items);
-  const groups = groupProjectsByCompany(visible.companies, visible.items);
-  const companies = groups
-    .filter((g) => g.items.length > 0)
-    .map((g, index) => buildCompany(g.company, g.companyId, g.items, levelById, index === 0));
+  const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
+  const latestIndex = resolveLatestIndex(groups);
+  const companies = groups.map((g, index) =>
+    buildCompany(g.company, g.companyId, g.items, levelById, index === latestIndex),
+  );
 
   return {
     summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items),

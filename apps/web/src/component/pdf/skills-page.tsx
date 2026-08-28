@@ -67,8 +67,9 @@ const LEGEND = '塗り = 上級 ／ 枠線 = 中級・初級。カッコ内は�
 
 function toChip(skill: PrintSkill): PrintChip {
   return {
-    // 年数 0 は「未入力」を意味する（DB は 0 と空欄を区別しない）ので括弧ごと出さない。
-    label: skill.years > 0 ? `${skill.name}（${skill.years} 年）` : skill.name,
+    // 年数を出すかどうかは skillYearsLabel（print-view-model.ts）が既に判定済み
+    // （分類許可リスト + スキルビュートグル）。ここでは組み立てるだけ。
+    label: skill.yearsLabel ? `${skill.name}（${skill.yearsLabel}）` : skill.name,
     emphasis: chipEmphasis(skill.level),
   };
 }

@@ -72,6 +72,16 @@ export const PRINT_SIZE = {
   headerTop: 16,
   footerBottom: 14,
   companySectionGap: 20,
+  /**
+   * 会社セクション左のレール（縦罫線）の太さ。`borderLeftWidth` を折り返す View に
+   * 付けると、@react-pdf はページ跨ぎの断片ごとに再描画する（実測、
+   * react-pdf-capability.node.test.tsx の H）。`wrap={false}` は不要。
+   */
+  companyRailWidth: 2,
+  /** レールから見出し帯・案件カードまでの余白。会社セクション全体の paddingLeft に使う。 */
+  companyRailIndent: 12,
+  /** 会社の終わりを示す短い罫線の幅。帯にはしない（淡いままで十分読み取れる）。 */
+  companyEndMarkerWidth: 18,
   cardGap: 16,
   cardPadVertical: 9,
   cardPadHorizontal: 12,
@@ -96,6 +106,25 @@ export const PRINT_SIZE = {
   ruleStrong: 1.5,
   ruleThin: 0.75,
   cardRadius: 3,
+  /**
+   * 案件カード 1 枚が「1 ページに収まり得る」上限高さ。
+   * pageHeight(842) − padTop(42) − ページの paddingBottom（`padBottom`32 + フッター余白 14）= 754。
+   * カードの見積り高さがこれ以下なら `wrap={false}` でカード全体を分割禁止にできる
+   * （@react-pdf は wrap={false} のノードがこの高さを超えると、ページ送りではなく
+   * 文字を圧縮して重ねる — 実測、company-grouping 作業の zz-wrapfalse-overflow-probe）。
+   * 超えるカードだけ、区切り単位（メタ表・チップ分類・本文ブロック）ごとに分割可能な形へ戻す。
+   */
+  cardMaxSinglePageHeight: 754,
+  /**
+   * 簡約表の列ヘッダーの後ろにこれだけの高さが残っていなければページを送る。
+   * 列ヘッダー（HEAD_PAD_VERTICAL 5×2 + meta 1 行 ≒ 27pt）+ 先頭案件の 1 行目
+   * （ROW_PAD_VERTICAL 7×2 + 本文 2 行分の折り返しを見込んで ≒ 48pt）の合計に
+   * 安全マージンを足した値。これが無いと、実行時点で残り高さが少ないページに
+   * 列ヘッダーだけが乗り、データ行 0 件のまま改ページして次ページで表が再度
+   * 描かれる（実測: p19→p20 / p25→p26 境界、company-heading.tsx の
+   * MIN_PRESENCE_AHEAD と同種の不具合）。
+   */
+  compactHeaderMinPresenceAhead: 90,
 } as const;
 
 /**
@@ -120,8 +149,31 @@ export const PRINT_TECH_LABEL = {
   collab: '連携ツール',
 } as const;
 
-/** 1 分類あたりに並べるチップの上限。超えた分は「他 N 件」に畳む。 */
-export const PRINT_CHIP_LIMIT = 6;
-
-/** 1 ページ目の主力スタックに並べるチップの上限。 */
+/**
+ * 1 ページ目の主力スタックに並べるチップの上限。
+ *
+ * これは「元データの省略」ではなく「1 ページ目の見出しとしての抜粋」。全件は
+ * スキル一覧ページ（`skills-page.tsx`）に必ず出る。オーナーの「簡易表記はあかん」
+ * （2026-08-29、案件詳細の作り替えレビューで確定）は「同じ内容の 2 変種で片方が
+ * 情報を落とす」ことを禁じる指示で、この上限は変種間の食い違いではなく「サマリ
+ * ページに全件を並べると 1 ページ目が主力スタックだけで埋まる」ための独立した
+ * デザイン上限なので対象外と判断した。据え置く。
+ */
 export const PRINT_TOP_SKILL_LIMIT = 10;
+
+/**
+ * チップに経験年数を添えてよいスキル分類。
+ *
+ * オーナーの指摘「CI/CD 4年ってなんやねん」の通り、年数は言語・フレームワーク・
+ * インフラ基盤には意味があるが、ツール・CMS・テストのような分類には意味がない。
+ * 実データのスキル分類は「フレームワーク」を「フロントエンド」「バックエンド」に
+ * 分けて登録しているため、同じ概念として両方を許可リストに含める
+ * （分類名は `skills` ブロックの自由入力文字列で、DB のキー体系ではない）。
+ */
+export const PRINT_YEAR_VISIBLE_CATEGORIES = new Set([
+  '言語',
+  'フレームワーク',
+  'フロントエンド',
+  'バックエンド',
+  'インフラ',
+]);
