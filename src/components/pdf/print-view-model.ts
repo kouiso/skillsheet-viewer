@@ -478,11 +478,37 @@ export function estimateProjectCardHeight(fields: {
   return height + 24;
 }
 
+/**
+ * 役割名を 1 つずつに割って重複を除き、読点で繋ぎ直す。
+ *
+ * 1 つの `role` に複数の役割が入ることがあり（例: `PL, PL` や
+ * `フルスタックエンジニア / エンジニアリングマネージャー`）、文字列のまま扱うと
+ * 同じ役割が 2 回並ぶ（実測: 案件カードの「役割：PL, PL」、会社行の
+ * 「フルスタックエンジニア、フルスタックエンジニア / エンジニアリングマネージャー」）。
+ *
+ * 繋ぎ直しに読点を使うのは、役割名自体が `・` を含むため
+ * （例: バックエンドリード・インフラエンジニア）。中黒で繋ぐと 1 つの役割名に見えて読めない。
+ * 割るのは列挙に使われる区切りだけで、役割名の一部である `・` は割らない。
+ */
+export function dedupeRoles(...roles: (string | undefined)[]): string {
+  return [
+    ...new Set(
+      roles.flatMap((role) =>
+        trimmed(role)
+          .split(/\s*[/,、]\s*/)
+          .map((part) => trimmed(part))
+          .filter(Boolean),
+      ),
+    ),
+  ].join('、');
+}
+
 function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level: DetailLevel): PrintProject {
   const area = resolveProjectArea(item.scope, item.tech);
   const processText = formatProcessForPrint(item.process ?? []);
   const metaRows: PrintMetaRow[] = [];
-  if (trimmed(item.role)) metaRows.push({ label: '役割', value: trimmed(item.role) });
+  const roleText = dedupeRoles(item.role);
+  if (roleText) metaRows.push({ label: '役割', value: roleText });
   // 導出値は「技術領域」、本人の言葉（scope）は「担当領域」。この区別を崩さない。
   if (trimmed(area.text)) metaRows.push({ label: area.derived ? '技術領域' : '担当領域', value: trimmed(area.text) });
   if (trimmed(item.team)) metaRows.push({ label: 'チーム', value: trimmed(item.team) });
@@ -557,25 +583,7 @@ function buildCompany(
   levelById: Map<string, DetailLevel>,
   isLatest: boolean,
 ): PrintCompany {
-  // 役割名自体が `・` を含む（例: バックエンドリード・インフラエンジニア）ため、
-  // 区切りは読点にする。中黒で繋ぐと 1 つの役割名に見えて読めない。
-  //
-  // 案件の `role` は 1 件に複数の役割が入ることがある（例: `フルスタックエンジニア / EM`）。
-  // 文字列のまま重複を除くと、`フルスタックエンジニア` と
-  // `フルスタックエンジニア / EM` が別物として残り、会社の行に同じ役割が 2 回並ぶ
-  // （実測: 2 ページ目「フルスタックエンジニア、フルスタックエンジニア / エンジニアリング
-  // マネージャー」）。役割 1 つずつに割ってから重複を除く。
-  // 割るのは列挙に使われる区切りだけで、役割名の一部である `・` は割らない。
-  const roles = [
-    ...new Set(
-      items.flatMap((i) =>
-        trimmed(i.role)
-          .split(/\s*[/,、]\s*/)
-          .map(trimmed)
-          .filter(Boolean),
-      ),
-    ),
-  ].join('、');
+  const roles = dedupeRoles(...items.map((i) => i.role));
   const sizes = items.map((i) => parseTeamSize(i.team)).filter((n): n is number => n !== null);
   const min = sizes.length > 0 ? Math.min(...sizes) : null;
   const max = sizes.length > 0 ? Math.max(...sizes) : null;
