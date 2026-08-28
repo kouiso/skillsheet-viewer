@@ -12,7 +12,7 @@ import { join, relative } from 'node:path';
 import { cwd } from 'node:process';
 
 const ROOT = cwd();
-const TARGET_DIR = join(ROOT, 'apps', 'web', 'src');
+const TARGET_DIR = join(ROOT, 'src');
 
 const FORBIDDEN_PATTERNS = [
   { pattern: /from\s+['"]@react-pdf\/renderer['"]/, reason: '@react-pdf/renderer を直接 import している' },

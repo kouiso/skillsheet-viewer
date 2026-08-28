@@ -8,12 +8,12 @@ skillsheet-viewer のデータ源は **Neon Postgres（Drizzle ORM）を正本**
 
 ## Part 1: スキーマ
 
-`packages/db/src/schema.ts` が Drizzle でテーブルを定義する。
+`src/db/schema.ts` が Drizzle でテーブルを定義する。
 
 ### skill_sheets / blocks
 
 ```ts
-// packages/db/src/schema.ts（抜粋）
+// src/db/schema.ts（抜粋）
 export const skillSheets = pgTable('skill_sheets', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   ownerId: text('owner_id').notNull(),
@@ -43,7 +43,7 @@ export const blocks = pgTable('blocks', {
 
 ## Part 2: ブロックモデルと Markdown 変換
 
-`packages/db/src/blocks.ts` がブロックのデータモデルと Markdown 変換を担う。ブロックは `type` と `data` を一致させた判別ユニオンで、次の 7 種類がある。
+`src/db/blocks.ts` がブロックのデータモデルと Markdown 変換を担う。ブロックは `type` と `data` を一致させた判別ユニオンで、次の 7 種類がある。
 
 | type | 内容 | 変換先 |
 |------|------|--------|
@@ -60,7 +60,7 @@ export const blocks = pgTable('blocks', {
 各ブロックは `type` に応じて Markdown 文字列へ変換される（`tableBlockToMarkdown` / `skillsBlockToMarkdown` / `experienceBlockToMarkdown` / `profileBlockToMarkdown` / `statsBlockToMarkdown` / `projectBlockToMarkdown`）。`blocksToMarkdown` はブロック配列を `order` 昇順で連結する。
 
 ```ts
-// packages/db/src/blocks.ts（抜粋・要約。実際は隣接ブロックの区切り規則 blockJoinSeparator も適用する）
+// src/db/blocks.ts（抜粋・要約。実際は隣接ブロックの区切り規則 blockJoinSeparator も適用する）
 export function blocksToMarkdown(blocks: Block[]): string {
   return [...blocks]
     .filter((b) => !isBlockInputEmpty(b)) // 中身が空のブロックは連結対象から除く（描画時のスキップ）
@@ -85,7 +85,7 @@ table / experience は Markdown 経由で描画するが、skills / profile / st
 
 ## Part 3: 読み取り・保存
 
-`packages/db/src/skillsheet.ts` が DB アクセスの中心。DB クライアントは `packages/db/src/client.ts` の `getDb()`（Neon serverless / WebSocket ドライバ、`DATABASE_URL` からモジュールスコープでキャッシュ）を使う。
+`src/db/skillsheet.ts` が DB アクセスの中心。DB クライアントは `src/db/client.ts` の `getDb()`（Neon serverless / WebSocket ドライバ、`DATABASE_URL` からモジュールスコープでキャッシュ）を使う。
 
 ### オーナー ID
 
@@ -147,7 +147,7 @@ return db.transaction(async (tx) => {
 
 ### tRPC mutation からの利用
 
-ビルダーの保存は `src/server/trpc/router/sheet.ts` の `sheet.save` procedure が入口（`app/builder/actions.ts` の Server Action は廃止済み）。`editorProcedure` ミドルウェアが `getEditorUserId()` で認可を再検証し、zod スキーマ（`z.custom<BlockInput>(isBlockInput)`。既存の型ガードを正本として再利用し `packages/db` に zod は入れない）でペイロードを検証してから `saveSkillSheetBlocks` を呼ぶ。`ConflictError` は `TRPCError({ code: 'CONFLICT' })` に変換してクライアントへ返す。`sheet.create` / `sheet.delete` も同じ `editorProcedure` を使う。
+ビルダーの保存は `src/server/trpc/router/sheet.ts` の `sheet.save` procedure が入口（`app/builder/actions.ts` の Server Action は廃止済み）。`editorProcedure` ミドルウェアが `getEditorUserId()` で認可を再検証し、zod スキーマ（`z.custom<BlockInput>(isBlockInput)`。既存の型ガードを正本として再利用し `src/db` に zod は入れない）でペイロードを検証してから `saveSkillSheetBlocks` を呼ぶ。`ConflictError` は `TRPCError({ code: 'CONFLICT' })` に変換してクライアントへ返す。`sheet.create` / `sheet.delete` も同じ `editorProcedure` を使う。
 
 ---
 
@@ -157,7 +157,7 @@ DB が空のときだけ、既存の GitHub プライベートリポジトリの
 
 - `fetchMarkdownFromGitHub()`（`skillsheet.ts`）: `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_REPO`（および `FILE_PATH` / `BRANCH`）でファイルを取得し、Base64 を UTF-8 デコードする。トークンはサーバー専用で、ブラウザには渡らない。
 - `ensureSeeded()`: デフォルトシートのブロックが 0 件なら、取得した Markdown を `splitMarkdownIntoBlocks()` で分割し `onConflictDoNothing()` で挿入する。
-- レガシー閲覧経路 `/view/[path]` は `apps/web/src/server/github-sheets.ts` を使い、リポジトリ直下の `.md` を列挙・取得する。`isValidSheetPath()`（`..` やスラッシュを弾き、日本語ファイル名は Unicode プロパティで許容）と `isSheetFileName()`（README / CLAUDE.md などの設定・AI 指示系を除外）で対象を絞る。ファイル不在は `SheetNotFoundError` として `notFound()`（404）に、システムエラーは再スローに振り分ける。
+- レガシー閲覧経路 `/view/[path]` は `src/server/github-sheets.ts` を使い、リポジトリ直下の `.md` を列挙・取得する。`isValidSheetPath()`（`..` やスラッシュを弾き、日本語ファイル名は Unicode プロパティで許容）と `isSheetFileName()`（README / CLAUDE.md などの設定・AI 指示系を除外）で対象を絞る。ファイル不在は `SheetNotFoundError` として `notFound()`（404）に、システムエラーは再スローに振り分ける。
 
 GitHub 系の環境変数は任意扱いで、`assertServerEnv()` は欠けても warn のみ（DB 経由の表示には影響しない）。
 
@@ -165,7 +165,7 @@ GitHub 系の環境変数は任意扱いで、`assertServerEnv()` は欠けて�
 
 ## Part 5: キャッシュと revalidate
 
-`apps/web/src/server/sheets-cache.ts` が `unstable_cache` でラップした読み取り関数群を提供する。
+`src/server/sheets-cache.ts` が `unstable_cache` でラップした読み取り関数群を提供する。
 
 | 関数 | 対象 | tag | revalidate |
 |------|------|-----|-----------|
