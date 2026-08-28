@@ -1,0 +1,286 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import type { Block } from '@/db/blocks';
+
+import SkillSheetViewer from './skill-sheet-viewer';
+
+// framer-motion はアニメーション専用 props を除いた素の要素に置換する
+vi.mock('framer-motion', () => ({
+  motion: new Proxy(
+    {},
+    {
+      get: () => {
+        const Passthrough = ({ children, ...props }: { children?: ReactNode }) => {
+          const rest = { ...props } as Record<string, unknown>;
+          for (const key of ['initial', 'animate', 'transition', 'whileHover', 'whileTap', 'exit', 'variants']) {
+            delete rest[key];
+          }
+          return <div {...rest}>{children}</div>;
+        };
+        return Passthrough;
+      },
+    },
+  ),
+  AnimatePresence: ({ children }: { children: ReactNode }) => <>{children}</>,
+  useReducedMotion: () => false,
+}));
+
+// Lightbox 本体は jsdom で描画しても開いているスライドを機械的に読み取れないため、
+// 受け取った index と slides をそのまま属性に出すスタブに置き換える。
+vi.mock('yet-another-react-lightbox', () => ({
+  default: ({ open, slides, index }: { open: boolean; slides: { src: string }[]; index: number }) =>
+    open ? <div data-testid="lightbox" data-index={index} data-src={slides[index]?.src ?? ''} /> : null,
+}));
+
+const DETAILS_CONTENT = `## テストセクション
+
+<details open>
+<summary><h2>スキル・経験年数</h2></summary>
+
+| 技術分類 | 技術名 |
+| :--- | :--- |
+| 言語 | TypeScript |
+
+</details>
+`;
+
+describe('SkillSheetViewer', () => {
+  it('生HTML（<details>/<summary>）を要素として描画し、生HTMLコードを文字列で表示しない', async () => {
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: DETAILS_CONTENT }} />);
+
+    // <summary> 内の見出しテキストが「要素」として描画されている。
+    // 目次（サイドバー）にも同じ見出しテキストが出るため、本文（.markdown-content）配下に
+    // scope して h2 要素の存在を確認する。
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('スキル・経験年数')).toBeInTheDocument();
+    });
+
+    // 生HTMLタグが文字列としてそのまま表示されていないこと（rehype-raw 回帰防止）
+    const root = document.querySelector('.markdown-content');
+    expect(root?.textContent ?? '').not.toContain('<summary');
+    expect(root?.textContent ?? '').not.toContain('<details');
+    expect(root?.textContent ?? '').not.toContain('display: inline');
+
+    // details 要素として描画されている
+    expect(document.querySelector('details')).not.toBeNull();
+    // テーブルも通常どおり描画される
+    expect(screen.getByText('TypeScript')).toBeInTheDocument();
+  });
+
+  it('GFM の列 alignment を th/td の inline text-align として適用する', async () => {
+    const ALIGN_TABLE = `| 左 | 中 | 右 |
+| :--- | :---: | ---: |
+| a | b | c |
+`;
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: ALIGN_TABLE }} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('a')).toBeInTheDocument();
+    });
+
+    const markdown = document.querySelector('.markdown-content') as HTMLElement;
+    // ヘッダ（th）に列ごとの alignment が反映される
+    const headers = Array.from(markdown.querySelectorAll('th')) as HTMLTableCellElement[];
+    expect(headers.map((th) => th.style.textAlign)).toEqual(['left', 'center', 'right']);
+    // 本文（td）にも同じ alignment が反映される
+    const cells = Array.from(markdown.querySelectorAll('tbody td')) as HTMLTableCellElement[];
+    expect(cells.map((td) => td.style.textAlign)).toEqual(['left', 'center', 'right']);
+  });
+
+  it('連続する skills ブロックを1つのグループにまとめ、空の skills ブロックは描画しない（A4）', async () => {
+    const blocks: Block[] = [
+      {
+        id: 'b1',
+        type: 'skills',
+        order: 0,
+        data: { category: '言語', skills: [{ name: 'TS', years: 3, level: '★★☆' }] },
+      },
+      {
+        id: 'b2',
+        type: 'skills',
+        order: 1,
+        data: { category: 'DB', skills: [{ name: 'PG', years: 2, level: '★☆☆' }] },
+      },
+      { id: 'b3', type: 'skills', order: 2, data: { category: '空', skills: [] } },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('TS')).toBeInTheDocument();
+    });
+
+    // 2つの非空 skills ブロックが1つのグリッドコンテナにまとまる（独立カード2個ではない）。
+    const categoryHeadings = screen.getAllByText(/^(言語|DB)$/);
+    expect(categoryHeadings).toHaveLength(2);
+    const containers = new Set(categoryHeadings.map((h) => h.closest('.grid')));
+    expect(containers.size).toBe(1);
+    expect(containers.has(null)).toBe(false);
+
+    // 空の skills ブロック（category: '空'）はどこにも描画されない。
+    expect(screen.queryByText('空')).toBeNull();
+  });
+
+  it('中身が空の profile ブロックは描画しない（issue #128: 迷子の "SKILL SHEET" kicker を防ぐ）', async () => {
+    const blocks: Block[] = [
+      {
+        id: 'p1',
+        type: 'profile',
+        order: 0,
+        data: { name: '', title: '', pr: '', strengths: [], meta: {} },
+      },
+      { id: 'm1', type: 'markdown', order: 1, data: { markdown: '## 目印' } },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText('SKILL SHEET')).toBeNull();
+  });
+
+  it('中身が空の experience ブロックは描画せず、目次にも出ない（issue #128: 「（現在）」孤立ブロック）', async () => {
+    const blocks: Block[] = [
+      { id: 'm1', type: 'markdown', order: 0, data: { markdown: '## 職務経歴' } },
+      {
+        id: 'e1',
+        type: 'experience',
+        order: 1,
+        data: { company: '', startDate: '', endDate: '', role: '', description: '' },
+      },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('職務経歴')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/現在/)).toBeNull();
+  });
+
+  it('全ラベル・全セルが空の table ブロックは描画しない（issue #128: 空の枠線グリッド）', async () => {
+    const blocks: Block[] = [
+      { id: 'm1', type: 'markdown', order: 0, data: { markdown: '## 目印' } },
+      {
+        id: 't1',
+        type: 'table',
+        order: 1,
+        data: { columns: [{ label: '', align: 'left' }], rows: [['']] },
+      },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    expect(document.querySelector('table')).toBeNull();
+  });
+
+  it('複数の markdown ブロックに同じ見出しテキストがあっても id を一意化し、React の重複key警告を出さない', async () => {
+    // 各 markdown ブロックは独立した <ReactMarkdown>（rehype-slug も独立実行）で描画されるため、
+    // 同じ見出しテキストを持つブロックが複数あると rehype-slug が同一 id を付与してしまう
+    // （TableOfContents の key 重複・アンカー衝突の原因になっていた実際のバグの再現）。
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const blocks: Block[] = [
+      { id: 'b1', type: 'markdown', order: 0, data: { markdown: '## プロジェクト概要\n\n案件A' } },
+      { id: 'b2', type: 'markdown', order: 1, data: { markdown: '## プロジェクト概要\n\n案件B' } },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('案件A')).toBeInTheDocument();
+      expect(screen.getByText('案件B')).toBeInTheDocument();
+    });
+
+    const ids = Array.from(document.querySelectorAll('.markdown-content h2[id]')).map((el) => el.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+
+    const duplicateKeyWarning = consoleErrorSpy.mock.calls.some((args) =>
+      String(args[0]).includes('Encountered two children with the same key'),
+    );
+    expect(duplicateKeyWarning).toBe(false);
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('ダッシュボードのセクション間隔は SP で space-y-8、sm 以上で space-y-12（#190: SP の fold 内情報量を増やす）', async () => {
+    // isDashboard は project ブロックの有無で決まる（sheet-view-client.tsx と同じ判定）。
+    const blocks: Block[] = [
+      { id: 'p1', type: 'project', order: 0, data: { companies: [], items: [] } },
+      { id: 'm1', type: 'markdown', order: 1, data: { markdown: '## 目印' } },
+    ];
+    const { container } = render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    // 外側（contentRef）と内側（ブロック列）の2箇所が同じ間隔指定を持つ。
+    // 片方だけ直すとダッシュボードの縦リズムがズレるため両方を固定する。
+    const spaced = Array.from(container.querySelectorAll('div')).filter((el) =>
+      el.className.includes('space-y-8'),
+    ) as HTMLElement[];
+    expect(spaced).toHaveLength(2);
+    for (const el of spaced) {
+      expect(el.className).toContain('sm:space-y-12');
+    }
+  });
+
+  it('非ダッシュボード（project ブロック無し）のブロック列には space-y-8 を付けない（既存レイアウトの互換維持）', async () => {
+    const blocks: Block[] = [{ id: 'm1', type: 'markdown', order: 0, data: { markdown: '## 目印' } }];
+    const { container } = render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      const markdown = document.querySelector('.markdown-content') as HTMLElement;
+      expect(within(markdown).getByText('目印')).toBeInTheDocument();
+    });
+
+    expect(container.querySelector('[class*="space-y-8"]')).toBeNull();
+  });
+
+  it('SkillMatrix グリッドの列最小幅が min(240px,100%) でコンテナ幅を超えない（320px 幅での横スクロール回帰防止）', async () => {
+    const blocks: Block[] = [
+      {
+        id: 'b1',
+        type: 'skills',
+        order: 0,
+        data: { category: '言語', skills: [{ name: 'TS', years: 3, level: '★★☆' }] },
+      },
+    ];
+    const { container } = render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('TS')).toBeInTheDocument();
+    });
+
+    const grid = container.querySelector('[class*="grid-template-columns"]') as HTMLElement;
+    expect(grid).not.toBeNull();
+    // 固定 240px の minmax だけだと 320px 幅で列自体がコンテナよりはみ出す
+    // （実機/Playwright 計測で確認済み）。min() でコンテナ幅を上限にキャップする。
+    expect(grid.className).toContain('minmax(min(240px,100%),1fr)');
+  });
+
+  it('相対パスの画像を押すと、押した画像そのものが Lightbox で開く', async () => {
+    const user = userEvent.setup();
+    // 画面の <img src> は絶対URLへ解決されるので、Markdown の生値（相対パス）と
+    // そのまま比較すると必ず -1 になり、別のスライドが開いていた。
+    const content = '![一枚目](/uploads/a.png)\n\n![二枚目](/uploads/b.png)\n';
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content }} />);
+
+    const second = await screen.findByAltText('二枚目');
+    await user.click(second);
+
+    const lightbox = await screen.findByTestId('lightbox');
+    expect(lightbox).toHaveAttribute('data-index', '1');
+    expect(lightbox.getAttribute('data-src')).toContain('/uploads/b.png');
+  });
+});

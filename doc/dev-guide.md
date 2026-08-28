@@ -6,21 +6,34 @@
 
 ### 開発
 
-- `pnpm dev` - 開発サーバーを起動（`apps/web`）
+- `pnpm dev` - 開発サーバーを起動
 - `pnpm build` - 本番用ビルドを実行
 - `pnpm start` - ビルド後のサーバーを起動
 
 ### テスト
 
-- `pnpm test` - 全パッケージのテストを実行（vitest）
-- `pnpm --filter @skillsheet/web test:watch` - 監視モードでテスト実行
-- `pnpm --filter @skillsheet/web test:coverage` - カバレッジ付きでテスト実行
+- `pnpm test` - 全テストを実行（vitest）
+
+  環境ごとに3本の設定へ分かれている。共通部分は `vitest.shared.ts` にあり、各設定は
+  `mergeConfig` でそれを取り込む。
+
+  | 設定 | 環境 | 対象 |
+  | --- | --- | --- |
+  | `vitest.config.ts` | jsdom | 画面（`app/` `src/` の `*.test.ts(x)`） |
+  | `vitest.config.node.ts` | node | `src/db/**` と `scripts/**` |
+  | `vitest.config.pdf.ts` | node | `*.node.test.tsx`（PDF の実バイト描画） |
+
+  `src/db` と `scripts` はサーバ／CLI で動くコードなので、jsdom に混ぜない。混ぜると
+  `window` / `document` が生えたうえブラウザ用 setup まで読み込まれ、本番と違う分岐を
+  通っても緑のままになる。
+- `pnpm test:watch` - 監視モードでテスト実行
+- `pnpm test:coverage` - カバレッジ付きでテスト実行
 
 ### コード品質
 
 - `pnpm lint` - Biome でコードをチェック（`biome check`）
 - `pnpm format` - Biome でフォーマット（`biome format --write`）
-- `pnpm -r type-check` - TypeScript 型チェック（全パッケージ）
+- `pnpm type-check` - TypeScript 型チェック（全パッケージ）
 
 ### DB（Drizzle）
 
@@ -29,22 +42,25 @@
 
 ## プロジェクト構成
 
+リポジトリルートがそのまま Next.js のプロジェクトルート（パッケージは1つだけ）。
+
 ```
 .
-├── apps/
-│   └── web/                 # Next.js 16 アプリ（App Router）
-│       ├── app/             # ルーティング（App Router: page.tsx / layout.tsx / route.ts）
-│       └── src/
-│           ├── component/   # 機能コンポーネント（PDF 含む）
-│           ├── components/  # shadcn/ui ベースの UI 部品
-│           ├── context/     # React Context
-│           ├── hooks/       # カスタムフック
-│           ├── lib/         # 認証クライアント・tRPC クライアントなどの共通設定
-│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション・tRPC router）
-│           │   └── trpc/    # tRPC: context / init / router / server caller
-│           └── util/        # ユーティリティ関数
-└── packages/
-    └── db/                  # Drizzle ORM + Neon（スキルシートの正本）
+├── app/                 # ルーティング（App Router: page.tsx / layout.tsx / route.ts）
+├── src/
+│   ├── components/      # コンポーネント（PDF 含む）
+│   │   └── ui/          # shadcn/ui ベースの UI 部品
+│   ├── context/         # React Context
+│   ├── db/              # Drizzle ORM + Neon（スキルシートの正本）
+│   ├── hooks/           # カスタムフック
+│   ├── lib/             # 認証クライアント・tRPC クライアントなどの共通設定
+│   ├── server/          # サーバー専用ロジック（認証ゲート・セッション・tRPC router）
+│   │   └── trpc/        # tRPC: context / init / router / server caller
+│   └── util/            # ユーティリティ関数
+├── drizzle/             # マイグレーション（drizzle.config.ts はルート）
+├── e2e/                 # Playwright の E2E
+├── scripts/             # CLI スクリプトと CI 用チェッカー
+└── public/              # 静的ファイル（フォント等）
 ```
 
 ## コーディング規約
@@ -63,7 +79,7 @@
 - **この規約は `scripts/check-naming.sh` が機械的に検査する。**
   `task naming` でローカル確認でき、CI（`.github/workflows/ci.yml` の naming ジョブ）でも必ず走る。
   例外を増やすときは同スクリプトの `is_exempt()` に理由付きで追加する（無言で足さない）
-- サーバー専用モジュール（`apps/web/src/server` や `packages/db`）は Client Component から import しない
+- サーバー専用モジュール（`src/server` や `src/db`）は Client Component から import しない
 
 ### TypeScript
 
@@ -79,7 +95,7 @@
 ### スタイリング
 
 - Tailwind CSS v4 + shadcn/ui（Radix UI）を使用
-- 共通 UI 部品は `apps/web/src/components/ui` に集約
+- 共通 UI 部品は `src/components/ui` に集約
 
 ## Markdown レンダリング
 
@@ -97,7 +113,7 @@
 
 詳細は `prompt/prompt.md` の「認証の2系統設計」を参照。
 
-- 編集者ログイン: Better Auth（`apps/web/src/lib/auth.ts` / `server/auth-gate.ts`）
+- 編集者ログイン: Better Auth（`src/lib/auth.ts` / `server/auth-gate.ts`）
 - 閲覧コード: HMAC + VIEWER_CODE（`server/session.ts` / `server/viewer-gate.ts`）
 
 ## 依存の脆弱性対応
@@ -161,14 +177,14 @@ story の `tags: ['autodocs']` はこれを addons に入れないとドキュ�
 1. `node_modules` を削除して再インストール
 
    ```bash
-   rm -rf node_modules apps/web/node_modules packages/db/node_modules
+   rm -rf node_modules
    pnpm install
    ```
 
 2. 型エラーの切り分け
 
    ```bash
-   pnpm -r type-check
+   pnpm type-check
    ```
 
 ### スキルシートが表示されない

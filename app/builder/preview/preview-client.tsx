@@ -1,0 +1,112 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import SkillSheetViewer from '@/components/skill-sheet-viewer';
+
+import { SyncBar, type SyncState } from './sync-bar';
+
+// builder-client.tsx と共有するキー（別ウィンドウ連携用）。
+const PREVIEW_CHANNEL_NAME = 'builder-preview';
+const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
+
+/**
+ * この時間だけ何も届かなければ「同期が途切れた」とみなす。
+ * 編集側は内容が変わらなくても 4 秒ごとに生存確認を送る（builder-client の
+ * PREVIEW_HEARTBEAT_MS）ので、手が止まっているだけの状態では途切れ扱いにならない。
+ */
+const STALE_AFTER_MS = 12_000;
+
+type PreviewPayload = { title: string; content: string };
+
+const isPreviewPayload = (value: unknown): value is PreviewPayload =>
+  typeof value === 'object' &&
+  value !== null &&
+  typeof (value as PreviewPayload).title === 'string' &&
+  typeof (value as PreviewPayload).content === 'string';
+
+export default function PreviewClient() {
+  const [payload, setPayload] = useState<PreviewPayload | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+  const [syncState, setSyncState] = useState<SyncState>('live');
+  const channelRef = useRef<BroadcastChannel | null>(null);
+  // window.open() で開かれた別窓は必ず window.opener を持つ（後で閉じられても消えない）。
+  // このURLへ直接アクセスした場合は最初から null。lastUpdatedAt はローカルストレージの
+  // シード（前回セッションの残留データ）でも立ってしまうため、standalone/closed の判定は
+  // lastUpdatedAt ではなくマウント時の window.opener の有無で行う（レビュー指摘: 過去に
+  // 一度でも別窓を開いたことがあるブラウザで直接アクセスすると、古いシードのせいで
+  // 「編集画面が閉じられました」と誤表示していた）。
+  const hadOpenerRef = useRef(typeof window !== 'undefined' && !!window.opener);
+
+  /** BroadcastChannel を張り直す。初回マウントと「再接続」ボタンの両方から呼ぶ。 */
+  const connect = useCallback(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    channelRef.current?.close();
+    const channel = new BroadcastChannel(PREVIEW_CHANNEL_NAME);
+    channel.onmessage = (event) => {
+      if (!isPreviewPayload(event.data)) return;
+      setPayload(event.data);
+      setLastUpdatedAt(Date.now());
+      setSyncState('live');
+    };
+    channelRef.current = channel;
+  }, []);
+
+  useEffect(() => {
+    // マウント時: window.open 直前にエディタ側がシード保存した内容を読み、
+    // 別窓を開いた瞬間から即座にプレビューが見える状態にする。
+    // hadOpenerRef が false（このURLへの直接アクセス）の場合は読み込まない。
+    // ここを無条件にすると、過去に別窓プレビューを開いたブラウザで直接アクセスした際、
+    // localStorage に残った前回セッションの内容が「表示できるプレビューがありません」の
+    // 下に薄く表示され続けてしまう（レビュー指摘）。
+    if (hadOpenerRef.current) {
+      try {
+        const seeded = localStorage.getItem(PREVIEW_STORAGE_KEY);
+        if (seeded) {
+          const parsed = JSON.parse(seeded);
+          if (isPreviewPayload(parsed)) {
+            setPayload(parsed);
+            setLastUpdatedAt(Date.now());
+          }
+        }
+      } catch {
+        // localStorage が読めない環境では BroadcastChannel の初回更新を待つ。
+      }
+    }
+    connect();
+    return () => channelRef.current?.close();
+  }, [connect]);
+
+  // 状態の判定は「編集画面が生きているか」→「最近更新が来たか」の順。
+  // 編集画面が閉じられた場合は再接続しても内容は来ないので、再接続ボタンを出さない。
+  //
+  // openerGone は「一度も接続していない（このURLへ直接アクセスした）」と
+  // 「接続後に編集画面が閉じられた」の両方で true になる。hadOpenerRef（マウント時に
+  // window.opener があったか）で前者を判別し、実態と食い違う「表示は最後の内容です」
+  // という文言を出さないようにする（#151 U-5）。
+  useEffect(() => {
+    const tick = () => {
+      const openerGone = typeof window !== 'undefined' && (!window.opener || window.opener.closed);
+      if (openerGone) {
+        setSyncState(hadOpenerRef.current ? 'closed' : 'standalone');
+        return;
+      }
+      setSyncState(lastUpdatedAt && Date.now() - lastUpdatedAt > STALE_AFTER_MS ? 'stale' : 'live');
+    };
+    tick();
+    const timer = window.setInterval(tick, 2_000);
+    return () => window.clearInterval(timer);
+  }, [lastUpdatedAt]);
+
+  return (
+    <>
+      <SyncBar state={syncState} lastUpdatedAt={lastUpdatedAt} onReconnect={connect} />
+      <div className={`mx-auto max-w-4xl px-4 py-6 sm:px-6 ${syncState === 'live' ? '' : 'stale-body'}`}>
+        <SkillSheetViewer
+          skillSheet={{ title: payload?.title?.trim() || 'プレビュー', content: payload?.content ?? '' }}
+          compareMode
+        />
+      </div>
+    </>
+  );
+}
