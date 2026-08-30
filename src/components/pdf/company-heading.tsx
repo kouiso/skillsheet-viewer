@@ -9,6 +9,7 @@
  */
 
 import { StyleSheet, View } from '@react-pdf/renderer';
+import type { ComponentProps } from 'react';
 
 import { DynamicView, type PageRenderProps, Paragraph, PrintText } from './print-primitives';
 import { PRINT_COLOR, PRINT_SIZE, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
@@ -25,7 +26,26 @@ import type { PrintCompany } from './print-view-model';
  * 分割可能なノードをその場で割る。実測でも帯 1 行目だけが前ページに残り、案件数の行と
  * 下端の罫線が次ページへ落ちた（残り高さ 54〜4pt のとき）。だから枠は `wrap={false}` にする。
  */
-const MIN_PRESENCE_AHEAD = 120;
+/**
+ * 会社見出しの後ろにこれだけの高さが残っていなければ、会社ごと次のページへ送る（pt）。
+ *
+ * 120 だった頃は、見出しの下に案件カードの頭だけが覗く形でページが終わり、読み手は
+ * ページの下端で所属が切り替わったことに気づけなかった（実測: 38 ページ版の p30 で
+ * B 社の見出しがページ下端から 134pt = 紙面の下 18% の位置に出ていた）。
+ *
+ * 240pt は「見出し + 概要 + 最初のカードの頭とメタ表」がまとまって見える高さ。
+ * 実データで会社見出しが最も下に来るページでも、下端から 486pt（紙面の上 4 割の中）に
+ * 収まる。会社ごとに必ず改ページする案（46 ページ・平均充填率 77%・半分以上白い
+ * ページ 7 枚）と比べ、42 ページ・平均 85%・半分以上白いページ 2 枚で済む。
+ *
+ * **この値が効くには、見出しが Page 直下の子でなければならない**（print-document.tsx の
+ * CompanySection を参照）。@react-pdf は「親の最初の子は既にページ先頭にいる」と見なして
+ * minPresenceAhead を無視するので、会社全体を 1 枚の View で囲うと見出しは必ずその最初の子に
+ * なり、120 でも 320 でも出力が 1 ページも変わらない（実測）。Page 直下なら前の会社が
+ * 先行兄弟になるので、そのまま効く。実測: 60pt にすると会社見出しが下端から 191pt の位置
+ * （紙面の下 2 割）まで降り、240pt では最も下でも 458pt に収まる。
+ */
+const MIN_PRESENCE_AHEAD = 240;
 
 /**
  * 会社概要を帯と同じ分割単位（`wrap={false}`）に入れてよい上限の文字数。
@@ -106,11 +126,25 @@ const styles = StyleSheet.create({
   note: { paddingTop: 6, paddingHorizontal: 10 },
 });
 
+/** View に渡せるスタイル。@react-pdf は Style 型を公開していないので、実物から引く。 */
+type ViewStyle = ComponentProps<typeof View>['style'];
+
 export function CompanyHeading({
   company,
   onFirstPage,
+  railStyle,
 }: {
   company: PrintCompany;
+  /**
+   * 会社セクション左のレール（縦罫線）とその内側の余白。**この見出しの根の View に直接
+   * 当てる**（上に View を 1 枚も足さない）。
+   *
+   * レールを見出しごと囲う View に持たせていた頃は、余白が足りず見出しが次ページへ
+   * 送られたとき、囲いの View だけが前のページに断片として残り、中身の無い縦線が
+   * ページ下端まで伸びていた（実測: 42 ページ版の p15）。レールを根に載せると、
+   * 見出しが送られたときレールも一緒に送られる。
+   */
+  railStyle?: ViewStyle;
   /**
    * この見出しが実際に乗ったページ番号を通知する（会社の「つづき」見出しの判定に使う）。
    * 見出し自体は `wrap={false}` で 1 ページに収まる保証があるので、確定パス
@@ -136,7 +170,7 @@ export function CompanyHeading({
     // `wrap={false}` を付けたこの View は**このコンポーネントの根**でなければならない。
     // 上にもう 1 枚 View を挟むと、残り高さが 54〜14pt のときページ送りではなく圧縮が
     // 走り、帯の余白が潰れて 2 行目がフッター（下から 46pt）に食い込む（実測）。
-    <View wrap={false} minPresenceAhead={MIN_PRESENCE_AHEAD}>
+    <View style={railStyle} wrap={false} minPresenceAhead={MIN_PRESENCE_AHEAD}>
       {onFirstPage && (
         <DynamicView
           render={(pageProps) => {
@@ -167,10 +201,15 @@ export function CompanyHeading({
   );
 
   if (noteFitsInBlock) return block;
+  // 概要が長すぎて同じ分割単位に入らない場合。**囲いの View を足さない** —
+  // 足すと minPresenceAhead を持つ block がその囲いの最初の子になり、@react-pdf が
+  // 「親の最初の子は既にページ先頭にいる」と見なして余白の要求を無視する
+  // （レビュー指摘。print-document.tsx の高さ 0 の View と同じ仕組み）。
+  // block と概要を並べて返し、レールは呼び出し側が両方に当てる。
   return (
-    <View>
+    <>
       {block}
-      {note}
-    </View>
+      <View style={railStyle}>{note}</View>
+    </>
   );
 }
