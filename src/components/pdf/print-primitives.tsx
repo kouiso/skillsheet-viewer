@@ -161,13 +161,16 @@ export function createSpanTracker() {
     },
     /** 指定ページの先頭で開いている単位のラベルを返す（無ければ undefined）。 */
     openLabel(pageNumber: number): string | undefined {
+      // 同じページで始まった単位が 2 つあるとき（前の会社が終わった直後に次が始まる）、
+      // start の大小だけで選ぶと先に登録された方が残り、それが既に閉じていると
+      // 継続ページの見出しが消える。まだ閉じていない候補だけを見て、同点は登録順で後を採る。
       let latest: Span | undefined;
       for (const span of order) {
-        if (span.start < pageNumber && (latest === undefined || span.start > latest.start)) latest = span;
+        if (span.start >= pageNumber) continue;
+        if (span.end !== undefined && span.end < pageNumber) continue;
+        if (latest === undefined || span.start >= latest.start) latest = span;
       }
-      if (!latest) return undefined;
-      if (latest.end !== undefined && latest.end < pageNumber) return undefined;
-      return latest.label;
+      return latest?.label;
     },
   };
 }

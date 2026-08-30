@@ -159,10 +159,14 @@ export function ProjectCardCompact({
 
   // 詳細版のメタ表（役割・技術領域・担当工程）に対応する情報を、簡約版では表ではなく
   // 1 行の密な文字列にまとめる。「チーム」はチーム列に既に出ているのでここでは重複させない。
-  const metaLine = project.metaRows
-    .filter((metaRow) => metaRow.label !== 'チーム')
-    .map((metaRow) => `${metaRow.label}：${metaRow.value}`)
-    .join(' ／ ');
+  // 期間の長さ（15 ヶ月 等）は画面の案件カードには出ているのに、簡約版の期間列は
+  // 短縮した年月しか出せない。ここへ入れて落とさない。
+  const metaLine = [
+    ...(project.durationText ? [`期間：${project.durationText}`] : []),
+    ...project.metaRows
+      .filter((metaRow) => metaRow.label !== 'チーム')
+      .map((metaRow) => `${metaRow.label}：${metaRow.value}`),
+  ].join(' ／ ');
   // 詳細版の技術チップと同じ全件（件数上限は無い）。分類ラベルの列を持たず 1 本にまとめる。
   const techChips = project.techGroups.flatMap((group) => group.chips);
   const hasMetaOrTech = metaLine.length > 0 || techChips.length > 0;
