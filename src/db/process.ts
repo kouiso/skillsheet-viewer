@@ -178,6 +178,19 @@ export function parseStart(period: string): number | null {
 export interface PeriodBounds {
   start: number;
   end: number;
+  /**
+   * 開始・終了とも月まで書かれていたか。`2020` のような年だけの表記や、終了が未記載の
+   * 場合は false。月数を数えて「（1ヶ月）」と出す側は、これが false のとき数えてはいけない
+   * （`2020` を点の期間として 1 ヶ月と表示していた）。
+   */
+  precise: boolean;
+  /** 終端が「現在」か。終わりが決まっていないので、幅や月数を確定値として出さない。 */
+  openEnded: boolean;
+}
+
+/** 月まで書かれている表記か（`2020` のような年だけの表記を弾く）。 */
+function hasMonthPrecision(token: string): boolean {
+  return /^\d{4}\s*[-.]\s*\d{1,2}$|^\d{4}-\d{1,2}-\d{1,2}$|^\d{4}\s*年\s*\d{1,2}\s*月$/.test(token.trim());
 }
 
 /**
@@ -189,15 +202,24 @@ export function parsePeriodBounds(period: string): PeriodBounds | null {
   const [startToken, endToken] = splitPeriodRange(period);
   const start = parseYearMonth(startToken);
   if (start === null) return null;
+  const startPrecise = hasMonthPrecision(startToken);
   if (/現在/.test(endToken)) {
+    // 終端「現在」は実行時点。描画に使う側は openEnded を見て、時計に依存しない値へ
+    // 置き換えること（サーバとブラウザで月をまたぐと違う結果になり、hydration がずれる）。
     const now = new Date();
     const end = now.getFullYear() + now.getMonth() / 12;
-    return { start, end: Math.max(end, start) };
+    return { start, end: Math.max(end, start), precise: startPrecise, openEnded: true };
   }
-  if (!endToken) return { start, end: start };
+  // 終了が未記載なら「終わりが分からない」であって、開始と同じ月に終わったのではない。
+  if (!endToken) return { start, end: start, precise: false, openEnded: false };
   const end = parseYearMonth(endToken);
   if (end === null) return null;
-  return { start, end: Math.max(end, start) };
+  return {
+    start,
+    end: Math.max(end, start),
+    precise: startPrecise && hasMonthPrecision(endToken),
+    openEnded: false,
+  };
 }
 
 /**

@@ -17,8 +17,11 @@ export function companyTenureLabel(period: string): string {
   const trimmed = period.trim();
   if (!trimmed) return '';
   const bounds = parsePeriodBounds(trimmed);
-  const months = bounds ? Math.round((bounds.end - bounds.start) * 12) + 1 : 0;
   const display = formatPeriodDisplay(trimmed);
+  // 年だけの表記・終了未記載・終端「現在」は月数を数えない。数えると `2020` が
+  // 「在籍 2020（1ヶ月）」になり、書いていない精度を勝手に足すことになる。
+  if (!bounds?.precise || bounds.openEnded) return `在籍 ${display}`;
+  const months = Math.round((bounds.end - bounds.start) * 12) + 1;
   return months > 0 ? `在籍 ${display}（${months}ヶ月）` : `在籍 ${display}`;
 }
 
@@ -28,6 +31,8 @@ export function companyCountLabel(shown: number, total: number, isSearching: boo
 
 interface CompanySectionProps {
   companyId: string;
+  /** 同じ会社 ID を持つ project ブロックが 2 つあるときに id が衝突しないようにする接尾辞。 */
+  headingIdSuffix?: string;
   company: CompanyInfo | undefined;
   items: NumberedProject[];
   totalCount: number;
@@ -38,6 +43,7 @@ interface CompanySectionProps {
 
 export function CompanySection({
   companyId,
+  headingIdSuffix,
   company,
   items,
   totalCount,
@@ -58,7 +64,7 @@ export function CompanySection({
 
   return (
     <section
-      id={`company-${companyId}`}
+      id={`company-${companyId}${headingIdSuffix ?? ''}`}
       aria-label={tenure ? `${name}（${company?.period}）` : name}
       className="flex min-w-0 scroll-mt-40 flex-col gap-4 sm:scroll-mt-[4.75rem]"
     >
