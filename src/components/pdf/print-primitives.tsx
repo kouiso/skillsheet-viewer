@@ -18,6 +18,7 @@ import type { ComponentProps, ComponentType, ReactNode } from 'react';
 
 import { isSafeLinkHref } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constants';
+import { toRenderableText } from './glyph-coverage';
 import { PRINT_COLOR, PRINT_SIZE, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
 import type { PrintChip, PrintMetaRow, PrintTechGroup } from './print-view-model';
 
@@ -28,9 +29,41 @@ const HYPHENATION_PENALTY_SUPPRESSED = 100000;
 type PrintTextProps = ComponentProps<typeof PdfText> & { hyphenationPenalty?: number };
 const PdfTextEx = PdfText as unknown as ComponentType<PrintTextProps>;
 
-/** 本文用の Text。ハイフン混入対策を既定で入れる。 */
+/**
+ * children のうち生の文字列だけを toRenderableText へ通す。
+ *
+ * ネストした要素（print-markdown.tsx が組む `<PrintText style={styles.strong}>…</PrintText>`
+ * の入れ子等）はそれぞれ自分の PrintText で処理されるので、ここでは文字列と配列だけを
+ * 見て要素・null・数値はそのまま素通しする（二重処理はしないが、しても toRenderableText は
+ * 冪等なので害はない）。
+ */
+function sanitizeChildren(node: ReactNode): ReactNode {
+  if (typeof node === 'string') return toRenderableText(node);
+  if (Array.isArray(node)) return node.map(sanitizeChildren);
+  return node;
+}
+
+/**
+ * 本文用の Text。ハイフン混入対策に加え、PDF に載る文字列は必ずここを通して
+ * 登録フォントが描けない文字（絵文字・補助面の拡張漢字等）を安全な代替へ倒す。
+ *
+ * @react-pdf/renderer 4.5.x は補助面文字のサブセット化・エンコードを正しく扱えず、
+ * 無関係なグリフが送り幅 0 で描かれて直後の文字まで潰す（glyph-coverage.ts 参照）。
+ * レガシー markdown 経路（render-nodes.tsx）は toRenderableText を自前で呼んでいるが、
+ * この印刷デザイン経路（DB 由来の全案件カード・1 ページ目・footer 等）はここを通る
+ * PrintText が唯一の共通出口なので、個々の呼び出し元（print-view-model.ts 等）で
+ * サニタイズを分散させず、ここ 1 箇所で担保する。
+ */
 export function PrintText({ hyphenationPenalty = HYPHENATION_PENALTY_SUPPRESSED, ...props }: PrintTextProps) {
-  return <PdfTextEx hyphenationPenalty={hyphenationPenalty} {...props} />;
+  // PrintTextProps は react-pdf 側の型が `PropsWithChildren<TextProps> | SVGTextProps` という
+  // union のため、`children` は分割代入で直接名前を取れない（SVGTextProps 側に無い）。
+  // `in` で絞ってから読む。
+  const rawChildren: ReactNode = 'children' in props ? props.children : undefined;
+  return (
+    <PdfTextEx hyphenationPenalty={hyphenationPenalty} {...props}>
+      {sanitizeChildren(rawChildren)}
+    </PdfTextEx>
+  );
 }
 
 /** fixed な running header / footer と、カードの継続ヘッダーに渡る値。 */
