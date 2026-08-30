@@ -121,4 +121,14 @@ describe('TechFilter', () => {
     expect(document.getElementById(activeId as string)).toHaveAttribute('role', 'option');
     expect(document.getElementById(activeId as string)).toHaveAttribute('aria-selected', 'true');
   });
+
+  it('検索欄の下に OR/AND のヒントを出す', () => {
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);
+    expect(screen.getByText(/スペース区切りはどれかを含む案件/)).toBeInTheDocument();
+  });
+
+  it('クエリに AND が入っていれば AND のヒントに切り替える', () => {
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} query="React AND TypeScript" />);
+    expect(screen.getByText(/すべての語を含む案件だけを表示/)).toBeInTheDocument();
+  });
 });

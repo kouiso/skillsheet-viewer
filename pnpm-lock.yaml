@@ -15,7 +15,7 @@ overrides:
 
 patchedDependencies:
   '@react-pdf/textkit@6.3.0':
-    hash: b3c74cbd53f9be9d22be5d6331b298a703dda7cd6a7d8c9426e93c211390ca34
+    hash: cf9d1b07e319496586e063cac807f88a809f71fe6aabad688480364b93a7df15
     path: patches/@react-pdf__textkit@6.3.0.patch
 
 importers:
@@ -54,7 +54,7 @@ importers:
         version: 4.5.1(react@19.2.7)
       '@react-pdf/textkit':
         specifier: 6.3.0
-        version: 6.3.0(patch_hash=b3c74cbd53f9be9d22be5d6331b298a703dda7cd6a7d8c9426e93c211390ca34)
+        version: 6.3.0(patch_hash=cf9d1b07e319496586e063cac807f88a809f71fe6aabad688480364b93a7df15)
       '@tanstack/react-query':
         specifier: ^5.101.4
         version: 5.101.4(react@19.2.7)
@@ -259,7 +259,7 @@ importers:
         version: 4.5.1(react@19.2.7)
       '@react-pdf/textkit':
         specifier: 6.3.0
-        version: 6.3.0(patch_hash=b3c74cbd53f9be9d22be5d6331b298a703dda7cd6a7d8c9426e93c211390ca34)
+        version: 6.3.0(patch_hash=cf9d1b07e319496586e063cac807f88a809f71fe6aabad688480364b93a7df15)
       '@skillsheet/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -6528,7 +6528,7 @@ snapshots:
       '@react-pdf/image': 3.1.0
       '@react-pdf/primitives': 4.3.0
       '@react-pdf/stylesheet': 6.2.1
-      '@react-pdf/textkit': 6.3.0(patch_hash=b3c74cbd53f9be9d22be5d6331b298a703dda7cd6a7d8c9426e93c211390ca34)
+      '@react-pdf/textkit': 6.3.0(patch_hash=cf9d1b07e319496586e063cac807f88a809f71fe6aabad688480364b93a7df15)
       '@react-pdf/types': 2.11.1
       emoji-regex-xs: 1.0.0
       queue: 6.0.2
@@ -6560,7 +6560,7 @@ snapshots:
       '@babel/runtime': 7.29.7
       '@react-pdf/fns': 3.1.3
       '@react-pdf/primitives': 4.3.0
-      '@react-pdf/textkit': 6.3.0(patch_hash=b3c74cbd53f9be9d22be5d6331b298a703dda7cd6a7d8c9426e93c211390ca34)
+      '@react-pdf/textkit': 6.3.0(patch_hash=cf9d1b07e319496586e063cac807f88a809f71fe6aabad688480364b93a7df15)
       '@react-pdf/types': 2.11.1
       abs-svg-path: 0.1.1
       color-string: 2.1.4
@@ -6598,7 +6598,7 @@ snapshots:
     dependencies:
       '@react-pdf/primitives': 4.3.0
 
-  '@react-pdf/textkit@6.3.0(patch_hash=b3c74cbd53f9be9d22be5d6331b298a703dda7cd6a7d8c9426e93c211390ca34)':
+  '@react-pdf/textkit@6.3.0(patch_hash=cf9d1b07e319496586e063cac807f88a809f71fe6aabad688480364b93a7df15)':
     dependencies:
       '@react-pdf/fns': 3.1.3
       bidi-js: 1.0.3

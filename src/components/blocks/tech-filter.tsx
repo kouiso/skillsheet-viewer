@@ -2,6 +2,7 @@
 
 import { Search } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
+import { parseProjectQuery, SEARCH_HINT_AND, SEARCH_HINT_OR } from './project-search';
 
 export interface TechCount {
   name: string;
@@ -34,6 +35,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
 
   const activeSet = useMemo(() => new Set(active), [active]);
   const selected = useMemo(() => all.filter((t) => activeSet.has(t.name)), [all, activeSet]);
+  const searchHint = parseProjectQuery(query).requireAll ? SEARCH_HINT_AND : SEARCH_HINT_OR;
 
   const q = techQuery.trim().toLowerCase();
   const matches = useMemo(
@@ -83,6 +85,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
           </button>
         )}
       </div>
+      <p className="text-[12px] leading-relaxed text-muted-foreground">{searchHint}</p>
 
       <div className="relative min-w-[220px] max-w-[420px]">
         <input

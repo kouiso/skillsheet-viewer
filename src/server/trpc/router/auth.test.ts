@@ -70,7 +70,9 @@ describe('auth.login', () => {
     await expect(caller.login({ code: 'correct-code' })).resolves.toEqual({ ok: true });
     expect(responseHeaders?.get('set-cookie')).toContain('session=');
     expect(responseHeaders?.get('set-cookie')).toContain('HttpOnly');
-    expect(responseHeaders?.get('set-cookie')).toContain('SameSite=Strict');
+    // 共有リンクをメール/Slack/ATS から開く cross-site のトップレベル遷移でも
+    // cookie が付くよう Lax にした（session.ts の getSessionCookieOptions 参照）。
+    expect(responseHeaders?.get('set-cookie')).toContain('SameSite=Lax');
   });
 
   it('origin と host が不一致なら FORBIDDEN で cookie を発行しない', async () => {
