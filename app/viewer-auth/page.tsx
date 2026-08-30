@@ -120,10 +120,15 @@ const ViewerAuthPage = () => {
                 </label>
                 <Input
                   id="auth-code"
+                  name="auth-code"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   required
-                  autoComplete="off"
+                  // 元は autoComplete="off"。共有コードはメールを消すと再取得できず、
+                  // ブラウザ/パスワードマネージャが保存も補完もできないと締め出しに
+                  // 直結する。この欄はメールに書かれた共有コードの入力欄であり、
+                  // ログインID等ではないので個人情報の懸念も無い。name を明示し、
+                  // autoComplete も外して保存・補完を許可する。
                 />
               </div>
               <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={loginMutation.isPending}>
