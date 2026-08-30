@@ -167,8 +167,10 @@ function renderBlock(node: MdNode, key: string): ReactNode {
     return (
       <View key={key} style={styles.table}>
         {rows.map((row, ri) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: 表の行と列は位置そのものが識別子で、内容は重複しうる。
           <View key={`${key}-r${ri}`} style={ri === 0 ? styles.tableHeadRow : styles.tableRow}>
             {(row.children ?? []).map((cell, ci) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: 同上。列の位置が識別子。
               <PrintText key={`${key}-r${ri}-c${ci}`} style={ri === 0 ? styles.tableHeadCell : styles.tableCell}>
                 {renderInline(cell.children)}
               </PrintText>

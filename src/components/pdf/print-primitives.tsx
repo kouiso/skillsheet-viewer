@@ -196,8 +196,8 @@ const styles = StyleSheet.create({
     borderTopColor: PRINT_COLOR.rule,
     paddingTop: 5,
   },
-  footerIdentity: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label , flexShrink: 1 },
-  footerCounter: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label , flexShrink: 0 },
+  footerIdentity: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label, flexShrink: 1 },
+  footerCounter: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label, flexShrink: 0 },
 
   sectionLabel: { ...PRINT_TYPE.sectionLabel, color: PRINT_COLOR.heading, letterSpacing: 0.4 },
 

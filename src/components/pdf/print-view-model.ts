@@ -12,7 +12,6 @@
  */
 
 import type { Block, CompanyInfo, ProfileBlockData, ProjectItem, ProjectTech, StatsBlockData } from '@/db/blocks';
-import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/blocks';
 import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
 import {
@@ -29,6 +28,7 @@ import {
 } from '@/db/process';
 import type { DetailLevel } from '@/db/project-detail-level';
 import { resolveDetailLevels } from '@/db/project-detail-level';
+import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 import { resolveProjectArea } from '@/db/tech-area';
 
 import {
