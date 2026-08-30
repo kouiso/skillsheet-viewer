@@ -135,7 +135,9 @@ test('「スキルマトリクス」を OFF にすると PDF 1 ページ目か�
   await page.goto(`/view/db/${sheetId}`, { waitUntil: 'networkidle' });
 
   // 上部バーの「スキルマトリクス」ピルを OFF にする（既定は全 ON）。
-  const skillsToggle = page.getByRole('button', { name: 'スキルマトリクス' });
+  // 目次側にも同じ名前のボタンが出るので、上部バーの 1 つ目に絞る
+  // （pdf-print-views.spec.ts の skillToggleButton と同じ取り方）。
+  const skillsToggle = page.getByRole('button', { name: /スキルマトリクス/ }).first();
   await expect(skillsToggle).toHaveAttribute('aria-pressed', 'true');
   await skillsToggle.click();
   await expect(skillsToggle).toHaveAttribute('aria-pressed', 'false');
@@ -151,10 +153,13 @@ test('「スキルマトリクス」を OFF にすると PDF 1 ページ目か�
   expect(page1Text, 'スキルマトリクス OFF で出した PDF の 1 ページ目に主力スタックの見出しが無いこと').not.toContain(
     '主力スタック',
   );
+  // 「TypeScript」単体では判定できない — プロフィールの得意分野にも入っており、
+  // そちらはスキル表とは別の情報なので OFF でも残る（pdf-print-views.spec.ts の 14 番）。
+  // スキルブロック側にしか無い綴りで見る。
   expect(
     page1Text,
-    'スキルマトリクス OFF で出した PDF の 1 ページ目にスキル名チップ（TypeScript）が無いこと',
-  ).not.toContain('TypeScript');
+    'スキルマトリクス OFF で出した PDF の 1 ページ目にスキル名チップ（TypeScript / JavaScript）が無いこと',
+  ).not.toContain('JavaScript');
 
   await context.close();
 });
