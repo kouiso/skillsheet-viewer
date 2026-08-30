@@ -51,13 +51,17 @@ const SheetViewClient = ({
 
   const handleDownloadPdf = async () => {
     const toastId = toast.loading('PDFを生成中…');
+    // 生成に失敗したときの後始末。import が済んだ時点で掴んでおく — catch の中で
+    // 改めて動的 import すると、その await の分だけ finally が遅れてボタンが busy のまま残る。
+    let resetFontsOnFailure: (() => void) | undefined;
     try {
       setPdfLoading(true);
 
-      const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
+      const [{ pdf }, { SkillSheetPDF, resetPdfFontsAfterFailure }] = await Promise.all([
         import('@react-pdf/renderer'),
         import('@/components/pdf-export'),
       ]);
+      resetFontsOnFailure = resetPdfFontsAfterFailure;
 
       // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
       // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
@@ -83,8 +87,7 @@ const SheetViewClient = ({
       // （リロードしないと直らない「詰み」状態になる）。失敗のたびに登録をリセットし、
       // 次のクリックで新しい FontSource から取得し直させる（フォント取得以外の失敗
       // でも安全 — 単に次回また登録し直すだけで副作用は無い）。
-      const { resetPdfFontsAfterFailure } = await import('@/components/pdf/fonts');
-      resetPdfFontsAfterFailure();
+      resetFontsOnFailure?.();
     } finally {
       setPdfLoading(false);
     }

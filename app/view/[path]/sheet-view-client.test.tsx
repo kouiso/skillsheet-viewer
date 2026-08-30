@@ -24,7 +24,13 @@ vi.mock('sonner', () => ({
 // @react-pdf/renderer は jsdom で動かない上に読み込みが重いので、
 // handleDownloadPdf の分岐（成功/失敗）だけを制御できるモックに置き換える。
 vi.mock('@react-pdf/renderer', () => ({ pdf: () => ({ toBlob }), Font: { fontFamilies, register: vi.fn() } }));
-vi.mock('@/components/pdf-export', () => ({ SkillSheetPDF: () => null }));
+vi.mock('@/components/pdf-export', () => ({
+  SkillSheetPDF: () => null,
+  // 後始末は pdf-export から同じ import で受け取る（catch 内で再度 await しないため）。
+  resetPdfFontsAfterFailure: () => {
+    delete fontFamilies['Noto Sans JP'];
+  },
+}));
 
 // 本体（ビューア）の描画は本テストの対象外。トップバーは
 // 「どちらが出たか」と「押したら onDownloadPdf が走るか」だけ見えれば十分。

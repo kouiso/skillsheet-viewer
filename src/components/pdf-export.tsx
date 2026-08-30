@@ -45,4 +45,9 @@ export const SkillSheetPDF = ({ title, content, blocks, views }: SkillSheetPDFPr
   return <SkillSheetDocument title={title} content={content} />;
 };
 
+// 失敗時の後始末も同じモジュールから出す。呼び出し側の catch で改めて動的 import すると、
+// その await が終わるまで finally（ローディング解除）が走らず、ボタンが busy のまま残って
+// 「押し直し」自体ができなくなる（実測でボタンが aria-busy のまま固まった）。
+export { resetPdfFontsAfterFailure } from './pdf/fonts';
+
 export default SkillSheetPDF;
