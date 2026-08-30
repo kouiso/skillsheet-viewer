@@ -9,6 +9,13 @@ const toastLoading = vi.hoisted(() => vi.fn(() => 'toast-1'));
 const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 const toBlob = vi.hoisted(() => vi.fn(async () => new Blob(['pdf'], { type: 'application/pdf' })));
+// フォント取得の失敗が永久化しないよう、失敗のたびに Font.clear() で登録をリセットする
+// （src/components/pdf/fonts.ts の resetPdfFontsAfterFailure）。handleDownloadPdf の catch が
+// 動的 import する src/components/pdf/fonts.ts も内部で `import { Font } from '@react-pdf/renderer'`
+// しているため、このモックに Font を足さないと「モックに無い export」でテストが落ちる。
+// 後始末は「アプリが登録した family だけを消す」形。標準フォントを巻き込むと
+// 2 回目の生成が Helvetica 未登録で落ちるため（font-reset.node.test.tsx 参照）。
+const fontFamilies = vi.hoisted(() => ({ Helvetica: {}, 'Noto Sans JP': {} }) as Record<string, unknown>);
 
 vi.mock('sonner', () => ({
   toast: { loading: toastLoading, success: toastSuccess, error: toastError },
@@ -16,8 +23,14 @@ vi.mock('sonner', () => ({
 
 // @react-pdf/renderer は jsdom で動かない上に読み込みが重いので、
 // handleDownloadPdf の分岐（成功/失敗）だけを制御できるモックに置き換える。
-vi.mock('@react-pdf/renderer', () => ({ pdf: () => ({ toBlob }) }));
-vi.mock('@/components/pdf-export', () => ({ SkillSheetPDF: () => null }));
+vi.mock('@react-pdf/renderer', () => ({ pdf: () => ({ toBlob }), Font: { fontFamilies, register: vi.fn() } }));
+vi.mock('@/components/pdf-export', () => ({
+  SkillSheetPDF: () => null,
+  // 後始末は pdf-export から同じ import で受け取る（catch 内で再度 await しないため）。
+  resetPdfFontsAfterFailure: () => {
+    delete fontFamilies['Noto Sans JP'];
+  },
+}));
 
 // 本体（ビューア）の描画は本テストの対象外。トップバーは
 // 「どちらが出たか」と「押したら onDownloadPdf が走るか」だけ見えれば十分。
@@ -90,6 +103,11 @@ describe('SheetViewClient', () => {
       await waitFor(() => expect(toastError).toHaveBeenCalled());
       expect(toastError).toHaveBeenCalledWith('PDFの生成に失敗しました', { id: 'toast-1' });
       expect(toastSuccess).not.toHaveBeenCalled();
+      // 失敗のたびにアプリの family だけ登録を捨てる（次のクリックで新しい FontSource から
+      // 取得し直させ、@react-pdf/font の reject 済み loadResultPromise がキャッシュされ続けて
+      // 以後ずっと同じ失敗を再現する「詰み」状態を防ぐ）。標準フォントは残す。
+      await waitFor(() => expect(Object.keys(fontFamilies)).not.toContain('Noto Sans JP'));
+      expect(Object.keys(fontFamilies)).toContain('Helvetica');
       consoleErrorSpy.mockRestore();
     });
 

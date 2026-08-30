@@ -91,13 +91,18 @@ export function hasPeriodRangeSeparator(period: string): boolean {
 }
 
 // YYYY-MM-DD / YYYY.MM / YYYY年M月 / YYYY-MM / YYYY の順で試す。すべて失敗したら null。
+//
+// 「YYYY年M月」は空白の有無を問わない。実データの会社 period（CompanyInfo.period）は
+// 「2025 年 11 月〜2026 年 9 月」のように年・月の前後に半角スペースが入る表記で、
+// 空白無し限定の正規表現だとこの表記が一件も解釈できず、`parsePeriodBounds` に依存する
+// 判定（会社の最新判定など）が全社「解釈不能」で機能しなくなる（実測、company-grouping 作業）。
 function parseYearMonth(token: string): number | null {
   if (!token) return null;
   let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
   m = token.match(/^(\d{4})\.(\d{1,2})$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
-  m = token.match(/^(\d{4})年(\d{1,2})月$/);
+  m = token.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
   m = token.match(/^(\d{4})-(\d{1,2})$/);
   if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
@@ -168,6 +173,53 @@ export function parseTokenToDate(token: string): Date | undefined {
 export function parseStart(period: string): number | null {
   const [startToken] = splitPeriodRange(period);
   return parseYearMonth(startToken);
+}
+
+export interface PeriodBounds {
+  start: number;
+  end: number;
+  /**
+   * 開始・終了とも月まで書かれていたか。`2020` のような年だけの表記や、終了が未記載の
+   * 場合は false。月数を数えて「（1ヶ月）」と出す側は、これが false のとき数えてはいけない
+   * （`2020` を点の期間として 1 ヶ月と表示していた）。
+   */
+  precise: boolean;
+  /** 終端が「現在」か。終わりが決まっていないので、幅や月数を確定値として出さない。 */
+  openEnded: boolean;
+}
+
+/** 月まで書かれている表記か（`2020` のような年だけの表記を弾く）。 */
+function hasMonthPrecision(token: string): boolean {
+  return /^\d{4}\s*[-.]\s*\d{1,2}$|^\d{4}-\d{1,2}-\d{1,2}$|^\d{4}\s*年\s*\d{1,2}\s*月$/.test(token.trim());
+}
+
+/**
+ * period の開始・終了を parseYearMonth と同じ数値尺度で返す。
+ * 終端「現在」は実行時点の年月。解釈できない入力は null（新規パーサは持たない）。
+ */
+export function parsePeriodBounds(period: string): PeriodBounds | null {
+  if (typeof period !== 'string' || period.length === 0) return null;
+  const [startToken, endToken] = splitPeriodRange(period);
+  const start = parseYearMonth(startToken);
+  if (start === null) return null;
+  const startPrecise = hasMonthPrecision(startToken);
+  if (/現在/.test(endToken)) {
+    // 終端「現在」は実行時点。描画に使う側は openEnded を見て、時計に依存しない値へ
+    // 置き換えること（サーバとブラウザで月をまたぐと違う結果になり、hydration がずれる）。
+    const now = new Date();
+    const end = now.getFullYear() + now.getMonth() / 12;
+    return { start, end: Math.max(end, start), precise: startPrecise, openEnded: true };
+  }
+  // 終了が未記載なら「終わりが分からない」であって、開始と同じ月に終わったのではない。
+  if (!endToken) return { start, end: start, precise: false, openEnded: false };
+  const end = parseYearMonth(endToken);
+  if (end === null) return null;
+  return {
+    start,
+    end: Math.max(end, start),
+    precise: startPrecise && hasMonthPrecision(endToken),
+    openEnded: false,
+  };
 }
 
 /**
@@ -287,7 +339,16 @@ export function deriveCompanyPeriod(periods: string[]): string {
   return `${minStartToken} — ${maxEndToken}`;
 }
 
-const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
+export const TECH_BUCKET_ORDER: (keyof ProjectTech)[] = ['lang', 'fw', 'db', 'infra', 'tools', 'collab'];
+
+export const TECH_BUCKET_LABELS: Record<keyof ProjectTech, string> = {
+  lang: '言語',
+  fw: 'フレームワーク',
+  db: 'DB',
+  infra: 'インフラ',
+  tools: 'ツール',
+  collab: 'コラボレーションツール',
+};
 
 // 元データの「該当なし」プレースホルダ。技術名として取り込まれても描画時点で除外する。
 const EMPTY_TECH_PLACEHOLDERS = new Set(['-', 'ー', '—']);

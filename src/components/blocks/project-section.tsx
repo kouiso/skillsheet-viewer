@@ -2,11 +2,14 @@
 
 import { motion, useReducedMotion } from 'framer-motion';
 import { type ReactNode, useMemo, useState } from 'react';
-import { filterVisibleProjectData, type ProjectBlockData } from '@/db/blocks';
+import { filterVisibleProjectData, type ProjectBlockData, type ProjectItem } from '@/db/blocks';
+import { groupProjectsByCompany } from '@/db/group-by-company';
 import { flattenTech } from '@/db/process';
 import { projectAreaText } from '@/db/tech-area';
+import { CompanyJumpNav } from './company-jump-nav';
+import { CompanySection } from './company-section';
 import { ProcessOverview } from './process-overview';
-import { ProjectCard } from './project-card';
+import { matchesSearchTerms, parseProjectQuery } from './project-search';
 import { SectionHead } from './section-head';
 import { TechFilter } from './tech-filter';
 import { Timeline } from './timeline';
@@ -26,8 +29,6 @@ interface ProjectSectionProps {
   showTimeline?: boolean;
 }
 
-// ビュートグルで再マウントされた際のフェードアップ（プロトタイプの .fadeup 相当）。
-// prefers-reduced-motion 時は即時表示する。
 function FadeUpSection({ children }: { children: ReactNode }) {
   const reduceMotion = useReducedMotion();
   return (
@@ -41,9 +42,27 @@ function FadeUpSection({ children }: { children: ReactNode }) {
   );
 }
 
-// project ブロックを「工程の俯瞰・案件詳細（技術フィルタ付き）・タイムライン」の
-// 3セクションへ投影するダッシュボード。新ブロック型を増やさず、既存の project データの
-// ビュー層としてのみ実装する。
+export function projectSearchHaystack(
+  item: ProjectItem,
+  companyName: string,
+  companyNote: string,
+  tech: string[],
+): string {
+  return [
+    item.title,
+    projectAreaText(item.scope, item.tech),
+    item.role,
+    companyName,
+    companyNote,
+    // 表示側（project-card.tsx）は `summary?.trim() || duties`。`??` だと空文字の
+    // summary が採用され、カードに出ている duties の語で検索してもヒットしない。
+    item.summary?.trim() || item.duties,
+    item.acquired,
+    item.comment,
+    ...tech,
+  ].join(' ');
+}
+
 export function ProjectSection({
   data,
   headingIdSuffix,
@@ -54,20 +73,14 @@ export function ProjectSection({
   const [query, setQuery] = useState('');
   const [activeTech, setActiveTech] = useState<string[]>([]);
 
-  // hidden な会社・案件の除外はここが唯一の入口。番号付け・TechFilter の件数・
-  // ProcessOverview の集計・Timeline はすべてこのフィルタ済みデータから導出する
-  // （PDF 側は projectBlockToMarkdown が同じ関数を適用しており表示が一致する）。
   const visible = useMemo(() => filterVisibleProjectData(data), [data]);
-
   const companyMap = useMemo(() => new Map(visible.companies.map((c) => [c.id, c])), [visible.companies]);
 
-  // no は hidden 除外後の全件配列基準（技術・検索で絞り込んでも既存カードの番号は変わらない）。
   const itemsWithNo = useMemo(
     () => visible.items.map((item, index) => ({ item, no: index + 1, tech: flattenTech(item.tech) })),
     [visible.items],
   );
 
-  // 出現頻度の降順。同数はプロトタイプでは順序不定だったので名前順で確定させる。
   const allTech = useMemo(() => {
     const counts = new Map<string, number>();
     for (const { tech } of itemsWithNo) {
@@ -78,28 +91,33 @@ export function ProjectSection({
       .map(([name, count]) => ({ name, count }));
   }, [itemsWithNo]);
 
+  const parsedQuery = useMemo(() => parseProjectQuery(query), [query]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return itemsWithNo.filter(({ item, tech }) => {
       const techOk = activeTech.length === 0 || tech.some((t) => activeTech.includes(t));
       if (!techOk) return false;
-      if (!q) return true;
+      if (parsedQuery.terms.length === 0) return true;
       const company = companyMap.get(item.companyId);
-      const haystack = [
-        item.title,
-        projectAreaText(item.scope, item.tech),
-        item.role,
-        company?.name ?? '',
-        // 表示側（project-card.tsx）は `summary?.trim() || duties`。`??` だと空文字の
-        // summary が採用され、カードに出ている duties の語で検索してもヒットしない。
-        item.summary?.trim() || item.duties,
-        ...tech,
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(q);
+      const haystack = projectSearchHaystack(item, company?.name ?? '', company?.note ?? '', tech);
+      return matchesSearchTerms(haystack, parsedQuery.terms, parsedQuery.requireAll);
     });
-  }, [itemsWithNo, activeTech, query, companyMap]);
+  }, [itemsWithNo, activeTech, parsedQuery, companyMap]);
+
+  const companyGroups = useMemo(() => {
+    const groups = groupProjectsByCompany(
+      visible.companies,
+      filtered.map((row) => row.item),
+    );
+    const byId = new Map(filtered.map((row) => [row.item.id, row]));
+    return groups
+      .map((group) => ({
+        ...group,
+        rows: group.items.map((item) => byId.get(item.id)).filter((row): row is (typeof filtered)[number] => !!row),
+        totalCount: visible.items.filter((item) => item.companyId === group.companyId).length,
+      }))
+      .filter((group) => group.rows.length > 0);
+  }, [visible.companies, visible.items, filtered]);
 
   const toggleTech = (t: string) => {
     setActiveTech((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -109,14 +127,12 @@ export function ProjectSection({
     setQuery('');
   };
 
-  // 可視案件が0件なら（会社だけ残っていても）表示するものが無いため何も描画しない。
   if (visible.items.length === 0) return null;
   if (!showProcess && !showProjects && !showTimeline) return null;
 
-  // 案件詳細セクション（フィルタUI）が非表示のときは、そのフィルタ状態を
-  // タイムラインへ持ち込まない（消したい方法が無いまま案件が消えて見えるのを防ぐ）。
   const timelineItems = showProjects ? filtered.map((x) => x.item) : visible.items;
   const timelineActiveTech = showProjects ? activeTech : [];
+  const isSearching = parsedQuery.terms.length > 0 || activeTech.length > 0;
 
   return (
     <div className="space-y-10">
@@ -142,19 +158,30 @@ export function ProjectSection({
               total={itemsWithNo.length}
             />
           </div>
-          <div className="grid grid-cols-1 gap-5">
-            {filtered.map(({ item, no, tech }) => (
-              <ProjectCard
-                key={item.id}
-                item={item}
-                no={no}
-                company={companyMap.get(item.companyId)}
+          <CompanyJumpNav
+            groups={companyGroups.map((group) => ({
+              companyId: group.companyId,
+              company: group.company,
+              count: group.rows.length,
+            }))}
+            headingIdSuffix={headingIdSuffix}
+          />
+          <div className="flex flex-col gap-10">
+            {companyGroups.map((group) => (
+              <CompanySection
+                key={group.companyId}
+                companyId={group.companyId}
+                headingIdSuffix={headingIdSuffix}
+                company={group.company}
+                items={group.rows}
+                totalCount={group.totalCount}
+                isSearching={isSearching}
                 activeTech={activeTech}
-                tech={tech}
+                queryTerms={parsedQuery.terms}
               />
             ))}
             {filtered.length === 0 && (
-              <p className="col-span-full rounded border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+              <p className="rounded border border-dashed border-border-strong py-8 text-center text-sm text-foreground">
                 条件に一致する案件がありません
               </p>
             )}

@@ -4,6 +4,7 @@ alwaysApply: true
 
 - 常に日本語で会話する
 - 常に[prompt](prompt/prompt.md) に従うこと
+- **指示を受けたら、着手前に「スキルシート（個人の経歴データ）への要望」か「このアプリへの機能要求」かを分類し、どちらとして扱うかを一言で示してから動く。** このリポジトリは「経歴データの入れ物」と「それを管理するアプリ」を同時に抱えており、混ぜると、アプリの機能にすべき話をデータ直書きで済ませたり、逆に今回の提出物の都合をアプリの仕様として固定してしまう。判断がつかない要望は、分類だけを先に確認する。
 - 常にプロジェクトの`doc`ディレクトリのドキュメントを前提に作業する
 - テストは環境ごとに3本の設定に分かれている。`vitest.config.ts`（jsdom / 画面）、`vitest.config.node.ts`（node / `src/db` と `scripts`）、`vitest.config.pdf.ts`（node / `*.node.test.tsx`）。共通設定は `vitest.shared.ts`。
 - PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。

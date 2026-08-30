@@ -19,6 +19,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/blocks';
+import { groupProjectsByCompany } from '@/db/group-by-company';
 
 // 案件エディタ 3 ペインの共通スタイル。CSS はモジュール単位で一度読み込めば全体へ効くため、
 // 最初に使う側（このナビ）で読み込む。閲覧側のバンドルには入らない。
@@ -220,11 +221,8 @@ export const ProjectNav = ({
 
   const byCompany = useMemo(() => {
     const map = new Map<string, ProjectItem[]>();
-    for (const c of data.companies) map.set(c.id, []);
-    for (const p of data.items) {
-      const list = map.get(p.companyId);
-      if (list) list.push(p);
-      else map.set(p.companyId, [p]);
+    for (const group of groupProjectsByCompany(data.companies, data.items)) {
+      map.set(group.companyId, group.items);
     }
     return map;
   }, [data]);

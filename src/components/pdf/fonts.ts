@@ -103,6 +103,27 @@ function isAsciiDigit(ch: string): boolean {
 }
 
 /**
+ * 行頭に置いてはいけない文字（行頭禁則）。句読点・閉じ括弧・小書き仮名・繰り返し記号など。
+ * ここに載っている文字の直前では改行マーカーを挟まない。
+ */
+const NO_LINE_START = new Set(
+  [
+    '、。，．・：；？！',
+    'ヽヾゝゞ々ー',
+    '）〕］｝〉》」』】〙〗〟’”｠»',
+    'ぁぃぅぇぉっゃゅょゎゕゖ',
+    'ァィゥェォッャュョヮヵヶ',
+    ')]},.:;?!',
+  ].join(''),
+);
+
+/**
+ * 行末に置いてはいけない文字（行末禁則）。開き括弧など。
+ * ここに載っている文字の直後では改行マーカーを挟まない。
+ */
+const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{'].join(''));
+
+/**
  * 非 CJK の連なりを、必要なときだけ改行可能な塊へ切り分ける。
  *
  * MAX_UNBREAKABLE_RUN 以下の語（＝通常の英単語）はそのまま返すので、ふつうの英文の
@@ -159,14 +180,31 @@ export function splitForHyphenation(word: string): string[] {
   const parts: string[] = [];
   let buffer = '';
   let prevWasCjk = false;
+  let prevChar = '';
+  // buffer に非 CJK を積むと prevChar はその中を進む。flush() が見る「連なりの手前の文字」は
+  // buffer に入る前の文字なので別に持つ。持たないと `「OpenAI」` の `「` が flush の時点で
+  // 見えなくなり、行末禁則の `「` の直後に改行機会が入る（実測で再現）。
+  let preBufferChar = '';
+  /**
+   * 禁則処理。改行マーカーを挟んでよい境界かを判定する。
+   *
+   * @react-pdf/textkit は日本語の禁則を知らないので、境界を無条件に挟むと
+   * 句点や閉じ括弧だけが次行の頭に落ちる（実測: 「クエリ最適化」→改行→「。」）。
+   * 提出書類として明確に体裁の崩れなので、マーカーを挟む側で防ぐ。
+   */
+  const canBreakBefore = (next: string, prev: string = prevChar): boolean =>
+    !NO_LINE_START.has(next) && !NO_LINE_END.has(prev);
   const flush = (): void => {
     if (!buffer) return;
     const chunks = splitLongRun(buffer);
     for (let i = 0; i < chunks.length; i++) {
       if (i > 0 || parts.length > 0) {
-        // 直前の要素との間に改行機会を作る。先頭の連なりでも、CJK 側から
-        // すでに BREAK_MARKER が積まれているケースは二重に挟まない。
-        if (parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
+        // 直前の要素との間に改行機会を作る。先頭の連なり（i===0）は CJK 側からの
+        // 境界なので禁則も見る。すでに BREAK_MARKER が積まれているケース、または
+        // 禁則で塞がれているケースは二重に挟まない／挟んではいけない。
+        // 内部の分割点（i>0）は同じ非CJKの連なりの中の強制改行なので禁則の対象外。
+        const boundaryOk = i > 0 || canBreakBefore(chunks[i][0], preBufferChar);
+        if (boundaryOk && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
       }
       parts.push(chunks[i]);
     }
@@ -187,15 +225,24 @@ export function splitForHyphenation(word: string): string[] {
       continue;
     }
     if (!isCjk(ch)) {
-      if (prevWasCjk && parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
+      // 直前と同じマーカーを二重に積まない（splitLongRun の内部分割でも同じ判定を使う）のに加え、
+      // 禁則（次に来る文字が行頭禁則、または直前の文字が行末禁則）にも当たらないことを確認する。
+      if (prevWasCjk && parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch)) {
+        parts.push(BREAK_MARKER);
+      }
+      if (!buffer) preBufferChar = prevChar;
       buffer += ch;
       prevWasCjk = false;
+      prevChar = ch;
       continue;
     }
     flush();
-    if (parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
+    if (parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch)) {
+      parts.push(BREAK_MARKER);
+    }
     parts.push(ch);
     prevWasCjk = true;
+    prevChar = ch;
   }
   flush();
   return parts.length > 0 ? parts : [word];
@@ -226,4 +273,25 @@ export default function registerPdfFonts(): void {
   }
 
   registered = true;
+}
+
+/**
+ * PDF 生成に失敗したときの後始末。次のクリックで新しくフォント登録をやり直せる状態に戻す。
+ *
+ * `@react-pdf/font` の `FontSource.load()` は `loadResultPromise` を一度きり生成して
+ * メモ化するが、reject を捨てる分岐が無いため、オフラインや 5xx で 1 回失敗すると
+ * 同じ reject 済み Promise が以後ずっと再 throw される（「PDFの生成に失敗しました」
+ * のあと、回線が戻っても押し直しでは直らない）。`registered` フラグだけを false に
+ * 戻しても `Font.register()` は同じ family に FontSource を積み増すだけで、汚染済みの
+ * 最初の 1 件が解決に使われ続けるため直らない（`FontFamily.resolve` は同じ
+ * `fontWeight`/`fontStyle` に対して `sources.find()` の最初の一致を返す）。
+ *
+ * **`Font.clear()` / `Font.reset()` は使わない。** どちらも登録済みファミリを丸ごと空にし、
+ * 標準 14 フォント（Helvetica 等）まで消える。この経路のどこかが Helvetica を解決しており、
+ * 2 回目の生成が `Font family not registered: Helvetica` で落ちる（実測）。
+ * 消すのはこのアプリが登録した family だけにする。
+ */
+export function resetPdfFontsAfterFailure(): void {
+  delete (Font as unknown as { fontFamilies: Record<string, unknown> }).fontFamilies[PDF_FONT_FAMILY];
+  registered = false;
 }

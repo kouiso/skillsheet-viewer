@@ -20,6 +20,11 @@ export const sharedVitestConfig = defineConfig({
   },
   test: {
     globals: true,
-    exclude: ['e2e/**', '**/node_modules/**', '**/dist/**'],
+    // `.claude/worktrees/**` は git worktree の実体で、別ブランチのソースがそのまま置かれる。
+    // 除外しないと、そこにある古いテストまで拾って落ち、いま直したい変更の合否が読めなくなる
+    // （実測: 19 ファイル・94 件が worktree 側の失敗で、本体は全件通過していた）。
+    // `.evidence/**` は動作確認の証跡置き場（git 管理外）。使い捨ての検証ハーネスを置くため、
+    // 本体のテスト実行が拾うと、証跡の作り直し忘れでいつまでも赤いままになる。
+    exclude: ['e2e/**', '**/node_modules/**', '**/dist/**', '.claude/worktrees/**', '.evidence/**'],
   },
 });
