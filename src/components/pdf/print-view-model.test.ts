@@ -338,7 +338,6 @@ describe('dedupeRoles', () => {
   });
 });
 
-
 describe('レビュー指摘の回帰: 消える情報・潰れる情報', () => {
   it('得意分野（strengths）を PDF のサマリへ載せる', () => {
     const blocks = blocksFixture();
