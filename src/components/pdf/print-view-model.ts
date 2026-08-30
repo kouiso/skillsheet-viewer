@@ -466,11 +466,21 @@ export function estimateProjectCardHeight(fields: {
     estimateWrappedLines(fields.title, 320, PRINT_TYPE.projectTitle.fontSize) * titleLineHeight +
     (fields.companyLabel ? PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight : 0);
 
-  // メタ表: 2 列。行数は列あたり ceil(件数/2)。
+  // メタ表: 2 列。各行の値は半ページ幅の列で折り返すので、行ごとに折り返し行数を数える。
+  // 1 行固定で数えると、担当工程や役割が長い案件で見積りが実際より低く出て fitsOnePage が
+  // 誤って true になり、1 ページを超えるカードごと wrap={false} になる（圧縮・重なりの原因）。
   if (fields.metaRows.length > 0) {
-    const rowsPerColumn = Math.ceil(fields.metaRows.length / 2);
-    const metaRowHeight = PRINT_SIZE.metaRowPadVertical * 2 + PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight;
-    height += rowsPerColumn * metaRowHeight;
+    const metaLineHeight = PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight;
+    const metaValueWidth = CARD_CONTENT_WIDTH / 2 - PRINT_SIZE.labelColMeta - PRINT_SIZE.metaRowPadHorizontal * 2;
+    const rowHeights = fields.metaRows.map(
+      (row) =>
+        PRINT_SIZE.metaRowPadVertical * 2 +
+        estimateWrappedLines(row.value, metaValueWidth, PRINT_TYPE.meta.fontSize) * metaLineHeight,
+    );
+    // 2 列に上から詰めるので、列ごとの合計の大きい方がメタ表の高さになる。
+    const half = Math.ceil(rowHeights.length / 2);
+    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
+    height += Math.max(sum(rowHeights.slice(0, half)), sum(rowHeights.slice(half)));
   }
 
   // 技術チップ: 分類ごとにチップの概算幅を積んで折り返し行数を見積る。
