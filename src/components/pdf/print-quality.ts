@@ -45,6 +45,12 @@ export interface QualityInput {
   headings: string[];
   /** 全文に必ず含まれていなければならない文字列（案件の本文など）。 */
   requiredTexts: { label: string; text: string }[];
+  /**
+   * running footer の左側に出る 1 行（`氏名 ／ シート名`）。
+   * 下端の踏み越え検査（検査 9）で footer 自身を本文と取り違えないために使う。
+   * 省略時は座標だけで判定するため検出が甘くなる（`isFooterItem` のコメント参照）。
+   */
+  footerText?: string;
 }
 
 export interface QualityOptions {
@@ -66,6 +72,29 @@ export interface QualityOptions {
   minOverlapPt: number;
   /** 重なりと認める最小の割合（狭い方の幅に対して）。 */
   minOverlapRatio: number;
+  /**
+   * 本文の下端（ページ下端からの高さ）。ページの paddingBottom + フッター用の余白。
+   * ベースラインがこれより下にある item は、余白ごと踏み越えて描かれている。
+   */
+  contentBottom: number;
+  /** running footer の帯（ページ下端からの高さ）。この範囲の item は下端超過に数えない。 */
+  footerReserve: number;
+  /**
+   * 縦の重なりを認める最小の割合（低い方の字高に対して）。
+   * 行間 1.45 倍でも隣の行とは重ならない一方、2 つの塊が同じ位置に描かれると 1 に近づく。
+   */
+  minVerticalOverlapRatio: number;
+  /**
+   * 本文の上端（ページ下端からの高さ = pageHeight - padTop）。
+   * これより上に描かれるのは、絶対配置の継続見出しだけ。
+   */
+  contentTop: number;
+  /**
+   * 本文上端から、本文 1 行目のベースラインまでの余裕（pt）。
+   * この帯にベースラインがあれば、絶対配置の見出しが本文側へ割り込んでいる。
+   * 本文 1 行目は 11.5pt × 行間 1.75 ＝ 13.4pt 下に来るので、12pt なら本文には当たらない。
+   */
+  headerBandSlack: number;
 }
 
 export const DEFAULT_QUALITY_OPTIONS: QualityOptions = {
@@ -76,6 +105,14 @@ export const DEFAULT_QUALITY_OPTIONS: QualityOptions = {
   footerBandHeight: 40,
   minOverlapPt: 0.5,
   minOverlapRatio: 0.2,
+  // ページ下端 32pt（padBottom）+ フッター用 14pt。printStyles.page の paddingBottom と同値。
+  contentBottom: 46,
+  // フッター本体（bottom:14 に 11pt）が入る高さ。ここは本文ではないので下端超過に数えない。
+  footerReserve: 30,
+  minVerticalOverlapRatio: 0.4,
+  // 842（A4 の高さ）− 42（padTop）。
+  contentTop: 800,
+  headerBandSlack: 12,
 };
 
 /**
@@ -166,6 +203,102 @@ export function findOverlaps(page: QualityPage, options: QualityOptions = DEFAUL
 }
 
 /**
+ * 文字同士が**矩形として**重なっている組を返す（検査 8）。
+ *
+ * 検査 1（`findOverlaps`）は「y の差が 1pt 未満」の二重書きだけを見る。だが実際に出た
+ * 崩れは、それでは 1 件も引っかからなかった:
+ *  - ページ跨ぎの継続見出しが 2 行に折り返し、2 行目が本文 1 行目に**数 pt ずれて**重なった
+ *  - 簡約カードの 2 段目がページ下端を突き抜け、フッターや別ブロックに重なった
+ * どちらも y の差が 5〜8pt あり、検査 1 は緑のままだった。
+ *
+ * ここでは 1 文字ぶんの矩形（ベースラインの上 0.88em・下 0.22em）で判定する。
+ * 行間は最小でも 1.45 倍あるので、正常に積まれた隣の行同士は矩形が重ならない。
+ */
+export function findBoxOverlaps(page: QualityPage, options: QualityOptions = DEFAULT_QUALITY_OPTIONS): OverlapPair[] {
+  const ASCENT = 0.88;
+  const DESCENT = 0.22;
+  const found: OverlapPair[] = [];
+  for (let i = 0; i < page.length; i++) {
+    for (let j = i + 1; j < page.length; j++) {
+      const a = page[i];
+      const b = page[j];
+      const vertical =
+        Math.min(a.y + a.size * ASCENT, b.y + b.size * ASCENT) -
+        Math.max(a.y - a.size * DESCENT, b.y - b.size * DESCENT);
+      if (vertical <= 0) continue;
+      const minHeight = Math.min(a.size, b.size) * (ASCENT + DESCENT);
+      if (vertical / Math.max(minHeight, 0.01) < options.minVerticalOverlapRatio) continue;
+      const amount = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      if (amount <= options.minOverlapPt) continue;
+      const ratio = amount / Math.max(Math.min(a.width, b.width), 0.01);
+      if (ratio < options.minOverlapRatio) continue;
+      found.push({ a, b, amount, ratio });
+    }
+  }
+  return found;
+}
+
+/**
+ * ページ下端の余白を踏み越えて描かれた item を返す（検査 9）。
+ *
+ * @react-pdf は、分割できない塊が「親の最初の子」で親も最初の子…と続くと、ページが
+ * 埋まっていても『現在ページは空』と誤判定して改ページせずに描く（@react-pdf/layout の
+ * splitNodes）。この壊れ方は文字同士が重ならないこともあり、その場合は検査 8 も緑になる。
+ * 下端を越えたかどうかは座標だけで判る（フッター帯は本文ではないので除く）。
+ */
+export function findBottomOverflows(
+  page: QualityPage,
+  options: QualityOptions = DEFAULT_QUALITY_OPTIONS,
+  footerText = '',
+): QualityItem[] {
+  return page.filter((item) => item.y < options.contentBottom && !isFooterItem(item, options, footerText));
+}
+
+/**
+ * running footer 由来の item か。
+ *
+ * footer とみなすのは「ページ下端 `footerReserve` の中にあり」かつ「左の
+ * `氏名 ／ シート名` の一部か、右のページ番号（`26 / 46` を pdfjs が割った断片）」のときだけ。
+ * 座標だけで「下端の帯は全部 footer」と決めると、本文が footer と同じ高さまで流れ込んだ
+ * ときに見逃す（レビュー指摘）。`footerText` が渡されないときは座標だけで判定する
+ * （従来どおりで検出は甘いので、実データを通す呼び出しでは必ず渡すこと）。
+ */
+function isFooterItem(item: QualityItem, options: QualityOptions, footerText: string): boolean {
+  if (item.y >= options.footerReserve) return false;
+  if (!footerText) return true;
+  const text = normalize(item.text);
+  if (!text) return true;
+  // ページ番号は `26` / `/` / `46` のように割れて返ることがある。
+  if (/^\d+$/.test(text) || text === '/' || /^\d+\/\d+$/.test(text)) return true;
+  return normalize(footerText).includes(text);
+}
+
+/**
+ * 継続見出しが 2 行に折り返して本文の帯へ割り込んでいないかを見る（検査 10）。
+ *
+ * 継続見出しは絶対配置（`position:absolute`, top 16pt）で描かれ、本文の流れに高さとして
+ * 寄与しない。本文はページ余白 42pt から始まるので、見出しに使えるのは 1 行ぶんだけ。
+ * 会社名と案件名が両方長いと 2 行になり、2 行目が本文の 1 行目のすぐ上へ割り込む。
+ *
+ * 実測（旧 v4 の p4）:
+ *   813.1 見出し 1 行目 ／ 796.1 見出し 2 行目 ／ 786.6 本文 1 行目
+ * 本文 1 行目は本文上端 800pt から 13.4pt 下（11.5pt × 行間 1.75）の 786.6pt に来る。
+ * つまり **786.6 と 800 の間にベースラインがあること自体が異常**で、そこにあるのは
+ * 割り込んだ見出しの 2 行目しかない。文字は横に並んで矩形が重ならないこともあり、
+ * その場合は検査 8 では拾えないので、この帯を座標だけで見る。
+ */
+export function findWrappedHeaderLines(page: QualityPage, options: QualityOptions = DEFAULT_QUALITY_OPTIONS): number[] {
+  const floor = options.contentTop - options.headerBandSlack;
+  const baselines = new Set<number>();
+  for (const item of page) {
+    if (item.y > options.contentTop || item.y <= floor) continue;
+    // pdfjs は同じ行を字種ごとの run に割るので、0.5pt 単位に丸めて 1 行に畳む。
+    baselines.add(Math.round(item.y * 2) / 2);
+  }
+  return [...baselines].sort((a, b) => b - a);
+}
+
+/**
  * ページ先頭の帯（見出しが載るべき範囲）のテキストを返す。
  *
  * running footer は全ページに出るので、これを「見出し」と数えると検査が常に緑になって
@@ -252,6 +385,35 @@ export function runQualityChecks(
       if (!isDeliberateWhitespace) {
         findings.push({ check: 'sparse-page', page: pageNumber, detail: `本文が ${chars} 文字しかない` });
       }
+    }
+
+    // 8. 矩形としての重なり（検査 1 が拾えない、数 pt ずれた重なり）
+    for (const { a, b, amount, ratio } of findBoxOverlaps(page, options).slice(0, 3)) {
+      findings.push({
+        check: 'overlap-box',
+        page: pageNumber,
+        detail: `「${a.text}」(y=${a.y.toFixed(1)}) と「${b.text}」(y=${b.y.toFixed(1)}) の字面が ${amount.toFixed(2)}pt（幅比 ${ratio.toFixed(2)}）重なっている`,
+      });
+    }
+
+    // 9. ページ下端の余白の踏み越え
+    const belowBottom = findBottomOverflows(page, options, input.footerText);
+    if (belowBottom.length > 0) {
+      findings.push({
+        check: 'bottom-overflow',
+        page: pageNumber,
+        detail: `${belowBottom.length} 箇所が本文の下端 ${options.contentBottom}pt より下に描かれている（最下 ${Math.min(...belowBottom.map((i) => i.y)).toFixed(1)}pt）: 「${belowBottom[0].text}」`,
+      });
+    }
+
+    // 10. 継続見出しの折り返し（2 行目が本文の 1 行目に割り込む）
+    const headerLines = findWrappedHeaderLines(page, options);
+    if (headerLines.length > 0) {
+      findings.push({
+        check: 'header-wrapped',
+        page: pageNumber,
+        detail: `本文上端 ${options.contentTop}pt のすぐ下（本文 1 行目より上）に ${headerLines.length} 行ある（y=${headerLines.map((y) => y.toFixed(1)).join(', ')}）。継続見出しが折り返して本文へ割り込んでいる`,
+      });
     }
 
     // 6. 本文幅からの溢れ

@@ -8,6 +8,7 @@ import {
   companyLabelOf,
   dedupeRoles,
   firstSentence,
+  fitContinuationHeading,
   formatProcessForPrint,
 } from './print-view-model';
 
@@ -72,11 +73,13 @@ describe('formatProcessForPrint', () => {
 });
 
 describe('buildTechGroups', () => {
-  it('各分類の先頭 1 個だけを塗りチップにする', () => {
+  it('案件カードの技術チップは 1 個も塗らない（説明できない強調を紙面に残さない）', () => {
     const groups = buildTechGroups({ ...emptyTech, lang: ['TypeScript', 'Python'] });
     expect(groups).toHaveLength(1);
     expect(groups[0].label).toBe('言語');
-    expect(groups[0].chips.map((c) => c.emphasis)).toEqual(['solid', 'outline']);
+    // かつては先頭 1 個を「主役技術」として塗っていたが、DB に主役のフラグは無く、
+    // 配列順が重要度順である保証も無い。本人が理由を答えられない強調になっていた。
+    expect(groups[0].chips.map((c) => c.emphasis)).toEqual(['outline', 'outline']);
   });
 
   it('件数の上限を持たない（元データを全件表示する — 他 N 件で畳まない）', () => {
@@ -87,6 +90,28 @@ describe('buildTechGroups', () => {
 
   it('中身が無い分類は行ごと出さない', () => {
     expect(buildTechGroups({ ...emptyTech, lang: ['-', ' '] })).toEqual([]);
+  });
+});
+
+describe('fitContinuationHeading', () => {
+  it('会社名と案件名が 1 行に収まるときは両方出す', () => {
+    expect(fitContinuationHeading('M 社', '販売システム')).toBe('M 社（つづき）　販売システム（続き）');
+  });
+
+  it('収まらないときは会社名を落として案件名を残す（跨いだ先で必要なのは案件名）', () => {
+    const project = 'あ'.repeat(30);
+    const text = fitContinuationHeading('と'.repeat(20), project);
+    expect(text).toBe(`${project}（続き）`);
+  });
+
+  it('案件名だけでも収まらないときは末尾を … で詰める', () => {
+    const text = fitContinuationHeading('会社', 'ん'.repeat(80));
+    expect(text.endsWith('…')).toBe(true);
+    expect([...text].length).toBeLessThan(80);
+  });
+
+  it('どちらも空なら見出しごと出さない', () => {
+    expect(fitContinuationHeading(undefined, undefined)).toBe('');
   });
 });
 
@@ -217,6 +242,11 @@ describe('buildPrintViewModel', () => {
     const levels = new Map(vm.companies.flatMap((c) => c.projects).map((p) => [p.title, p.level]));
     expect(levels.get('新しい案件')).toBe('detail');
     expect(levels.get('古い案件')).toBe('compact');
+  });
+
+  it('案件の通し番号は会社をまたいで連番になる（会社ごとに 1 へ戻らない）', () => {
+    const vm = buildPrintViewModel('シート', blocksFixture());
+    expect(vm.companies.flatMap((c) => c.projects).map((p) => p.index)).toEqual([1, 2]);
   });
 
   it('値が空のメタ行は作らない', () => {

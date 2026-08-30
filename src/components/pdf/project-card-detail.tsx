@@ -150,7 +150,9 @@ export function ProjectCardDetail({
   const header = (
     <View style={present.length > 0 ? [styles.header, styles.blockDivider] : styles.header}>
       <View style={styles.headerLeft}>
-        <PrintText style={styles.title}>{project.title}</PrintText>
+        {/* 通し番号は書類全体で連番（採番は print-view-model.ts の 1 箇所）。
+            案件名と同じ Text に入れて、名前が折り返しても番号だけが宙に浮かないようにする。 */}
+        <PrintText style={styles.title}>{`${project.index}. ${project.title}`}</PrintText>
         {companyLine ? <PrintText style={styles.company}>{companyLine}</PrintText> : null}
       </View>
       <View style={styles.headerRight}>

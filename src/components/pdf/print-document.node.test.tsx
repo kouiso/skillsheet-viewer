@@ -72,7 +72,10 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
       .filter(([, text]) => text.length > 0)
       .map(([field, text]) => ({ label: `${p.title} / ${field}`, text: toSearchKey(text) })),
   );
-  return { headings, requiredTexts };
+  // running footer の左側（print-primitives.tsx の RunningFooter と同じ組み立て）。
+  // 下端の踏み越え検査が footer 自身を本文と取り違えないために渡す。
+  const footerText = [vm.summary.name, vm.summary.sheetTitle].filter(Boolean).join(' ／ ');
+  return { headings, requiredTexts, footerText };
 }
 
 describe('新しい印刷経路の品質', () => {
@@ -110,8 +113,11 @@ describe('新しい印刷経路の品質', () => {
   });
 
   it('committed synthetic fixture で 7 項目すべて緑になる（CI の実効ゲート）', () => {
-    const { headings, requiredTexts } = buildTextQualityInputs(PDF_QUALITY_FIXTURE_TITLE, fixtureVm);
-    const findings = runQualityChecks({ pages: fixturePages, headings, requiredTexts }, DEFAULT_QUALITY_OPTIONS);
+    const { headings, requiredTexts, footerText } = buildTextQualityInputs(PDF_QUALITY_FIXTURE_TITLE, fixtureVm);
+    const findings = runQualityChecks(
+      { pages: fixturePages, headings, requiredTexts, footerText },
+      DEFAULT_QUALITY_OPTIONS,
+    );
     console.log(`[print:fixture] pages=${fixturePages.length} findings=${findings.length} → ${summarize(findings)}`);
     for (const f of findings.slice(0, 20)) console.log(`[print:fixture] p${f.page} ${f.check}: ${f.detail}`);
     expect(findings).toEqual([]);
@@ -149,8 +155,8 @@ describe('新しい印刷経路の品質', () => {
           pages.map((items, i) => `=== page ${i + 1} ===\n${items.map((it) => it.text).join('')}`).join('\n\n'),
         );
       }
-      const { headings, requiredTexts } = buildTextQualityInputs(title, vm);
-      const findings = runQualityChecks({ pages, headings, requiredTexts }, DEFAULT_QUALITY_OPTIONS);
+      const { headings, requiredTexts, footerText } = buildTextQualityInputs(title, vm);
+      const findings = runQualityChecks({ pages, headings, requiredTexts, footerText }, DEFAULT_QUALITY_OPTIONS);
 
       console.log(
         `[print] pages=${pages.length} 案件=${vm.companies.flatMap((c) => c.projects).length} findings=${findings.length} → ${summarize(findings)}`,

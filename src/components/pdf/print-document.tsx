@@ -17,7 +17,7 @@ import { CompanyHeading } from './company-heading';
 import { createSpanTracker, DynamicView, PrintText, printStyles, RunningFooter } from './print-primitives';
 import { PRINT_COLOR, PRINT_SIZE, PRINT_TYPE } from './print-tokens';
 import type { PrintCompany, PrintViewKey } from './print-view-model';
-import { buildPrintViewModel } from './print-view-model';
+import { buildPrintViewModel, fitContinuationHeading } from './print-view-model';
 import { CompactTableHeader, ProjectCardCompact } from './project-card-compact';
 import { ProjectCardDetail } from './project-card-detail';
 import { SkillsPage } from './skills-page';
@@ -47,7 +47,17 @@ const styles = StyleSheet.create({
     borderBottomColor: PRINT_COLOR.rule,
     paddingBottom: 4,
   },
-  continuationText: { ...PRINT_TYPE.meta, fontWeight: 700, color: PRINT_COLOR.accent },
+  // maxLines / textOverflow は @react-pdf では props ではなく **style** で渡す
+  // （@react-pdf/layout の getMaxLines は node.style を見る）。
+  // 2 行目は本文の 1 行目に重なるので、文字列側（fitContinuationHeading）で 1 行に
+  // 収めたうえで、ここでも折り返しを禁じて二重に塞ぐ。
+  continuationText: {
+    ...PRINT_TYPE.meta,
+    fontWeight: 700,
+    color: PRINT_COLOR.accent,
+    maxLines: 1,
+    textOverflow: 'ellipsis',
+  },
   compactGroup: { marginTop: PRINT_SIZE.cardGap },
   // 会社の終わり。帯にすると重いので、短い罫線 1 本だけでセクションが閉じたことを示す。
   companyEndMarker: {
@@ -107,10 +117,21 @@ function CompanySection({
   company,
   projectSpanTracker,
   companySpanTracker,
+  startOnNewPage,
 }: {
   company: PrintCompany;
   projectSpanTracker: Tracker;
   companySpanTracker: Tracker;
+  /**
+   * この会社を新しいページの先頭から始めるか。2 社目以降は必ず true。
+   *
+   * 前の会社の途中で次の会社の見出しが現れると、読み手はページの真ん中で所属が
+   * 切り替わったことに気づけない（実測: p8 で A 社の見出しが Q 社の案件の直下に出ていた）。
+   * 会社は経歴の最上位の区切りなので、ページの境界と一致させる。
+   * ページ数は増える（会社ごとに最後のページの下端が余る）が、その代わり
+   * 「どのページを開いても、いま読んでいるのがどの会社かが上から辿れる」形になる。
+   */
+  startOnNewPage: boolean;
 }) {
   // 簡約版が連続する区間をまとめる。会社の中で詳細版と簡約版が交互に現れても、
   // 列ヘッダーが必要な回数だけ出るようにする。
@@ -125,7 +146,7 @@ function CompanySection({
   }
 
   return (
-    <View style={styles.companySection}>
+    <View style={styles.companySection} break={startOnNewPage}>
       <CompanyHeading
         company={company}
         onFirstPage={(pageProps) => companySpanTracker.markStart(company.id, company.name, pageProps)}
@@ -218,12 +239,14 @@ export function PrintSkillSheetDocument({ title, blocks, views }: PrintSkillShee
 
       {vm.showProjects && vm.companies.length > 0 && (
         <Page size="A4" style={printStyles.page}>
-          {vm.companies.map((company) => (
+          {vm.companies.map((company, index) => (
             <CompanySection
               key={company.id}
               company={company}
               projectSpanTracker={projectSpanTracker}
               companySpanTracker={companySpanTracker}
+              // 1 社目に break を付けるとページの先頭で更に改ページし、空ページが 1 枚出る。
+              startOnNewPage={index > 0}
             />
           ))}
           {footer}
@@ -241,12 +264,10 @@ export function PrintSkillSheetDocument({ title, blocks, views }: PrintSkillShee
               if (pageProps.subPageNumber === undefined) return null;
               const companyLabel = companySpanTracker.openLabel(pageProps.pageNumber);
               const projectLabel = projectSpanTracker.openLabel(pageProps.pageNumber);
-              if (!companyLabel && !projectLabel) return null;
-              const text = projectLabel
-                ? companyLabel
-                  ? `${companyLabel}（つづき）　${projectLabel}（続き）`
-                  : `${projectLabel}（続き）`
-                : `${companyLabel}（つづき）`;
+              // 2 行に折り返すと 2 行目が本文の 1 行目に重なる（絶対配置で高さを持たないため）。
+              // 収まらないときに何を落とすかの判断は fitContinuationHeading に一本化する。
+              const text = fitContinuationHeading(companyLabel, projectLabel);
+              if (!text) return null;
               return (
                 <View style={styles.continuationInner}>
                   <PrintText style={styles.continuationText}>{text}</PrintText>

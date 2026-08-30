@@ -69,6 +69,14 @@ export interface PrintMetaRow {
 
 export interface PrintProject {
   id: string;
+  /**
+   * 書類全体での案件の通し番号（1 始まり、会社セクションの並び順のまま上から連番）。
+   *
+   * DB には番号のフィールドが無い（PDF のために型を足さない方針）。並び順そのものが
+   * 番号なので、ビューモデルを組み立てるこの 1 箇所で採番して描画側へ渡す。
+   * 描画側で数え直すと、会社をまたいだ通し番号が会社ごとの 1 始まりに戻る。
+   */
+  index: number;
   title: string;
   companyName: string;
   /**
@@ -280,6 +288,54 @@ export function compactPeriod(period: string): string {
 }
 
 /**
+ * ページ跨ぎの継続見出し（「A 社（つづき）　案件名（続き）」）を **1 行に収める**。
+ *
+ * この見出しは Page 直下の絶対配置（`position:absolute`, top 16pt）で描いており、
+ * 本文の流れに高さとして寄与しない。本文が始まるのはページ余白 `padTop` = 42pt からで、
+ * 見出しに使えるのは実質 26pt（11pt × 行間 1.55 ≒ 17pt の 1 行ぶん）しかない。
+ * 会社名と案件名が両方長いと見出しが 2 行に折り返し、2 行目が本文 1 行目の上に
+ * そのまま重なる（実測: p4「Q 社（…）（つづき）　動画配信サービスの…（Web）（続き）」の
+ * 2 行目が習得スキルの箇条書きに罫線ごと重なっていた）。
+ *
+ * 落とす順番は「読み手にとっての必要度が低い方から」。会社名は直前のページで必ず見えて
+ * いるが、案件名は跨いだ先で初めて必要になるので、**会社名を先に捨てて案件名を残す**。
+ * それでも収まらないときだけ案件名を末尾から詰める。
+ */
+export function fitContinuationHeading(companyLabel: string | undefined, projectLabel: string | undefined): string {
+  const company = (companyLabel ?? '').trim();
+  const project = (projectLabel ?? '').trim();
+  if (!company && !project) return '';
+  // 見積り幅は概算（全角 1em / 半角 0.55em）で、実フォントの太字はこれよりやや広い。
+  // 折り返しは即座に本文への重なりになるので、9 割で切って安全側に倒す。
+  const budget = PRINT_SIZE.contentWidth * 0.9;
+  const fontSize = PRINT_TYPE.meta.fontSize;
+  const fits = (text: string) => estimateTextWidth(text, fontSize) <= budget;
+
+  const projectPart = project ? `${project}（続き）` : '';
+  const companyPart = company ? `${company}（つづき）` : '';
+  const both = projectPart && companyPart ? `${companyPart}　${projectPart}` : projectPart || companyPart;
+  if (fits(both)) return both;
+  // 会社名を落として案件名だけにする。
+  if (projectPart && fits(projectPart)) return projectPart;
+  return truncateToWidth(projectPart || companyPart, budget, fontSize);
+}
+
+/** 末尾を `…` に置き換えて見積り幅へ収める。1 文字も入らない場合でも空文字は返さない。 */
+function truncateToWidth(text: string, budgetPt: number, fontSizePt: number): string {
+  const chars = [...text];
+  const ellipsisWidth = estimateTextWidth('…', fontSizePt);
+  let width = 0;
+  const kept: string[] = [];
+  for (const ch of chars) {
+    const next = width + estimateTextWidth(ch, fontSizePt);
+    if (next + ellipsisWidth > budgetPt) break;
+    kept.push(ch);
+    width = next;
+  }
+  return kept.length === 0 ? '…' : `${kept.join('')}…`;
+}
+
+/**
  * プロフィール帯（1 行 3 列 = 1 セル約 110pt）に収まる値の文字数の上限。
  * 11pt の全角文字は 1 セルに約 10 文字しか入らないので、30 文字を超えると 3 行以上に
  * 折り返して帯の高さが跳ねる（実データの得意分野は 62 文字だった）。
@@ -343,8 +399,12 @@ export function formatProcessForPrint(process: string[]): string {
 /**
  * 技術スタックを分類ラベル + チップに畳む。
  *
- * 各分類の**配列先頭 1 個を塗りチップ**にする。DB に「主役技術」のフラグは無く、
- * 配列順は本人がエディタで入れた順（＝重要度順）として扱えるため。
+ * **すべて枠線チップにする。塗り（強調）は使わない。**
+ * かつては各分類の配列先頭 1 個を「主役技術」とみなして塗っていたが、DB に主役の
+ * フラグは無く、配列順が重要度順である保証もない。結果として本人にも説明できない
+ * 強調が紙面に出ていた（オーナー指摘: 「製作者の私が意味が分かってなくて青色に
+ * なっていたら答えられない」）。読み手に問われて答えられない強調は情報ではなく飾りなので、
+ * 根拠のある強調（1 ページ目の主力スタックは習熟度が上級のものを塗る）だけを残す。
  * 件数は畳まない（PrintTechGroup のコメント参照）。チップ行は必要なだけ折り返す。
  */
 export function buildTechGroups(tech: ProjectTech | undefined): PrintTechGroup[] {
@@ -355,7 +415,7 @@ export function buildTechGroups(tech: ProjectTech | undefined): PrintTechGroup[]
     if (all.length === 0) continue;
     groups.push({
       label: PRINT_TECH_LABEL[key],
-      chips: all.map((label, i) => ({ label, emphasis: i === 0 ? 'solid' : 'outline' })),
+      chips: all.map((label) => ({ label, emphasis: 'outline' as const })),
     });
   }
   return groups;
@@ -542,7 +602,12 @@ export function dedupeRoles(...roles: (string | undefined)[]): string {
   ].join('、');
 }
 
-function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level: DetailLevel): PrintProject {
+function buildProject(
+  item: ProjectItem,
+  company: CompanyInfo | undefined,
+  level: DetailLevel,
+  index: number,
+): PrintProject {
   const area = resolveProjectArea(item.scope, item.tech);
   const processText = formatProcessForPrint(item.process ?? []);
   const metaRows: PrintMetaRow[] = [];
@@ -570,6 +635,7 @@ function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level
 
   return {
     id: item.id,
+    index,
     title,
     companyName: companyDisplayName(company),
     companyLabel,
@@ -626,6 +692,8 @@ function buildCompany(
   items: ProjectItem[],
   levelById: Map<string, DetailLevel>,
   isLatest: boolean,
+  /** この会社の先頭案件に振る通し番号。会社をまたいで連番になるよう呼び出し側が積み上げる。 */
+  startIndex: number,
 ): PrintCompany {
   const roles = dedupeRoles(...items.map((i) => i.role));
   const sizes = items.flatMap((i) => parseTeamSizes(i.team));
@@ -646,7 +714,7 @@ function buildCompany(
     roles,
     teamRange,
     isLatest,
-    projects: items.map((item) => buildProject(item, company, levelById.get(item.id) ?? 'compact')),
+    projects: items.map((item, i) => buildProject(item, company, levelById.get(item.id) ?? 'compact', startIndex + i)),
   };
 }
 
@@ -751,9 +819,13 @@ export function buildPrintViewModel(
   const { levelById } = resolveDetailLevels(visible.items);
   const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
   const latestIndex = resolveLatestIndex(groups);
-  const companies = groups.map((g, index) =>
-    buildCompany(g.company, g.companyId, g.items, levelById, index === latestIndex),
-  );
+  // 案件の通し番号は会社をまたいで連番にする（会社ごとに 1 に戻さない）。
+  let nextProjectIndex = 1;
+  const companies = groups.map((g, index) => {
+    const company = buildCompany(g.company, g.companyId, g.items, levelById, index === latestIndex, nextProjectIndex);
+    nextProjectIndex += company.projects.length;
+    return company;
+  });
 
   return {
     summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items, on('skills')),
