@@ -39,7 +39,17 @@ describe('findBottomOverflows（検査 9）', () => {
   });
 
   it('running footer は本文ではないので数えない', () => {
-    expect(findBottomOverflows([item('I・K ／ エンジニアスキルシート', 40, 16, 120, 11)])).toHaveLength(0);
+    const footer = 'I・K ／ エンジニアスキルシート';
+    expect(findBottomOverflows([item(footer, 40, 16, 120, 11)], O, footer)).toHaveLength(0);
+    // ページ番号は pdfjs が `26` / `/` / `46` に割って返すことがある。
+    expect(findBottomOverflows([item('26', 500, 16, 12, 11), item('/', 512, 16, 4, 11)], O, footer)).toHaveLength(0);
+  });
+
+  it('本文が footer と同じ高さまで流れ込んだら拾う（帯だけで除外しない）', () => {
+    // レビュー指摘: 座標だけで下端の帯を除外すると、y=20 まで溢れた本文を見逃す。
+    const footer = 'I・K ／ エンジニアスキルシート';
+    const found = findBottomOverflows([item('溢れた本文', 100, 20, 60), item(footer, 40, 16, 120, 11)], O, footer);
+    expect(found.map((i) => i.text)).toEqual(['溢れた本文']);
   });
 
   it('本文の範囲内は数えない', () => {

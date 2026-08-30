@@ -45,6 +45,12 @@ export interface QualityInput {
   headings: string[];
   /** 全文に必ず含まれていなければならない文字列（案件の本文など）。 */
   requiredTexts: { label: string; text: string }[];
+  /**
+   * running footer の左側に出る 1 行（`氏名 ／ シート名`）。
+   * 下端の踏み越え検査（検査 9）で footer 自身を本文と取り違えないために使う。
+   * 省略時は座標だけで判定するため検出が甘くなる（`isFooterItem` のコメント参照）。
+   */
+  footerText?: string;
 }
 
 export interface QualityOptions {
@@ -243,8 +249,28 @@ export function findBoxOverlaps(page: QualityPage, options: QualityOptions = DEF
 export function findBottomOverflows(
   page: QualityPage,
   options: QualityOptions = DEFAULT_QUALITY_OPTIONS,
+  footerText = '',
 ): QualityItem[] {
-  return page.filter((item) => item.y < options.contentBottom && item.y >= options.footerReserve);
+  return page.filter((item) => item.y < options.contentBottom && !isFooterItem(item, options, footerText));
+}
+
+/**
+ * running footer 由来の item か。
+ *
+ * footer とみなすのは「ページ下端 `footerReserve` の中にあり」かつ「左の
+ * `氏名 ／ シート名` の一部か、右のページ番号（`26 / 46` を pdfjs が割った断片）」のときだけ。
+ * 座標だけで「下端の帯は全部 footer」と決めると、本文が footer と同じ高さまで流れ込んだ
+ * ときに見逃す（レビュー指摘）。`footerText` が渡されないときは座標だけで判定する
+ * （従来どおりで検出は甘いので、実データを通す呼び出しでは必ず渡すこと）。
+ */
+function isFooterItem(item: QualityItem, options: QualityOptions, footerText: string): boolean {
+  if (item.y >= options.footerReserve) return false;
+  if (!footerText) return true;
+  const text = normalize(item.text);
+  if (!text) return true;
+  // ページ番号は `26` / `/` / `46` のように割れて返ることがある。
+  if (/^\d+$/.test(text) || text === '/' || /^\d+\/\d+$/.test(text)) return true;
+  return normalize(footerText).includes(text);
 }
 
 /**
@@ -371,7 +397,7 @@ export function runQualityChecks(
     }
 
     // 9. ページ下端の余白の踏み越え
-    const belowBottom = findBottomOverflows(page, options);
+    const belowBottom = findBottomOverflows(page, options, input.footerText);
     if (belowBottom.length > 0) {
       findings.push({
         check: 'bottom-overflow',
