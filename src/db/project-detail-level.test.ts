@@ -131,3 +131,22 @@ describe('resolveDetailLevels', () => {
     expect(DETAIL_CUTOFF_MONTHS).toBeGreaterThan(0);
   });
 });
+
+describe('isLeadRole: ラテン略号は語として独立しているときだけ拾う', () => {
+  it('単語の一部に PL / EM を含むだけの役割はリードとみなさない', () => {
+    expect(isLeadRole('Implementation Engineer')).toBe(false);
+    expect(isLeadRole('System Engineer')).toBe(false);
+  });
+
+  it('区切り文字で独立している略号は従来どおり拾う', () => {
+    expect(isLeadRole('PL')).toBe(true);
+    expect(isLeadRole('PM & PL')).toBe(true);
+    expect(isLeadRole('PMO→PL')).toBe(true);
+    expect(isLeadRole('EM / フルスタックエンジニア')).toBe(true);
+  });
+
+  it('日本語の語は従来どおり部分一致で拾う', () => {
+    expect(isLeadRole('バックエンドリード・インフラエンジニア')).toBe(true);
+    expect(isLeadRole('エンジニアリングマネージャー')).toBe(true);
+  });
+});

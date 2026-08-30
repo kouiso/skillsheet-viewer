@@ -1,4 +1,4 @@
-import type { Block } from '@/db/blocks';
+import type { Block, BlockType } from '@/db/blocks';
 
 import registerPdfFonts from './pdf/fonts';
 import { PrintSkillSheetDocument } from './pdf/print-document';
@@ -21,9 +21,27 @@ export interface SkillSheetPDFProps extends SkillSheetDocumentProps {
  * （`/view/[path]`）は markdown 文字列しか持たないため、この経路は消せない。
  * **レガシー経路には機能を足さない**（片方だけ直す事故を防ぐため凍結する）。
  */
+/** 印刷デザインのビューモデルが実際に読むブロック種別。 */
+const STRUCTURED_BLOCK_TYPES = new Set<BlockType>(['profile', 'skills', 'stats', 'project']);
+
+/**
+ * 印刷デザインで描いてよいブロック構成か。
+ *
+ * ビューモデルは profile / skills / stats / project しか読まない。`markdown` や `table`、
+ * `experience` を含むシート（GitHub から取り込んだシートは本文が markdown ブロックで入る）を
+ * そのまま構造描画に回すと、それらが 1 つも描かれずサマリだけの PDF が出る。
+ * 構造化ブロックがあり、かつ描けないブロックが 1 つも無いときだけ印刷デザインを使う。
+ */
+function canRenderStructured(blocks: Block[] | undefined): blocks is Block[] {
+  if (!blocks || blocks.length === 0) return false;
+  return (
+    blocks.some((b) => STRUCTURED_BLOCK_TYPES.has(b.type)) && blocks.every((b) => STRUCTURED_BLOCK_TYPES.has(b.type))
+  );
+}
+
 export const SkillSheetPDF = ({ title, content, blocks, views }: SkillSheetPDFProps) => {
   registerPdfFonts();
-  if (blocks && blocks.length > 0) return <PrintSkillSheetDocument title={title} blocks={blocks} views={views} />;
+  if (canRenderStructured(blocks)) return <PrintSkillSheetDocument title={title} blocks={blocks} views={views} />;
   return <SkillSheetDocument title={title} content={content} />;
 };
 

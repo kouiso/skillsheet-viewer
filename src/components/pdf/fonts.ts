@@ -181,6 +181,10 @@ export function splitForHyphenation(word: string): string[] {
   let buffer = '';
   let prevWasCjk = false;
   let prevChar = '';
+  // buffer に非 CJK を積むと prevChar はその中を進む。flush() が見る「連なりの手前の文字」は
+  // buffer に入る前の文字なので別に持つ。持たないと `「OpenAI」` の `「` が flush の時点で
+  // 見えなくなり、行末禁則の `「` の直後に改行機会が入る（実測で再現）。
+  let preBufferChar = '';
   /**
    * 禁則処理。改行マーカーを挟んでよい境界かを判定する。
    *
@@ -188,7 +192,8 @@ export function splitForHyphenation(word: string): string[] {
    * 句点や閉じ括弧だけが次行の頭に落ちる（実測: 「クエリ最適化」→改行→「。」）。
    * 提出書類として明確に体裁の崩れなので、マーカーを挟む側で防ぐ。
    */
-  const canBreakBefore = (next: string): boolean => !NO_LINE_START.has(next) && !NO_LINE_END.has(prevChar);
+  const canBreakBefore = (next: string, prev: string = prevChar): boolean =>
+    !NO_LINE_START.has(next) && !NO_LINE_END.has(prev);
   const flush = (): void => {
     if (!buffer) return;
     const chunks = splitLongRun(buffer);
@@ -198,7 +203,7 @@ export function splitForHyphenation(word: string): string[] {
         // 境界なので禁則も見る。すでに BREAK_MARKER が積まれているケース、または
         // 禁則で塞がれているケースは二重に挟まない／挟んではいけない。
         // 内部の分割点（i>0）は同じ非CJKの連なりの中の強制改行なので禁則の対象外。
-        const boundaryOk = i > 0 || canBreakBefore(chunks[i][0]);
+        const boundaryOk = i > 0 || canBreakBefore(chunks[i][0], preBufferChar);
         if (boundaryOk && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
       }
       parts.push(chunks[i]);
@@ -225,6 +230,7 @@ export function splitForHyphenation(word: string): string[] {
       if (prevWasCjk && parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch)) {
         parts.push(BREAK_MARKER);
       }
+      if (!buffer) preBufferChar = prevChar;
       buffer += ch;
       prevWasCjk = false;
       prevChar = ch;

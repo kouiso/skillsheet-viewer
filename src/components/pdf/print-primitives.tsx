@@ -193,7 +193,8 @@ const styles = StyleSheet.create({
     borderTopColor: PRINT_COLOR.rule,
     paddingTop: 5,
   },
-  footerText: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label },
+  footerIdentity: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label , flexShrink: 1 },
+  footerCounter: { ...PRINT_TYPE.meta, color: PRINT_COLOR.label , flexShrink: 0 },
 
   sectionLabel: { ...PRINT_TYPE.sectionLabel, color: PRINT_COLOR.heading, letterSpacing: 0.4 },
 
@@ -259,16 +260,27 @@ const styles = StyleSheet.create({
 export const printStyles = styles;
 
 /** 全ページに繰り返すフッター（氏名 ／ シート名 と ページ番号）。 */
+/** footer の左側に置ける全角文字数の目安（本文幅 515pt / 11pt、ページ番号ぶんを除く）。 */
+const FOOTER_IDENTITY_MAX_CHARS = 42;
+
+function truncate(value: string, max: number): string {
+  return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
+}
+
 export function RunningFooter({ name, sheetTitle }: { name: string; sheetTitle: string }) {
-  const left = [name, sheetTitle].filter(Boolean).join(' ／ ');
+  // 氏名とシート名は長さに上限が無い。折り返すと固定要素なので全ページでページ番号に
+  // 重なるため、ここで 1 行に収まる長さへ落とす（左は縮む・右は縮まない指定と併用する）。
+  const left = truncate([name, sheetTitle].filter(Boolean).join(' ／ '), FOOTER_IDENTITY_MAX_CHARS);
   return (
     <DynamicView
       fixed
       style={styles.footer}
       render={({ pageNumber, totalPages }) => (
         <>
-          <PrintText style={styles.footerText}>{left}</PrintText>
-          <PrintText style={styles.footerText}>{`${pageNumber} / ${totalPages}`}</PrintText>
+          {/* 氏名とシート名は長さに上限が無い。1 行に収める指定が無いと本文側へ折り返し、
+              固定要素なので全ページでページ番号に重なる。左は縮む・1 行、右は縮まない。 */}
+          <PrintText style={styles.footerIdentity}>{left}</PrintText>
+          <PrintText style={styles.footerCounter}>{`${pageNumber} / ${totalPages}`}</PrintText>
         </>
       )}
     />
@@ -355,10 +367,11 @@ export function MetaTable({ rows }: { rows: PrintMetaRow[] }) {
 }
 
 /** 箇条書き 1 行（記号はアクセント色のダッシュ）。 */
-export function BulletRow({ children }: { children: ReactNode }) {
+/** 行頭記号は既定でダッシュ。順序付きリストは `1.` `2.` を渡して番号を保つ。 */
+export function BulletRow({ children, marker = '—' }: { children: ReactNode; marker?: string }) {
   return (
     <View style={styles.bulletRow}>
-      <PrintText style={styles.bulletMark}>—</PrintText>
+      <PrintText style={styles.bulletMark}>{marker}</PrintText>
       <PrintText style={styles.bulletBody}>{children}</PrintText>
     </View>
   );

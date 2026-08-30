@@ -49,6 +49,9 @@ import {
 import { PRINT_COLOR, PRINT_SIZE, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
 import type { PrintProject } from './print-view-model';
 
+/** ヘッダー単独で置くときに、その下へ最低限確保する高さ（pt）。見出しだけが下端に残るのを防ぐ。 */
+const HEADER_MIN_PRESENCE_AHEAD = 80;
+
 const styles = StyleSheet.create({
   // marginTop はここに直接持たせる（呼び出し側でカードを別の View に包んで margin を
   // 付けない）。中身の無い（borderのみの）ラッパー View を 1 枚挟むだけで、ヘッダー＋
@@ -216,11 +219,24 @@ export function ProjectCardDetail({
     // 見積りで 1 ページを超えるカード（`fitsOnePage === false`）だけ既定の分割可能な
     // 形（メタ表・チップ分類・本文ブロックの区切りでのみ割れる）のまま描画する。
     <View style={styles.card} wrap={!project.fitsOnePage}>
-      {/* ヘッダーと先頭ブロックを 1 つの分割単位にする（ファイル冒頭コメント参照）。 */}
-      <View wrap={false}>
-        {header}
-        {firstBlock}
-      </View>
+      {/* ヘッダーと先頭ブロックを 1 つの分割単位にする（ファイル冒頭コメント参照）。
+          ただし 1 ページに収まらないカードでは束ねない。先頭ブロックが 1 ページより高い
+          （長い業務内容・大きな技術セクション）と、その塊はどのページにも入らず、
+          @react-pdf は改ページの代わりに圧縮・重なり・切り落としを起こす。
+          その場合はヘッダーだけを分割禁止にし、後続の余白を要求して孤立を防ぐ。 */}
+      {project.fitsOnePage ? (
+        <View wrap={false}>
+          {header}
+          {firstBlock}
+        </View>
+      ) : (
+        <>
+          <View wrap={false} minPresenceAhead={HEADER_MIN_PRESENCE_AHEAD}>
+            {header}
+          </View>
+          {firstBlock}
+        </>
+      )}
       {restBlocks}
     </View>
   );
