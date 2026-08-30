@@ -1,5 +1,5 @@
 /**
- * 案件の本文・担当領域（`item.comment` / `duties` / `acquired` / `scope`）と
+ * 案件の本文・担当領域・役割（`item.comment` / `duties` / `acquired` / `scope` / `role`）と
  * 会社の概要・区分（`company.note` / `kind`）を、外部の JSON ファイルから流し込むスクリプト。
  *
  * 値そのものをこのリポジトリへ置かないのが狙い。skillsheet-viewer は public なので、
@@ -42,14 +42,14 @@ import {
   writeBlockUpdates,
 } from './block-write';
 
-type ProjectPatch = { comment?: string; duties?: string; acquired?: string; scope?: string };
+type ProjectPatch = { comment?: string; duties?: string; acquired?: string; scope?: string; role?: string };
 type CompanyPatch = { note?: string; kind?: string };
 interface NarrativeFile {
   projects?: Record<string, ProjectPatch>;
   companies?: Record<string, CompanyPatch>;
 }
 
-const PROJECT_FIELDS = ['comment', 'duties', 'acquired', 'scope'] as const;
+const PROJECT_FIELDS = ['comment', 'duties', 'acquired', 'scope', 'role'] as const;
 const COMPANY_FIELDS = ['note', 'kind'] as const;
 
 function readNarrative(path: string): NarrativeFile {
