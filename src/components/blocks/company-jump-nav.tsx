@@ -17,7 +17,12 @@ export interface JumpCompanyItem {
   count: number;
 }
 
-export function buildCompanyJumpItems(groups: JumpCompanyInput[]): JumpCompanyItem[] {
+/**
+ * ジャンプ先の id は CompanySection 側と同じ規則で作る。project ブロックが 2 つある
+ * シートでは同じ会社 ID が両方に出うるので、接尾辞まで含めて一致させないと後のブロックの
+ * リンクが前のブロックへ飛ぶ。
+ */
+export function buildCompanyJumpItems(groups: JumpCompanyInput[], headingIdSuffix = ''): JumpCompanyItem[] {
   const names = groups.map((group) => companyDisplayName(group.company));
   const nameCount = new Map<string, number>();
   for (const name of names) nameCount.set(name, (nameCount.get(name) ?? 0) + 1);
@@ -29,7 +34,7 @@ export function buildCompanyJumpItems(groups: JumpCompanyInput[]): JumpCompanyIt
     const start = parseStart(period);
     const qual = dup && start !== null ? `${formatMonthToken(startToken)}—` : '';
     return {
-      href: `#company-${group.companyId}`,
+      href: `#company-${group.companyId}${headingIdSuffix}`,
       name,
       qual,
       count: group.count,
@@ -37,8 +42,8 @@ export function buildCompanyJumpItems(groups: JumpCompanyInput[]): JumpCompanyIt
   });
 }
 
-export function CompanyJumpNav({ groups }: { groups: JumpCompanyInput[] }) {
-  const items = buildCompanyJumpItems(groups);
+export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompanyInput[]; headingIdSuffix?: string }) {
+  const items = buildCompanyJumpItems(groups, headingIdSuffix ?? '');
   if (items.length === 0) return null;
   return (
     <nav aria-label="会社別ジャンプ" className="mb-5">

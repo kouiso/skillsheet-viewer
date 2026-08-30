@@ -388,3 +388,21 @@ describe('deriveCompanyPeriod', () => {
     expect(deriveCompanyPeriod(['2019.01 — 2019.06', '2020'])).toBe('2019.01 — 2019.06');
   });
 });
+
+describe('parsePeriodBounds: 精度と終端の扱い（レビュー指摘の回帰）', () => {
+  it('年だけの表記は月精度なしとして返す', () => {
+    expect(parsePeriodBounds('2020')).toMatchObject({ precise: false, openEnded: false });
+  });
+
+  it('終了が未記載でも月精度なしにする（開始と同じ月に終わったことにしない）', () => {
+    expect(parsePeriodBounds('2020.06')).toMatchObject({ precise: false, openEnded: false });
+  });
+
+  it('終端「現在」は openEnded で返す（描画側が時計に依存しないようにする）', () => {
+    expect(parsePeriodBounds('2020.06 — 現在')).toMatchObject({ openEnded: true });
+  });
+
+  it('両端とも月まで書かれていれば月精度ありにする', () => {
+    expect(parsePeriodBounds('2020.01 — 2020.03')).toMatchObject({ precise: true, openEnded: false });
+  });
+});

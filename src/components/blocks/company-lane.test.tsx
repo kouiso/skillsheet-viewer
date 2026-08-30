@@ -28,3 +28,25 @@ describe('buildCompanyLane / CompanyLane', () => {
     expect(screen.queryByText('01')).not.toBeInTheDocument();
   });
 });
+
+describe('レビュー指摘の回帰: 解釈できない期間と終端「現在」', () => {
+  const items = [
+    { no: '01', period: '2020.01 — 2020.06', duration: '6ヶ月' },
+    { no: '02', period: '2020.07 — 2020.12', duration: '6ヶ月' },
+  ];
+
+  it('期間を解釈できない案件はレーンに出さない（会社の全期間として描かない）', () => {
+    const lane = buildCompanyLane('2020.01 — 2020.12', [...items, { no: '03', period: '不明', duration: '' }]);
+    expect(lane?.rows.map((row) => row.no)).toEqual(['01', '02']);
+  });
+
+  it('解釈できる案件が 2 件未満ならレーンを出さない', () => {
+    expect(buildCompanyLane('2020.01 — 2020.12', [items[0], { no: '02', period: '不明', duration: '' }])).toBeNull();
+  });
+
+  it('終端が「現在」でも、幅は案件側の最大終了月から決まる（実行時の時計に依存しない）', () => {
+    const a = buildCompanyLane('2020.01 — 現在', items);
+    const b = buildCompanyLane('2020.01 — 2020.12', items);
+    expect(a?.rows).toEqual(b?.rows);
+  });
+});

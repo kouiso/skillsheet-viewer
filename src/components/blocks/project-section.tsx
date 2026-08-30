@@ -164,12 +164,14 @@ export function ProjectSection({
               company: group.company,
               count: group.rows.length,
             }))}
+            headingIdSuffix={headingIdSuffix}
           />
           <div className="flex flex-col gap-10">
             {companyGroups.map((group) => (
               <CompanySection
                 key={group.companyId}
                 companyId={group.companyId}
+                headingIdSuffix={headingIdSuffix}
                 company={group.company}
                 items={group.rows}
                 totalCount={group.totalCount}

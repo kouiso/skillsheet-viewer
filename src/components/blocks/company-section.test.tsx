@@ -74,3 +74,21 @@ describe('CompanySection', () => {
     expect(screen.getByText('一致 1 / 案件 3 件')).toBeInTheDocument();
   });
 });
+
+describe('レビュー指摘の回帰: 書いていない精度を足さない', () => {
+  it('年だけの在籍期間に月数を付けない', () => {
+    expect(companyTenureLabel('2020')).toBe('在籍 2020');
+  });
+
+  it('終了が未記載なら月数を付けない', () => {
+    expect(companyTenureLabel('2020.06')).toBe('在籍 2020.06');
+  });
+
+  it('終端が「現在」なら月数を付けない（実行時の時計で変わるため）', () => {
+    expect(companyTenureLabel('2020.06 — 現在')).not.toMatch(/ヶ月/);
+  });
+
+  it('開始も終了も月まで書かれていれば従来どおり月数を出す', () => {
+    expect(companyTenureLabel('2020.01 — 2020.03')).toContain('（3ヶ月）');
+  });
+});
