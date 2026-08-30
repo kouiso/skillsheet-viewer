@@ -70,3 +70,6 @@ test-results/
 playwright/.auth/
 # Added by code-review-graph
 .code-review-graph/
+
+# Claude Code のセッション作業ファイル（ツールが実行のたびに書く一時物）
+.claude/tmp/
