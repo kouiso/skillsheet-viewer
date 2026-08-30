@@ -80,6 +80,9 @@ const styles = StyleSheet.create({
   projectGroup: {
     borderBottomWidth: PRINT_SIZE.ruleThin,
     borderBottomColor: PRINT_COLOR.rule,
+    // 2 段目の最後のブロックと罫線の間隔。かつて 2 段目を囲っていた View の
+    // paddingBottom をここへ移した（囲いを 1 枚も残さないため。JSX のコメント参照）。
+    paddingBottom: 8,
   },
   row: {
     flexDirection: 'row',
@@ -108,12 +111,15 @@ const styles = StyleSheet.create({
   teamCell: { width: PRINT_SIZE.teamColCompact, flexShrink: 0 },
   teamText: { ...PRINT_TYPE.meta, color: PRINT_COLOR.text, textAlign: 'right' },
 
-  // 期間列の幅 + 行の左余白ぶん下げて、案件名の左端に本文の左端を合わせる。
-  body: {
-    flexDirection: 'column',
-    gap: 7,
-    paddingTop: 6,
-    paddingBottom: 8,
+  /**
+   * 2 段目の 1 ブロック。期間列の幅 + 行の左余白ぶん下げて、案件名の左端に本文の左端を合わせる。
+   *
+   * かつては 2 段目全体を 1 枚の View で囲って `gap` を使っていた。その囲いを外し、
+   * **ブロックを 1 段目の行と同じ階層に並べる**形にしてある（理由は JSX のコメント）。
+   * `gap` が使えなくなるぶん、ブロック同士の間隔は marginTop で作る。
+   */
+  bodyItem: {
+    marginTop: 7,
     paddingLeft: ROW_PAD_HORIZONTAL + PRINT_SIZE.labelColCompact,
     paddingRight: ROW_PAD_HORIZONTAL,
   },
@@ -169,13 +175,13 @@ export function ProjectCardCompact({
   ].join(' ／ ');
   // 詳細版の技術チップと同じ全件（件数上限は無い）。分類ラベルの列を持たず 1 本にまとめる。
   const techChips = project.techGroups.flatMap((group) => group.chips);
-  const hasMetaOrTech = metaLine.length > 0 || techChips.length > 0;
 
   const row = (
     <View style={styles.row} wrap={false}>
       <PrintText style={styles.period}>{project.compactPeriodText}</PrintText>
       <View style={styles.main}>
-        <PrintText style={styles.title}>{project.title}</PrintText>
+        {/* 詳細版と同じ通し番号。両方に出さないと、詳細版と簡約版が混ざる会社で番号が飛ぶ。 */}
+        <PrintText style={styles.title}>{`${project.index}. ${project.title}`}</PrintText>
         {project.compactNote.length > 0 && <PrintText style={styles.note}>{project.compactNote}</PrintText>}
       </View>
       <View style={styles.teamCell}>
@@ -202,44 +208,50 @@ export function ProjectCardCompact({
       ) : (
         row
       )}
-      {(hasMetaOrTech || sections.length > 0) && (
-        <View style={styles.body}>
-          {hasMetaOrTech && (
-            // 詳細版の techGroup（print-primitives.tsx）と同じ理由で wrap={false} にする。
-            // 分割可能なまま改ページを跨ぐと、チップの折り返し行が途中で切れて「文字の無い
-            // 枠線チップ」が下端に残る（実測: p20、E社の継続ページで CloudSQL の手前に
-            // 空チップ 5 個が出た）。全件を 1 本の行にまとめた分、詳細版の分類単位より
-            // 塊が大きくなるが、メタ行 + チップ折り返しは 1 ページ全体の高さに対して
-            // 十分小さいため、wrap={false} の「収まらなければ次ページへ」だけで解決する。
-            <View style={styles.bodySection}>
-              {metaLine.length > 0 && (
-                <View wrap={false}>
-                  <PrintText style={styles.note}>{metaLine}</PrintText>
-                </View>
-              )}
-              {/* チップは 6 分類ぶんを 1 本にまとめるので件数に上限が無い。全部を 1 つの
-                  wrap={false} に入れると、束がページ高を超えたときどのページにも入らず、
-                  @react-pdf は改ページの代わりに圧縮・重なり・切り落としを起こす。
-                  ページに必ず収まる大きさへ区切り、区切りの中だけ分割禁止にする。 */}
-              {chunk(techChips, CHIPS_PER_UNBREAKABLE_GROUP).map((group, gi) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: 並び順そのものが単位なので index が識別子になる。
-                <View key={`chips-${gi}`} style={styles.techChipsRow} wrap={false}>
-                  {group.map((chip, i) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: 分類をまたいで結合しており、同じ技術名が別分類にも重複登録され得る（label だけでは一意にならない）。
-                    <Chip key={`${chip.label}-${i}`} chip={chip} />
-                  ))}
-                </View>
-              ))}
-            </View>
-          )}
-          {sections.map((section) => (
-            <View key={section.label} style={styles.bodySection}>
-              <SectionLabel>{section.label}</SectionLabel>
-              <PrintMarkdown text={section.text} />
-            </View>
-          ))}
+      {/*
+        **2 段目のブロックは 1 段目の行と同じ階層に並べる。まとめ役の View を 1 枚も挟まない。**
+
+        @react-pdf のページ割りは、収まらない子を次ページへ送ったあと「現在ページの断片が
+        空になったなら親ごと次ページへ送る」という救済を持つ（@react-pdf/layout の
+        splitNodes、`currentChild.children.length === 0` の分岐）。ところがその直後に
+        「ただし **現在ページが空なら** 親をこのページに置いてよい」という例外があり、
+        「現在ページが空か」を **同じ親の中の兄弟だけ** で判定している
+        （`currentChildren.length === 0`）。
+
+        つまり、分割できない塊が「親の最初の子」で、その親も「そのまた親の最初の子」…と
+        最初の子が続くと、実際にはページ下端まで本文が詰まっていても『空ページ』と誤判定され、
+        塊が改ページされずにページ外へはみ出して描かれる。実測（残り高さ 20〜45pt を
+        振ったプローブ）でメタ行・チップ・列ヘッダーごと溢れてフッターや本文に重なり、
+        実データでも p26 が同じ形で壊れていた。
+
+        1 段目の行（必ず先に置かれる）と同じ階層に並べておけば、2 段目のどのブロックにも
+        必ず先行する兄弟がいるので、この誤判定に入らない。
+      */}
+      {metaLine.length > 0 && (
+        // 分割可能なまま改ページを跨ぐと折り返しが途中で切れるので、メタ行 1 本は割らない。
+        <View style={styles.bodyItem} wrap={false}>
+          <PrintText style={styles.note}>{metaLine}</PrintText>
         </View>
       )}
+      {/* チップは 6 分類ぶんを 1 本にまとめるので件数に上限が無い。全部を 1 つの
+          wrap={false} に入れると、束がページ高を超えたときどのページにも入らず、
+          @react-pdf は改ページの代わりに圧縮・重なり・切り落としを起こす。
+          ページに必ず収まる大きさへ区切り、区切りの中だけ分割禁止にする。 */}
+      {chunk(techChips, CHIPS_PER_UNBREAKABLE_GROUP).map((group, gi) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: 並び順そのものが単位なので index が識別子になる。
+        <View key={`chips-${gi}`} style={[styles.bodyItem, styles.techChipsRow]} wrap={false}>
+          {group.map((chip, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: 分類をまたいで結合しており、同じ技術名が別分類にも重複登録され得る（label だけでは一意にならない）。
+            <Chip key={`${chip.label}-${i}`} chip={chip} />
+          ))}
+        </View>
+      ))}
+      {sections.map((section) => (
+        <View key={section.label} style={[styles.bodyItem, styles.bodySection]}>
+          <SectionLabel>{section.label}</SectionLabel>
+          <PrintMarkdown text={section.text} />
+        </View>
+      ))}
     </View>
   );
 }
