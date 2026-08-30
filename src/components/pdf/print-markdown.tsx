@@ -19,7 +19,7 @@ import { isSafeLinkHref, PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 import { BulletRow, Link, Paragraph, PrintText, printStyles } from './print-primitives';
 import { PRINT_COLOR, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
 
-interface MdNode {
+export interface MdNode {
   type: string;
   value?: string;
   ordered?: boolean;
@@ -57,7 +57,26 @@ function stripHtmlTags(value: string | undefined): string {
     .trim();
 }
 
-function renderInline(nodes: MdNode[] | undefined): ReactNode {
+/**
+ * 段落が「太字だけ」でできているか。`**開発基盤・チーム**` のように、本文の中で
+ * 小見出しとして使われている段落を見分けるために使う。
+ */
+export function isHeadingLikeParagraph(node: MdNode): boolean {
+  const meaningful = (node.children ?? []).filter((child) => !(child.type === 'text' && !(child.value ?? '').trim()));
+  return meaningful.length === 1 && meaningful[0].type === 'strong';
+}
+
+/**
+ * `allowBold` は「太字を太字として描いてよいか」。
+ *
+ * 既定は false ＝ 文の途中の `**…**` はウェイトを上げずに地の文として描く。
+ * 提出用 PDF では、本人が後から読み返しても理由を説明できない強調が紙面に残ると
+ * 「なぜここだけ太いのか」に答えられない（オーナー指摘）。一方で段落まるごとが
+ * 太字のものは本文の小見出しとして機能しており、これを地の文に落とすと
+ * コメント全体が切れ目の無い塊になって読めなくなる。だから
+ * 「段落まるごと太字＝小見出しだけ残し、文中の強調は消す」で分ける。
+ */
+function renderInline(nodes: MdNode[] | undefined, allowBold = false): ReactNode {
   if (!nodes) return null;
   return nodes.map((node, index) => {
     const key = `${node.type}-${index}`;
@@ -74,23 +93,24 @@ function renderInline(nodes: MdNode[] | undefined): ReactNode {
       );
     }
     if (node.type === 'strong') {
+      if (!allowBold) return renderInline(node.children);
       return (
         <PrintText key={key} style={styles.strong}>
-          {renderInline(node.children)}
+          {renderInline(node.children, true)}
         </PrintText>
       );
     }
     if (node.type === 'emphasis') {
       return (
         <PrintText key={key} style={styles.emphasis}>
-          {renderInline(node.children)}
+          {renderInline(node.children, allowBold)}
         </PrintText>
       );
     }
     if (node.type === 'delete') {
       return (
         <PrintText key={key} style={{ textDecoration: 'line-through' }}>
-          {renderInline(node.children)}
+          {renderInline(node.children, allowBold)}
         </PrintText>
       );
     }
@@ -100,17 +120,17 @@ function renderInline(nodes: MdNode[] | undefined): ReactNode {
       if (!isSafeLinkHref(href)) {
         return (
           <PrintText key={key} style={printStyles.link}>
-            {renderInline(node.children)}
+            {renderInline(node.children, allowBold)}
           </PrintText>
         );
       }
       return (
         <Link key={key} src={href} style={printStyles.link}>
-          {renderInline(node.children)}
+          {renderInline(node.children, allowBold)}
         </Link>
       );
     }
-    return node.children ? renderInline(node.children) : (node.value ?? null);
+    return node.children ? renderInline(node.children, allowBold) : (node.value ?? null);
   });
 }
 
@@ -145,7 +165,9 @@ function listMarker(list: MdNode, index: number): string {
 }
 
 function renderBlock(node: MdNode, key: string): ReactNode {
-  if (node.type === 'paragraph') return <Paragraph key={key}>{renderInline(node.children)}</Paragraph>;
+  if (node.type === 'paragraph') {
+    return <Paragraph key={key}>{renderInline(node.children, isHeadingLikeParagraph(node))}</Paragraph>;
+  }
   if (node.type === 'list') {
     return (
       <View key={key} style={styles.blocks}>
