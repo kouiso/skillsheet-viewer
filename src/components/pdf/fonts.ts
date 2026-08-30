@@ -268,3 +268,23 @@ export default function registerPdfFonts(): void {
 
   registered = true;
 }
+
+/**
+ * PDF 生成に失敗したときの後始末。次のクリックで新しくフォント登録をやり直せる状態に戻す。
+ *
+ * @react-pdf/font の `FontSource.load()` は `loadResultPromise` を一度きり生成して
+ * メモ化するが、reject を捨てる分岐が無いため、オフラインや 5xx で 1 回失敗すると
+ * 同じ reject 済み Promise が以後ずっと再 throw される（Issue: 「PDFの生成に失敗しました」
+ * トーストが出た後、回線が戻ってももう一度失敗し続ける）。`registered` フラグだけを
+ * false に戻しても `Font.register()` は同じ family に FontSource を積み増すだけで
+ * 汚染済みの最初の 1 件が解決に使われ続けるため直らない（`FontFamily.resolve` は
+ * 同じ `fontWeight`/`fontStyle` に対して `sources.find()` の最初の一致を返す）。
+ * `Font.clear()`（内部 FontStore の `fontFamilies` を丸ごと空にする）で汚染された
+ * FontSource ごと捨ててから再登録する必要がある。このアプリは全文字列を
+ * PDF_FONT_FAMILY 経由でしか描画しない（Helvetica 等の標準フォントは使わない）ため、
+ * Font.clear() で標準フォントの登録も消えることは実害にならない。
+ */
+export function resetPdfFontsAfterFailure(): void {
+  Font.clear();
+  registered = false;
+}

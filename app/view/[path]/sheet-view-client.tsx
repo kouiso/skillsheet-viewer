@@ -78,6 +78,13 @@ const SheetViewClient = ({
     } catch (err) {
       console.error('Error generating PDF:', err);
       toast.error('PDFの生成に失敗しました', { id: toastId });
+      // フォント取得の失敗（オフライン・5xx 等）は @react-pdf/font 内で reject 済みの
+      // Promise として永久にキャッシュされ、次のクリックも即座に同じ失敗を再現する
+      // （リロードしないと直らない「詰み」状態になる）。失敗のたびに登録をリセットし、
+      // 次のクリックで新しい FontSource から取得し直させる（フォント取得以外の失敗
+      // でも安全 — 単に次回また登録し直すだけで副作用は無い）。
+      const { resetPdfFontsAfterFailure } = await import('@/components/pdf/fonts');
+      resetPdfFontsAfterFailure();
     } finally {
       setPdfLoading(false);
     }
