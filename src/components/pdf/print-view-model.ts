@@ -90,6 +90,7 @@ export interface PrintProject {
   /** 詳細版カードのメタ表。役割・技術領域・チーム・担当工程のうち、値があるものだけ。 */
   metaRows: PrintMetaRow[];
   techGroups: PrintTechGroup[];
+  /** 詳細版カードの「業務内容」ブロックの本文。未入力なら要約（`ProjectItem.summary`）で補う。 */
   duties: string;
   acquired: string;
   comment: string;
@@ -517,7 +518,12 @@ function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level
   const title = trimmed(item.title) || '（タイトル未入力）';
   const companyLabel = companyLabelOf(companyDisplayName(company), trimmed(company?.kind));
   const techGroups = buildTechGroups(item.tech);
-  const duties = trimmed(item.duties);
+  // ビューア（project-card.tsx:55 `item.summary?.trim() || item.duties`）と同じ優先順位。
+  // PrintProject には duties 専用フィールドしか無く、要約だけ入力して担当業務を空にした
+  // 案件（詳細版カード）は 業務内容 ブロックが 1 つも出ない静かなデータ欠落だった
+  // （no-abbreviated-rendering skill 違反）。表示名は duties のままにし、ここで解決済みの
+  // 値を詰める — 呼び出し側（ProjectCardDetail 等）に判断を分散させない。
+  const duties = trimmed(item.summary) || trimmed(item.duties);
   const acquired = trimmed(item.acquired);
   const comment = trimmed(item.comment);
   const fitsOnePage =
@@ -538,7 +544,7 @@ function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level
     duties,
     acquired,
     comment,
-    compactNote: firstSentence(item.summary || item.duties || item.comment),
+    compactNote: firstSentence(duties || comment),
     level,
     fitsOnePage,
   };
@@ -612,6 +618,7 @@ function buildSummary(
   stats: StatsBlockData | undefined,
   skillGroups: PrintSkillGroup[],
   items: ProjectItem[],
+  showSkills: boolean,
 ): PrintSummary {
   const allProfileRows: PrintMetaRow[] = [];
   if (trimmed(profile?.company)) allProfileRows.push({ label: '所属', value: trimmed(profile?.company) });
@@ -622,7 +629,14 @@ function buildSummary(
   const expertiseRows = allProfileRows.filter((row) => row.value.length > PROFILE_SHORT_VALUE_CHARS);
 
   // 主力スタックは経験年数の降順。同年数のときはスキル一覧に並んでいる順を保つ。
-  const flatSkills = skillGroups.flatMap((g, gi) => g.skills.map((s, si) => ({ ...s, order: gi * 1000 + si })));
+  //
+  // スキルのビュートグルが OFF のときはここも空にする。以前は showSkills を一切見ずに
+  // 組み立てており、スキル一覧「ページ」は消えても 1 ページ目の主力スタック見出し＋
+  // チップだけが残っていた（スキル情報を隠したのに 1 ページ目には出る、という
+  // トグルの約束破り）。
+  const flatSkills = showSkills
+    ? skillGroups.flatMap((g, gi) => g.skills.map((s, si) => ({ ...s, order: gi * 1000 + si })))
+    : [];
   const topSkills = flatSkills
     .filter((s) => trimmed(s.name))
     .sort((a, b) => b.years - a.years || a.order - b.order)
@@ -703,7 +717,7 @@ export function buildPrintViewModel(
   );
 
   return {
-    summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items),
+    summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items, on('skills')),
     skillGroups,
     companies,
     showProjects: on('projects'),

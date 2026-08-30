@@ -6,6 +6,7 @@ import {
   buildTechGroups,
   compactPeriod,
   companyLabelOf,
+  dedupeRoles,
   firstSentence,
   formatProcessForPrint,
 } from './print-view-model';
@@ -266,5 +267,73 @@ describe('buildPrintViewModel', () => {
   it('トグル未指定なら全部 ON', () => {
     const vm = buildPrintViewModel('シート', blocksFixture());
     expect([vm.showProjects, vm.showSkills, vm.showProcess]).toEqual([true, true, true]);
+  });
+
+  it('スキルのビュートグルを OFF にすると 1 ページ目の主力スタックも空にする', () => {
+    // 実測で出た欠陥: 以前は topSkills が showSkills を一切見ずに組み立てられており、
+    // スキル一覧「ページ」は OFF で消えても 1 ページ目の「主力スタック（経験年数）」
+    // 見出し＋チップだけが残った（トグルの約束「押した瞬間の状態がそのまま PDF に効く」
+    // の破り。skillYearsLabel が年数だけ空にするので、見出しが「経験年数」と言っているのに
+    // 年数がどこにも無い壊れ方だった）。
+    //
+    // 赤くなることを確認済み: buildSummary の `const flatSkills = showSkills ? ... : []` を
+    // `showSkills` を見ずに常に組み立てる形へ戻すと、この it は落ちる
+    // （summary.topSkills が空配列でなく TypeScript/Python のチップを含む）。
+    const vm = buildPrintViewModel('シート', blocksFixture(), ['projects', 'process']);
+    expect(vm.summary.topSkills).toEqual([]);
+  });
+
+  it('要約だけ入力し担当業務を空にした案件は、要約の全文を duties として持つ', () => {
+    // ビューア（project-card.tsx:55 `item.summary?.trim() || item.duties`）と同じ優先順位。
+    // 以前は PrintProject.duties が item.duties しか見ておらず、要約だけ入力した直近案件
+    // （詳細版カード）は「業務内容」ブロックが 1 つも出ない静かなデータ欠落だった。
+    // 60 文字超・2 文の本文にする（firstSentence が使う compactNote 側の 1 文/60 文字切りを
+    // 混同していないことも確かめる — ここで見るのは duties そのもので、切られていないこと）。
+    const summaryText =
+      '決済基盤のリプレイスを設計から主導した案件。旧バッチの段階移行と本番切り替えまで担当し、無停止で移行を完了させた。';
+    const blocks = blocksFixture();
+    const project = blocks.find((b) => b.type === 'project');
+    if (project?.type === 'project') {
+      project.data.items[0].duties = '';
+      project.data.items[0].summary = summaryText;
+    }
+    // 赤くなることを確認済み: buildProject の
+    // `const duties = trimmed(item.summary) || trimmed(item.duties);` を
+    // `const duties = trimmed(item.duties);` に戻すと、この it は空文字との比較で落ちる。
+    const vm = buildPrintViewModel('シート', blocks);
+    expect(vm.companies[0].projects[0].duties).toBe(summaryText);
+  });
+});
+
+describe('dedupeRoles', () => {
+  // 実測で出た欠陥をそのまま固定する。案件カードに「役割：PL, PL」、
+  // 会社行に「フルスタックエンジニア、フルスタックエンジニア / エンジニアリングマネージャー」
+  // と同じ役割が 2 度並んでいた。
+  //
+  // 赤くなることを確認済み: dedupeRoles の `new Set(...)` を外す（分割と結合はそのまま）と、
+  // この describe の 5 件中 4 件が落ちる。緑のまま通るテストは何も守っていないので、
+  // 手を入れるときは同じ壊し方でもう一度赤を見ること。
+  it('1 つの役割文字列の中の重複を消す', () => {
+    expect(dedupeRoles('PL, PL')).toBe('PL');
+  });
+
+  it('複数案件にまたがる重複を、部分一致ではなく役割単位で消す', () => {
+    expect(dedupeRoles('フルスタックエンジニア', 'フルスタックエンジニア / エンジニアリングマネージャー')).toBe(
+      'フルスタックエンジニア、エンジニアリングマネージャー',
+    );
+  });
+
+  it('区切りは読点。中黒は役割名の一部なので割らない', () => {
+    expect(dedupeRoles('バックエンドリード・インフラエンジニア', 'PM')).toBe(
+      'バックエンドリード・インフラエンジニア、PM',
+    );
+  });
+
+  it('先に出た順を保つ', () => {
+    expect(dedupeRoles('PM, PL', 'PL, SE')).toBe('PM、PL、SE');
+  });
+
+  it('空・未定義・空白だけの役割は落とす', () => {
+    expect(dedupeRoles('', undefined, '  ', 'PL,,  ,PL')).toBe('PL');
   });
 });
