@@ -35,6 +35,18 @@ const HEAD_PAD_VERTICAL = 5;
 /** 案件名と技術・一言の行間（デザインの gap:2px）。 */
 const MAIN_COLUMN_GAP = 2;
 
+/**
+ * 1 つの分割禁止ブロックに入れるチップの上限。11pt のチップが 3 段折り返しても
+ * 印刷領域の高さ（約 700pt）に十分収まる件数にしてある。
+ */
+const CHIPS_PER_UNBREAKABLE_GROUP = 18;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
@@ -195,16 +207,25 @@ export function ProjectCardCompact({
             // 空チップ 5 個が出た）。全件を 1 本の行にまとめた分、詳細版の分類単位より
             // 塊が大きくなるが、メタ行 + チップ折り返しは 1 ページ全体の高さに対して
             // 十分小さいため、wrap={false} の「収まらなければ次ページへ」だけで解決する。
-            <View style={styles.bodySection} wrap={false}>
-              {metaLine.length > 0 && <PrintText style={styles.note}>{metaLine}</PrintText>}
-              {techChips.length > 0 && (
-                <View style={styles.techChipsRow}>
-                  {techChips.map((chip, i) => (
+            <View style={styles.bodySection}>
+              {metaLine.length > 0 && (
+                <View wrap={false}>
+                  <PrintText style={styles.note}>{metaLine}</PrintText>
+                </View>
+              )}
+              {/* チップは 6 分類ぶんを 1 本にまとめるので件数に上限が無い。全部を 1 つの
+                  wrap={false} に入れると、束がページ高を超えたときどのページにも入らず、
+                  @react-pdf は改ページの代わりに圧縮・重なり・切り落としを起こす。
+                  ページに必ず収まる大きさへ区切り、区切りの中だけ分割禁止にする。 */}
+              {chunk(techChips, CHIPS_PER_UNBREAKABLE_GROUP).map((group, gi) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: 並び順そのものが単位なので index が識別子になる。
+                <View key={`chips-${gi}`} style={styles.techChipsRow} wrap={false}>
+                  {group.map((chip, i) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 分類をまたいで結合しており、同じ技術名が別分類にも重複登録され得る（label だけでは一意にならない）。
                     <Chip key={`${chip.label}-${i}`} chip={chip} />
                   ))}
                 </View>
-              )}
+              ))}
             </View>
           )}
           {sections.map((section) => (

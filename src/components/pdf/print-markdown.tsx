@@ -15,7 +15,7 @@ import type { ReactNode } from 'react';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
-import { isSafeLinkHref, MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
+import { isSafeLinkHref, PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 import { BulletRow, Link, Paragraph, PrintText, printStyles } from './print-primitives';
 import { PRINT_COLOR, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
 
@@ -23,6 +23,7 @@ interface MdNode {
   type: string;
   value?: string;
   ordered?: boolean;
+  start?: number;
   children?: MdNode[];
   url?: string;
 }
@@ -33,7 +34,28 @@ const styles = StyleSheet.create({
   emphasis: { fontStyle: 'italic' },
   code: { ...PRINT_TYPE.meta, color: PRINT_COLOR.heading, backgroundColor: PRINT_COLOR.surface },
   strong: { fontWeight: PRINT_WEIGHT.bold, color: PRINT_COLOR.heading },
+  table: { flexDirection: 'column', borderTop: `0.75pt solid ${PRINT_COLOR.ruleFaint}` },
+  tableRow: { flexDirection: 'row', borderBottom: `0.75pt solid ${PRINT_COLOR.ruleFaint}` },
+  tableHeadRow: { flexDirection: 'row', borderBottom: `0.75pt solid ${PRINT_COLOR.rule}` },
+  tableCell: { ...PRINT_TYPE.meta, color: PRINT_COLOR.text, flex: 1, paddingVertical: 3, paddingHorizontal: 5 },
+  tableHeadCell: {
+    ...PRINT_TYPE.meta,
+    fontWeight: PRINT_WEIGHT.bold,
+    color: PRINT_COLOR.heading,
+    flex: 1,
+    paddingVertical: 3,
+    paddingHorizontal: 5,
+  },
 });
+
+/** 生 HTML から タグだけ落として本文を残す。画面側は rehype-sanitize が担保している。 */
+function stripHtmlTags(value: string | undefined): string {
+  if (!value) return '';
+  return value
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function renderInline(nodes: MdNode[] | undefined): ReactNode {
   if (!nodes) return null;
@@ -41,9 +63,9 @@ function renderInline(nodes: MdNode[] | undefined): ReactNode {
     const key = `${node.type}-${index}`;
     if (node.type === 'text') return node.value ?? null;
     if (node.type === 'break') return '\n';
-    // 生 HTML はここでは描画しない（画面側は rehype-sanitize が担保しており、
-    // PDF に生タグを流すと本文にタグ文字列がそのまま出る）。
-    if (node.type === 'html') return null;
+    // 生 HTML はタグだけ落として中の文字は残す。捨てると <details><summary>概要</summary>
+    // 本文</details> のように画面には出ている記述が PDF から丸ごと消える。
+    if (node.type === 'html') return stripHtmlTags(node.value) || null;
     if (node.type === 'inlineCode') {
       return (
         <PrintText key={key} style={styles.code}>
@@ -92,17 +114,19 @@ function renderInline(nodes: MdNode[] | undefined): ReactNode {
   });
 }
 
-function renderListItem(item: MdNode, key: string): ReactNode {
+function renderListItem(item: MdNode, key: string, marker: string): ReactNode {
   const children = item.children ?? [];
   const nestedLists = children.filter((child) => child.type === 'list');
   const ownBlocks = children.filter((child) => child.type !== 'list');
   return (
     <View key={key}>
-      <BulletRow>{ownBlocks.flatMap((block) => renderInline(block.children))}</BulletRow>
+      <BulletRow marker={marker}>{ownBlocks.flatMap((block) => renderInline(block.children))}</BulletRow>
       {nestedLists.length > 0 && (
         <View style={styles.nested}>
           {nestedLists.flatMap((list, li) =>
-            (list.children ?? []).map((child, ci) => renderListItem(child, `${key}-n${li}-${ci}`)),
+            (list.children ?? []).map((child, ci) =>
+              renderListItem(child, `${key}-n${li}-${ci}`, listMarker(list, ci)),
+            ),
           )}
         </View>
       )}
@@ -110,12 +134,22 @@ function renderListItem(item: MdNode, key: string): ReactNode {
   );
 }
 
+/**
+ * 箇条書きの行頭記号。順序付きリスト（`1.` `2.`）は番号を保つ — 手順や順位を書いた本文が
+ * 並びだけの箇条書きに落ちると、順番という情報そのものが消える。
+ */
+function listMarker(list: MdNode, index: number): string {
+  if (!list.ordered) return '—';
+  const start = typeof list.start === 'number' ? list.start : 1;
+  return `${start + index}.`;
+}
+
 function renderBlock(node: MdNode, key: string): ReactNode {
   if (node.type === 'paragraph') return <Paragraph key={key}>{renderInline(node.children)}</Paragraph>;
   if (node.type === 'list') {
     return (
       <View key={key} style={styles.blocks}>
-        {(node.children ?? []).map((item, index) => renderListItem(item, `${key}-${index}`))}
+        {(node.children ?? []).map((item, index) => renderListItem(item, `${key}-${index}`, listMarker(node, index)))}
       </View>
     );
   }
@@ -127,12 +161,32 @@ function renderBlock(node: MdNode, key: string): ReactNode {
     );
   }
   if (node.type === 'code') return <Paragraph key={key}>{node.value}</Paragraph>;
+  // GFM の表。1 段落に潰すと値が列から切り離されて読めなくなるので、行と列のまま描く。
+  if (node.type === 'table') {
+    const rows = node.children ?? [];
+    return (
+      <View key={key} style={styles.table}>
+        {rows.map((row, ri) => (
+          <View key={`${key}-r${ri}`} style={ri === 0 ? styles.tableHeadRow : styles.tableRow}>
+            {(row.children ?? []).map((cell, ci) => (
+              <PrintText key={`${key}-r${ri}-c${ci}`} style={ri === 0 ? styles.tableHeadCell : styles.tableCell}>
+                {renderInline(cell.children)}
+              </PrintText>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }
   // 見出し・表・区切り線は 3 つのフィールドには現れない。来た場合も本文として出して落とさない。
   if (node.children) return <Paragraph key={key}>{renderInline(node.children)}</Paragraph>;
   return node.value ? <Paragraph key={key}>{node.value}</Paragraph> : null;
 }
 
-const processor = unified().use(remarkParse).use(MARKDOWN_REMARK_PLUGINS);
+// PDF 専用のプラグイン集合を使う。画面用の MARKDOWN_REMARK_PLUGINS は remark-breaks を
+// 含んでおり、単独改行が break ノードになる。react-pdf の Text 内に \n を入れると隣接行が
+// 重なるため、PDF 側は remark-breaks を外した集合（markdown-config.ts の定義）を使う。
+const processor = unified().use(remarkParse).use(PDF_REMARK_PLUGINS);
 
 /**
  * 自由記述 1 フィールドを描画する。空文字なら null（呼び出し側でブロックごと出さない）。

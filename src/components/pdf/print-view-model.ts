@@ -12,6 +12,7 @@
  */
 
 import type { Block, CompanyInfo, ProfileBlockData, ProjectItem, ProjectTech, StatsBlockData } from '@/db/blocks';
+import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/blocks';
 import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
 import {
@@ -181,6 +182,11 @@ export interface PrintSummary {
    * スキル一覧ページの先頭へ回す。内容もスキルの要約なので、そちらの方が文脈に合う。
    */
   expertiseRows: PrintMetaRow[];
+  /**
+   * 得意分野（`profile.strengths`）。画面の ProfileIntro は出しているのに、以前はここで
+   * 読んでおらず PDF からだけ丸ごと消えていた。
+   */
+  strengths: string[];
   /** 自己紹介本文。 */
   pr: string;
 }
@@ -189,7 +195,13 @@ export interface PrintViewModel {
   summary: PrintSummary;
   skillGroups: PrintSkillGroup[];
   companies: PrintCompany[];
-  /** 案件セクションを出すか（ビュートグル `projects`）。 */
+  /**
+   * 案件セクションを出すか。
+   *
+   * `timeline` も同じ扱いにする。PDF に時系列の専用セクションは無く、案件が年月の降順で
+   * 並ぶこと自体が画面の Timeline に当たる。ここで `timeline` を無視すると、画面では
+   * 時系列が出ている状態で PDF だけがサマリ 1 枚になり、トグルが黙って捨てられる。
+   */
   showProjects: boolean;
   /** スキル一覧を出すか（ビュートグル `skills`）。 */
   showSkills: boolean;
@@ -201,8 +213,23 @@ const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline'];
 
 // --- 小さなヘルパー -------------------------------------------------------
 
+/**
+ * PDF に載せるプレーンテキストの唯一の入口。
+ *
+ * 画面は sanitizeHtml、レガシー PDF は escapeCell で生タグを落としている。この経路だけが
+ * 素通しだと、`<script>社外秘</script>API` のように「どの表示経路でも隠れている中身」が
+ * ダウンロードした PDF にだけ literal で出る。ここでタグごと落とす。
+ */
 function trimmed(value: string | undefined): string {
-  return typeof value === 'string' ? value.trim() : '';
+  return typeof value === 'string' ? sanitizeHtml(value).trim() : '';
+}
+
+/**
+ * markdown として描くフィールド（業務内容 / 習得スキル・実績 / コメント / 自己紹介）用。
+ * `<details>` のような画面で許容済みのタグは残し、script/style だけ中身ごと落とす。
+ */
+function markdownText(value: string | undefined): string {
+  return typeof value === 'string' ? sanitizeMarkdown(value).trim() : '';
 }
 
 /** 習熟度から強調を決める。上級だけ塗り、それ以外は枠線。 */
@@ -225,12 +252,13 @@ export function skillYearsLabel(category: string, years: number, showSkills: boo
 }
 
 /**
- * 「N 名」「N 人」から人数を取り出す。範囲表示のためだけに使い、表示自体は原文を保つ。
- * 取れなければ null（原文をそのまま出す判断に落とす）。
+ * 「N 名」「N 人」「3〜8 名」から人数を取り出す。範囲表示のためだけに使い、表示自体は原文を保つ。
+ *
+ * 先頭の 1 つだけを読むと、`3〜8名` を持つ案件が会社の集計で `3 名` に潰れ、上限が実際より
+ * 小さく出る。数字を全部拾って両端を返す。取れなければ空配列（原文をそのまま出す判断に落とす）。
  */
-function parseTeamSize(team: string): number | null {
-  const match = trimmed(team).match(/(\d+)/);
-  return match ? Number(match[1]) : null;
+function parseTeamSizes(team: string): number[] {
+  return (trimmed(team).match(/\d+/g) ?? []).map(Number);
 }
 
 /**
@@ -523,9 +551,9 @@ function buildProject(item: ProjectItem, company: CompanyInfo | undefined, level
   // 案件（詳細版カード）は 業務内容 ブロックが 1 つも出ない静かなデータ欠落だった
   // （no-abbreviated-rendering skill 違反）。表示名は duties のままにし、ここで解決済みの
   // 値を詰める — 呼び出し側（ProjectCardDetail 等）に判断を分散させない。
-  const duties = trimmed(item.summary) || trimmed(item.duties);
-  const acquired = trimmed(item.acquired);
-  const comment = trimmed(item.comment);
+  const duties = markdownText(item.summary) || markdownText(item.duties);
+  const acquired = markdownText(item.acquired);
+  const comment = markdownText(item.comment);
   const fitsOnePage =
     estimateProjectCardHeight({ title, companyLabel, metaRows, techGroups, duties, acquired, comment }) <=
     PRINT_SIZE.cardMaxSinglePageHeight;
@@ -590,7 +618,7 @@ function buildCompany(
   isLatest: boolean,
 ): PrintCompany {
   const roles = dedupeRoles(...items.map((i) => i.role));
-  const sizes = items.map((i) => parseTeamSize(i.team)).filter((n): n is number => n !== null);
+  const sizes = items.flatMap((i) => parseTeamSizes(i.team));
   const min = sizes.length > 0 ? Math.min(...sizes) : null;
   const max = sizes.length > 0 ? Math.max(...sizes) : null;
   const teamRange = min === null || max === null ? '' : min === max ? `${min} 名` : `${min}〜${max} 名`;
@@ -603,7 +631,7 @@ function buildCompany(
     periodText:
       formatPeriodDisplay(trimmed(company?.period)) ||
       formatPeriodDisplay(deriveCompanyPeriod(items.map((i) => i.period))),
-    note: trimmed(company?.note),
+    note: markdownText(company?.note),
     projectCount: items.length,
     roles,
     teamRange,
@@ -671,7 +699,8 @@ function buildSummary(
     processLabels: PROCESS_LABELS.filter((_, i) => done[i]),
     profileRows,
     expertiseRows,
-    pr: stripDecorativeHeading(trimmed(profile?.pr)),
+    strengths: (profile?.strengths ?? []).map(trimmed).filter(Boolean),
+    pr: stripDecorativeHeading(markdownText(profile?.pr)),
   };
 }
 
@@ -720,7 +749,7 @@ export function buildPrintViewModel(
     summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items, on('skills')),
     skillGroups,
     companies,
-    showProjects: on('projects'),
+    showProjects: on('projects') || on('timeline'),
     showSkills: on('skills'),
     showProcess: on('process'),
   };

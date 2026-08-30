@@ -178,3 +178,15 @@ describe('splitLongRun', () => {
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(16);
   });
 });
+
+describe('禁則: 連なりの手前の文字を見失わない', () => {
+  it('開き括弧の直後にラテン文字が続いても、括弧の後ろで改行させない', () => {
+    // prevChar が buffer の中を進むため、以前は flush の時点で「「」が見えず
+    // ['「', BREAK, 'OpenAI', '」'] を返して行末に「「」だけが残っていた。
+    const parts = splitForHyphenation('「OpenAI」');
+    const openIndex = parts.indexOf('「');
+    expect(openIndex).toBeGreaterThanOrEqual(0);
+    expect(parts[openIndex + 1]).not.toBe('​');
+    expect(parts.join('')).toContain('「OpenAI');
+  });
+});

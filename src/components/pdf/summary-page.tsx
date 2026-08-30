@@ -206,6 +206,19 @@ export function SummaryPage({
         </View>
       )}
 
+      {/* 得意分野。画面の ProfileIntro は出しているのに PDF からだけ消えていた。
+          自己紹介の直前に置く — 短い語の並びなので工程チップと同じ帯で読める。 */}
+      {summary.strengths.length > 0 && (
+        <View style={styles.processSection}>
+          <SectionLabel>得意分野</SectionLabel>
+          <View style={printStyles.chipRow}>
+            {summary.strengths.map((label) => (
+              <BandChip key={label} label={label} />
+            ))}
+          </View>
+        </View>
+      )}
+
       {/* 自己紹介はデザインでは 2 ページ目だが、1 ページ目に置く。デザインが 1 ページ目に
           敷いていた「直近 3 案件」と「ポジショニング文」を出さない判断（前者は指示、後者は
           DB に該当データが無い）で約 490pt の空白が空き、空白のまま出すと「書くことが無い」

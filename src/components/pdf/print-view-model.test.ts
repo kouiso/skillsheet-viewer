@@ -337,3 +337,32 @@ describe('dedupeRoles', () => {
     expect(dedupeRoles('', undefined, '  ', 'PL,,  ,PL')).toBe('PL');
   });
 });
+
+
+describe('レビュー指摘の回帰: 消える情報・潰れる情報', () => {
+  it('得意分野（strengths）を PDF のサマリへ載せる', () => {
+    const blocks = blocksFixture();
+    const profile = blocks.find((b) => b.type === 'profile');
+    if (profile?.type === 'profile') profile.data.strengths = ['バックエンド設計', 'チームリード'];
+    const vm = buildPrintViewModel('シート', blocks);
+    expect(vm.summary.strengths).toEqual(['バックエンド設計', 'チームリード']);
+  });
+
+  it('プレーンテキストの script は中身ごと落とす（他の表示経路では隠れている）', () => {
+    const blocks = blocksFixture();
+    const profile = blocks.find((b) => b.type === 'profile');
+    if (profile?.type === 'profile') profile.data.name = '<script>confidential</script>磯貝';
+    const vm = buildPrintViewModel('シート', blocks);
+    expect(vm.summary.name).toBe('磯貝');
+  });
+
+  it('タイムラインだけ ON でも案件セクションを出す（PDF に時系列の専用面は無い）', () => {
+    const vm = buildPrintViewModel('シート', blocksFixture(), ['timeline']);
+    expect(vm.showProjects).toBe(true);
+  });
+
+  it('スキルを OFF にすると 1 ページ目の主力スタックも空になる', () => {
+    const vm = buildPrintViewModel('シート', blocksFixture(), ['projects']);
+    expect(vm.summary.topSkills).toEqual([]);
+  });
+});

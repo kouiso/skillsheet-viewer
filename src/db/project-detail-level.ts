@@ -31,12 +31,21 @@ export type DetailLevel = 'detail' | 'compact';
  * のように揺れている。部分一致で拾うが、拾う語彙は「そのプロジェクトを率いていた」と
  * 読める語だけに限る（`SE` / `SE サポート` は拾わない）。
  */
-const LEAD_ROLE_TOKENS = ['PL', 'PM', 'PMO', 'リード', 'マネージャー', 'マネジメント', 'EM'] as const;
+// ラテン文字の略号は語として独立しているときだけ拾う。部分一致にすると
+// `ImPLementation Engineer` が PL、`SystEM Engineer` が EM に当たり、ただの実装担当が
+// 詳細版の枠（最大 3 件）を奪って「率いていた案件」として強調される。
+const LEAD_ROLE_ABBREVIATIONS = ['PL', 'PM', 'PMO', 'EM'] as const;
+// 日本語の語は語境界という概念が無いので従来どおり部分一致で拾う。
+const LEAD_ROLE_WORDS = ['リード', 'マネージャー', 'マネジメント'] as const;
 
 export function isLeadRole(role: string): boolean {
   if (typeof role !== 'string') return false;
+  if (LEAD_ROLE_WORDS.some((word) => role.includes(word))) return true;
   const normalized = role.toUpperCase();
-  return LEAD_ROLE_TOKENS.some((token) => normalized.includes(token.toUpperCase()));
+  return LEAD_ROLE_ABBREVIATIONS.some((token) =>
+    // 前後がラテン文字・数字でなければ独立した語とみなす（`PM & PL` `PMO→PL` は拾う）。
+    new RegExp(`(^|[^A-Z0-9])${token}([^A-Z0-9]|$)`).test(normalized),
+  );
 }
 
 /** period から稼働月数を返す（両端を含む）。解釈できなければ null。 */
