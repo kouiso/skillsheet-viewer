@@ -219,6 +219,14 @@ export function PrintMarkdown({ text }: { text: string }) {
   if (!text.trim()) return null;
   const tree = processor.runSync(processor.parse(text)) as unknown as MdNode;
   return (
-    <View style={styles.blocks}>{(tree.children ?? []).map((node, index) => renderBlock(node, `b${index}`))}</View>
+    <View style={styles.blocks}>
+      {/* 高さ 0 の先行兄弟。@react-pdf は「親の最初の子は既にページ先頭にいる」と見なして
+          改ページの判断を省き、ページが埋まっていても先頭の段落をそのまま現在ページへ
+          置いて下端からはみ出させる（layout の shouldBreak / splitNodes。詳しくは
+          project-card-compact.tsx のコメント）。何も描かない View を 1 つ先に置くだけで
+          その判定が外れ、収まらない分が正しく次ページへ送られる。 */}
+      <View />
+      {(tree.children ?? []).map((node, index) => renderBlock(node, `b${index}`))}
+    </View>
   );
 }
