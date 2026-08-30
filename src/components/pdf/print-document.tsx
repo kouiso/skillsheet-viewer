@@ -27,7 +27,21 @@ const styles = StyleSheet.create({
   // 会社セクション全体を囲むレール。borderLeftWidth は折り返す View でもページ断片ごとに
   // 再描画される（実測、react-pdf-capability.node.test.tsx の H）ので wrap={false} は不要。
   // paddingLeft がレールから見出し帯・カードまでの間隔を作る。
-  companySection: {
+  /**
+   * 会社セクション左のレール（縦罫線）と、その内側の余白。
+   *
+   * **会社の全体を 1 枚の View で囲ってレールを持たせてはいけない。** 囲うと、余白が
+   * 足りず見出しが次ページへ送られたときに囲いの View だけが前のページに断片として
+   * 残り、中身の無い縦線がページ下端まで伸びる（実測: 42 ページ版の p15）。
+   * 見出しと案件の並びにそれぞれ当てて、送られるときは線も一緒に送られるようにする。
+   */
+  companyRail: {
+    borderLeftWidth: PRINT_SIZE.companyRailWidth,
+    borderLeftColor: PRINT_COLOR.rule,
+    paddingLeft: PRINT_SIZE.companyRailIndent,
+  },
+  /** 案件の並び。会社と会社の間隔はここで作る（見出し側に付けると帯の上が空く）。 */
+  companyBody: {
     marginBottom: PRINT_SIZE.companySectionGap,
     borderLeftWidth: PRINT_SIZE.companyRailWidth,
     borderLeftColor: PRINT_COLOR.rule,
@@ -135,36 +149,49 @@ function CompanySection({
   }
 
   return (
-    <View style={styles.companySection}>
-      {/* 高さ 0 の先行兄弟。@react-pdf は「親の最初の子は既にページ先頭にいる」と見なして
-          minPresenceAhead を無視する（layout の shouldBreak の breakingImprovesPresence）。
-          何も描かない View を 1 つ先に置くだけで、その判定が外れて見出しの
-          「後ろにこれだけ余白が要る」が効くようになる。 */}
-      <View />
+    <>
+      {/*
+        会社の見出しと案件の並びを、**Page 直下の兄弟として並べる**（会社全体を 1 枚の
+        View で囲わない）。理由は 2 つあり、どちらもページ割りの実装に由来する。
+
+        1. 見出しの「後ろにこれだけ余白が要る」（minPresenceAhead）は、その見出しに
+           先行する兄弟がいないと無視される。@react-pdf は「親の最初の子は既にページの
+           先頭にいる」と見なして判断を省くため（layout の shouldBreak の
+           breakingImprovesPresence）。会社全体を囲うと見出しは必ずその最初の子になり、
+           余白の要求が 120 でも 320 でも出力が 1 ページも変わらなかった（実測）。
+           Page 直下なら前の会社が先行兄弟になるので、そのまま効く。
+
+        2. 囲った View に左のレール（縦罫線）を持たせると、見出しが次ページへ送られた
+           ときに囲いの断片だけが前のページに残り、中身の無い縦線がページ下端まで伸びる。
+           レールを見出しと案件それぞれに持たせれば、送られるときは線も一緒に送られる。
+      */}
       <CompanyHeading
         company={company}
+        railStyle={styles.companyRail}
         onFirstPage={(pageProps) => companySpanTracker.markStart(company.id, company.name, pageProps)}
       />
-      {runs.map((run, runIndex) =>
-        run.level === 'detail' ? (
-          run.projects.map((project) => (
-            <ProjectCardDetail key={project.id} project={project} spanTracker={projectSpanTracker} />
-          ))
-        ) : (
-          // 連続する簡約案件を 1 つの表にまとめた塊。塊自体は並び順以外の識別子を持たず、
-          // 会社内での位置がそのまま同一性になるので index を鍵に使う。
-          // biome-ignore lint/suspicious/noArrayIndexKey: 塊は並び順でしか識別できない
-          <CompactRun key={`compact-${runIndex}`} projects={run.projects} />
-        ),
-      )}
-      <DynamicView
-        render={(pageProps) => {
-          companySpanTracker.markEnd(company.id, pageProps);
-          return null;
-        }}
-      />
-      <View style={styles.companyEndMarker} />
-    </View>
+      <View style={styles.companyBody}>
+        {runs.map((run, runIndex) =>
+          run.level === 'detail' ? (
+            run.projects.map((project) => (
+              <ProjectCardDetail key={project.id} project={project} spanTracker={projectSpanTracker} />
+            ))
+          ) : (
+            // 連続する簡約案件を 1 つの表にまとめた塊。塊自体は並び順以外の識別子を持たず、
+            // 会社内での位置がそのまま同一性になるので index を鍵に使う。
+            // biome-ignore lint/suspicious/noArrayIndexKey: 塊は並び順でしか識別できない
+            <CompactRun key={`compact-${runIndex}`} projects={run.projects} />
+          ),
+        )}
+        <DynamicView
+          render={(pageProps) => {
+            companySpanTracker.markEnd(company.id, pageProps);
+            return null;
+          }}
+        />
+        <View style={styles.companyEndMarker} />
+      </View>
+    </>
   );
 }
 
