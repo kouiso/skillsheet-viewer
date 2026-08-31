@@ -229,10 +229,12 @@ export interface PrintSkillSheetDocumentProps {
   blocks: Block[];
   /** 画面のビュートグルの状態。未指定は全 ON（画面側 isViewOn と同じ既定）。 */
   views?: PrintViewKey[];
+  /** 継続中案件の経験月数に使う固定月キー。 */
+  referenceMonth?: number;
 }
 
-export function PrintSkillSheetDocument({ title, blocks, views }: PrintSkillSheetDocumentProps) {
-  const vm = buildPrintViewModel(title, blocks, views);
+export function PrintSkillSheetDocument({ title, blocks, views, referenceMonth }: PrintSkillSheetDocumentProps) {
+  const vm = buildPrintViewModel(title, blocks, views, referenceMonth);
   // カード・会社それぞれの開始・終了ページを覚える器は、この描画 1 回ぶんだけ生きる。
   // モジュール変数にすると前回の描画の記録が残り、継続ヘッダーの判定が狂う。
   const projectSpanTracker = createSpanTracker();

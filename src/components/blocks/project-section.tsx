@@ -114,7 +114,7 @@ export function ProjectSection({
       .map((group) => ({
         ...group,
         rows: group.items.map((item) => byId.get(item.id)).filter((row): row is (typeof filtered)[number] => !!row),
-        totalCount: visible.items.filter((item) => item.companyId === group.companyId).length,
+        allCompanyItems: visible.items.filter((item) => item.companyId === group.companyId),
       }))
       .filter((group) => group.rows.length > 0);
   }, [visible.companies, visible.items, filtered]);
@@ -174,7 +174,8 @@ export function ProjectSection({
                 headingIdSuffix={headingIdSuffix}
                 company={group.company}
                 items={group.rows}
-                totalCount={group.totalCount}
+                allCompanyItems={group.allCompanyItems}
+                totalCount={group.allCompanyItems.length}
                 isSearching={isSearching}
                 activeTech={activeTech}
                 queryTerms={parsedQuery.terms}

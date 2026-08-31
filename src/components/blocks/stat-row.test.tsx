@@ -22,6 +22,46 @@ describe('StatRow', () => {
     expect(grid?.className).toContain('sm:grid-cols-4');
   });
 
+  it('3項目ならsm以上で3等分する', () => {
+    const data = buildData();
+    data.items.push({ value: '20代', unit: '', label: '年齢' });
+    const { container } = render(<StatRow data={data} />);
+    const grid = container.firstElementChild?.firstElementChild;
+    expect(grid?.className).toContain('grid-cols-2');
+    expect(grid?.className).toContain('sm:grid-cols-3');
+    expect(grid?.className).not.toContain('sm:grid-cols-4');
+  });
+
+  it('表示対象案件から経験年数と案件数を差し替える', () => {
+    const project = (id: string, period: string) => ({
+      id,
+      companyId: 'c1',
+      title: id,
+      scope: '',
+      period,
+      role: '',
+      team: '',
+      tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+      process: [],
+      duties: '',
+      acquired: '',
+      comment: '',
+    });
+    render(
+      <StatRow
+        data={buildData()}
+        projectItems={[project('p1', '2020.01 — 2020.12'), project('p2', '2021.01 — 2021.12')]}
+      />,
+    );
+    expect(document.body).toHaveTextContent('2年');
+    expect(document.body).toHaveTextContent('2件');
+  });
+
+  it('projectブロックが無い場合は手入力の案件数を維持する', () => {
+    render(<StatRow data={buildData()} />);
+    expect(document.body).toHaveTextContent('12件');
+  });
+
   it('mb-6 はブレークポイント無しで常に付く（space-y-0 のシートで次ブロックとの余白が消える回帰の防止）', () => {
     const { container } = render(<StatRow data={buildData()} />);
     const grid = container.firstElementChild?.firstElementChild;

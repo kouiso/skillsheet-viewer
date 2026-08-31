@@ -260,12 +260,36 @@ describe('buildPrintViewModel', () => {
     expect(buildPrintViewModel('シート', blocksFixture()).summary.title).toBe('');
   });
 
-  it('主力スタックは経験年数の降順で、上級だけ塗りにする', () => {
+  it('主力スタックは案件から導出した経験年月の降順で、上級だけ塗りにする', () => {
     const vm = buildPrintViewModel('シート', blocksFixture());
     expect(vm.summary.topSkills).toEqual([
-      { label: 'TypeScript 8 年', emphasis: 'solid' },
       { label: 'Python 4 年', emphasis: 'outline' },
+      { label: 'TypeScript 0 年 9 ヶ月', emphasis: 'solid' },
     ]);
+  });
+
+  it('統計枠は非表示案件を除いた案件数と重複なしの経験年数を使う', () => {
+    const blocks = blocksFixture();
+    const stats = blocks.find((b) => b.type === 'stats');
+    if (stats?.type === 'stats') {
+      stats.data.items.push({ value: '30+', unit: '案件', label: '参画プロジェクト数' });
+    }
+
+    expect(buildPrintViewModel('シート', blocks).summary.stats).toEqual([
+      { value: '1', unit: '年', label: 'エンジニア歴' },
+      { value: '2', unit: '案件', label: '参画プロジェクト数' },
+    ]);
+  });
+
+  it('projectブロックが無い場合は手入力の案件数を維持する', () => {
+    const blocks = blocksFixture().filter((block) => block.type !== 'project');
+    const stats = blocks.find((block) => block.type === 'stats');
+    if (stats?.type === 'stats') stats.data.items.push({ value: '12', unit: '件', label: '案件数' });
+    expect(buildPrintViewModel('シート', blocks).summary.stats).toContainEqual({
+      value: '12',
+      unit: '件',
+      label: '案件数',
+    });
   });
 
   it('中身が空の統計項目は落とす（1 ページ目に空セルを作らない）', () => {

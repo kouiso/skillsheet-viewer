@@ -20,6 +20,8 @@ interface SheetViewClientProps {
    * 画面上部に案内する（Issue #204）。sheets-cache.ts の isDbContentStale() で判定する。
    */
   stale?: boolean;
+  /** SSRとHydrationで共有する、継続中案件の集計基準月。 */
+  referenceMonth?: number;
 }
 
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
@@ -31,6 +33,7 @@ const SheetViewClient = ({
   canEdit = false,
   reserveEditSlot = false,
   stale = false,
+  referenceMonth,
 }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
@@ -65,7 +68,9 @@ const SheetViewClient = ({
 
       // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
       // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
-      const blob = await pdf(<SkillSheetPDF title={title} content={content} blocks={blocks} views={views} />).toBlob();
+      const blob = await pdf(
+        <SkillSheetPDF title={title} content={content} blocks={blocks} views={views} referenceMonth={referenceMonth} />,
+      ).toBlob();
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -123,7 +128,12 @@ const SheetViewClient = ({
           backHref="/view"
         />
       )}
-      <SkillSheetViewer skillSheet={{ title, content }} blocks={blocks} views={isDashboard ? views : undefined} />
+      <SkillSheetViewer
+        skillSheet={{ title, content }}
+        blocks={blocks}
+        views={isDashboard ? views : undefined}
+        referenceMonth={referenceMonth}
+      />
     </div>
   );
 };
