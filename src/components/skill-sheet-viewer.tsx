@@ -236,7 +236,7 @@ const SkillSheetViewer = ({
   // hidden 判定を繰り返すと、画面とPDFで集計母数がずれるためここで一度だけ解決する。
   const visibleProjectItems = useMemo(() => {
     const project = blocks?.find((block): block is Extract<Block, { type: 'project' }> => block.type === 'project');
-    return project ? filterVisibleProjectData(project.data).items : [];
+    return project ? filterVisibleProjectData(project.data).items : undefined;
   }, [blocks]);
   // 1枚のシートに project ブロックが複数あると、案件詳細・タイムラインの見出し id が
   // 重複して目次のスクロール先が壊れる。複数あるときだけブロック id で分ける

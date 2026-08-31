@@ -57,6 +57,11 @@ describe('StatRow', () => {
     expect(document.body).toHaveTextContent('2件');
   });
 
+  it('projectブロックが無い場合は手入力の案件数を維持する', () => {
+    render(<StatRow data={buildData()} />);
+    expect(document.body).toHaveTextContent('12件');
+  });
+
   it('mb-6 はブレークポイント無しで常に付く（space-y-0 のシートで次ブロックとの余白が消える回帰の防止）', () => {
     const { container } = render(<StatRow data={buildData()} />);
     const grid = container.firstElementChild?.firstElementChild;

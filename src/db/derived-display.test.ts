@@ -51,6 +51,29 @@ describe('resolveDisplayedStats', () => {
     const stats = [{ value: '8', unit: '年', label: '経験年数' }];
     expect(resolveDisplayedStats(stats, [project('p1', '不明'), project('p2', '2020')])).toEqual(stats);
   });
+
+  it('案件ブロックが無ければ手入力値を維持する', () => {
+    const stats = [{ value: '12', unit: '件', label: '案件数' }];
+    expect(resolveDisplayedStats(stats, undefined)).toEqual(stats);
+  });
+
+  it('経験値は表示単位に合わせて年または月へ変換する', () => {
+    const projects = [project('p1', '2020.01 — 2021.12')];
+    expect(
+      resolveDisplayedStats(
+        [
+          { value: '1', unit: '年', label: '実務経験' },
+          { value: '1', unit: 'ヶ月', label: '経験年数' },
+          { value: '手入力', unit: '日', label: 'エンジニア歴' },
+        ],
+        projects,
+      ),
+    ).toEqual([
+      { value: '2', unit: '年', label: '実務経験' },
+      { value: '24', unit: 'ヶ月', label: '経験年数' },
+      { value: '手入力', unit: '日', label: 'エンジニア歴' },
+    ]);
+  });
 });
 
 describe('resolveCompanyPeriod', () => {

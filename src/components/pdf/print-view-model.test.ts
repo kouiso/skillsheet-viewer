@@ -281,6 +281,17 @@ describe('buildPrintViewModel', () => {
     ]);
   });
 
+  it('projectブロックが無い場合は手入力の案件数を維持する', () => {
+    const blocks = blocksFixture().filter((block) => block.type !== 'project');
+    const stats = blocks.find((block) => block.type === 'stats');
+    if (stats?.type === 'stats') stats.data.items.push({ value: '12', unit: '件', label: '案件数' });
+    expect(buildPrintViewModel('シート', blocks).summary.stats).toContainEqual({
+      value: '12',
+      unit: '件',
+      label: '案件数',
+    });
+  });
+
   it('中身が空の統計項目は落とす（1 ページ目に空セルを作らない）', () => {
     const blocks = blocksFixture();
     const stats = blocks.find((b) => b.type === 'stats');
