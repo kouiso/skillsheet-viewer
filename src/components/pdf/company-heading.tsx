@@ -133,6 +133,7 @@ export function CompanyHeading({
   company,
   onFirstPage,
   railStyle,
+  minPresenceAhead = MIN_PRESENCE_AHEAD,
 }: {
   company: PrintCompany;
   /**
@@ -151,6 +152,12 @@ export function CompanyHeading({
    * （`subPageNumber` を持つ呼び出し）を 1 回拾えば「会社の開始ページ」が確定する。
    */
   onFirstPage?: (pageProps: PageRenderProps) => void;
+  /**
+   * 見出しの後ろに要求する高さ（pt）。既定は 240。
+   * 会社の最初のカードが 1 ページに収まる大きさのときは、呼び出し側がその見積り高さを
+   * 渡す（見出しだけがページの末尾に取り残されるのを防ぐ）。
+   */
+  minPresenceAhead?: number;
 }) {
   const isLatest = company.isLatest;
   // デザインの右端「詳細版 ×N」は出さない。内部の分類結果で、読む側には意味が無い。
@@ -170,7 +177,7 @@ export function CompanyHeading({
     // `wrap={false}` を付けたこの View は**このコンポーネントの根**でなければならない。
     // 上にもう 1 枚 View を挟むと、残り高さが 54〜14pt のときページ送りではなく圧縮が
     // 走り、帯の余白が潰れて 2 行目がフッター（下から 46pt）に食い込む（実測）。
-    <View style={railStyle} wrap={false} minPresenceAhead={MIN_PRESENCE_AHEAD}>
+    <View style={railStyle} wrap={false} minPresenceAhead={minPresenceAhead}>
       {onFirstPage && (
         <DynamicView
           render={(pageProps) => {
