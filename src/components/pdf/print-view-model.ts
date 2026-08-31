@@ -124,6 +124,11 @@ export interface PrintProject {
    * 見積りは `estimateProjectCardHeight` 参照。
    */
   fitsOnePage: boolean;
+  /**
+   * 詳細版カード 1 枚の見積り高さ（pt）。会社見出しが「最初のカードごと」次ページへ
+   * 送られるべきかの判定に使う（print-document.tsx の CompanySection）。
+   */
+  estimatedHeight: number;
 }
 
 export interface PrintCompany {
@@ -629,9 +634,16 @@ function buildProject(
   const duties = markdownText(item.summary) || markdownText(item.duties);
   const acquired = markdownText(item.acquired);
   const comment = markdownText(item.comment);
-  const fitsOnePage =
-    estimateProjectCardHeight({ title, companyLabel, metaRows, techGroups, duties, acquired, comment }) <=
-    PRINT_SIZE.cardMaxSinglePageHeight;
+  const estimatedHeight = estimateProjectCardHeight({
+    title,
+    companyLabel,
+    metaRows,
+    techGroups,
+    duties,
+    acquired,
+    comment,
+  });
+  const fitsOnePage = estimatedHeight <= PRINT_SIZE.cardMaxSinglePageHeight;
 
   return {
     id: item.id,
@@ -651,6 +663,7 @@ function buildProject(
     compactNote: firstSentence(duties || comment),
     level,
     fitsOnePage,
+    estimatedHeight,
   };
 }
 

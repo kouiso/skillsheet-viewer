@@ -85,6 +85,34 @@ const styles = StyleSheet.create({
 type Tracker = ReturnType<typeof createSpanTracker>;
 
 /**
+ * 会社見出しの後ろに要求する高さ（pt）。
+ *
+ * 最初のカードが 1 ページに収まる大きさのときは、**そのカードごと入る高さ**を要求する。
+ * 固定値（240pt）だけだと、見出しは残り 300pt のページに乗るのに、分割禁止の 500pt の
+ * カードは丸ごと次ページへ行き、見出しと会社概要だけがページの末尾に取り残される
+ * （実測: 42 ページ版の p19、E 社の見出しの下が 1 枚まるごと白かった）。
+ *
+ * 1 ページに収まらないカード（`fitsOnePage === false`）は分割されて見出しの直後から
+ * 描かれ始めるので、取り残されない。その場合は既定の 240pt でよい。
+ *
+ * 上限を置くのは、要求が満たせない大きさになると「送っても解決しない」からで、
+ * その時は 240pt と同じ挙動に落ちる。見出し 1 つ分（帯 + 概要 2 行）を実測で約 110pt と
+ * 見て、本文の高さ 754pt から引いた残りを上限にする。カードの見積りは安全側に大きめへ
+ * 振ってあるので、上限に当たったカードも実際の高さでは収まることが多い。
+ */
+const HEADING_BLOCK_HEIGHT = 110;
+const MAX_ROOM_AFTER_HEADING = PRINT_SIZE.cardMaxSinglePageHeight - HEADING_BLOCK_HEIGHT;
+
+function requiredRoomAfterHeading(company: PrintCompany): number | undefined {
+  const first = company.projects[0];
+  // 見積り（estimatedHeight / fitsOnePage）は**詳細版カードの寸法**なので、簡約版には当てない
+  // （レビュー指摘）。簡約版は 1 段目の行だけを分割禁止にして 2 段目は割れる作りなので、
+  // 見出しの直後に必ず中身が乗る。取り残される心配が無いぶん、既定の要求で足りる。
+  if (first?.level !== 'detail' || !first.fitsOnePage) return undefined;
+  return Math.min(first.estimatedHeight + PRINT_SIZE.cardGap, MAX_ROOM_AFTER_HEADING);
+}
+
+/**
  * 簡約表 1 区間ぶん。列ヘッダーは先頭案件と 1 つの `wrap={false}` 単位に束ねて、
  * データ行 0 件のまま列ヘッダーだけが改ページするのを防ぐ（project-card-compact.tsx の
  * leadingHeader コメント参照）。2 ページ目以降の継続ヘッダーは、先頭案件が実際に乗った
@@ -168,6 +196,7 @@ function CompanySection({
       <CompanyHeading
         company={company}
         railStyle={styles.companyRail}
+        minPresenceAhead={requiredRoomAfterHeading(company)}
         onFirstPage={(pageProps) => companySpanTracker.markStart(company.id, company.name, pageProps)}
       />
       <View style={styles.companyBody}>
