@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { ProjectItem, ProjectTech } from './blocks';
 import {
   deriveSkillExperienceMonths,
@@ -77,6 +77,8 @@ describe('技術名の完全一致', () => {
   it('JavaとJavaScript、ReactとReact Nativeを誤って一致させない', () => {
     expect(technologyNamesMatch('Java', 'JavaScript')).toBe(false);
     expect(technologyNamesMatch('React', 'React Native')).toBe(false);
+    expect(technologyNamesMatch('C', 'C++')).toBe(false);
+    expect(technologyNamesMatch('C++', 'C++')).toBe(true);
   });
 
   it('一致案件の月を重複なく集計する', () => {
@@ -99,12 +101,21 @@ describe('技術名の完全一致', () => {
     });
   });
 
-  it('現在までの案件は実行月まで数える', () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-15T00:00:00Z'));
+  it('現在までの案件はサーバーから渡した固定月まで数える', () => {
     expect(
-      deriveSkillExperienceMonths('React Native', [project('p1', '2019.10 — 現在', { fw: ['React Native'] })]),
+      deriveSkillExperienceMonths(
+        'React Native',
+        [project('p1', '2019.10 — 現在', { fw: ['React Native'] })],
+        2026 * 12 + 8,
+      ),
     ).toBe(84);
-    vi.useRealTimers();
+  });
+
+  it('固定月が無い継続中案件は手入力へ戻す', () => {
+    expect(
+      resolveDisplayedSkillExperience({ name: 'React Native', years: 1 }, [
+        project('p1', '2019.10 — 現在', { fw: ['React Native'] }),
+      ]),
+    ).toEqual({ months: 12, label: '1年', derived: false });
   });
 });

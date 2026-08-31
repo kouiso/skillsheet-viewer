@@ -738,6 +738,7 @@ function buildSummary(
   skillGroups: PrintSkillGroup[],
   items: ProjectItem[],
   showSkills: boolean,
+  referenceMonth?: number,
 ): PrintSummary {
   const allProfileRows: PrintMetaRow[] = [];
   if (trimmed(profile?.company)) allProfileRows.push({ label: '所属', value: trimmed(profile?.company) });
@@ -783,7 +784,7 @@ function buildSummary(
     companyName: trimmed(profile?.company),
     // 3 つとも空の枠は出さない。エディタは空の統計項目を許すので、そのまま描くと
     // 1 ページ目に中身の無いセルが 1 つ増え、残りのセルが痩せる（レビュー指摘）。
-    stats: resolveDisplayedStats(stats?.items ?? [], items)
+    stats: resolveDisplayedStats(stats?.items ?? [], items, referenceMonth)
       .map((i) => ({ value: trimmed(i.value), unit: trimmed(i.unit), label: trimmed(i.label) }))
       .filter((i) => i.value !== '' || i.unit !== '' || i.label !== ''),
     topSkills,
@@ -804,6 +805,7 @@ export function buildPrintViewModel(
   sheetTitle: string,
   blocks: Block[],
   views: PrintViewKey[] = ALL_VIEWS,
+  referenceMonth?: number,
 ): PrintViewModel {
   const on = (key: PrintViewKey) => views.includes(key);
 
@@ -820,7 +822,7 @@ export function buildPrintViewModel(
         skills: (b.data.skills ?? [])
           .filter((s) => trimmed(s.name))
           .map((s) => {
-            const experience = resolveDisplayedSkillExperience(s, visible.items);
+            const experience = resolveDisplayedSkillExperience(s, visible.items, referenceMonth);
             return {
               name: trimmed(s.name),
               years: experience.months / 12,
@@ -847,7 +849,7 @@ export function buildPrintViewModel(
   });
 
   return {
-    summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items, on('skills')),
+    summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items, on('skills'), referenceMonth),
     skillGroups,
     companies,
     showProjects: on('projects') || on('timeline'),
