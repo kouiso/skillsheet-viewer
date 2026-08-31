@@ -38,14 +38,17 @@ function collectProjectMonths(
 /** 画面とPDFの統計枠へ表示する値を、表示対象案件から解決する。 */
 export function resolveDisplayedStats(
   items: StatItem[],
-  visibleProjects: ProjectItem[],
+  visibleProjects: ProjectItem[] | undefined,
   referenceMonth?: number,
 ): StatItem[] {
+  if (visibleProjects === undefined) return items;
   const experienceMonths = collectProjectMonths(visibleProjects, undefined, referenceMonth).size;
   return items.map((item) => {
     const label = item.label.trim();
     if (ENGINEER_EXPERIENCE_LABELS.has(label) && experienceMonths > 0) {
-      return { ...item, value: String(Math.floor(experienceMonths / 12)) };
+      const unit = item.unit.trim();
+      if (unit === '年') return { ...item, value: String(Math.floor(experienceMonths / 12)) };
+      if (/^(?:ヶ|か|ケ)月$/.test(unit)) return { ...item, value: String(experienceMonths) };
     }
     if (PROJECT_COUNT_LABELS.has(label)) {
       return { ...item, value: String(visibleProjects.length) };

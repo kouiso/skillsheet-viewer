@@ -739,6 +739,7 @@ function buildSummary(
   items: ProjectItem[],
   showSkills: boolean,
   referenceMonth?: number,
+  hasProjectSource = true,
 ): PrintSummary {
   const allProfileRows: PrintMetaRow[] = [];
   if (trimmed(profile?.company)) allProfileRows.push({ label: '所属', value: trimmed(profile?.company) });
@@ -784,7 +785,7 @@ function buildSummary(
     companyName: trimmed(profile?.company),
     // 3 つとも空の枠は出さない。エディタは空の統計項目を許すので、そのまま描くと
     // 1 ページ目に中身の無いセルが 1 つ増え、残りのセルが痩せる（レビュー指摘）。
-    stats: resolveDisplayedStats(stats?.items ?? [], items, referenceMonth)
+    stats: resolveDisplayedStats(stats?.items ?? [], hasProjectSource ? items : undefined, referenceMonth)
       .map((i) => ({ value: trimmed(i.value), unit: trimmed(i.unit), label: trimmed(i.label) }))
       .filter((i) => i.value !== '' || i.unit !== '' || i.label !== ''),
     topSkills,
@@ -849,7 +850,16 @@ export function buildPrintViewModel(
   });
 
   return {
-    summary: buildSummary(sheetTitle, profile, stats, skillGroups, visible.items, on('skills'), referenceMonth),
+    summary: buildSummary(
+      sheetTitle,
+      profile,
+      stats,
+      skillGroups,
+      visible.items,
+      on('skills'),
+      referenceMonth,
+      projectBlock !== undefined,
+    ),
     skillGroups,
     companies,
     showProjects: on('projects') || on('timeline'),
