@@ -10,6 +10,8 @@ export interface SkillSheetPDFProps extends SkillSheetDocumentProps {
   blocks?: Block[];
   /** 画面のビュートグルの状態。押した瞬間の状態がそのまま PDF に効く。 */
   views?: PrintViewKey[];
+  /** 継続中案件の経験月数に使う固定月キー。 */
+  referenceMonth?: number;
 }
 
 /**
@@ -39,9 +41,11 @@ function canRenderStructured(blocks: Block[] | undefined): blocks is Block[] {
   );
 }
 
-export const SkillSheetPDF = ({ title, content, blocks, views }: SkillSheetPDFProps) => {
+export const SkillSheetPDF = ({ title, content, blocks, views, referenceMonth }: SkillSheetPDFProps) => {
   registerPdfFonts();
-  if (canRenderStructured(blocks)) return <PrintSkillSheetDocument title={title} blocks={blocks} views={views} />;
+  if (canRenderStructured(blocks)) {
+    return <PrintSkillSheetDocument title={title} blocks={blocks} views={views} referenceMonth={referenceMonth} />;
+  }
   return <SkillSheetDocument title={title} content={content} />;
 };
 

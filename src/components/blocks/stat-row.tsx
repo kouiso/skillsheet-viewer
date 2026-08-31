@@ -6,11 +6,12 @@ import { resolveDisplayedStats } from '@/db/derived-display';
 interface StatRowProps {
   data: StatsBlockData;
   projectItems?: ProjectItem[];
+  referenceMonth?: number;
 }
 
-export const StatRow = ({ data, projectItems = [] }: StatRowProps) => {
+export const StatRow = ({ data, projectItems = [], referenceMonth }: StatRowProps) => {
   if (data.items.length === 0) return null;
-  const items = resolveDisplayedStats(data.items, projectItems);
+  const items = resolveDisplayedStats(data.items, projectItems, referenceMonth);
   const desktopColumns = items.length === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-4';
 
   return (

@@ -7,6 +7,7 @@ import { sanitizeHtml } from '@/util/sanitize-html';
 interface SkillMatrixProps {
   data: SkillsBlockData;
   projectItems?: ProjectItem[];
+  referenceMonth?: number;
   className?: string;
 }
 
@@ -29,7 +30,7 @@ function getMonthsBarPercent(months: number): number {
   return Math.max(ratio * 100, 8);
 }
 
-export const SkillMatrix = ({ data, projectItems = [], className = 'mb-6' }: SkillMatrixProps) => {
+export const SkillMatrix = ({ data, projectItems = [], referenceMonth, className = 'mb-6' }: SkillMatrixProps) => {
   if (data.skills.length === 0) return null;
 
   return (
@@ -44,7 +45,7 @@ export const SkillMatrix = ({ data, projectItems = [], className = 'mb-6' }: Ski
       )}
       <div className="grid gap-y-[11px]">
         {data.skills.map((skill, i) => {
-          const experience = resolveDisplayedSkillExperience(skill, projectItems);
+          const experience = resolveDisplayedSkillExperience(skill, projectItems, referenceMonth);
           return (
             // 名前 / 習熟度(★) / バー / 年数 の4列。習熟度は PDF（表形式）と同じ情報量になるよう、
             // ホバー不要で常時可視のテキストとして表示する（issue #142）。

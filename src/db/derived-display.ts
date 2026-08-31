@@ -4,13 +4,19 @@ import { deriveCompanyPeriod, flattenTech, parsePeriodBounds } from './process';
 const ENGINEER_EXPERIENCE_LABELS = new Set(['エンジニア歴', 'エンジニア経験', '経験年数', '実務経験']);
 const PROJECT_COUNT_LABELS = new Set(['案件数', 'プロジェクト数', '参画案件数', '参画プロジェクト数']);
 
+/** サーバーからクライアントへ渡す、月初基準の固定月キー。 */
+export function currentMonthKey(date = new Date()): number {
+  return date.getFullYear() * 12 + date.getMonth();
+}
+
 /** 月数を計算できる精度の期間を、重複排除に使う連続した月キーへ変換する。 */
-function periodMonthKeys(period: string): number[] {
+function periodMonthKeys(period: string, referenceMonth?: number): number[] {
   const bounds = parsePeriodBounds(period);
-  // 年だけの期間から「1ヶ月」を捏造しない。開始月まで書かれている継続中は計算できる。
+  // 年だけの期間から「1ヶ月」を捏造しない。継続中はSSRとHydrationで同じ固定月を使う。
   if (!bounds?.precise) return [];
   const start = Math.round(bounds.start * 12);
-  const end = Math.round(bounds.end * 12);
+  if (bounds.openEnded && referenceMonth === undefined) return [];
+  const end = bounds.openEnded ? Math.max(referenceMonth ?? start, start) : Math.round(bounds.end * 12);
   const months: number[] = [];
   for (let month = start; month <= end; month += 1) months.push(month);
   return months;
@@ -19,18 +25,23 @@ function periodMonthKeys(period: string): number[] {
 function collectProjectMonths(
   items: ProjectItem[],
   predicate: (item: ProjectItem) => boolean = () => true,
+  referenceMonth?: number,
 ): Set<number> {
   const months = new Set<number>();
   for (const item of items) {
     if (!predicate(item)) continue;
-    for (const month of periodMonthKeys(item.period)) months.add(month);
+    for (const month of periodMonthKeys(item.period, referenceMonth)) months.add(month);
   }
   return months;
 }
 
 /** 画面とPDFの統計枠へ表示する値を、表示対象案件から解決する。 */
-export function resolveDisplayedStats(items: StatItem[], visibleProjects: ProjectItem[]): StatItem[] {
-  const experienceMonths = collectProjectMonths(visibleProjects).size;
+export function resolveDisplayedStats(
+  items: StatItem[],
+  visibleProjects: ProjectItem[],
+  referenceMonth?: number,
+): StatItem[] {
+  const experienceMonths = collectProjectMonths(visibleProjects, undefined, referenceMonth).size;
   return items.map((item) => {
     const label = item.label.trim();
     if (ENGINEER_EXPERIENCE_LABELS.has(label) && experienceMonths > 0) {
@@ -63,7 +74,7 @@ export function normalizeTechnologyCandidates(value: string): Set<string> {
   const parenthetical = [...normalized.matchAll(/\(([^()]*)\)/g)].map((match) => match[1]);
   const base = normalized.replace(/\([^()]*\)/g, ' ');
   const candidates = [base, ...parenthetical]
-    .flatMap((part) => [part, ...part.split(/\s*(?:\/|\+|,|、|・|&)\s*/)])
+    .flatMap((part) => [part, ...part.split(/\s*(?:\/|(?<!\+)\+(?!\+)|,|、|・|&)\s*/)])
     .map(stripTrailingVersion)
     .map((part) => part.replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US'))
     .filter(Boolean);
@@ -76,9 +87,15 @@ export function technologyNamesMatch(skillName: string, projectTechnology: strin
   return [...skillCandidates].some((candidate) => projectCandidates.has(candidate));
 }
 
-export function deriveSkillExperienceMonths(skillName: string, visibleProjects: ProjectItem[]): number {
-  return collectProjectMonths(visibleProjects, (item) =>
-    flattenTech(item.tech).some((technology) => technologyNamesMatch(skillName, technology)),
+export function deriveSkillExperienceMonths(
+  skillName: string,
+  visibleProjects: ProjectItem[],
+  referenceMonth?: number,
+): number {
+  return collectProjectMonths(
+    visibleProjects,
+    (item) => flattenTech(item.tech).some((technology) => technologyNamesMatch(skillName, technology)),
+    referenceMonth,
   ).size;
 }
 
@@ -97,8 +114,9 @@ export interface DisplayedSkillExperience {
 export function resolveDisplayedSkillExperience(
   skill: Pick<SkillEntry, 'name' | 'years'>,
   visibleProjects: ProjectItem[],
+  referenceMonth?: number,
 ): DisplayedSkillExperience {
-  const derivedMonths = deriveSkillExperienceMonths(skill.name, visibleProjects);
+  const derivedMonths = deriveSkillExperienceMonths(skill.name, visibleProjects, referenceMonth);
   if (derivedMonths > 0) {
     return { months: derivedMonths, label: formatExperienceMonths(derivedMonths), derived: true };
   }
