@@ -1,6 +1,7 @@
 'use client';
 
 import type { CompanyInfo, ProjectItem } from '@/db/blocks';
+import { resolveCompanyPeriod } from '@/db/derived-display';
 import { companyDisplayName } from '@/db/group-by-company';
 import { deriveDuration, formatPeriodDisplay, parsePeriodBounds } from '@/db/process';
 import { sanitizeHtml } from '@/util/sanitize-html';
@@ -35,6 +36,8 @@ interface CompanySectionProps {
   headingIdSuffix?: string;
   company: CompanyInfo | undefined;
   items: NumberedProject[];
+  /** 検索で絞り込む前の会社配下案件。期間導出が検索条件で変わらないように使う。 */
+  allCompanyItems?: ProjectItem[];
   totalCount: number;
   isSearching: boolean;
   activeTech: string[];
@@ -46,13 +49,16 @@ export function CompanySection({
   headingIdSuffix,
   company,
   items,
+  allCompanyItems,
   totalCount,
   isSearching,
   activeTech,
   queryTerms,
 }: CompanySectionProps) {
   const name = companyDisplayName(company);
-  const tenure = companyTenureLabel(company?.period ?? '');
+  const periodItems = allCompanyItems ?? items.map(({ item }) => item);
+  const effectivePeriod = resolveCompanyPeriod(company, periodItems);
+  const tenure = companyTenureLabel(effectivePeriod);
   const note = company?.note?.trim() ?? '';
   const kind = company?.kind?.trim() ?? '';
   const countLabel = companyCountLabel(items.length, totalCount, isSearching);
@@ -65,7 +71,7 @@ export function CompanySection({
   return (
     <section
       id={`company-${companyId}${headingIdSuffix ?? ''}`}
-      aria-label={tenure ? `${name}（${company?.period}）` : name}
+      aria-label={tenure ? `${name}（${effectivePeriod}）` : name}
       className="flex min-w-0 scroll-mt-40 flex-col gap-4 sm:scroll-mt-[4.75rem]"
     >
       <div className="sticky top-40 z-20 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 border-b border-border bg-background py-2.5 sm:top-[4.75rem]">
@@ -79,7 +85,7 @@ export function CompanySection({
 
       {note ? <p className="max-w-[72ch] text-[13.5px] leading-relaxed text-foreground">{sanitizeHtml(note)}</p> : null}
 
-      <CompanyLane companyPeriod={company?.period ?? ''} items={laneItems} />
+      <CompanyLane companyPeriod={effectivePeriod} items={laneItems} />
 
       <div className="flex min-w-0 flex-col gap-4">
         {items.map(({ item, no, tech }) => (

@@ -13,9 +13,9 @@
 
 import type { Block, CompanyInfo, ProfileBlockData, ProjectItem, ProjectTech, StatsBlockData } from '@/db/blocks';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/blocks';
+import { resolveCompanyPeriod, resolveDisplayedSkillExperience, resolveDisplayedStats } from '@/db/derived-display';
 import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
 import {
-  deriveCompanyPeriod,
   deriveDuration,
   flattenTech,
   formatMonthToken,
@@ -257,6 +257,13 @@ export function skillYearsLabel(category: string, years: number, showSkills: boo
   if (!showSkills) return '';
   if (!PRINT_YEAR_VISIBLE_CATEGORIES.has(trimmed(category))) return '';
   return years > 0 ? `${years} 年` : '';
+}
+
+/** 画面用の年月ラベルを、PDF内で使っている空白入りの表記へ揃える。 */
+function printExperienceLabel(label: string): string {
+  const match = label.match(/^(\d+)年(?:(\d+)ヶ月)?$/);
+  if (!match) return label;
+  return match[2] === undefined ? `${match[1]} 年` : `${match[1]} 年 ${match[2]} ヶ月`;
 }
 
 /**
@@ -654,11 +661,6 @@ function buildProject(
   };
 }
 
-/** 会社の実効 period 文字列。`buildCompany` の periodText と同じ導出だが、表示整形前の生値。 */
-function companyRawPeriod(company: CompanyInfo | undefined, items: ProjectItem[]): string {
-  return trimmed(company?.period) || deriveCompanyPeriod(items.map((i) => i.period));
-}
-
 /**
  * 「最新の会社」の index を判定する。
  *
@@ -675,7 +677,7 @@ function resolveLatestIndex(groups: { company: CompanyInfo | undefined; items: P
   let latestEnd = -Infinity;
   let latestStart = -Infinity;
   groups.forEach((g, index) => {
-    const bounds = parsePeriodBounds(companyRawPeriod(g.company, g.items));
+    const bounds = parsePeriodBounds(resolveCompanyPeriod(g.company, g.items));
     if (!bounds) return;
     if (bounds.end > latestEnd || (bounds.end === latestEnd && bounds.start > latestStart)) {
       latest = index;
@@ -706,9 +708,7 @@ function buildCompany(
     name: companyDisplayName(company),
     kind: companyDisplayName(company).includes(trimmed(company?.kind)) ? '' : trimmed(company?.kind),
     kindLabel: companyDisplayName(company).includes(trimmed(company?.kind)) ? '' : trimmed(company?.kind),
-    periodText:
-      formatPeriodDisplay(trimmed(company?.period)) ||
-      formatPeriodDisplay(deriveCompanyPeriod(items.map((i) => i.period))),
+    periodText: formatPeriodDisplay(resolveCompanyPeriod(company, items)),
     note: markdownText(company?.note),
     projectCount: items.length,
     roles,
@@ -748,7 +748,7 @@ function buildSummary(
     .sort((a, b) => b.years - a.years || a.order - b.order)
     .slice(0, PRINT_TOP_SKILL_LIMIT)
     .map((s) => ({
-      // 年数を出すかどうかは skillYearsLabel が既に判定済み（分類許可リスト + スキル
+      // 年数を出すかどうかはビューモデル組み立て時に判定済み（分類許可リスト + スキル
       // ビュートグル）。ここでは組み立てるだけで、判定をこの部品側で繰り返さない。
       label: s.yearsLabel ? `${s.name} ${s.yearsLabel}` : s.name,
       emphasis: chipEmphasis(s.level),
@@ -770,7 +770,7 @@ function buildSummary(
     companyName: trimmed(profile?.company),
     // 3 つとも空の枠は出さない。エディタは空の統計項目を許すので、そのまま描くと
     // 1 ページ目に中身の無いセルが 1 つ増え、残りのセルが痩せる（レビュー指摘）。
-    stats: (stats?.items ?? [])
+    stats: resolveDisplayedStats(stats?.items ?? [], items)
       .map((i) => ({ value: trimmed(i.value), unit: trimmed(i.unit), label: trimmed(i.label) }))
       .filter((i) => i.value !== '' || i.unit !== '' || i.label !== ''),
     topSkills,
@@ -796,6 +796,8 @@ export function buildPrintViewModel(
 
   const profile = blocks.find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile')?.data;
   const stats = blocks.find((b): b is Extract<Block, { type: 'stats' }> => b.type === 'stats')?.data;
+  const projectBlock = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')?.data;
+  const visible = projectBlock ? filterVisibleProjectData(projectBlock) : { companies: [], items: [] };
   const skillGroups: PrintSkillGroup[] = blocks
     .filter((b): b is Extract<Block, { type: 'skills' }> => b.type === 'skills')
     .map((b) => {
@@ -804,18 +806,22 @@ export function buildPrintViewModel(
         category,
         skills: (b.data.skills ?? [])
           .filter((s) => trimmed(s.name))
-          .map((s) => ({
-            name: trimmed(s.name),
-            years: s.years,
-            level: trimmed(s.level),
-            yearsLabel: skillYearsLabel(category, s.years, on('skills')),
-          })),
+          .map((s) => {
+            const experience = resolveDisplayedSkillExperience(s, visible.items);
+            return {
+              name: trimmed(s.name),
+              years: experience.months / 12,
+              level: trimmed(s.level),
+              yearsLabel:
+                on('skills') && PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
+                  ? printExperienceLabel(experience.label)
+                  : '',
+            };
+          }),
       };
     })
     .filter((g) => g.skills.length > 0);
 
-  const projectBlock = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')?.data;
-  const visible = projectBlock ? filterVisibleProjectData(projectBlock) : { companies: [], items: [] };
   const { levelById } = resolveDetailLevels(visible.items);
   const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
   const latestIndex = resolveLatestIndex(groups);

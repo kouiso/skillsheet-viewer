@@ -200,7 +200,7 @@ export function ProjectCardDetail({
       </View>
     ),
     comment: present.includes('comment') && (
-      <View key="comment" style={styles.block}>
+      <View key="comment" style={styles.block} break={!project.fitsOnePage}>
         {markStart('comment')}
         <View style={styles.section}>
           <SectionLabel>コメント</SectionLabel>
