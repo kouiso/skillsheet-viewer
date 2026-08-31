@@ -105,7 +105,10 @@ const MAX_ROOM_AFTER_HEADING = PRINT_SIZE.cardMaxSinglePageHeight - HEADING_BLOC
 
 function requiredRoomAfterHeading(company: PrintCompany): number | undefined {
   const first = company.projects[0];
-  if (!first?.fitsOnePage) return undefined;
+  // 見積り（estimatedHeight / fitsOnePage）は**詳細版カードの寸法**なので、簡約版には当てない
+  // （レビュー指摘）。簡約版は 1 段目の行だけを分割禁止にして 2 段目は割れる作りなので、
+  // 見出しの直後に必ず中身が乗る。取り残される心配が無いぶん、既定の要求で足りる。
+  if (first?.level !== 'detail' || !first.fitsOnePage) return undefined;
   return Math.min(first.estimatedHeight + PRINT_SIZE.cardGap, MAX_ROOM_AFTER_HEADING);
 }
 
