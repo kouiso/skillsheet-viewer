@@ -51,15 +51,21 @@ const SheetViewClient = ({
 
   const handleDownloadPdf = async () => {
     const toastId = toast.loading('PDFを生成中…');
+    // 生成に失敗したときの後始末。import が済んだ時点で掴んでおく — catch の中で
+    // 改めて動的 import すると、その await の分だけ finally が遅れてボタンが busy のまま残る。
+    let resetFontsOnFailure: (() => void) | undefined;
     try {
       setPdfLoading(true);
 
-      const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
+      const [{ pdf }, { SkillSheetPDF, resetPdfFontsAfterFailure }] = await Promise.all([
         import('@react-pdf/renderer'),
         import('@/components/pdf-export'),
       ]);
+      resetFontsOnFailure = resetPdfFontsAfterFailure;
 
-      const blob = await pdf(<SkillSheetPDF title={title} content={content} />).toBlob();
+      // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
+      // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
+      const blob = await pdf(<SkillSheetPDF title={title} content={content} blocks={blocks} views={views} />).toBlob();
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -76,6 +82,12 @@ const SheetViewClient = ({
     } catch (err) {
       console.error('Error generating PDF:', err);
       toast.error('PDFの生成に失敗しました', { id: toastId });
+      // フォント取得の失敗（オフライン・5xx 等）は @react-pdf/font 内で reject 済みの
+      // Promise として永久にキャッシュされ、次のクリックも即座に同じ失敗を再現する
+      // （リロードしないと直らない「詰み」状態になる）。失敗のたびに登録をリセットし、
+      // 次のクリックで新しい FontSource から取得し直させる（フォント取得以外の失敗
+      // でも安全 — 単に次回また登録し直すだけで副作用は無い）。
+      resetFontsOnFailure?.();
     } finally {
       setPdfLoading(false);
     }

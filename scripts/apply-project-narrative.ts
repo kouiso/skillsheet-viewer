@@ -1,5 +1,5 @@
 /**
- * 案件の本文・担当領域（`item.comment` / `duties` / `acquired` / `scope`）と
+ * 案件の本文・担当領域・役割（`item.comment` / `duties` / `acquired` / `scope` / `role`）と
  * 会社の概要・区分（`company.note` / `kind`）を、外部の JSON ファイルから流し込むスクリプト。
  *
  * 値そのものをこのリポジトリへ置かないのが狙い。skillsheet-viewer は public なので、
@@ -30,6 +30,7 @@
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { isProjectBlockData } from '../src/db/blocks';
 import { getDb } from '../src/db/client';
@@ -42,24 +43,61 @@ import {
   writeBlockUpdates,
 } from './block-write';
 
-type ProjectPatch = { comment?: string; duties?: string; acquired?: string; scope?: string };
+type ProjectPatch = { comment?: string; duties?: string; acquired?: string; scope?: string; role?: string };
 type CompanyPatch = { note?: string; kind?: string };
-interface NarrativeFile {
+export interface NarrativeFile {
   projects?: Record<string, ProjectPatch>;
   companies?: Record<string, CompanyPatch>;
 }
 
-const PROJECT_FIELDS = ['comment', 'duties', 'acquired', 'scope'] as const;
+const PROJECT_FIELDS = ['comment', 'duties', 'acquired', 'scope', 'role'] as const;
 const COMPANY_FIELDS = ['note', 'kind'] as const;
 
-function readNarrative(path: string): NarrativeFile {
+/**
+ * パッチ 1 件を検証する。値は「書かない」か「文字列」だけを許す。
+ *
+ * 以前はトップレベルがオブジェクトかだけ見て `NarrativeFile` へキャストしていた。
+ * `null` や数値が混じると、更新ループの `value.length` で落ちるか、型に合わない値を
+ * そのまま DB へ書く（`ProjectItem.role` は文字列必須で、読み戻し側の型ガードが弾く）。
+ * 本番のデータを書き換える経路なので、DB へ触る前にここで止める。
+ */
+function assertPatch(where: string, patch: unknown, fields: readonly string[]): void {
+  if (typeof patch !== 'object' || patch === null || Array.isArray(patch)) {
+    throw new Error(`${where}: パッチはオブジェクトである必要があります`);
+  }
+  for (const [key, value] of Object.entries(patch)) {
+    if (!fields.includes(key)) {
+      throw new Error(`${where}: 知らない項目 ${key}（使えるのは ${fields.join(' / ')}）`);
+    }
+    if (typeof value !== 'string') {
+      throw new Error(
+        `${where}: ${key} は文字列である必要があります（実際は ${value === null ? 'null' : typeof value}）`,
+      );
+    }
+  }
+}
+
+function assertPatchMap(where: string, value: unknown, fields: readonly string[]): void {
+  if (value === undefined) return;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`${where} はオブジェクトである必要があります`);
+  }
+  for (const [name, patch] of Object.entries(value)) {
+    assertPatch(`${where}.${name}`, patch, fields);
+  }
+}
+
+export function readNarrative(path: string): NarrativeFile {
   if (!existsSync(path)) {
     throw new Error(`本文 JSON が見つかりません: ${path}`);
   }
   const parsed: unknown = JSON.parse(readFileSync(path, 'utf-8'));
-  if (typeof parsed !== 'object' || parsed === null) {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     throw new Error('本文 JSON はオブジェクトである必要があります');
   }
+  const file = parsed as Record<string, unknown>;
+  assertPatchMap('projects', file.projects, PROJECT_FIELDS);
+  assertPatchMap('companies', file.companies, COMPANY_FIELDS);
   return parsed as NarrativeFile;
 }
 
@@ -137,7 +175,12 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+// テストからこのファイルを import しても main() が走らないようにする
+// （import しただけで「パスを渡してください」で落ち、exitCode まで汚す）。
+const invokedDirectly = process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) {
+  main().catch((err) => {
+    console.error(err);
+    process.exitCode = 1;
+  });
+}

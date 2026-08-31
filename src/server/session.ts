@@ -68,9 +68,27 @@ export function getSessionCookieOptions() {
     maxAge: SESSION_DURATION_SECONDS,
     name: SESSION_COOKIE_NAME,
     path: '/',
-    sameSite: 'strict' as const,
+    // Strict だと「メール/Slack/ATS に貼られた共有リンクを踏む」というこのプロダクトの
+    // 唯一の配布経路が、まさに cross-site のトップレベル遷移になるため cookie が付かない。
+    // 有効な 7 日間セッションを持つ受け取り手が、メールを開くたび毎回 /viewer-auth に
+    // 差し戻される不具合として実測された。
+    //
+    // CSRF はこの cookie の SameSite ではなく isSameOriginRequest（auth.ts）が
+    // Origin/Host 一致を別途強制することで塞がれている（login/logout の
+    // requireHttpMutationContext 経由）。この cookie で通せる viewerProcedure は
+    // sheet.list/byId/getDefault・github-sheet.list/byPath の query のみで、
+    // 書き込みは一切無い（sheet.ts の save/create/delete は editorProcedure）。
+    // Lax は cross-site の POST やサブリソース経由の cookie 送出は引き続き止めるため、
+    // ここを Strict → Lax にしても新たに開く攻撃面は無い。
+    sameSite: 'lax' as const,
     secure,
   };
+}
+
+/** Cookie 属性の SameSite 値（先頭大文字）。getSessionCookieOptions() を唯一の正本にする。 */
+function sameSiteCookieAttribute(): string {
+  const { sameSite } = getSessionCookieOptions();
+  return `SameSite=${sameSite.charAt(0).toUpperCase()}${sameSite.slice(1)}`;
 }
 
 /** tRPC の Fetch adapter が返す Headers へ閲覧セッション cookie を追加する。 */
@@ -81,7 +99,7 @@ export function appendSessionCookie(headers: Headers): void {
     `Max-Age=${options.maxAge}`,
     `Path=${options.path}`,
     'HttpOnly',
-    'SameSite=Strict',
+    sameSiteCookieAttribute(),
   ];
   if (options.secure) parts.push('Secure');
   headers.append('set-cookie', parts.join('; '));
@@ -89,7 +107,7 @@ export function appendSessionCookie(headers: Headers): void {
 
 /** 閲覧セッション cookie を同じ Path で失効させる。 */
 export function appendExpiredSessionCookie(headers: Headers): void {
-  headers.append('set-cookie', `${SESSION_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict`);
+  headers.append('set-cookie', `${SESSION_COOKIE_NAME}=; Max-Age=0; Path=/; HttpOnly; ${sameSiteCookieAttribute()}`);
 }
 
 export { SESSION_COOKIE_NAME };

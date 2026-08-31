@@ -97,6 +97,46 @@ describe('splitForHyphenation', () => {
   });
 });
 
+describe('splitForHyphenation の禁則処理', () => {
+  /** 改行マーカーの直後に来る文字（= 行頭になりうる文字）を全部集める。 */
+  const lineStartCandidates = (word: string): string[] => {
+    const parts = splitForHyphenation(word);
+    const heads: string[] = [];
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (parts[i] === BREAK_MARKER && parts[i + 1] !== undefined) heads.push(parts[i + 1][0]);
+    }
+    return heads;
+  };
+
+  it('句読点・中黒・閉じ括弧は行頭候補にならない', () => {
+    // 禁則が無いと「クエリ最適化」→改行→「。」のように句点だけが次行の頭に落ちる（実測）。
+    for (const word of ['最適化。', '課金・キャンペーン演出 等）。', '実装、設計', '対応（全工程）']) {
+      expect(lineStartCandidates(word)).not.toContain('。');
+      expect(lineStartCandidates(word)).not.toContain('、');
+      expect(lineStartCandidates(word)).not.toContain('・');
+      expect(lineStartCandidates(word)).not.toContain('）');
+    }
+  });
+
+  it('開き括弧の直後は行頭候補にならない（開き括弧が行末に残らない）', () => {
+    expect(splitForHyphenation('（例')).toEqual(['（', '例']);
+  });
+
+  it('ASCII の閉じ括弧・句読点も行頭候補にしない', () => {
+    expect(splitForHyphenation('実装)')).toEqual(['実', BREAK_MARKER, '装', ')']);
+  });
+
+  it('禁則に当たらない境界では従来どおり改行を許す', () => {
+    expect(splitForHyphenation('最適化')).toEqual(['最', BREAK_MARKER, '適', BREAK_MARKER, '化']);
+  });
+
+  it('禁則を入れても結合すると元の語に戻る', () => {
+    for (const word of ['最適化。', '課金・演出', '（例）', 'React連携。', '実装)']) {
+      expect(splitForHyphenation(word).join('')).toBe(word);
+    }
+  });
+});
+
 /**
  * 表セルの末尾クリップ（Issue #263 C）と段落のはみ出し（同 F）を防ぐ本体。
  * 区切り記号優先・camelCase 境界・上限での強制分割・切った位置への巻き戻しという
@@ -136,5 +176,17 @@ describe('splitLongRun', () => {
     const chunks = splitLongRun(run);
     expect(chunks.join('')).toBe(run);
     for (const chunk of chunks) expect(chunk.length).toBeLessThanOrEqual(16);
+  });
+});
+
+describe('禁則: 連なりの手前の文字を見失わない', () => {
+  it('開き括弧の直後にラテン文字が続いても、括弧の後ろで改行させない', () => {
+    // prevChar が buffer の中を進むため、以前は flush の時点で「「」が見えず
+    // ['「', BREAK, 'OpenAI', '」'] を返して行末に「「」だけが残っていた。
+    const parts = splitForHyphenation('「OpenAI」');
+    const openIndex = parts.indexOf('「');
+    expect(openIndex).toBeGreaterThanOrEqual(0);
+    expect(parts[openIndex + 1]).not.toBe('​');
+    expect(parts.join('')).toContain('「OpenAI');
   });
 });

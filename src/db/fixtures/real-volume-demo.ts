@@ -34,11 +34,16 @@ const newId = () => crypto.randomUUID();
 export const REAL_VOLUME_COMPANY_COUNT = 19;
 /** 元データ（実際の職務経歴書）の案件数。design-audit.spec.ts の件数一致チェックに使う。 */
 export const REAL_VOLUME_PROJECT_COUNT = 32;
+/** #143 実測の再現ケース（案件01）のタイトル。e2e がこの案件を name で探すときに使う。 */
+export const REAL_VOLUME_FLAGSHIP_PROJECT_TITLE = 'マッチングアプリの開発';
 
 // 19社。実データと同様、自社サービス・大手SIベンダー・ベンチャー・受託・個人開発など
 // 長さも種類もばらつく会社名にして、案件カードの右寄せメタ列（会社名 · チーム名 · 期間）の
 // 崩れを再現しやすくする。
-const COMPANY_NAMES: readonly string[] = [
+// e2e から会社名・フラグシップ案件の技術タグを直接参照できるよう export する
+// （テスト側で同じ文字列をハードコードして複製すると、ここを変更したときに
+// サイレントに乖離する）。
+export const COMPANY_NAMES: readonly string[] = [
   'Q社（自社サービス事業会社）',
   'A社（大手SIベンダー）',
   'B社（ベンチャー企業）',
@@ -97,7 +102,7 @@ const ROLE_TEMPLATES: readonly string[] = [
   'バックエンドエンジニア',
 ];
 
-const TECH_POOLS: readonly ProjectTech[] = [
+export const TECH_POOLS: readonly ProjectTech[] = [
   {
     lang: ['TypeScript', 'JavaScript'],
     fw: ['React', 'Next.js', 'NestJS'],
