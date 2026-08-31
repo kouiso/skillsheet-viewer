@@ -104,6 +104,10 @@ const styles = StyleSheet.create({
 /** 下罫線の判定・開始終了マーカーの位置決めに使うブロック識別子。ヘッダーは常に出るので数えない。 */
 type BlockKey = 'meta' | 'tech' | 'duties' | 'acquired' | 'comment';
 
+export function shouldBreakBeforeComment(fitsOnePage: boolean, firstBlock: BlockKey | undefined): boolean {
+  return !fitsOnePage && firstBlock !== 'comment';
+}
+
 export function ProjectCardDetail({
   project,
   spanTracker,
@@ -200,7 +204,7 @@ export function ProjectCardDetail({
       </View>
     ),
     comment: present.includes('comment') && (
-      <View key="comment" style={styles.block}>
+      <View key="comment" style={styles.block} break={shouldBreakBeforeComment(project.fitsOnePage, present[0])}>
         {markStart('comment')}
         <View style={styles.section}>
           <SectionLabel>コメント</SectionLabel>

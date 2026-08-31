@@ -11,7 +11,12 @@ import Lightbox from 'yet-another-react-lightbox';
 import 'yet-another-react-lightbox/styles.css';
 
 import type { Block } from '@/db/blocks';
-import { experienceBlockToMarkdown, isBlockInputEmpty, tableBlockToMarkdown } from '@/db/blocks';
+import {
+  experienceBlockToMarkdown,
+  filterVisibleProjectData,
+  isBlockInputEmpty,
+  tableBlockToMarkdown,
+} from '@/db/blocks';
 import { useActiveHeading } from '@/hooks/use-active-heading';
 import { isSafeImageSrc, MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from '@/lib/markdown-config';
 import { ProfileIntro } from './blocks/profile-intro';
@@ -48,6 +53,8 @@ interface SkillSheetViewerProps {
    * （ビルダープレビュー・比較ページは従来どおり全セクション表示）。
    */
   views?: ViewKey[];
+  /** 継続中案件の集計に使う、サーバー描画時に固定した月キー。 */
+  referenceMonth?: number;
 }
 
 // GFM の列 alignment（remark-rehype が th/td の properties.align に left/center/right で
@@ -214,11 +221,23 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
   return groups;
 }
 
-const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: SkillSheetViewerProps) => {
+const SkillSheetViewer = ({
+  skillSheet,
+  blocks,
+  compareMode = false,
+  views,
+  referenceMonth,
+}: SkillSheetViewerProps) => {
   // views 未指定（ビルダープレビュー・比較・レガシー）は全ビューON扱い。
   const showView = useCallback((view: ViewKey) => !views || views.includes(view), [views]);
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
   const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
+  // 統計・スキル・案件表示が同じ「表示対象案件」を使う。各子コンポーネントで
+  // hidden 判定を繰り返すと、画面とPDFで集計母数がずれるためここで一度だけ解決する。
+  const visibleProjectItems = useMemo(() => {
+    const project = blocks?.find((block): block is Extract<Block, { type: 'project' }> => block.type === 'project');
+    return project ? filterVisibleProjectData(project.data).items : undefined;
+  }, [blocks]);
   // 1枚のシートに project ブロックが複数あると、案件詳細・タイムラインの見出し id が
   // 重複して目次のスクロール先が壊れる。複数あるときだけブロック id で分ける
   // （1つだけの通常ケースでは id を変えない）。ブロックごとに変わる値ではないのでループ外で1回だけ求める。
@@ -351,7 +370,13 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
                       {/* design: gap 28px(縦) 40px(横) の auto-fit グリッド */}
                       <div className="grid gap-x-10 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
                         {group.blocks.map((block) => (
-                          <SkillMatrix key={block.id} data={block.data} className="mb-0" />
+                          <SkillMatrix
+                            key={block.id}
+                            data={block.data}
+                            projectItems={visibleProjectItems}
+                            referenceMonth={referenceMonth}
+                            className="mb-0"
+                          />
                         ))}
                       </div>
                     </FadeUpSection>
@@ -373,7 +398,14 @@ const SkillSheetViewer = ({ skillSheet, blocks, compareMode = false, views }: Sk
                   return <ProfileIntro key={block.id} data={block.data} />;
                 }
                 if (block.type === 'stats') {
-                  return <StatRow key={block.id} data={block.data} />;
+                  return (
+                    <StatRow
+                      key={block.id}
+                      data={block.data}
+                      projectItems={visibleProjectItems}
+                      referenceMonth={referenceMonth}
+                    />
+                  );
                 }
                 if (block.type === 'project') {
                   return (

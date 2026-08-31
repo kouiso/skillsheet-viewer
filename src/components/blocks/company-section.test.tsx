@@ -59,6 +59,26 @@ describe('CompanySection', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Q社' }).parentElement).toHaveClass('sticky');
   });
 
+  it('会社期間が空なら配下案件から導出して見出しとレーンへ渡す', () => {
+    render(
+      <CompanySection
+        companyId="c1"
+        company={company({ id: 'c1', name: '個人開発', period: '' })}
+        items={[
+          { item: item({ id: 'p1', period: '2018.02 — 2019.03' }), no: 1, tech: [] },
+          { item: item({ id: 'p2', period: '2020.01 — 2021.02' }), no: 2, tech: [] },
+        ]}
+        totalCount={2}
+        isSearching={false}
+        activeTech={[]}
+        queryTerms={[]}
+      />,
+    );
+    expect(screen.getByText(/在籍 2018\.02〜2021\.02/)).toBeInTheDocument();
+    expect(screen.getByText('2018.02')).toBeInTheDocument();
+    expect(screen.getByText('2021.02')).toBeInTheDocument();
+  });
+
   it('検索時の件数ラベルを出す', () => {
     render(
       <CompanySection

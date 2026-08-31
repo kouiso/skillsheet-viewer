@@ -34,9 +34,34 @@ describe('SkillMatrix', () => {
     );
 
     expect(screen.getByText('TypeScript')).toBeInTheDocument();
-    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getByText('5年')).toBeInTheDocument();
 
     const row = screen.getByText('TypeScript').closest('div');
-    expect(row?.className).toContain('grid-cols-[1fr_44px_84px_28px]');
+    expect(row?.className).toContain('grid-cols-[minmax(0,1fr)_44px_72px_64px]');
+  });
+
+  it('一致案件の重複月を除いて年月表示する', () => {
+    render(
+      <SkillMatrix
+        data={{ category: 'フロントエンド', skills: [{ name: 'React Native', years: 1, level: '★★★' }] }}
+        projectItems={[
+          {
+            id: 'p1',
+            companyId: 'c1',
+            title: '案件',
+            scope: '',
+            period: '2019.01 — 2025.12',
+            role: '',
+            team: '',
+            tech: { lang: [], fw: ['React Native'], db: [], infra: [], tools: [], collab: [] },
+            process: [],
+            duties: '',
+            acquired: '',
+            comment: '',
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText('7年0ヶ月')).toBeInTheDocument();
   });
 });
