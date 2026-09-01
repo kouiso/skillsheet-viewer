@@ -8,7 +8,7 @@ import { inArray } from 'drizzle-orm';
 
 import { isSkillsBlockData } from '../src/db/blocks';
 import { getDb } from '../src/db/client';
-import { blocks } from '../src/db/schema';
+import { blocks, skillSheets } from '../src/db/schema';
 import { type BlockUpdate, loadWebEnvLocal, resolveTargetSheetIds, writeBlockUpdates } from './block-write';
 
 const FEATURED_SKILLS = new Map([
@@ -32,6 +32,11 @@ async function main(): Promise<void> {
       `対象シートは1件だけ指定してください（現在: ${sheetIds.length} 件）。--sheet-id を指定してください。`,
     );
   }
+  const sheets = await db
+    .select({ id: skillSheets.id, updatedAt: skillSheets.updatedAt })
+    .from(skillSheets)
+    .where(inArray(skillSheets.id, sheetIds));
+  const expectedUpdatedAtBySheet = new Map(sheets.map((sheet) => [sheet.id, sheet.updatedAt]));
   const rows = await db.select().from(blocks).where(inArray(blocks.sheetId, sheetIds));
   const found = new Set<string>();
   const updates: BlockUpdate[] = [];
@@ -52,7 +57,13 @@ async function main(): Promise<void> {
         return unfeatured;
       }),
     };
-    updates.push({ id: row.id, sheetId: row.sheetId, data, previous });
+    updates.push({
+      id: row.id,
+      sheetId: row.sheetId,
+      expectedUpdatedAt: expectedUpdatedAtBySheet.get(row.sheetId),
+      data,
+      previous,
+    });
   }
 
   const missing = [...FEATURED_SKILLS.keys()].filter((key) => !found.has(key));
