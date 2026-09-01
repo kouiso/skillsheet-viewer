@@ -9,12 +9,7 @@ import { inArray } from 'drizzle-orm';
 import { isSkillsBlockData } from '../src/db/blocks';
 import { getDb } from '../src/db/client';
 import { blocks } from '../src/db/schema';
-import {
-  loadWebEnvLocal,
-  type BlockUpdate,
-  resolveTargetSheetIds,
-  writeBlockUpdates,
-} from './block-write';
+import { type BlockUpdate, loadWebEnvLocal, resolveTargetSheetIds, writeBlockUpdates } from './block-write';
 
 const FEATURED_SKILLS = new Map([
   ['言語\u0000TypeScript/JavaScript', true],
@@ -33,7 +28,9 @@ async function main(): Promise<void> {
   const db = getDb();
   const sheetIds = await resolveTargetSheetIds(db, process.argv.slice(2));
   if (sheetIds.length !== 1) {
-    throw new Error(`対象シートは1件だけ指定してください（現在: ${sheetIds.length} 件）。--sheet-id を指定してください。`);
+    throw new Error(
+      `対象シートは1件だけ指定してください（現在: ${sheetIds.length} 件）。--sheet-id を指定してください。`,
+    );
   }
   const rows = await db.select().from(blocks).where(inArray(blocks.sheetId, sheetIds));
   const found = new Set<string>();

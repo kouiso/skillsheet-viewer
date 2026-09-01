@@ -390,8 +390,12 @@ describe('バリデータ', () => {
   it('isSkillsBlockData', () => {
     expect(isSkillsBlockData(SKILLS)).toBe(true);
     expect(isSkillsBlockData({ category: 'x', skills: [] })).toBe(true);
-    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: true }] })).toBe(true);
-    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: 'true' }] })).toBe(false);
+    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: true }] })).toBe(
+      true,
+    );
+    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: 'true' }] })).toBe(
+      false,
+    );
     expect(isSkillsBlockData({ category: 1, skills: [] })).toBe(false);
     expect(isSkillsBlockData({ category: 'x', skills: 'y' })).toBe(false);
     expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: '3', level: 'ok' }] })).toBe(false);

@@ -237,7 +237,9 @@ const SkillSheetViewer = ({
   const hasFeaturedSkills = useMemo(
     () =>
       blocks?.some(
-        (block) => block.type === 'skills' && block.data.skills.some((skill) => skill.featured === true && skill.name.trim() !== ''),
+        (block) =>
+          block.type === 'skills' &&
+          block.data.skills.some((skill) => skill.featured === true && skill.name.trim() !== ''),
       ) ?? false,
     [blocks],
   );

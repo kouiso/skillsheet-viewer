@@ -32,7 +32,13 @@ function getMonthsBarPercent(months: number): number {
   return Math.max(ratio * 100, 8);
 }
 
-export const SkillMatrix = ({ data, hasFeatured = false, projectItems = [], referenceMonth, className = 'mb-6' }: SkillMatrixProps) => {
+export const SkillMatrix = ({
+  data,
+  hasFeatured = false,
+  projectItems = [],
+  referenceMonth,
+  className = 'mb-6',
+}: SkillMatrixProps) => {
   if (data.skills.length === 0) return null;
 
   return (
@@ -74,7 +80,9 @@ export const SkillMatrix = ({ data, hasFeatured = false, projectItems = [], refe
                   />
                 ) : (
                   // 年数が無いスキルは ★ の段階でバー幅を決める。
-                  <span className={`barFill block ${getLevelWidth(skill.level)} ${isFeatured ? 'bg-primary' : hasFeatured ? 'bg-faint' : ''}`} />
+                  <span
+                    className={`barFill block ${getLevelWidth(skill.level)} ${isFeatured ? 'bg-primary' : hasFeatured ? 'bg-faint' : ''}`}
+                  />
                 )}
               </span>
               <span className="whitespace-nowrap text-right font-mono text-[11px] text-foreground">

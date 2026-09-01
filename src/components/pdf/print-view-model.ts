@@ -251,7 +251,10 @@ function markdownText(value: string | undefined): string {
 /** 習熟度から強調を決める。上級だけ塗り、それ以外は枠線。 */
 const SOLID_LEVELS = new Set(['上級', '★★★']);
 
-export function chipEmphasis(skill: Pick<PrintSkill, 'level' | 'featured'>, mode: PrintViewModel['skillEmphasisMode']): PrintChip['emphasis'] {
+export function chipEmphasis(
+  skill: Pick<PrintSkill, 'level' | 'featured'>,
+  mode: PrintViewModel['skillEmphasisMode'],
+): PrintChip['emphasis'] {
   if (mode === 'featured') return skill.featured ? 'solid' : 'outline';
   return SOLID_LEVELS.has(trimmed(skill.level)) ? 'solid' : 'outline';
 }
