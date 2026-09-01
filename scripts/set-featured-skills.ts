@@ -39,6 +39,7 @@ async function main(): Promise<void> {
   const expectedUpdatedAtBySheet = new Map(sheets.map((sheet) => [sheet.id, sheet.updatedAt]));
   const rows = await db.select().from(blocks).where(inArray(blocks.sheetId, sheetIds));
   const found = new Set<string>();
+  let matched = 0;
   const updates: BlockUpdate[] = [];
 
   for (const row of rows) {
@@ -50,6 +51,7 @@ async function main(): Promise<void> {
         const key = targetKey(previous.category, skill.name);
         if (FEATURED_SKILLS.has(key)) {
           found.add(key);
+          matched += 1;
           return { ...skill, featured: true };
         }
         // 「推し」は true のときだけ保持する。false を残すと全行が不要な差分になる。
@@ -70,10 +72,12 @@ async function main(): Promise<void> {
   if (missing.length > 0) {
     throw new Error(`対象スキルが見つかりません: ${missing.map((key) => key.replace('\u0000', ' / ')).join(', ')}`);
   }
-  if (found.size !== FEATURED_SKILLS.size) throw new Error('推しの対象数が4件と一致しません');
+  if (matched !== FEATURED_SKILLS.size) {
+    throw new Error(`推しの対象数が4件と一致しません（現在: ${matched} 件）。対象スキルの重複を解消してください。`);
+  }
 
   const changed = updates.filter((update) => JSON.stringify(update.data) !== JSON.stringify(update.previous));
-  console.log(`対象シート: ${sheetIds.length} 件 / 推し: ${found.size} 件 / 変更ブロック: ${changed.length} 件`);
+  console.log(`対象シート: ${sheetIds.length} 件 / 推し: ${matched} 件 / 変更ブロック: ${changed.length} 件`);
   for (const update of changed) console.log(`  block ${update.id}: featured を更新`);
   if (!apply) {
     console.log('→ 確認のみ（反映するには --apply を付ける）。');
