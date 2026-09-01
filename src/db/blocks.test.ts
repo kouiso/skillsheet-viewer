@@ -283,6 +283,24 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
     expect(md).toContain('| Nest.js | 2年 | 業務利用可 |  |');
   });
 
+  it('サニタイズ後に空となる推し名では推しモードを有効にしない', () => {
+    const blocks: Block[] = [
+      {
+        id: 'skills',
+        type: 'skills',
+        order: 0,
+        data: {
+          category: '言語',
+          skills: [
+            { name: '<script>x</script>', years: 1, level: '学習中', featured: true },
+            { name: 'TypeScript', years: 3, level: '実務経験あり' },
+          ],
+        },
+      },
+    ];
+    expect(blocksToMarkdown(blocks)).not.toContain('| 推し |');
+  });
+
   it('experience ブロックを markdown セクションへ変換して連結する', () => {
     const blocks: Block[] = [
       { id: 'm', type: 'markdown', order: 0, data: { markdown: '## 経歴' } },

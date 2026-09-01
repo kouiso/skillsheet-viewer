@@ -23,7 +23,7 @@ import {
   type TableColumn,
   tableBlockToMarkdown,
 } from '@/db/blocks';
-import { sanitizeMarkdown } from '@/db/sanitize-html';
+import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
 export type EditorItem =
@@ -119,7 +119,9 @@ export const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolea
 // GFM テーブルが直前段落へ lazy continuation として飲み込まれない区切りを両立する。
 export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: boolean }): string => {
   const hasFeatured = items.some(
-    (item) => item?.type === 'skills' && item.skills.some((skill) => skill.featured === true),
+    (item) =>
+      item?.type === 'skills' &&
+      item.skills.some((skill) => skill.featured === true && sanitizeHtml(skill.name).trim() !== ''),
   );
   let result = '';
   let prev: EditorItem | undefined;
