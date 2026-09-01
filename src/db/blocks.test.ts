@@ -178,6 +178,16 @@ describe('skillsBlockToMarkdown', () => {
     const md = skillsBlockToMarkdown({ category: '', skills: [{ name: 'Rust', years: 0, level: '学習中' }] });
     expect(md).toContain('| Rust | - | 学習中 |');
   });
+
+  it('推しがあるときだけ推し列を足す', () => {
+    const md = skillsBlockToMarkdown({
+      ...SKILLS,
+      skills: [{ ...SKILLS.skills[0], featured: true }, SKILLS.skills[1]],
+    });
+    expect(md).toContain('| スキル | 経験年数 | 習熟度 | 推し |');
+    expect(md).toContain('| TypeScript | 3年 | 実務経験あり | ✓ |');
+    expect(md).toContain('| Go | 1年 | 業務利用可 |  |');
+  });
 });
 
 const EXP: ExperienceBlockData = {
@@ -380,6 +390,8 @@ describe('バリデータ', () => {
   it('isSkillsBlockData', () => {
     expect(isSkillsBlockData(SKILLS)).toBe(true);
     expect(isSkillsBlockData({ category: 'x', skills: [] })).toBe(true);
+    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: true }] })).toBe(true);
+    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: 'true' }] })).toBe(false);
     expect(isSkillsBlockData({ category: 1, skills: [] })).toBe(false);
     expect(isSkillsBlockData({ category: 'x', skills: 'y' })).toBe(false);
     expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: '3', level: 'ok' }] })).toBe(false);

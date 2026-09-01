@@ -16,7 +16,7 @@ export const SkillsBlockEditor = ({
   onChange: (category: string, skills: SkillEntry[]) => void;
 }) => {
   const setCategory = (v: string) => onChange(v, skills);
-  const setSkill = (i: number, field: keyof SkillEntry, value: string | number) =>
+  const setSkill = (i: number, field: keyof SkillEntry, value: string | number | boolean) =>
     onChange(
       category,
       skills.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)),
@@ -41,7 +41,7 @@ export const SkillsBlockEditor = ({
           「経験年数」ヘッダーが1文字ずつ縦積みになっていた（#150）。min-w を与えてテーブル自体を
           コンテナよりワイドにし、overflow-x-auto の横スクロールを実際に発火させる。 */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[480px] border-collapse text-sm">
+        <table className="w-full min-w-[560px] border-collapse text-sm">
           <thead>
             <tr>
               <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
@@ -49,6 +49,7 @@ export const SkillsBlockEditor = ({
                 経験年数
               </th>
               <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">習熟度</th>
+              <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-16">推し</th>
               <th className="border border-border px-1 py-1 w-8" />
             </tr>
           </thead>
@@ -63,6 +64,15 @@ export const SkillsBlockEditor = ({
                     placeholder="スキル名（例: TypeScript）"
                     aria-label={`スキル${i + 1}の名称`}
                     className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </td>
+                <td className="border border-border p-1 text-center">
+                  <input
+                    type="checkbox"
+                    checked={s.featured === true}
+                    onChange={(e) => setSkill(i, 'featured', e.target.checked)}
+                    aria-label={`スキル${i + 1}を推しにする`}
+                    className="size-5 accent-primary"
                   />
                 </td>
                 <td className="border border-border p-1">
@@ -100,6 +110,7 @@ export const SkillsBlockEditor = ({
           </tbody>
         </table>
       </div>
+      <p className="text-xs text-muted-foreground">1 つでもチェックすると、塗りはチェックしたスキルだけになります。</p>
       <button
         type="button"
         onClick={addSkill}

@@ -284,7 +284,11 @@ export function PrintSkillSheetDocument({ title, blocks, views, referenceMonth }
               ) : null
             }
           />
-          <SkillsPage groups={vm.skillGroups} expertiseRows={vm.summary.expertiseRows} />
+          <SkillsPage
+            groups={vm.skillGroups}
+            expertiseRows={vm.summary.expertiseRows}
+            skillEmphasisMode={vm.skillEmphasisMode}
+          />
           {footer}
         </Page>
       )}

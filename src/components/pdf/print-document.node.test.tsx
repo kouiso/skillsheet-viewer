@@ -212,4 +212,16 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     const headings = await renderHeadingSet(undefined);
     expect(headings.has('スキル一覧')).toBe(true);
   }, 60_000);
+
+  it('推しモードの凡例を実PDFのテキスト層へ出す', async () => {
+    const featuredBlocks = buildPdfQualityFixtureBlocks();
+    const skills = featuredBlocks.find((block) => block.type === 'skills');
+    if (skills?.type === 'skills' && skills.data.skills[0]) skills.data.skills[0].featured = true;
+
+    const buffer = await renderToBuffer(<PrintSkillSheetDocument title={title} blocks={featuredBlocks} />);
+    const pages = await extractQualityPages(buffer);
+    const fullText = pages.flatMap((page) => page.map((item) => item.text)).join('');
+    const normalized = fullText.replaceAll(/\s/g, '');
+    expect(normalized).toContain('塗り=主に使う技術／枠線=その他。カッコ内は経験年数。');
+  }, 60_000);
 });

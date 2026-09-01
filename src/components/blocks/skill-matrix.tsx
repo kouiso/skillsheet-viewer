@@ -6,6 +6,8 @@ import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface SkillMatrixProps {
   data: SkillsBlockData;
+  /** シート内に推しがある場合だけ、推しの視覚表現を有効にする。 */
+  hasFeatured?: boolean;
   projectItems?: ProjectItem[];
   referenceMonth?: number;
   className?: string;
@@ -30,7 +32,7 @@ function getMonthsBarPercent(months: number): number {
   return Math.max(ratio * 100, 8);
 }
 
-export const SkillMatrix = ({ data, projectItems = [], referenceMonth, className = 'mb-6' }: SkillMatrixProps) => {
+export const SkillMatrix = ({ data, hasFeatured = false, projectItems = [], referenceMonth, className = 'mb-6' }: SkillMatrixProps) => {
   if (data.skills.length === 0) return null;
 
   return (
@@ -46,6 +48,7 @@ export const SkillMatrix = ({ data, projectItems = [], referenceMonth, className
       <div className="grid gap-y-[11px]">
         {data.skills.map((skill, i) => {
           const experience = resolveDisplayedSkillExperience(skill, projectItems, referenceMonth);
+          const isFeatured = hasFeatured && skill.featured === true;
           return (
             // 名前 / 習熟度(★) / バー / 年数 の4列。習熟度は PDF（表形式）と同じ情報量になるよう、
             // ホバー不要で常時可視のテキストとして表示する（issue #142）。
@@ -54,7 +57,10 @@ export const SkillMatrix = ({ data, projectItems = [], referenceMonth, className
             // 折り返しが発生しない限り単一行時の見た目に影響しない（行高＝内容高のため）。
             // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
             <div key={i} className="grid grid-cols-[minmax(0,1fr)_44px_72px_64px] items-start gap-2 sm:gap-3">
-              <span className="min-w-0 break-words text-sm text-foreground" title={sanitizeHtml(skill.name)}>
+              <span
+                className={`min-w-0 break-words text-sm ${isFeatured ? 'font-semibold text-primary-dark' : 'text-foreground'}`}
+                title={sanitizeHtml(skill.name)}
+              >
                 {sanitizeHtml(skill.name)}
               </span>
               <span className="truncate text-center text-xs text-foreground" title={skill.level}>
@@ -62,10 +68,13 @@ export const SkillMatrix = ({ data, projectItems = [], referenceMonth, className
               </span>
               <span className="barTrack" title={skill.level}>
                 {experience.months > 0 ? (
-                  <span className="barFill block" style={{ width: `${getMonthsBarPercent(experience.months)}%` }} />
+                  <span
+                    className={`barFill block ${isFeatured ? 'bg-primary' : ''}`}
+                    style={{ width: `${getMonthsBarPercent(experience.months)}%` }}
+                  />
                 ) : (
                   // 年数が無いスキルは ★ の段階でバー幅を決める。
-                  <span className={`barFill block ${getLevelWidth(skill.level)}`} />
+                  <span className={`barFill block ${getLevelWidth(skill.level)} ${isFeatured ? 'bg-primary' : ''}`} />
                 )}
               </span>
               <span className="whitespace-nowrap text-right font-mono text-[11px] text-foreground">

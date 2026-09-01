@@ -190,7 +190,7 @@ export function SummaryPage({
 
       {summary.topSkills.length > 0 && (
         <View style={styles.skillSection}>
-          <SectionLabel>主力スタック（経験年数）</SectionLabel>
+          <SectionLabel>{summary.skillEmphasisMode === 'featured' ? '主力スタック' : '主力スタック（経験年数）'}</SectionLabel>
           <ChipRow chips={summary.topSkills} />
         </View>
       )}
