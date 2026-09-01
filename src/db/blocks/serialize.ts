@@ -42,9 +42,9 @@ export function skillsBlockToMarkdown(
 ): string {
   const category = escapeCell(data.category);
   const header = data.category.trim().length > 0 ? `### ${category}\n\n` : '';
-  if (data.skills.length === 0) return `${header}| スキル | 経験年数 | 習熟度 |\n| :--- | :---: | :--- |`;
   const headerLine = hasFeatured ? '| スキル | 経験年数 | 習熟度 | 推し |' : '| スキル | 経験年数 | 習熟度 |';
   const alignLine = hasFeatured ? '| :--- | :---: | :--- | :---: |' : '| :--- | :---: | :--- |';
+  if (data.skills.length === 0) return `${header}${headerLine}\n${alignLine}`;
   const bodyLines = data.skills.map((s) => {
     const values = [escapeCell(s.name), s.years > 0 ? `${s.years}年` : '-', escapeCell(s.level)];
     if (hasFeatured) values.push(s.featured ? '✓' : '');

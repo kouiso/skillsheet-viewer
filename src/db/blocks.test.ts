@@ -188,6 +188,12 @@ describe('skillsBlockToMarkdown', () => {
     expect(md).toContain('| TypeScript | 3年 | 実務経験あり | ✓ |');
     expect(md).toContain('| Go | 1年 | 業務利用可 |  |');
   });
+
+  it('空のスキル表も推しモードでは推し列を維持する', () => {
+    const md = skillsBlockToMarkdown({ category: 'その他', skills: [] }, true);
+    expect(md).toContain('| スキル | 経験年数 | 習熟度 | 推し |');
+    expect(md).toContain('| :--- | :---: | :--- | :---: |');
+  });
 });
 
 const EXP: ExperienceBlockData = {
