@@ -69,12 +69,12 @@ export const SkillMatrix = ({ data, hasFeatured = false, projectItems = [], refe
               <span className="barTrack" title={skill.level}>
                 {experience.months > 0 ? (
                   <span
-                    className={`barFill block ${isFeatured ? 'bg-primary' : ''}`}
+                    className={`barFill block ${isFeatured ? 'bg-primary' : hasFeatured ? 'bg-faint' : ''}`}
                     style={{ width: `${getMonthsBarPercent(experience.months)}%` }}
                   />
                 ) : (
                   // 年数が無いスキルは ★ の段階でバー幅を決める。
-                  <span className={`barFill block ${getLevelWidth(skill.level)} ${isFeatured ? 'bg-primary' : ''}`} />
+                  <span className={`barFill block ${getLevelWidth(skill.level)} ${isFeatured ? 'bg-primary' : hasFeatured ? 'bg-faint' : ''}`} />
                 )}
               </span>
               <span className="whitespace-nowrap text-right font-mono text-[11px] text-foreground">

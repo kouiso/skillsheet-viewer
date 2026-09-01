@@ -825,11 +825,6 @@ export function buildPrintViewModel(
   const stats = blocks.find((b): b is Extract<Block, { type: 'stats' }> => b.type === 'stats')?.data;
   const projectBlock = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')?.data;
   const visible = projectBlock ? filterVisibleProjectData(projectBlock) : { companies: [], items: [] };
-  const skillEmphasisMode: PrintViewModel['skillEmphasisMode'] = blocks.some(
-    (block) => block.type === 'skills' && block.data.skills.some((skill) => skill.featured === true),
-  )
-    ? 'featured'
-    : 'level';
   const skillGroups: PrintSkillGroup[] = blocks
     .filter((b): b is Extract<Block, { type: 'skills' }> => b.type === 'skills')
     .map((b) => {
@@ -854,6 +849,11 @@ export function buildPrintViewModel(
       };
     })
     .filter((g) => g.skills.length > 0);
+  const skillEmphasisMode: PrintViewModel['skillEmphasisMode'] = skillGroups.some((group) =>
+    group.skills.some((skill) => skill.featured),
+  )
+    ? 'featured'
+    : 'level';
 
   const { levelById } = resolveDetailLevels(visible.items);
   const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);

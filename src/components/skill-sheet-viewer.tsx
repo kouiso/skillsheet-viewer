@@ -235,7 +235,10 @@ const SkillSheetViewer = ({
   // 途中に他種別ブロックが挟まっていても、推しモードはシート内の全スキル一覧で共通にする。
   // 描画グループ単位にすると、片方のカテゴリだけ従来の習熟度強調へ戻ってしまうため。
   const hasFeaturedSkills = useMemo(
-    () => blocks?.some((block) => block.type === 'skills' && block.data.skills.some((skill) => skill.featured === true)) ?? false,
+    () =>
+      blocks?.some(
+        (block) => block.type === 'skills' && block.data.skills.some((skill) => skill.featured === true && skill.name.trim() !== ''),
+      ) ?? false,
     [blocks],
   );
   // 統計・スキル・案件表示が同じ「表示対象案件」を使う。各子コンポーネントで
