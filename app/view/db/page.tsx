@@ -4,6 +4,7 @@ import { connection } from 'next/server';
 import { configErrorNoticeOrRethrow } from '@/components/view-error';
 import { currentMonthKey } from '@/db/derived-display';
 import { createServerCaller } from '@/server/trpc/caller';
+import { isViewer } from '@/server/viewer-gate';
 
 import SheetViewClient from '../[path]/sheet-view-client';
 
@@ -16,6 +17,11 @@ export default async function DbSheetPage() {
   // DATABASE_URL はランタイム専用のため、connection() で動的レンダリングを明示する。
   // force-dynamic と異なりセグメント全体ではなくこのコンポーネント単位で動的化する。
   await connection();
+  // layout の requireViewer() と同じ判定を先に行う。App Router は layout と page を並行して
+  // 描くため、リダイレクトが確定する前に page のデータ取得が走る。未認可のまま進むと
+  // viewerProcedure が UNAUTHORIZED を投げ、リダイレクトの裏で毎回スタックトレースが出る
+  // （＋タイミング次第でリダイレクトより 500 が勝つ）。描画は layout の redirect に譲る。
+  if (!(await isViewer())) return null;
 
   // DB 未マイグレーション（テーブル不在）や DATABASE_URL / SKILLSHEET_OWNER_ID 未設定でも
   // 生の 500 を出さず、対処手順を案内するフォールバック UI を表示する。

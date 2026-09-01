@@ -4,6 +4,7 @@ import { connection } from 'next/server';
 import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
 import { currentMonthKey } from '@/db/derived-display';
 import { createServerCaller } from '@/server/trpc/caller';
+import { isViewer } from '@/server/viewer-gate';
 
 import SheetViewClient from '../../[path]/sheet-view-client';
 
@@ -26,6 +27,12 @@ export default async function DbSheetByIdPage({ params }: Props) {
   await connection();
 
   const { id } = await params;
+
+  // layout の requireViewer() と同じ判定を先に行う。App Router は layout と page を並行して
+  // 描くため、リダイレクトが確定する前に page のデータ取得が走る。未認可のまま進むと
+  // viewerProcedure が UNAUTHORIZED を投げ、リダイレクトの裏で毎回スタックトレースが出る
+  // （＋タイミング次第でリダイレクトより 500 が勝つ）。描画は layout の redirect に譲る。
+  if (!(await isViewer())) return null;
 
   try {
     const caller = await createServerCaller();

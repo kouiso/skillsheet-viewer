@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
 import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/github-sheets';
 import { createServerCaller } from '@/server/trpc/caller';
+import { isViewer } from '@/server/viewer-gate';
 
 import DeferredEditSheetView from './deferred-edit-sheet-view';
 
@@ -31,6 +32,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function SheetViewPage({ params }: PageProps) {
   const { path } = await params;
   if (!isValidSheetPath(path) || !isSheetFileName(path)) notFound();
+  // layout の requireViewer() と同じ判定を先に行う。App Router は layout と page を並行して
+  // 描くため、リダイレクトが確定する前に page のデータ取得が走る。未認可のまま進むと
+  // viewerProcedure が UNAUTHORIZED を投げ、リダイレクトの裏で毎回スタックトレースが出る
+  // （＋タイミング次第でリダイレクトより 500 が勝つ）。描画は layout の redirect に譲る。
+  if (!(await isViewer())) return null;
 
   let sheet: SheetContent;
   try {
