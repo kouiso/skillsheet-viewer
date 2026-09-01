@@ -73,10 +73,12 @@ export async function hasViewerSession(requestHeaders?: Headers): Promise<boolea
  * 未許可なら /viewer-auth へリダイレクトする（redirect() は内部で例外を投げるため、
  * 許可時のみ正常 return する）。RSC / レイアウトからのみ呼ぶこと。
  *
- * 注意: App Router は layout と page を**並行して**描画するため、ここで投げた redirect は
- * 配下の page の描画を止めない。page 側も先頭で isViewer() を見て、false なら null を返して
- * データ取得へ進まないこと。忘れると未認証アクセスのたびに viewerProcedure が
- * UNAUTHORIZED を投げ、リダイレクトの裏でエラーログが出る（タイミング次第では 500 が勝つ）。
+ * 注意: layout に置くだけでは足りず、/view 配下の page も先頭でこれを呼ぶこと。理由は 2 つ。
+ * (1) App Router は layout と page を**並行して**描画するため、ここで投げた redirect は
+ *     配下の page の描画を止めない。呼び忘れると未認証アクセスのたびに viewerProcedure が
+ *     UNAUTHORIZED を投げ、リダイレクトの裏でエラーログが出る（タイミング次第では 500 が勝つ）。
+ * (2) クライアント遷移では共有 layout は再レンダリングされない。遷移の間に閲覧 cookie が
+ *     切れても layout 側の判定は走らないため、page 側で判定しないと素通りする。
  */
 export async function requireViewer(): Promise<void> {
   if (await isViewer()) {

@@ -4,7 +4,7 @@ import { connection } from 'next/server';
 import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
 import { currentMonthKey } from '@/db/derived-display';
 import { createServerCaller } from '@/server/trpc/caller';
-import { isViewer } from '@/server/viewer-gate';
+import { requireViewer } from '@/server/viewer-gate';
 
 import SheetViewClient from '../../[path]/sheet-view-client';
 
@@ -28,11 +28,14 @@ export default async function DbSheetByIdPage({ params }: Props) {
 
   const { id } = await params;
 
-  // layout の requireViewer() と同じ判定を先に行う。App Router は layout と page を並行して
-  // 描くため、リダイレクトが確定する前に page のデータ取得が走る。未認可のまま進むと
-  // viewerProcedure が UNAUTHORIZED を投げ、リダイレクトの裏で毎回スタックトレースが出る
-  // （＋タイミング次第でリダイレクトより 500 が勝つ）。描画は layout の redirect に譲る。
-  if (!(await isViewer())) return null;
+  // 閲覧ゲートを page 側でも通す。layout に任せきりにできない理由が 2 つある。
+  // (1) App Router は layout と page を並行して描くため、layout の redirect が確定する前に
+  //     page のデータ取得が走る。未認可のまま進むと viewerProcedure が UNAUTHORIZED を投げ、
+  //     リダイレクトの裏で毎回スタックトレースが出る（タイミング次第では 500 が勝つ）。
+  // (2) クライアント遷移では共有 layout は再レンダリングされないので、遷移の間に閲覧 cookie が
+  //     切れても layout の requireViewer() は走らない。page 側で判定しないと素通りする。
+  // isViewer() を見て null を返す形だと (2) で白画面になるため、page 自身がリダイレクトする。
+  await requireViewer();
 
   try {
     const caller = await createServerCaller();
