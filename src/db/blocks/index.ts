@@ -34,6 +34,8 @@ export interface SkillEntry {
   name: string;
   years: number;
   level: string;
+  /** 推し。塗り強調の唯一の根拠で、未設定なら従来の習熟度強調を使う。 */
+  featured?: boolean;
 }
 
 /** スキル一覧ブロックの構造化データ。カテゴリ名＋スキルの配列。 */

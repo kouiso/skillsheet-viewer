@@ -49,6 +49,9 @@ export function loadScriptEnv({ required = false }: { required?: boolean } = {})
   const candidates = envCandidates();
   const envPath = candidates.find((p) => existsSync(p));
   if (!envPath) {
+    // CI や一時実行では、秘密値をファイルへ複製せずプロセス環境で渡す。
+    // `required` は「接続情報が必要」の意味であり、`.env` という保管形式を強制しない。
+    if (required && process.env.DATABASE_URL) return null;
     if (required) {
       throw new Error(`.env が見つかりません（探した場所: ${candidates.join(' , ')}）`);
     }

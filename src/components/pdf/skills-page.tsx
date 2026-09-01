@@ -63,18 +63,29 @@ const styles = StyleSheet.create({
   chips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: SKILL_CHIP_GAP },
 });
 
-const LEGEND = '塗り = 上級 ／ 枠線 = 中級・初級。カッコ内は経験年数。';
+const LEGEND = {
+  featured: '塗り = 主に使う技術 ／ 枠線 = その他。カッコ内は経験年数。',
+  level: '塗り = 上級 ／ 枠線 = 中級・初級。カッコ内は経験年数。',
+} as const;
 
-function toChip(skill: PrintSkill): PrintChip {
+function toChip(skill: PrintSkill, mode: 'featured' | 'level'): PrintChip {
   return {
     // 年数を出すかどうかは skillYearsLabel（print-view-model.ts）が既に判定済み
     // （分類許可リスト + スキルビュートグル）。ここでは組み立てるだけ。
     label: skill.yearsLabel ? `${skill.name}（${skill.yearsLabel}）` : skill.name,
-    emphasis: chipEmphasis(skill.level),
+    emphasis: chipEmphasis(skill, mode),
   };
 }
 
-export function SkillsPage({ groups, expertiseRows }: { groups: PrintSkillGroup[]; expertiseRows: PrintMetaRow[] }) {
+export function SkillsPage({
+  groups,
+  expertiseRows,
+  skillEmphasisMode,
+}: {
+  groups: PrintSkillGroup[];
+  expertiseRows: PrintMetaRow[];
+  skillEmphasisMode: 'featured' | 'level';
+}) {
   const filled = groups.filter((group) => group.skills.length > 0);
   return (
     <>
@@ -93,7 +104,7 @@ export function SkillsPage({ groups, expertiseRows }: { groups: PrintSkillGroup[
       )}
       {filled.length > 0 && (
         <>
-          <PrintText style={styles.legend}>{LEGEND}</PrintText>
+          <PrintText style={styles.legend}>{LEGEND[skillEmphasisMode]}</PrintText>
           <View style={styles.groups}>
             {filled.map((group, groupIndex) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: 分類名はブロックごとの自由入力で、未入力（空文字）や重複があり得るので index を混ぜる
@@ -102,7 +113,7 @@ export function SkillsPage({ groups, expertiseRows }: { groups: PrintSkillGroup[
                 <View style={styles.chips}>
                   {group.skills.map((skill, index) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: 同一分類に同名スキルが重複する実データがあり得るため index を混ぜる（並び替えも状態も無い静的な列）
-                    <Chip key={`${skill.name}-${index}`} chip={toChip(skill)} />
+                    <Chip key={`${skill.name}-${index}`} chip={toChip(skill, skillEmphasisMode)} />
                   ))}
                 </View>
               </View>
