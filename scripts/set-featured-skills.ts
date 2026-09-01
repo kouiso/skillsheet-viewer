@@ -2,7 +2,7 @@
  * 指定シートの推しを React / TypeScript / Nest.js / Next.js の4件へそろえる。
  *
  * 既存の一括更新スクリプトと同じく、既定は dry-run。--apply を付けるまで DB は変更しない。
- * `--sheet-id` または SKILLSHEET_OWNER_ID で必ず対象を絞る。
+ * `--sheet-id` または SKILLSHEET_OWNER_ID で対象を絞り、必ず1シートだけを更新する。
  */
 import { inArray } from 'drizzle-orm';
 
@@ -32,6 +32,9 @@ async function main(): Promise<void> {
   const apply = process.argv.includes('--apply');
   const db = getDb();
   const sheetIds = await resolveTargetSheetIds(db, process.argv.slice(2));
+  if (sheetIds.length !== 1) {
+    throw new Error(`対象シートは1件だけ指定してください（現在: ${sheetIds.length} 件）。--sheet-id を指定してください。`);
+  }
   const rows = await db.select().from(blocks).where(inArray(blocks.sheetId, sheetIds));
   const found = new Set<string>();
   const updates: BlockUpdate[] = [];

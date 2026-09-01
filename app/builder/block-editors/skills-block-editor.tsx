@@ -66,15 +66,6 @@ export const SkillsBlockEditor = ({
                     className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
-                <td className="border border-border p-1 text-center">
-                  <input
-                    type="checkbox"
-                    checked={s.featured === true}
-                    onChange={(e) => setSkill(i, 'featured', e.target.checked)}
-                    aria-label={`スキル${i + 1}を推しにする`}
-                    className="size-5 accent-primary"
-                  />
-                </td>
                 <td className="border border-border p-1">
                   <input
                     type="number"
@@ -93,6 +84,15 @@ export const SkillsBlockEditor = ({
                     onChange={(v) => setSkill(i, 'level', v)}
                     placeholder="習熟度"
                     label={`スキル${i + 1}の習熟度`}
+                  />
+                </td>
+                <td className="border border-border p-1 text-center">
+                  <input
+                    type="checkbox"
+                    checked={s.featured === true}
+                    onChange={(e) => setSkill(i, 'featured', e.target.checked)}
+                    aria-label={`スキル${i + 1}を推しにする`}
+                    className="size-5 accent-primary"
                   />
                 </td>
                 <td className="border border-border p-1 text-center">
