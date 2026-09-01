@@ -162,6 +162,7 @@ export interface PrintSkill {
   /** ソートにだけ使う生の経験年数。表示するかどうかは yearsLabel が既に判定済み。 */
   years: number;
   level: string;
+  featured: boolean;
   /**
    * チップに添える経験年数の表示文字列（例: "8 年"）。表示しない場合は空文字。
    * 分類（`PRINT_YEAR_VISIBLE_CATEGORIES`）とスキルビュートグルで既に判定済みの値を
@@ -183,8 +184,9 @@ export interface PrintSummary {
   title: string;
   companyName: string;
   stats: { value: string; unit: string; label: string }[];
-  /** 主力スタック。経験年数の降順で PRINT_TOP_SKILL_LIMIT 件まで。 */
+  /** 主力スタック。推しモードでは推しを先頭に、それ以外は経験年数の降順で PRINT_TOP_SKILL_LIMIT 件まで。 */
   topSkills: PrintChip[];
+  skillEmphasisMode: 'featured' | 'level';
   /** 対応可能工程。全案件の process の和union。 */
   processLabels: string[];
   /** プロフィール帯（所属・年齢・勤務形態 …）。1 行に 3 列で並ぶ短い項目だけ。 */
@@ -220,6 +222,7 @@ export interface PrintViewModel {
   showSkills: boolean;
   /** 工程を出すか（ビュートグル `process`）。 */
   showProcess: boolean;
+  skillEmphasisMode: 'featured' | 'level';
 }
 
 const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline'];
@@ -248,8 +251,12 @@ function markdownText(value: string | undefined): string {
 /** 習熟度から強調を決める。上級だけ塗り、それ以外は枠線。 */
 const SOLID_LEVELS = new Set(['上級', '★★★']);
 
-export function chipEmphasis(level: string): PrintChip['emphasis'] {
-  return SOLID_LEVELS.has(trimmed(level)) ? 'solid' : 'outline';
+export function chipEmphasis(
+  skill: Pick<PrintSkill, 'level' | 'featured'>,
+  mode: PrintViewModel['skillEmphasisMode'],
+): PrintChip['emphasis'] {
+  if (mode === 'featured') return skill.featured ? 'solid' : 'outline';
+  return SOLID_LEVELS.has(trimmed(skill.level)) ? 'solid' : 'outline';
 }
 
 /**
@@ -738,6 +745,7 @@ function buildSummary(
   skillGroups: PrintSkillGroup[],
   items: ProjectItem[],
   showSkills: boolean,
+  skillEmphasisMode: PrintViewModel['skillEmphasisMode'],
   referenceMonth?: number,
   hasProjectSource = true,
 ): PrintSummary {
@@ -749,7 +757,7 @@ function buildSummary(
   const profileRows = allProfileRows.filter((row) => row.value.length <= PROFILE_SHORT_VALUE_CHARS);
   const expertiseRows = allProfileRows.filter((row) => row.value.length > PROFILE_SHORT_VALUE_CHARS);
 
-  // 主力スタックは経験年数の降順。同年数のときはスキル一覧に並んでいる順を保つ。
+  // 推しモードは本人が見せたい技術を先頭へ置く。推し未設定の既存シートでは、従来どおり経験年数順。
   //
   // スキルのビュートグルが OFF のときはここも空にする。以前は showSkills を一切見ずに
   // 組み立てており、スキル一覧「ページ」は消えても 1 ページ目の主力スタック見出し＋
@@ -760,13 +768,18 @@ function buildSummary(
     : [];
   const topSkills = flatSkills
     .filter((s) => trimmed(s.name))
-    .sort((a, b) => b.years - a.years || a.order - b.order)
+    .sort(
+      (a, b) =>
+        (skillEmphasisMode === 'featured' ? Number(b.featured) - Number(a.featured) : 0) ||
+        b.years - a.years ||
+        a.order - b.order,
+    )
     .slice(0, PRINT_TOP_SKILL_LIMIT)
     .map((s) => ({
       // 年数を出すかどうかはビューモデル組み立て時に判定済み（分類許可リスト + スキル
       // ビュートグル）。ここでは組み立てるだけで、判定をこの部品側で繰り返さない。
       label: s.yearsLabel ? `${s.name} ${s.yearsLabel}` : s.name,
-      emphasis: chipEmphasis(s.level),
+      emphasis: chipEmphasis(s, skillEmphasisMode),
     }));
 
   // 対応可能工程は全案件の和union。1 件でも担当していれば「対応できる」と読む。
@@ -789,6 +802,7 @@ function buildSummary(
       .map((i) => ({ value: trimmed(i.value), unit: trimmed(i.unit), label: trimmed(i.label) }))
       .filter((i) => i.value !== '' || i.unit !== '' || i.label !== ''),
     topSkills,
+    skillEmphasisMode,
     processLabels: PROCESS_LABELS.filter((_, i) => done[i]),
     profileRows,
     expertiseRows,
@@ -828,6 +842,7 @@ export function buildPrintViewModel(
               name: trimmed(s.name),
               years: experience.months / 12,
               level: trimmed(s.level),
+              featured: s.featured === true,
               yearsLabel:
                 on('skills') && PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
                   ? printExperienceLabel(experience.label)
@@ -837,6 +852,11 @@ export function buildPrintViewModel(
       };
     })
     .filter((g) => g.skills.length > 0);
+  const skillEmphasisMode: PrintViewModel['skillEmphasisMode'] = skillGroups.some((group) =>
+    group.skills.some((skill) => skill.featured),
+  )
+    ? 'featured'
+    : 'level';
 
   const { levelById } = resolveDetailLevels(visible.items);
   const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
@@ -857,6 +877,7 @@ export function buildPrintViewModel(
       skillGroups,
       visible.items,
       on('skills'),
+      skillEmphasisMode,
       referenceMonth,
       projectBlock !== undefined,
     ),
@@ -865,5 +886,6 @@ export function buildPrintViewModel(
     showProjects: on('projects') || on('timeline'),
     showSkills: on('skills'),
     showProcess: on('process'),
+    skillEmphasisMode,
   };
 }

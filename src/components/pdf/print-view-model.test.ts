@@ -268,6 +268,30 @@ describe('buildPrintViewModel', () => {
     ]);
   });
 
+  it('推しが1つでもあれば推しだけを塗り、主力スタックは推しを先頭にする', () => {
+    const blocks = blocksFixture();
+    const skills = blocks.find((block) => block.type === 'skills');
+    if (skills?.type === 'skills') skills.data.skills[1].featured = true;
+
+    const vm = buildPrintViewModel('シート', blocks);
+    expect(vm.skillEmphasisMode).toBe('featured');
+    expect(vm.summary.skillEmphasisMode).toBe('featured');
+    expect(vm.summary.topSkills).toEqual([
+      { label: 'Python 4 年', emphasis: 'solid' },
+      { label: 'TypeScript 0 年 9 ヶ月', emphasis: 'outline' },
+    ]);
+    expect(vm.skillGroups[0].skills.map((skill) => skill.featured)).toEqual([false, true]);
+  });
+
+  it('空名の推しはPDFの推しモードを有効にしない', () => {
+    const blocks = blocksFixture();
+    const skills = blocks.find((block) => block.type === 'skills');
+    if (skills?.type === 'skills') skills.data.skills.push({ name: '  ', years: 1, level: '★★★', featured: true });
+
+    const vm = buildPrintViewModel('シート', blocks);
+    expect(vm.skillEmphasisMode).toBe('level');
+  });
+
   it('統計枠は非表示案件を除いた案件数と重複なしの経験年数を使う', () => {
     const blocks = blocksFixture();
     const stats = blocks.find((b) => b.type === 'stats');

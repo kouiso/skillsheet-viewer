@@ -64,4 +64,31 @@ describe('SkillMatrix', () => {
     );
     expect(screen.getByText('7年0ヶ月')).toBeInTheDocument();
   });
+
+  it('推しモードでは推しのスキル名と経験バーを強調するが、4列グリッドは維持する', () => {
+    render(
+      <SkillMatrix
+        hasFeatured
+        data={{
+          category: '言語',
+          skills: [
+            { name: 'TypeScript', years: 5, level: '★★★', featured: true },
+            { name: 'Python', years: 2, level: '★★☆' },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByText('TypeScript')).toHaveClass('font-semibold', 'text-primary-dark');
+    expect(screen.getByText('Python')).not.toHaveClass('font-semibold');
+    expect(screen.getByText('Python').parentElement?.querySelector('.barFill')).toHaveStyle({
+      backgroundColor: 'var(--faint)',
+    });
+    expect(screen.getByText('TypeScript').parentElement?.querySelector('.barFill')).toHaveStyle({
+      backgroundColor: 'var(--primary)',
+    });
+    expect(screen.getByText('TypeScript').closest('div')?.className).toContain(
+      'grid-cols-[minmax(0,1fr)_44px_72px_64px]',
+    );
+  });
 });

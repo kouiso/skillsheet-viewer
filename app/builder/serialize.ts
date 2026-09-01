@@ -23,7 +23,7 @@ import {
   type TableColumn,
   tableBlockToMarkdown,
 } from '@/db/blocks';
-import { sanitizeMarkdown } from '@/db/sanitize-html';
+import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
 export type EditorItem =
@@ -91,14 +91,14 @@ export const itemToBlockInput = (item: EditorItem): BlockInput => {
 
 // 1 ブロックを markdown 文字列へ（table/skills/experience は GFM 表・セクションへ変換）。
 // includeHidden はバックアップ書き出し用（hidden な会社・案件も欠落させない）。
-export const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolean }): string => {
+export const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolean; hasFeatured?: boolean }): string => {
   switch (item.type) {
     case 'markdown':
       return sanitizeMarkdown(item.markdown);
     case 'table':
       return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
     case 'skills':
-      return skillsBlockToMarkdown({ category: item.category, skills: item.skills });
+      return skillsBlockToMarkdown({ category: item.category, skills: item.skills }, opts?.hasFeatured);
     case 'experience': {
       const { company, startDate, endDate, role, description } = item;
       return experienceBlockToMarkdown({ company, startDate, endDate, role, description });
@@ -118,6 +118,11 @@ export const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolea
 // 手コピーで 2 箇所に規則が重複していたのを解消し、markdown 分割の無損失性と
 // GFM テーブルが直前段落へ lazy continuation として飲み込まれない区切りを両立する。
 export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: boolean }): string => {
+  const hasFeatured = items.some(
+    (item) =>
+      item?.type === 'skills' &&
+      item.skills.some((skill) => skill.featured === true && sanitizeHtml(skill.name).trim() !== ''),
+  );
   let result = '';
   let prev: EditorItem | undefined;
   for (let i = 0; i < items.length; i++) {
@@ -128,7 +133,7 @@ export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: b
     // — 後から continue すると直前ブロック判定（blockJoinSeparator / 先頭判定）が
     // スキップされた要素を指してしまう。
     if (isBlockInputEmpty(itemToBlockInput(item))) continue;
-    const markdown = itemToMarkdown(item, opts);
+    const markdown = itemToMarkdown(item, { ...opts, hasFeatured });
     // items[i - 1] を位置で参照すると sparse 配列（途中の undefined 要素）で
     // 実際に直前にレンダリングされたブロックを見失う。実際にレンダリングした
     // 直前アイテムを prev で追跡し、先頭要素の判定も prev の有無で行う。
