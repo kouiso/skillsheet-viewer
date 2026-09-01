@@ -3,6 +3,7 @@ import { connection } from 'next/server';
 import { classifyConfigErrorOrRethrow } from '@/components/view-error';
 import type { SheetSummary } from '@/db';
 import { createServerCaller } from '@/server/trpc/caller';
+import { isViewer } from '@/server/viewer-gate';
 import type { ConfigErrorKind } from '@/util/is-config-error';
 
 import DbSheetsListClient from './db-sheets-list-client';
@@ -14,6 +15,11 @@ export const metadata: Metadata = {
 export default async function SheetsListPage() {
   // DATABASE_URL はランタイム専用。connection() で動的レンダリングを確保する。
   await connection();
+  // layout の requireViewer() と同じ判定を先に行う。App Router は layout と page を並行して
+  // 描くため、リダイレクトが確定する前に page のデータ取得が走る。未認可のまま進むと
+  // viewerProcedure が UNAUTHORIZED を投げ、リダイレクトの裏で毎回スタックトレースが出る
+  // （＋タイミング次第でリダイレクトより 500 が勝つ）。描画は layout の redirect に譲る。
+  if (!(await isViewer())) return null;
 
   let sheets: SheetSummary[] = [];
   let stale = false;

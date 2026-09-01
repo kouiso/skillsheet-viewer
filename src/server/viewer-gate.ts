@@ -72,6 +72,11 @@ export async function hasViewerSession(requestHeaders?: Headers): Promise<boolea
  * /view 配下の閲覧認可の単一チェックポイント。
  * 未許可なら /viewer-auth へリダイレクトする（redirect() は内部で例外を投げるため、
  * 許可時のみ正常 return する）。RSC / レイアウトからのみ呼ぶこと。
+ *
+ * 注意: App Router は layout と page を**並行して**描画するため、ここで投げた redirect は
+ * 配下の page の描画を止めない。page 側も先頭で isViewer() を見て、false なら null を返して
+ * データ取得へ進まないこと。忘れると未認証アクセスのたびに viewerProcedure が
+ * UNAUTHORIZED を投げ、リダイレクトの裏でエラーログが出る（タイミング次第では 500 が勝つ）。
  */
 export async function requireViewer(): Promise<void> {
   if (await isViewer()) {
