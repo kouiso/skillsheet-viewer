@@ -55,6 +55,7 @@ export const SkillMatrix = ({
         {data.skills.map((skill, i) => {
           const experience = resolveDisplayedSkillExperience(skill, projectItems, referenceMonth);
           const isFeatured = hasFeatured && skill.featured === true;
+          const barColor = isFeatured ? 'var(--primary)' : hasFeatured ? 'var(--faint)' : undefined;
           return (
             // 名前 / 習熟度(★) / バー / 年数 の4列。習熟度は PDF（表形式）と同じ情報量になるよう、
             // ホバー不要で常時可視のテキストとして表示する（issue #142）。
@@ -75,13 +76,14 @@ export const SkillMatrix = ({
               <span className="barTrack" title={skill.level}>
                 {experience.months > 0 ? (
                   <span
-                    className={`barFill block ${isFeatured ? 'bg-primary' : hasFeatured ? 'bg-faint' : ''}`}
-                    style={{ width: `${getMonthsBarPercent(experience.months)}%` }}
+                    className="barFill block"
+                    style={{ width: `${getMonthsBarPercent(experience.months)}%`, backgroundColor: barColor }}
                   />
                 ) : (
                   // 年数が無いスキルは ★ の段階でバー幅を決める。
                   <span
-                    className={`barFill block ${getLevelWidth(skill.level)} ${isFeatured ? 'bg-primary' : hasFeatured ? 'bg-faint' : ''}`}
+                    className={`barFill block ${getLevelWidth(skill.level)}`}
+                    style={{ backgroundColor: barColor }}
                   />
                 )}
               </span>

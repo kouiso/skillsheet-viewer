@@ -81,7 +81,12 @@ describe('SkillMatrix', () => {
 
     expect(screen.getByText('TypeScript')).toHaveClass('font-semibold', 'text-primary-dark');
     expect(screen.getByText('Python')).not.toHaveClass('font-semibold');
-    expect(screen.getByText('Python').parentElement?.querySelector('.barFill')).toHaveClass('bg-faint');
+    expect(screen.getByText('Python').parentElement?.querySelector('.barFill')).toHaveStyle({
+      backgroundColor: 'var(--faint)',
+    });
+    expect(screen.getByText('TypeScript').parentElement?.querySelector('.barFill')).toHaveStyle({
+      backgroundColor: 'var(--primary)',
+    });
     expect(screen.getByText('TypeScript').closest('div')?.className).toContain(
       'grid-cols-[minmax(0,1fr)_44px_72px_64px]',
     );

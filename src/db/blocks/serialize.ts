@@ -36,11 +36,13 @@ export function tableBlockToMarkdown(data: TableBlockData): string {
 }
 
 /** スキル一覧ブロックを GFM markdown 表へ変換する。 */
-export function skillsBlockToMarkdown(data: SkillsBlockData): string {
+export function skillsBlockToMarkdown(
+  data: SkillsBlockData,
+  hasFeatured = data.skills.some((skill) => skill.featured === true),
+): string {
   const category = escapeCell(data.category);
   const header = data.category.trim().length > 0 ? `### ${category}\n\n` : '';
   if (data.skills.length === 0) return `${header}| スキル | 経験年数 | 習熟度 |\n| :--- | :---: | :--- |`;
-  const hasFeatured = data.skills.some((skill) => skill.featured === true);
   const headerLine = hasFeatured ? '| スキル | 経験年数 | 習熟度 | 推し |' : '| スキル | 経験年数 | 習熟度 |';
   const alignLine = hasFeatured ? '| :--- | :---: | :--- | :---: |' : '| :--- | :---: | :--- |';
   const bodyLines = data.skills.map((s) => {
@@ -182,10 +184,10 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
   return lines.join('\n');
 }
 
-export function blockToMarkdown(block: Block): string {
+export function blockToMarkdown(block: Block, hasFeatured?: boolean): string {
   if (block.type === 'markdown') return sanitizeMarkdown(block.data.markdown);
   if (block.type === 'table') return tableBlockToMarkdown(block.data);
-  if (block.type === 'skills') return skillsBlockToMarkdown(block.data);
+  if (block.type === 'skills') return skillsBlockToMarkdown(block.data, hasFeatured);
   if (block.type === 'experience') return experienceBlockToMarkdown(block.data);
   if (block.type === 'profile') return profileBlockToMarkdown(block.data);
   if (block.type === 'stats') return statsBlockToMarkdown(block.data);

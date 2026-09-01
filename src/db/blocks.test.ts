@@ -256,6 +256,27 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
     expect(md).toContain('| TypeScript | 3年 | 実務経験あり |');
   });
 
+  it('推しモードは同一シートのすべての skills 表へ推し列を付ける', () => {
+    const blocks: Block[] = [
+      {
+        id: 'featured',
+        type: 'skills',
+        order: 0,
+        data: { ...SKILLS, skills: [{ ...SKILLS.skills[0], featured: true }] },
+      },
+      {
+        id: 'plain',
+        type: 'skills',
+        order: 1,
+        data: { category: 'バックエンド', skills: [{ name: 'Nest.js', years: 2, level: '業務利用可' }] },
+      },
+    ];
+
+    const md = blocksToMarkdown(blocks);
+    expect(md.match(/\| スキル \| 経験年数 \| 習熟度 \| 推し \|/g)).toHaveLength(2);
+    expect(md).toContain('| Nest.js | 2年 | 業務利用可 |  |');
+  });
+
   it('experience ブロックを markdown セクションへ変換して連結する', () => {
     const blocks: Block[] = [
       { id: 'm', type: 'markdown', order: 0, data: { markdown: '## 経歴' } },
