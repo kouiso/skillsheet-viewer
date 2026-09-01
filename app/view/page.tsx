@@ -3,6 +3,7 @@ import { connection } from 'next/server';
 import { classifyConfigErrorOrRethrow } from '@/components/view-error';
 import type { SheetSummary } from '@/db';
 import { createServerCaller } from '@/server/trpc/caller';
+import { requireViewer } from '@/server/viewer-gate';
 import type { ConfigErrorKind } from '@/util/is-config-error';
 
 import DbSheetsListClient from './db-sheets-list-client';
@@ -14,6 +15,14 @@ export const metadata: Metadata = {
 export default async function SheetsListPage() {
   // DATABASE_URL はランタイム専用。connection() で動的レンダリングを確保する。
   await connection();
+  // 閲覧ゲートを page 側でも通す。layout に任せきりにできない理由が 2 つある。
+  // (1) App Router は layout と page を並行して描くため、layout の redirect が確定する前に
+  //     page のデータ取得が走る。未認可のまま進むと viewerProcedure が UNAUTHORIZED を投げ、
+  //     リダイレクトの裏で毎回スタックトレースが出る（タイミング次第では 500 が勝つ）。
+  // (2) クライアント遷移では共有 layout は再レンダリングされないので、遷移の間に閲覧 cookie が
+  //     切れても layout の requireViewer() は走らない。page 側で判定しないと素通りする。
+  // isViewer() を見て null を返す形だと (2) で白画面になるため、page 自身がリダイレクトする。
+  await requireViewer();
 
   let sheets: SheetSummary[] = [];
   let stale = false;
