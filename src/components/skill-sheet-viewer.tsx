@@ -19,6 +19,7 @@ import {
 } from '@/db/blocks';
 import { useActiveHeading } from '@/hooks/use-active-heading';
 import { isSafeImageSrc, MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from '@/lib/markdown-config';
+import { sanitizeHtml } from '@/util/sanitize-html';
 import { ProfileIntro } from './blocks/profile-intro';
 import { ProjectSection } from './blocks/project-section';
 import { SectionHead } from './blocks/section-head';
@@ -239,7 +240,7 @@ const SkillSheetViewer = ({
       blocks?.some(
         (block) =>
           block.type === 'skills' &&
-          block.data.skills.some((skill) => skill.featured === true && skill.name.trim() !== ''),
+          block.data.skills.some((skill) => skill.featured === true && sanitizeHtml(skill.name).trim() !== ''),
       ) ?? false,
     [blocks],
   );

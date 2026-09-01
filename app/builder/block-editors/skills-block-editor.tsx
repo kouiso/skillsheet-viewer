@@ -19,7 +19,14 @@ export const SkillsBlockEditor = ({
   const setSkill = (i: number, field: keyof SkillEntry, value: string | number | boolean) =>
     onChange(
       category,
-      skills.map((s, idx) => (idx === i ? { ...s, [field]: value } : s)),
+      skills.map((s, idx) => {
+        if (idx !== i) return s;
+        if (field === 'featured' && value !== true) {
+          const { featured: _featured, ...unfeatured } = s;
+          return unfeatured;
+        }
+        return { ...s, [field]: value };
+      }),
     );
   const addSkill = () => onChange(category, [...skills, { name: '', years: 0, level: '' }]);
   const removeSkill = (i: number) =>
