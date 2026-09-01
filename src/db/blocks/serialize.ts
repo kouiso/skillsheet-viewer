@@ -5,7 +5,7 @@
  */
 
 import { flattenTech, formatMonthToken, formatPeriodDisplay, normalizeProcess, PROCESS_LABELS } from '../process';
-import { sanitizeMarkdown } from '../sanitize-html';
+import { sanitizeHtml, sanitizeMarkdown } from '../sanitize-html';
 // tech-area.ts はこのファイルから型のみを取り込むため、実行時の循環は発生しない。
 import { resolveProjectArea } from '../tech-area';
 import { collapseSoftBreaks } from '../text';
@@ -47,7 +47,7 @@ export function skillsBlockToMarkdown(
   if (data.skills.length === 0) return `${header}${headerLine}\n${alignLine}`;
   const bodyLines = data.skills.map((s) => {
     const values = [escapeCell(s.name), s.years > 0 ? `${s.years}年` : '-', escapeCell(s.level)];
-    if (hasFeatured) values.push(s.featured ? '✓' : '');
+    if (hasFeatured) values.push(s.featured === true && sanitizeHtml(s.name).trim() !== '' ? '✓' : '');
     return `| ${values.join(' | ')} |`;
   });
   return `${header}${[headerLine, alignLine, ...bodyLines].join('\n')}`;

@@ -301,6 +301,21 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
     expect(blocksToMarkdown(blocks)).not.toContain('| 推し |');
   });
 
+  it('サニタイズ後に空となる行には推し印を出さない', () => {
+    const md = skillsBlockToMarkdown(
+      {
+        category: '言語',
+        skills: [
+          { name: 'TypeScript', years: 3, level: '実務経験あり', featured: true },
+          { name: '<script>x</script>', years: 1, level: '学習中', featured: true },
+        ],
+      },
+      true,
+    );
+    expect(md).toContain('| TypeScript | 3年 | 実務経験あり | ✓ |');
+    expect(md).not.toContain('|  | 1年 | 学習中 | ✓ |');
+  });
+
   it('experience ブロックを markdown セクションへ変換して連結する', () => {
     const blocks: Block[] = [
       { id: 'm', type: 'markdown', order: 0, data: { markdown: '## 経歴' } },
