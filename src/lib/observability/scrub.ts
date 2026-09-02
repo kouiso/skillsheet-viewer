@@ -85,23 +85,21 @@ export interface ScrubbableSentryEvent {
     cookies?: unknown;
     headers?: unknown;
   };
-  contexts?: {
-    nextjs?: { request_path?: string; [key: string]: unknown };
-    [key: string]: unknown;
-  };
+  // 実 Sentry の Contexts 型は「全プロパティ任意の辞書型」で `nextjs` を静的に知らないため、
+  // 構造的部分型としてそのまま渡すと TS の weak-type チェックに弾かれる。辞書として受け、
+  // 中の読み書きだけ nextjs の形を仮定する（scrubSentryEvent 内でのみ行う）。
+  contexts?: Record<string, unknown>;
   exception?: {
-    values?: Array<{ value?: string; [key: string]: unknown }>;
+    values?: Array<{ value?: string }>;
   };
   user?: unknown;
   breadcrumbs?: ScrubbableBreadcrumb[];
-  [key: string]: unknown;
 }
 
 export interface ScrubbableBreadcrumb {
   category?: string;
   message?: string;
   data?: Record<string, unknown>;
-  [key: string]: unknown;
 }
 
 function toRoutePlaceholder(rawUrl: string): string {
@@ -113,8 +111,8 @@ function toRoutePlaceholder(rawUrl: string): string {
  * breadcrumb（history の to/from）の両方に効く最終防衛line。個別の integration 設定
  * （httpIntegration({breadcrumbs:false}) 等）が主防御で、これは二重化。
  */
-export function scrubBreadcrumb<T extends ScrubbableBreadcrumb>(breadcrumb: T): T {
-  const next: T = { ...breadcrumb };
+export function scrubBreadcrumb(breadcrumb: ScrubbableBreadcrumb): ScrubbableBreadcrumb {
+  const next: ScrubbableBreadcrumb = { ...breadcrumb };
   if (typeof next.message === 'string') {
     next.message = redactFreeText(next.message);
   }
@@ -140,8 +138,8 @@ export function scrubBreadcrumb<T extends ScrubbableBreadcrumb>(breadcrumb: T): 
  * PII の最終防衛line。個々の integration 設定・breadcrumb 無効化が主防御で、
  * これは「それでも漏れたら」を潰す二重化。request のユーザー識別情報は丸ごと落とす。
  */
-export function scrubSentryEvent<T extends ScrubbableSentryEvent>(event: T): T {
-  const next: T = { ...event };
+export function scrubSentryEvent(event: ScrubbableSentryEvent): ScrubbableSentryEvent {
+  const next: ScrubbableSentryEvent = { ...event };
 
   if (typeof next.message === 'string') {
     next.message = redactFreeText(next.message);
@@ -155,10 +153,11 @@ export function scrubSentryEvent<T extends ScrubbableSentryEvent>(event: T): T {
     };
   }
 
-  if (next.contexts?.nextjs?.request_path) {
+  const nextjsContext = next.contexts?.nextjs as { request_path?: string } | undefined;
+  if (typeof nextjsContext?.request_path === 'string') {
     next.contexts = {
       ...next.contexts,
-      nextjs: { ...next.contexts.nextjs, request_path: toRoutePlaceholder(next.contexts.nextjs.request_path) },
+      nextjs: { ...nextjsContext, request_path: toRoutePlaceholder(nextjsContext.request_path) },
     };
   }
 
