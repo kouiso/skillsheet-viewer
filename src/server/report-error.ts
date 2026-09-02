@@ -1,10 +1,40 @@
 import { TRPCError } from '@trpc/server';
+import { after } from 'next/server';
 
 import { MISSING_SERVER_ENV_PREFIX } from '@/lib/env';
 import { isSentryEnabled } from '@/lib/observability/config';
 import { classifyConfigError } from '@/util/is-config-error';
 
+import { SESSION_SECRET_MISSING_MESSAGE } from './session';
 import { shouldLogTRPCError } from './trpc/log-error';
+
+// src/server/trpc/router/auth.ts の VIEWER_AUTH_NOT_CONFIGURED_MESSAGE と同じ文字列。
+// auth.ts はレート制限（viewer-rate-limit.ts）経由でこのファイルを import するため、
+// 直接 import すると循環参照になる（レビュー指摘対応で文字列比較のみ追加する形にした）。
+// 変更する場合は両方を必ず一緒に直すこと。
+const VIEWER_AUTH_NOT_CONFIGURED_MESSAGE = 'viewer authentication is not configured';
+
+// tRPC のレート制限応答（総当たり防御が意図通り機能している状態）。攻撃者がロック後も
+// 送り続けるだけで Sentry の無料枠（20 件）を溶かせてしまうため、例外送信からは除外する
+// （レビュー指摘）。console.error 自体は shouldLogTRPCError 側の判定で維持し、
+// サーバー側の攻撃ログは失わない。
+const RATE_LIMIT_CODES: ReadonlySet<string> = new Set(['TOO_MANY_REQUESTS']);
+
+/**
+ * Sentry 送信だけをリクエストの生存期間内に留める。`after()` はレスポンス返却後も
+ * この Promise が解決するまでサーバーレス実行環境を維持するため、応答直後に
+ * インスタンスが凍結/終了して検出コードが未実行のまま送信が消える事故を防ぐ
+ * （レビュー指摘: 元の fire-and-forget では captureException が呼ばれる前に切れうる）。
+ * リクエストスコープ外（単体テスト等）で呼ばれた場合は `after()`自体が同期 throw するため、
+ * 元の fire-and-forget にフォールバックする。
+ */
+function reportAsync(work: () => Promise<void>): void {
+  try {
+    after(work);
+  } catch {
+    void work();
+  }
+}
 
 /**
  * `@sentry/nextjs` は動的 import にする（トップレベル import しない）。
@@ -31,6 +61,16 @@ async function loadSentry() {
 // 判定を素通りする）。
 const REVALIDATE_SECRET_MISSING_MESSAGE = 'REVALIDATE_SECRET is not configured';
 
+// route handler は assertServerEnv() を通さないため、VIEWER_CODE/SESSION_SECRET 欠落は
+// 個別のエラーとして auth.login / セッション署名の中で初めて顕在化する。ここで見ないと
+// 該当変数が1つ欠けた状態で /api/trpc/auth.login への通常アクセスのたびに Sentry へ送られる
+// （レビュー指摘）。
+const KNOWN_CONFIG_ERROR_MESSAGES: ReadonlySet<string> = new Set([
+  REVALIDATE_SECRET_MISSING_MESSAGE,
+  SESSION_SECRET_MISSING_MESSAGE,
+  VIEWER_AUTH_NOT_CONFIGURED_MESSAGE,
+]);
+
 /**
  * 「待っても直らない設定不備」の判定。`classifyConfigError()`（GitHub/DB系）と
  * `assertServerEnv()` の欠落メッセージ（別の文言体系）の両方を見る必要がある
@@ -39,7 +79,7 @@ const REVALIDATE_SECRET_MISSING_MESSAGE = 'REVALIDATE_SECRET is not configured';
 function isKnownConfigError(error: unknown): boolean {
   if (classifyConfigError(error) !== null) return true;
   if (!(error instanceof Error)) return false;
-  return error.message.startsWith(MISSING_SERVER_ENV_PREFIX) || error.message === REVALIDATE_SECRET_MISSING_MESSAGE;
+  return error.message.startsWith(MISSING_SERVER_ENV_PREFIX) || KNOWN_CONFIG_ERROR_MESSAGES.has(error.message);
 }
 
 /**
@@ -59,12 +99,14 @@ export function reportTRPCError(options: {
 
   console.error(...options.logArgs);
 
-  if (isSentryEnabled() && !isKnownConfigError(options.error)) {
-    void loadSentry()
-      .then((Sentry) => {
-        Sentry.captureException(options.error, { tags: { scope: options.scope } });
-      })
-      .catch(() => undefined);
+  if (isSentryEnabled() && !isKnownConfigError(options.error) && !RATE_LIMIT_CODES.has(code)) {
+    reportAsync(() =>
+      loadSentry()
+        .then((Sentry) => {
+          Sentry.captureException(options.error, { tags: { scope: options.scope } });
+        })
+        .catch(() => undefined),
+    );
   }
 }
 
@@ -86,9 +128,11 @@ export function reportDegradation(message: string, context: { scope: string }): 
   const last = degradationLastReportedAt.get(key);
   if (last !== undefined && now - last < DEGRADATION_COOLDOWN_MS) return;
   degradationLastReportedAt.set(key, now);
-  void loadSentry()
-    .then((Sentry) => {
-      Sentry.captureMessage(message, { level: 'warning', tags: { scope: context.scope } });
-    })
-    .catch(() => undefined);
+  reportAsync(() =>
+    loadSentry()
+      .then((Sentry) => {
+        Sentry.captureMessage(message, { level: 'warning', tags: { scope: context.scope } });
+      })
+      .catch(() => undefined),
+  );
 }

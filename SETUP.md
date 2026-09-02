@@ -59,9 +59,12 @@ cp .env.example .env
 
 ```bash
 # 初回のみ：1Password から秘密鍵を取り出してローカルに保存
+umask 077
 mkdir -p ~/.config/sops/age
+key_tmp="$(mktemp ~/.config/sops/age/skillsheet-viewer.XXXXXX)"
 op item get "skillsheet-viewer SOPS age key" --vault RITMO --fields notesPlain --format json \
-  | jq -r '.value' | grep -v '^#' > ~/.config/sops/age/skillsheet-viewer.txt
+  | jq -r '.value' | grep -v '^#' > "$key_tmp"
+mv "$key_tmp" ~/.config/sops/age/skillsheet-viewer.txt
 
 export SOPS_AGE_KEY_FILE=~/.config/sops/age/skillsheet-viewer.txt
 

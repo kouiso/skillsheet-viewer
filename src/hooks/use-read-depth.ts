@@ -53,16 +53,26 @@ export function useReadDepth(enabled = true): void {
       }
     };
 
+    // 未読込の画像は初期レイアウトの高さがほぼ0で、直後に判定すると「スクロール不要な
+    // 短いページ」と誤認して 100% を早期発火してしまう（一度発火した閾値は撤回できない）。
+    // load 完了までは scroll / resize どちらの通知も判定に使わない
+    // （レビュー指摘: ResizeObserver は window の 'load' より前にも初回通知を発火しうる。
+    // load 前提のこの初回判定ガードは scroll にしかかかっていなかった）。
+    let readyForMeasurement = document.readyState === 'complete';
+    let lastScrollHeight = document.documentElement.scrollHeight;
+
     const onScroll = () => {
+      if (!readyForMeasurement) return;
       if (rafRef.current !== null) return;
       rafRef.current = requestAnimationFrame(checkDepth);
     };
 
-    // 未読込の画像は初期レイアウトの高さがほぼ0で、直後に判定すると「スクロール不要な
-    // 短いページ」と誤認して 100% を早期発火してしまう（一度発火した閾値は撤回できない）。
-    // 初回判定だけは読み込み完了まで待つ（読み込み済みなら即座に判定する）。
-    let runInitialCheck = () => checkDepth();
-    if (document.readyState === 'complete') {
+    let runInitialCheck = () => {
+      readyForMeasurement = true;
+      lastScrollHeight = document.documentElement.scrollHeight;
+      checkDepth();
+    };
+    if (readyForMeasurement) {
       checkDepth();
       runInitialCheck = () => {};
     } else {
@@ -70,8 +80,17 @@ export function useReadDepth(enabled = true): void {
     }
 
     // 遅延ロード画像やフォント差し替えなど、load 後もレイアウトが変わりうるケースを拾う
-    // ための継続的な再判定（スクロールしなくても到達度が変わりうる）。
-    const resizeObserver = new ResizeObserver(() => checkDepth());
+    // ための継続的な再判定（スクロールしなくても到達度が変わりうる）。ただし document の
+    // 「成長」だけを再判定のトリガーにする。ダッシュボードでセクションを OFF にする操作は
+    // scrollHeight を縮めるが、これは実際に読んだ量とは無関係で、縮んだ分だけ既読率が
+    // 跳ね上がり不可逆の閾値を誤発火させてしまう（レビュー指摘）。
+    const resizeObserver = new ResizeObserver(() => {
+      if (!readyForMeasurement) return;
+      const { scrollHeight } = document.documentElement;
+      if (scrollHeight <= lastScrollHeight) return;
+      lastScrollHeight = scrollHeight;
+      checkDepth();
+    });
     resizeObserver.observe(document.documentElement);
 
     window.addEventListener('scroll', onScroll, { passive: true });

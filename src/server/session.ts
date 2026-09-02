@@ -15,9 +15,14 @@ interface SessionPayload {
   exp: number;
 }
 
+// report-error.ts の isKnownConfigError() が「待っても直らない設定不備」として
+// 個別に見分けるために import する（レビュー指摘: 未設定のまま個別に見ないと
+// SESSION_SECRET が1つ欠けた状態で全リクエストが Sentry へ送られ続ける）。
+export const SESSION_SECRET_MISSING_MESSAGE = 'SESSION_SECRET is not set';
+
 function getSecret(): Buffer {
   const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error('SESSION_SECRET is not set');
+  if (!secret) throw new Error(SESSION_SECRET_MISSING_MESSAGE);
   return Buffer.from(secret, 'utf-8');
 }
 

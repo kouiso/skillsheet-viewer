@@ -1,10 +1,13 @@
 import { TRPCError } from '@trpc/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import * as config from '@/lib/observability/config';
+
 import { reportDegradation, reportTRPCError } from './report-error';
 
 const captureMessageMock = vi.fn();
-vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock, captureException: vi.fn() }));
+const captureExceptionMock = vi.fn();
+vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock, captureException: captureExceptionMock }));
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -49,6 +52,50 @@ describe('reportTRPCError', () => {
     const error = new Error('unexpected');
     reportTRPCError({ error, scope: 'test', logArgs: ['test: unexpected error:', error] });
     expect(spy).toHaveBeenCalledWith('test: unexpected error:', error);
+  });
+});
+
+describe('reportTRPCError — Sentry 送信の抑制（isSentryEnabled をモックして検証）', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    captureExceptionMock.mockClear();
+  });
+
+  it('VIEWER_CODE 未設定（auth.login）は Sentry へ送らない', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'viewer authentication is not configured' });
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it('SESSION_SECRET 未設定は Sentry へ送らない', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'SESSION_SECRET is not set' });
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it('TOO_MANY_REQUESTS はログするが Sentry へは送らない（攻撃者による無料枠消費を防ぐ）', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'too many requests' });
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(spy).toHaveBeenCalled();
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it('未知のエラーは通常どおり Sentry へ送る（抑制条件を広げすぎていないかの回帰防止）', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('something unexpected');
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(captureExceptionMock).toHaveBeenCalledTimes(1);
   });
 });
 

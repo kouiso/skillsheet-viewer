@@ -21,6 +21,7 @@ const TARGET_DIRS = [
   'instrumentation.ts',
   'instrumentation-client.ts',
   'sentry.server.config.ts',
+  'proxy.ts',
 ];
 const SKIP_DIR_NAMES = new Set(['node_modules', '.next', '.git']);
 
@@ -78,15 +79,20 @@ for (const target of TARGET_DIRS) {
   try {
     for await (const filePath of walk(fullPath)) {
       const content = await readFile(filePath, 'utf-8');
-      const lines = content.split('\n');
       const allowedDirectImport = ALLOWED_DIRECT_IMPORT_FILES.has(filePath);
 
+      // ブロックコメント（/* ... */）と行コメント（// ...）の中身を空白に潰してから検査する。
+      // 改行だけは残し、後続の行番号計算がズレないようにする
+      // （レビュー指摘: `/* import ... from '@sentry/nextjs' */` のようなブロックコメントで
+      // コメントアウトしただけの記述が IMPORT_PATTERN に一致し、lint が誤って失敗していた）。
+      const withoutBlockComments = content.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+      const sanitizedContent = withoutBlockComments
+        .split('\n')
+        .map((line) => (line.trim().startsWith('//') ? '' : line))
+        .join('\n');
+      const sanitizedLines = sanitizedContent.split('\n');
+
       if (!allowedDirectImport) {
-        // コメント行の文字列に "import" が含まれると、貪欲な全文パターンがそこから
-        // マッチを開始し、後続の本物の import 文まで食い潰して見逃す
-        // （レビュー指摘: `// import の代わりに窓口を使う` のようなコメント直後の
-        // 本物の import が検出されなくなる）。行頭が `//` の行は空行に潰してから検査する。
-        const sanitizedContent = lines.map((line) => (line.trim().startsWith('//') ? '' : line)).join('\n');
         const importPattern = new RegExp(IMPORT_PATTERN.source, `${IMPORT_PATTERN.flags}g`);
         for (const match of sanitizedContent.matchAll(importPattern)) {
           const line = sanitizedContent.slice(0, match.index).split('\n').length;
@@ -99,9 +105,8 @@ for (const target of TARGET_DIRS) {
         }
       }
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.trim().startsWith('//')) continue;
+      for (let i = 0; i < sanitizedLines.length; i++) {
+        const line = sanitizedLines[i];
 
         if (SET_USER_PATTERN.test(line)) {
           violations.push({ file: relative(ROOT, filePath), line: i + 1, reason: 'Sentry.setUser() は全面禁止' });

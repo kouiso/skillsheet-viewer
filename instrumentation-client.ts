@@ -1,5 +1,4 @@
-import * as Sentry from '@sentry/nextjs';
-import posthog from 'posthog-js';
+import type { CaptureContext } from '@/lib/observability/capture';
 import { registerObservabilityHandle } from '@/lib/observability/capture';
 import {
   getPostHogHost,
@@ -8,20 +7,76 @@ import {
   isPostHogEnabled,
   isSentryEnabled,
 } from '@/lib/observability/config';
-import { SHARED_SENTRY_OPTIONS } from '@/lib/observability/sentry-options';
-import { buildClientIntegrations } from '@/lib/observability/sentry-options.client';
+import type { ObservabilityEvent } from '@/lib/observability/event';
 
 // Next はクライアント計測の初期化ファイルを1本しか許さない（`instrumentation-client.ts`）ため、
-// Sentry と PostHog の両方をここで初期化する。fetch/XHR を素で掴ませたいので Sentry を先に。
-if (isSentryEnabled()) {
+// Sentry と PostHog の両方をここで初期化する。
+//
+// SDK 本体は動的 import にする。トップレベルで静的 import すると、両方無効な環境
+// （キー未設定のデプロイ・DSN を意図的に外したプレビュー環境等）でも、このファイルは
+// 全ルートで必ずロードされる性質上、実行時の `if` 分岐に関わらず2つの SDK が
+// クライアントバンドルにダウンロード・評価される（レビュー指摘: no-op のはずが
+// バンドルサイズ・起動コストだけは常に払っていた）。
+//
+// 初期化が終わるまでの短い間（ダイナミック import が解決するまでの数msから数十ms）に
+// 発生した capture/track はキューに積み、初期化完了後にまとめて送る。ここで単純に
+// 「初期化完了後に registerObservabilityHandle する」実装にすると、ハイドレーション中の
+// ごく初期の例外（例: app/providers.tsx の同期 throw）を取りこぼす窓ができてしまうため、
+// ハンドル自体は同期的に登録し、送信先が無ければキューへ積む方式にした。
+let sentryClient: typeof import('@sentry/nextjs') | undefined;
+let posthogClient: typeof import('posthog-js')['default'] | undefined;
+const pendingCaptures: Array<{ error: unknown; level: 'error' | 'warning'; context: CaptureContext }> = [];
+const pendingTracks: ObservabilityEvent[] = [];
+
+registerObservabilityHandle({
+  capture(error, level, context) {
+    if (sentryClient) {
+      sentryClient.captureException(error, {
+        level,
+        tags: { scope: context.scope, feature: context.feature },
+        fingerprint: context.fingerprint,
+      });
+    } else if (isSentryEnabled()) {
+      pendingCaptures.push({ error, level, context });
+    }
+  },
+  track(event) {
+    if (posthogClient) {
+      const { name, ...properties } = event;
+      posthogClient.capture(name, properties);
+    } else if (isPostHogEnabled()) {
+      pendingTracks.push(event);
+    }
+  },
+});
+
+async function initSentry(): Promise<void> {
+  if (!isSentryEnabled()) return;
+  // integrations の組み立て（sentry-options.client.ts）も Sentry 型に依存するため、
+  // SDK 本体と合わせて動的 import する。
+  const [Sentry, { SHARED_SENTRY_OPTIONS }, { buildClientIntegrations }] = await Promise.all([
+    import('@sentry/nextjs'),
+    import('@/lib/observability/sentry-options'),
+    import('@/lib/observability/sentry-options.client'),
+  ]);
   Sentry.init({
     dsn: getSentryDsn(),
     integrations: (defaults) => buildClientIntegrations(defaults),
     ...SHARED_SENTRY_OPTIONS,
   });
+  sentryClient = Sentry;
+  for (const pending of pendingCaptures.splice(0)) {
+    Sentry.captureException(pending.error, {
+      level: pending.level,
+      tags: { scope: pending.context.scope, feature: pending.context.feature },
+      fingerprint: pending.context.fingerprint,
+    });
+  }
 }
 
-if (isPostHogEnabled()) {
+async function initPostHog(): Promise<void> {
+  if (!isPostHogEnabled()) return;
+  const { default: posthog } = await import('posthog-js');
   posthog.init(getPostHogKey() as string, {
     api_host: getPostHogHost(),
     defaults: '2026-05-30',
@@ -50,23 +105,16 @@ if (isPostHogEnabled()) {
       '$initial_pathname',
     ],
   });
-}
-
-registerObservabilityHandle({
-  capture(error, level, context) {
-    if (isSentryEnabled()) {
-      Sentry.captureException(error, {
-        level,
-        tags: { scope: context.scope, feature: context.feature },
-        fingerprint: context.fingerprint,
-      });
-    }
-  },
-  track(event) {
-    if (!isPostHogEnabled()) return;
+  posthogClient = posthog;
+  for (const event of pendingTracks.splice(0)) {
     const { name, ...properties } = event;
     posthog.capture(name, properties);
-  },
-});
+  }
+}
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+void initSentry();
+void initPostHog();
+
+export function onRouterTransitionStart(url: string, navigationType: 'push' | 'replace' | 'traverse'): void {
+  sentryClient?.captureRouterTransitionStart(url, navigationType);
+}
