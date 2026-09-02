@@ -82,12 +82,14 @@ for (const target of TARGET_DIRS) {
       const allowedDirectImport = ALLOWED_DIRECT_IMPORT_FILES.has(filePath);
 
       if (!allowedDirectImport) {
-        // import 文は複数行にまたがりうるため、ファイル全文に対して 's' フラグ付きで検査する
-        // （1行ずつの走査だと `from '...'` が別行にある複数行 import を見逃す）。
+        // コメント行の文字列に "import" が含まれると、貪欲な全文パターンがそこから
+        // マッチを開始し、後続の本物の import 文まで食い潰して見逃す
+        // （レビュー指摘: `// import の代わりに窓口を使う` のようなコメント直後の
+        // 本物の import が検出されなくなる）。行頭が `//` の行は空行に潰してから検査する。
+        const sanitizedContent = lines.map((line) => (line.trim().startsWith('//') ? '' : line)).join('\n');
         const importPattern = new RegExp(IMPORT_PATTERN.source, `${IMPORT_PATTERN.flags}g`);
-        for (const match of content.matchAll(importPattern)) {
-          const line = content.slice(0, match.index).split('\n').length;
-          if (lines[line - 1]?.trim().startsWith('//')) continue;
+        for (const match of sanitizedContent.matchAll(importPattern)) {
+          const line = sanitizedContent.slice(0, match.index).split('\n').length;
           violations.push({
             file: relative(ROOT, filePath),
             line,
