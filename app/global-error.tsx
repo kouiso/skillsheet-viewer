@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 
 import { ConfigErrorNotice } from '@/components/config-error-notice';
+import { captureWarning } from '@/lib/observability/capture';
 import { THEME_INIT_SCRIPT } from '@/lib/theme-init-script';
 
 import './globals.css';
@@ -26,6 +27,10 @@ import './globals.css';
 export default function GlobalError({ error: err }: { error: Error & { digest?: string } }) {
   useEffect(() => {
     console.error('Root layout error boundary:', err);
+    // ここに来る時点で常に設定不備（このファイル冒頭のコメント参照）。バグ報告ではなく
+    // 「デプロイが壊れとる」信号として warning レベルで送る。固定 fingerprint で
+    // 同じ Issue に集約する（欠落変数が違っても、案内すべき対処は同じ）。
+    captureWarning(err, { scope: 'config-error-boundary', fingerprint: ['config-error-boundary'] });
   }, [err]);
 
   return (

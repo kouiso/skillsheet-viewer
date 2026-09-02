@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { captureError } from '@/lib/observability/capture';
 
 // 動的ルート（/view/[path] 等）のサーバー側システムエラーを受け取るセグメント境界。
 // ファイル不在は notFound() で、設定不備（GitHub/DB未設定等）は isConfigError() で別扱い、
@@ -11,6 +12,11 @@ import { Button } from '@/components/ui/button';
 export default function Error({ error: err, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error('Route error boundary:', err);
+    // digest がある＝サーバーが投げたエラーで、onRequestError（instrumentation.ts）が
+    // 既にスタック付きで報告済み。ここで重ねて送ると同じ障害が2件の Issue に分かれる。
+    if (!err.digest) {
+      captureError(err, { scope: 'route-error-boundary' });
+    }
   }, [err]);
 
   return (

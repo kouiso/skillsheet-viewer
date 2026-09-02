@@ -7,7 +7,10 @@
  */
 export type ViewKind = 'markdown' | 'dashboard';
 export type SheetSource = 'db' | 'github';
-export type ViewToggleKey = 'timeline' | 'summary' | 'detail';
+// src/components/viewer-topbar.tsx の ViewKey と同じ値。型を直接 import すると
+// components → lib/observability の依存方向が逆転するので、値の集合だけを複製する
+// （viewer-topbar.tsx 側を変えたらここも変えること。テストで揃っているかを検査する）。
+export type ViewToggleKey = 'skills' | 'process' | 'projects' | 'timeline';
 export type PdfResult = 'success' | 'failure';
 export type PdfFailureReason = 'TypeError' | 'RangeError' | 'FetchError' | 'Error' | 'unknown';
 export type SecondsBucket = '0-5' | '5-15' | '15-30' | '30-60' | '60+';

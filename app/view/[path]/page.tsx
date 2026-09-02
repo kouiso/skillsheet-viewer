@@ -59,10 +59,12 @@ export default async function SheetViewPage({ params }: PageProps) {
     // 「未設定」の文面で案内しており、トークン拒否のときに調査を誤誘導していた）。
     // console.error は出さない（一時的な障害ではないため）（#157）。
     // 設定不備は 200 ＋ 原因と対処、一時的なシステムエラーは error.tsx / 監視へ委ねる。
-    return configErrorNoticeOrRethrow(err, `Failed to load sheet: ${path}`);
+    // ログ文字列にシート識別子（path）を埋め込まない — 監視基盤の
+    // 送信側 breadcrumb・console キャプチャに乗る余地を発生源で断つ。
+    return configErrorNoticeOrRethrow(err, 'Failed to load sheet');
   }
 
   // key={path}: 別シートへ遷移してもコンポーネントを再マウントし、ビュー
   // ON/OFF トグルの state（初回マウント時に決まる）を新しいシートへ持ち越さない。
-  return <DeferredEditSheetView key={path} title={sheet.title} content={sheet.content} />;
+  return <DeferredEditSheetView key={path} title={sheet.title} content={sheet.content} source="github" />;
 }
