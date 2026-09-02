@@ -47,6 +47,7 @@ pnpm install
 ### 2. 環境変数の設定
 
 `.env.example` をコピーして `.env`（コミット禁止）に値を設定します。**すべてサーバー専用**で、ブラウザには公開しません（`NEXT_PUBLIC_` を付けないこと）。
+例外は Sentry/PostHog の DSN/キー（後述）のみ — ブラウザ SDK に埋め込む前提の値で秘匿情報ではない。
 
 ```bash
 cp .env.example .env
@@ -73,6 +74,16 @@ cp .env.example .env
 | `REVALIDATE_SECRET` | tRPC の `maintenance.revalidate` でキャッシュを手動失効させるためのシークレット |
 
 > DB 接続文字列は、実行時はプール用（`-pooler` ホスト）、マイグレーションは非プール文字列を使うと安定します。
+
+#### 監視・計測（Sentry / PostHog。すべて任意。未設定なら自動で no-op。詳細は [doc/observability.md](doc/observability.md)）
+
+| 変数 | 用途 |
+|------|------|
+| `NEXT_PUBLIC_SENTRY_DSN` | Sentry の送信先。未設定なら `Sentry.init` を呼ばない |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog のプロジェクトキー。未設定なら `posthog.init` を呼ばない |
+| `NEXT_PUBLIC_POSTHOG_HOST` | PostHog のホスト（既定 `https://us.i.posthog.com`） |
+| `NEXT_PUBLIC_OBSERVABILITY_FORCE` | ローカル検証用の非常口（`'1'` のみ有効）。**検証後は必ず消す** — 付けっぱなしだと e2e が本番プロジェクトに書く |
+| `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | source map アップロード用。**Vercel のビルド環境にのみ**設定し、GitHub Actions には入れない |
 
 ### 3. DB マイグレーションの適用
 
