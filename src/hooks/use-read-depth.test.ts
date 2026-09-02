@@ -74,4 +74,45 @@ describe('useReadDepth', () => {
     await tick();
     expect(handle.track).not.toHaveBeenCalled();
   });
+
+  function stubResizeObserver(): { fire: () => void } {
+    let callback: (() => void) | undefined;
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          callback = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    return { fire: () => callback?.() };
+  }
+
+  it('load 完了前の ResizeObserver 通知は無視する（未読込画像による早期到達を防ぐ）', () => {
+    const { fire } = stubResizeObserver();
+    Object.defineProperty(document, 'readyState', { value: 'loading', configurable: true });
+    setScroll(1000, 2000, 1000); // 100% 相当（scrollable かつ最下部）
+    renderHook(() => useReadDepth());
+
+    fire(); // load 前の通知は無視されるべき
+    expect(handle.track).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event('load'));
+    expect(handle.track).toHaveBeenCalledWith(expect.objectContaining({ depthPercent: 100 }));
+
+    Object.defineProperty(document, 'readyState', { value: 'complete', configurable: true });
+  });
+
+  it('document の収縮だけを伴う resize 通知は既読度を進めない（セクション OFF 対策）', () => {
+    const { fire } = stubResizeObserver();
+    setScroll(0, 2000, 1000); // マウント時に 25・50% が発火
+    renderHook(() => useReadDepth());
+    (handle.track as ReturnType<typeof vi.fn>).mockClear();
+
+    setScroll(0, 1000, 1000); // scrollHeight が縮む → 見かけ上は 100% だが実際は読んでいない
+    fire();
+    expect(handle.track).not.toHaveBeenCalled();
+  });
 });

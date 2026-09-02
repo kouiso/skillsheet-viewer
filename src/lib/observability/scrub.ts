@@ -59,6 +59,12 @@ const LONG_TOKEN_PATTERN = /[A-Za-z0-9_.-]{32,}/gu;
 // http(s) URL はクエリ文字列（閲覧コード等）や動的セグメント（シート名）を運びうるので、
 // ルート名 enum の placeholder に丸める（ファイル名 replace 等より先に、まるごと1回で処理する）。
 const URL_PATTERN = /https?:\/\/[^\s"'<>)]+/giu;
+// 絶対 URL を経由しない相対パス（fetch failed: /view/a.md?viewer_code=1234 等）も
+// クエリ文字列を運びうる。既知ルートの接頭辞に一致する場合のみルート名 enum に丸める
+// （任意の "/" を丸めると "3/4" のような無関係な文字列まで壊すため、既知ルートに限定する）。
+// 直前が単語文字だと絶対 URL のパス部分（ドメイン直後の "/"）を二重処理してしまうため除外する。
+const RELATIVE_ROUTE_PATTERN =
+  /(?<![\w-])\/(?:view\/db|view|viewer-auth|login|builder\/preview|builder|api\/auth|api\/logout|api\/revalidate|api\/trpc)(?:\/[^\s?#"'<>)]*)?(?:\?[^\s#"'<>)]*)?(?:#[^\s"'<>)]*)?/gu;
 // Drizzle の `DrizzleQueryError` は `Failed query: <sql>\nparams: <値>` という形式で、
 // params 以降に職務経歴書の本文（会社名・案件名等）がそのまま入る。SQL 本体はプレースホルダ
 // （$1, $2 ...）だけで実データを持たないため、params 以降だけを丸ごと落とす。
@@ -74,6 +80,7 @@ export function redactFreeText(input: string): string {
   const redacted = input
     .replace(DRIZZLE_PARAMS_PATTERN, 'params: [redacted]')
     .replace(URL_PATTERN, (url) => toRoutePlaceholder(url))
+    .replace(RELATIVE_ROUTE_PATTERN, (route) => toRoutePlaceholder(route.split(/[?#]/, 1)[0]))
     .replace(MARKDOWN_FILENAME_PATTERN, '[redacted.md]')
     .replace(UUID_PATTERN, '[redacted-uuid]')
     .replace(EMAIL_PATTERN, '[redacted-email]')

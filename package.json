@@ -30,8 +30,8 @@
     "build-storybook": "storybook build",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "env:decrypt": "sops -d --input-type dotenv --output-type dotenv .env.enc > .env",
-    "env:encrypt": "sops -e --input-type dotenv --output-type dotenv --filename-override .env.enc .env > .env.enc"
+    "env:decrypt": "tmp=$(mktemp .env.tmp.XXXXXX) && sops -d --input-type dotenv --output-type dotenv .env.enc > \"$tmp\" && mv \"$tmp\" .env",
+    "env:encrypt": "tmp=$(mktemp .env.enc.tmp.XXXXXX) && sops -e --input-type dotenv --output-type dotenv --filename-override .env.enc .env > \"$tmp\" && mv \"$tmp\" .env.enc"
   },
   "dependencies": {
     "@better-auth/core": "^1.6.25",

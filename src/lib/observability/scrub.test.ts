@@ -73,6 +73,14 @@ describe('redactFreeText', () => {
   it('該当しない文字列はそのまま', () => {
     expect(redactFreeText('plain error message')).toBe('plain error message');
   });
+
+  it('絶対 URL を経由しない相対パスのクエリ文字列（閲覧コード等）も落とす', () => {
+    expect(redactFreeText('fetch failed: /view/a.md?viewer_code=1234')).toBe('fetch failed: /[route:view-sheet]');
+  });
+
+  it('既知ルートに一致しない "/" は無関係な文字列として壊さない', () => {
+    expect(redactFreeText('3/4 done, review and/or approve')).toBe('3/4 done, review and/or approve');
+  });
 });
 
 describe('scrubBreadcrumb', () => {

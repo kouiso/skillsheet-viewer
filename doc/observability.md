@@ -84,7 +84,7 @@ enum 以外の `string` プロパティを置かない（シート名等が書�
 
 | イベント | いつ | 主なプロパティ |
 |---|---|---|
-| `$pageview` | 自動（`capture_pageview: 'history_change'`） | ルート enum |
+| `$pageview` | 自動（`capture_pageview: 'history_change'`） | なし（`$current_url`/`$pathname` は denylist で落としており、ルート enum への置き換えもしていない。ページ単位でルートを見たい場合は `sheet_viewed` 等の手動イベントの enum プロパティを使う） |
 | `sheet_viewed` | シート表示コンポーネントの mount | `layout`, `source`, `blockCount` |
 | `sheet_read_depth` | スクロールで 25/50/75/100% 到達 | `depthPercent`, `secondsBucket` |
 | `sheet_view_toggled` | ダッシュボードのビュー切替 | `view`, `enabled` |
