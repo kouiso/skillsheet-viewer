@@ -53,6 +53,25 @@ pnpm install
 cp .env.example .env
 ```
 
+#### 実際の値の共有（SOPS + age）
+
+このリポジトリでは、開発用の実値を入れた `.env` を [SOPS](https://github.com/getsops/sops) で暗号化した `.env.enc` としてリポジトリにコミットしています（平文の `.env` 自体はコミットしません）。復号鍵（age 秘密鍵）は 1Password の `RITMO` vault に `skillsheet-viewer SOPS age key` として保存済みです。
+
+```bash
+# 初回のみ：1Password から秘密鍵を取り出してローカルに保存
+mkdir -p ~/.config/sops/age
+op item get "skillsheet-viewer SOPS age key" --vault RITMO --fields notesPlain --format json \
+  | jq -r '.value' | grep -v '^#' > ~/.config/sops/age/skillsheet-viewer.txt
+
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/skillsheet-viewer.txt
+
+# 復号して .env を作る
+pnpm env:decrypt
+
+# .env を編集したら、暗号化し直してコミットする
+pnpm env:encrypt
+```
+
 #### 必須（欠けると起動時に fail-fast で throw / `src/lib/env.ts`）
 
 | 変数 | 用途 |
