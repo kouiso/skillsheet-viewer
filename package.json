@@ -29,7 +29,9 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "env:decrypt": "sops -d --input-type dotenv --output-type dotenv .env.enc > .env",
+    "env:encrypt": "sops -e --input-type dotenv --output-type dotenv --filename-override .env.enc .env > .env.enc"
   },
   "dependencies": {
     "@better-auth/core": "^1.6.25",
