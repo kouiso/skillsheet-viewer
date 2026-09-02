@@ -1,16 +1,20 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import Header from '@/components/header';
 import SkillSheetViewer from '@/components/skill-sheet-viewer';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
 import type { Block } from '@/db/blocks';
+import { captureError, track } from '@/lib/observability/capture';
+import type { SheetSource } from '@/lib/observability/event';
 
 interface SheetViewClientProps {
   title: string;
   content: string;
   blocks?: Block[];
+  /** シートの取得元。計測イベントの source プロパティにそのまま乗る。 */
+  source: SheetSource;
   /** 編集者ログイン済みか。false（閲覧コードのみ等）のときは編集導線を出さない。 */
   canEdit?: boolean;
   /** 編集者判定の前後で編集ボタン分の幅を固定し、レイアウトずれを防ぐ。 */
@@ -24,12 +28,35 @@ interface SheetViewClientProps {
   referenceMonth?: number;
 }
 
+const PDF_DURATION_BUCKETS = [
+  { max: 5_000, label: '0-5' },
+  { max: 15_000, label: '5-15' },
+  { max: 30_000, label: '15-30' },
+  { max: 60_000, label: '30-60' },
+] as const;
+
+function durationBucket(ms: number): (typeof PDF_DURATION_BUCKETS)[number]['label'] | '60+' {
+  const found = PDF_DURATION_BUCKETS.find((b) => ms < b.max);
+  return found?.label ?? '60+';
+}
+
+function pdfFailureReason(err: unknown): 'TypeError' | 'RangeError' | 'FetchError' | 'Error' | 'unknown' {
+  if (err instanceof TypeError) return 'TypeError';
+  if (err instanceof RangeError) return 'RangeError';
+  // ブラウザの fetch 失敗（オフライン等）は環境依存の名前になりがちなので name で判定する
+  // （err.message はフォント URL 等を含みうるので使わない）。
+  if (err instanceof Error && err.name === 'FetchError') return 'FetchError';
+  if (err instanceof Error) return 'Error';
+  return 'unknown';
+}
+
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
 const SheetViewClient = ({
   title,
   content,
   blocks,
+  source,
   canEdit = false,
   reserveEditSlot = false,
   stale = false,
@@ -47,13 +74,33 @@ const SheetViewClient = ({
     () => (blocks ?? []).find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile'),
     [blocks],
   );
+  const blockCount = blocks?.length ?? 0;
+
+  // 親が key={path}/key={id} でシートごとに再マウントする設計（トグル state を
+  // 次のシートへ持ち越さないため）なので、このコンポーネントの mount は
+  // 「1シートを開いた」に一致する。ここが初の useEffect になるので依存配列を
+  // 貼り付けず個別に検討した — isDashboard/source/blockCount は再マウントでしか変わらない。
+  // biome-ignore lint/correctness/useExhaustiveDependencies: マウント1回だけで送る（下のコメント参照）。
+  useEffect(() => {
+    track({
+      name: 'sheet_viewed',
+      layout: isDashboard ? 'dashboard' : 'markdown',
+      source,
+      blockCount,
+    });
+  }, []);
 
   const toggleView = (view: ViewKey) => {
-    setViews((prev) => (prev.includes(view) ? prev.filter((v) => v !== view) : [...prev, view]));
+    // setState の updater 内で副作用（track）を呼ばない — StrictMode 下では updater が
+    // 2回呼ばれうるため、外側で現在値から次の状態を決めてから1回だけ送る。
+    const enabled = !views.includes(view);
+    track({ name: 'sheet_view_toggled', view, enabled });
+    setViews((prev) => (enabled ? [...prev, view] : prev.filter((v) => v !== view)));
   };
 
   const handleDownloadPdf = async () => {
     const toastId = toast.loading('PDFを生成中…');
+    const startedAt = performance.now();
     // 生成に失敗したときの後始末。import が済んだ時点で掴んでおく — catch の中で
     // 改めて動的 import すると、その await の分だけ finally が遅れてボタンが busy のまま残る。
     let resetFontsOnFailure: (() => void) | undefined;
@@ -84,9 +131,17 @@ const SheetViewClient = ({
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
       toast.success('PDFをダウンロードしました', { id: toastId });
+      track({ name: 'pdf_exported', result: 'success', durationBucket: durationBucket(performance.now() - startedAt) });
     } catch (err) {
       console.error('Error generating PDF:', err);
       toast.error('PDFの生成に失敗しました', { id: toastId });
+      track({
+        name: 'pdf_exported',
+        result: 'failure',
+        durationBucket: durationBucket(performance.now() - startedAt),
+        reason: pdfFailureReason(err),
+      });
+      captureError(err, { feature: 'pdf-export' });
       // フォント取得の失敗（オフライン・5xx 等）は @react-pdf/font 内で reject 済みの
       // Promise として永久にキャッシュされ、次のクリックも即座に同じ失敗を再現する
       // （リロードしないと直らない「詰み」状態になる）。失敗のたびに登録をリセットし、
