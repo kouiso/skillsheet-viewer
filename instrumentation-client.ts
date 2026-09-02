@@ -37,7 +37,18 @@ if (isPostHogEnabled()) {
     // remote-config 経由のスクリプト注入による hydration mismatch を避ける。
     // 代償はサーベイ/ツールバー機能が使えなくなること（使う予定なし）。
     disable_external_dependency_loading: true,
-    property_denylist: ['$title', '$referrer', '$initial_current_url', '$initial_referrer', '$initial_pathname'],
+    // $current_url/$pathname は enum 置換ではなく全イベントから denylist で落とす方針にした
+    // （$pageview は enum 化の窓口を経由しない自動送信のため。ルート情報が要る場合は
+    // sheet_viewed 等の手動イベントの enum プロパティを見る）。
+    property_denylist: [
+      '$title',
+      '$referrer',
+      '$current_url',
+      '$pathname',
+      '$initial_current_url',
+      '$initial_referrer',
+      '$initial_pathname',
+    ],
   });
 }
 

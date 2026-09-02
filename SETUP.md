@@ -47,7 +47,7 @@ pnpm install
 ### 2. 環境変数の設定
 
 `.env.example` をコピーして `.env`（コミット禁止）に値を設定します。**すべてサーバー専用**で、ブラウザには公開しません（`NEXT_PUBLIC_` を付けないこと）。
-例外は Sentry/PostHog の DSN/キー（後述）のみ — ブラウザ SDK に埋め込む前提の値で秘匿情報ではない。
+例外は Sentry/PostHog の DSN・キー・ホストと、ローカル検証用の非常口（後述）のみ — ブラウザ SDK に埋め込む前提の値で秘匿情報ではない。
 
 ```bash
 cp .env.example .env

@@ -65,12 +65,13 @@ describe('useReadDepth', () => {
     expect(handle.track).not.toHaveBeenCalled();
   });
 
-  it('アンマウント後は scroll listener が残らない', () => {
+  it('アンマウント後は scroll listener が残らない', async () => {
     const { unmount } = renderHook(() => useReadDepth());
     unmount();
     (handle.track as ReturnType<typeof vi.fn>).mockClear();
     setScroll(1000, 2000, 1000);
     window.dispatchEvent(new Event('scroll'));
+    await tick();
     expect(handle.track).not.toHaveBeenCalled();
   });
 });

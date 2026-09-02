@@ -8,6 +8,25 @@ import { THEME_INIT_SCRIPT } from '@/lib/theme-init-script';
 
 import './globals.css';
 
+// 固定 fingerprint は Sentry 上で1つの Issue にまとめるだけで、送信自体（無料枠の消費）は
+// 都度発生する。同じ設定不備は直るまで直らないので、同一ブラウザからは一定時間に1回だけ送る
+// （レビュー指摘: 「1回だけ知らせる」は実態と違い、毎ページロードで送信され続けていた）。
+const CONFIG_ERROR_REPORT_COOLDOWN_MS = 60 * 60 * 1000;
+const CONFIG_ERROR_REPORT_STORAGE_KEY = 'skillsheet:config-error-last-reported-at';
+
+function shouldReportConfigError(): boolean {
+  try {
+    const last = window.localStorage.getItem(CONFIG_ERROR_REPORT_STORAGE_KEY);
+    if (last && Date.now() - Number(last) < CONFIG_ERROR_REPORT_COOLDOWN_MS) return false;
+    window.localStorage.setItem(CONFIG_ERROR_REPORT_STORAGE_KEY, String(Date.now()));
+    return true;
+  } catch {
+    // プライベートモード等で localStorage が使えない環境では制御を諦めて送る
+    // （抑制を優先すると、その環境では設定不備に永久に気づけなくなる）。
+    return true;
+  }
+}
+
 /**
  * ルートレイアウト（layout.tsx）自体が投げるエラーを受け取る最後の境界。
  *
@@ -30,7 +49,9 @@ export default function GlobalError({ error: err }: { error: Error & { digest?: 
     // ここに来る時点で常に設定不備（このファイル冒頭のコメント参照）。バグ報告ではなく
     // 「デプロイが壊れとる」信号として warning レベルで送る。固定 fingerprint で
     // 同じ Issue に集約する（欠落変数が違っても、案内すべき対処は同じ）。
-    captureWarning(err, { scope: 'config-error-boundary', fingerprint: ['config-error-boundary'] });
+    if (shouldReportConfigError()) {
+      captureWarning(err, { scope: 'config-error-boundary', fingerprint: ['config-error-boundary'] });
+    }
   }, [err]);
 
   return (

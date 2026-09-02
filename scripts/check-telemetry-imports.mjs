@@ -41,10 +41,17 @@ const ALLOWED_DIRECT_IMPORT_FILES = new Set(
 // `import type` は実行時コードを生成しない（Sentry.setUser 等を呼びようがない）ので許可する。
 // sentry-options.ts が型だけを共有ファイルから参照するために使っている。
 // `import(...)` の動的呼び出し（report-error.ts が isSentryEnabled() 判定後にのみ読み込むために使う）も拾う。
+// `[^;]` は改行も含むため、`import {\n ... \n} from '...'` のような複数行 import も
+// 1つの import 文の途中で `;` を跨がない限り検出できる
+// （レビュー指摘: 旧実装は1行ずつ判定していたため、from が別行にある複数行 import を見逃していた）。
 const IMPORT_PATTERN =
-  /^\s*import\s+(?!type\s)[^;]*from\s+['"](@sentry\/[^'"]+|posthog-js)['"]|import\(\s*['"](@sentry\/[^'"]+|posthog-js)['"]\s*\)/;
-const SET_USER_PATTERN = /Sentry\.setUser\s*\(/;
-const IDENTIFY_PATTERN = /posthog\.identify\s*\(/;
+  /import\s+(?!type\s)[^;]*from\s+['"](@sentry\/[^'"]+|posthog-js)['"]|import\(\s*['"](@sentry\/[^'"]+|posthog-js)['"]\s*\)/su;
+// `?.` によるオプショナルチェーン経由の呼び出し（`Sentry?.setUser(...)`）も対象にする。
+// エイリアス経由の間接呼び出し（`const f = posthog.identify; f(...)`）は静的な行走査では
+// 原理的に検出できず、AST 解析が要る。本スクリプトは「うっかり直接呼んでしまう」ことへの
+// 防波堤（本来の防御は capture.ts の窓口一本化）なので、意図的な回避までは対象外とする。
+const SET_USER_PATTERN = /Sentry\??\.setUser\s*\(/;
+const IDENTIFY_PATTERN = /posthog\??\.identify\s*\(/;
 
 function isTargetSourceFile(fileName) {
   return /\.(ts|tsx)$/.test(fileName) && !fileName.endsWith('.d.ts');
@@ -74,18 +81,26 @@ for (const target of TARGET_DIRS) {
       const lines = content.split('\n');
       const allowedDirectImport = ALLOWED_DIRECT_IMPORT_FILES.has(filePath);
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (line.trim().startsWith('//')) continue;
-
-        if (!allowedDirectImport && IMPORT_PATTERN.test(line)) {
+      if (!allowedDirectImport) {
+        // import 文は複数行にまたがりうるため、ファイル全文に対して 's' フラグ付きで検査する
+        // （1行ずつの走査だと `from '...'` が別行にある複数行 import を見逃す）。
+        const importPattern = new RegExp(IMPORT_PATTERN.source, `${IMPORT_PATTERN.flags}g`);
+        for (const match of content.matchAll(importPattern)) {
+          const line = content.slice(0, match.index).split('\n').length;
+          if (lines[line - 1]?.trim().startsWith('//')) continue;
           violations.push({
             file: relative(ROOT, filePath),
-            line: i + 1,
+            line,
             reason: '@sentry/* / posthog-js を直接 import している（src/lib/observability/capture.ts 経由にすること）',
           });
           exitCode = 1;
         }
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.trim().startsWith('//')) continue;
+
         if (SET_USER_PATTERN.test(line)) {
           violations.push({ file: relative(ROOT, filePath), line: i + 1, reason: 'Sentry.setUser() は全面禁止' });
           exitCode = 1;
