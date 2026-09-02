@@ -25,6 +25,10 @@ const REQUIRED_SERVER_ENV = [
 // GitHub 読み取りは副系統。揃っていなくても致命的ではないので warn 止まり。
 const OPTIONAL_GITHUB_ENV = ['GITHUB_TOKEN', 'GITHUB_OWNER', 'GITHUB_REPO'] as const;
 
+// 設定不備由来のエラーを classifyConfigError() とは別経路で判定するための文言プレフィックス。
+// assertServerEnv() の throw 文言と一字一句一致させること（observability 側の設定不備フィルタが依存する）。
+export const MISSING_SERVER_ENV_PREFIX = '必須のサーバー環境変数が設定されていません';
+
 // `next build` の静的解析フェーズでは secrets が無いのが正常なので検証しない。
 // （Vercel ビルド等で secrets 未注入のまま import されても落とさない）
 function isBuildPhase(): boolean {
