@@ -111,12 +111,14 @@ describe('scrubSentryEvent', () => {
     const result = scrubSentryEvent({
       contexts: { nextjs: { request_path: '/view/技術スキルシート.md?token=abc' } },
     });
-    expect(result.contexts?.nextjs?.request_path).toBe('/[route:view-sheet]');
+    expect((result.contexts?.nextjs as { request_path?: string } | undefined)?.request_path).toBe(
+      '/[route:view-sheet]',
+    );
   });
 
   it('exception.values[].value を redactFreeText する', () => {
     const result = scrubSentryEvent({
-      exception: { values: [{ type: 'Error', value: 'Failed to load sheet: 技術スキルシート.md' }] },
+      exception: { values: [{ value: 'Failed to load sheet: 技術スキルシート.md' }] },
     });
     expect(result.exception?.values?.[0].value).toBe('Failed to load sheet: [redacted.md]');
   });

@@ -1,4 +1,5 @@
 import bundleAnalyzer from '@next/bundle-analyzer';
+import { withSentryConfig } from '@sentry/nextjs/config';
 import type { NextConfig } from 'next';
 
 const withBundleAnalyzer = bundleAnalyzer({
@@ -18,4 +19,14 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ['127.0.0.1', 'localhost'],
 };
 
-export default withBundleAnalyzer(nextConfig);
+// Sentry が最外。最終的に解決された Turbopack 設定にパッチを当てるため、
+// withBundleAnalyzer より内側だと Sentry から見える設定が古いままになる。
+export default withSentryConfig(withBundleAnalyzer(nextConfig), {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  // トークンが無いビルド（ローカル・CI・トークン未設定のプレビュー）では
+  // source map 関連の処理そのものを止める。ビルドは落とさない。
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  silent: true,
+});
