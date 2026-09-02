@@ -120,7 +120,8 @@
       "brace-expansion@>=3": "^5.0.9",
       "test-exclude": "^8.0.0",
       "fast-uri@3": "^3.1.5",
-      "nanoid": "^3.3.17"
+      "nanoid": "^3.3.17",
+      "browserslist": "^4.28.7"
     },
     "patchedDependencies": {
       "@react-pdf/textkit@6.3.0": "patches/@react-pdf__textkit@6.3.0.patch"
