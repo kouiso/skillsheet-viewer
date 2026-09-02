@@ -35,7 +35,7 @@ export function useReadDepth(enabled = true): void {
 
   useEffect(() => {
     if (!enabled) return;
-    // スクロール不要なほど短いページなら、マウント直後の1回分の判定で 100% がそのまま送れる。
+    // スクロール不要なほど短いページなら、初回判定で 100% がそのまま送れる。
     startedAtRef.current = performance.now();
 
     const checkDepth = () => {
@@ -58,10 +58,27 @@ export function useReadDepth(enabled = true): void {
       rafRef.current = requestAnimationFrame(checkDepth);
     };
 
-    checkDepth();
+    // 未読込の画像は初期レイアウトの高さがほぼ0で、直後に判定すると「スクロール不要な
+    // 短いページ」と誤認して 100% を早期発火してしまう（一度発火した閾値は撤回できない）。
+    // 初回判定だけは読み込み完了まで待つ（読み込み済みなら即座に判定する）。
+    let runInitialCheck = () => checkDepth();
+    if (document.readyState === 'complete') {
+      checkDepth();
+      runInitialCheck = () => {};
+    } else {
+      window.addEventListener('load', runInitialCheck, { once: true });
+    }
+
+    // 遅延ロード画像やフォント差し替えなど、load 後もレイアウトが変わりうるケースを拾う
+    // ための継続的な再判定（スクロールしなくても到達度が変わりうる）。
+    const resizeObserver = new ResizeObserver(() => checkDepth());
+    resizeObserver.observe(document.documentElement);
+
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('load', runInitialCheck);
+      resizeObserver.disconnect();
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, [enabled]);

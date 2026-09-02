@@ -56,6 +56,20 @@ describe('redactFreeText', () => {
     expect(result.endsWith('…')).toBe(true);
   });
 
+  it('Drizzle の DrizzleQueryError（params 以降に職務経歴書の本文が入りうる）を潰す', () => {
+    const message =
+      'Failed query: update "blocks" set "content" = $1 where "id" = $2\nparams: 案件A社の機密プロジェクト詳細,42';
+    expect(redactFreeText(message)).toBe(
+      'Failed query: update "blocks" set "content" = $1 where "id" = $2\nparams: [redacted]',
+    );
+  });
+
+  it('URL をルート名 placeholder に丸める（クエリ文字列の閲覧コード等ごと落とす）', () => {
+    expect(redactFreeText('fetch failed: https://skillsheet.example/view/a.md?viewer_code=1234')).toBe(
+      'fetch failed: /[route:view-sheet]',
+    );
+  });
+
   it('該当しない文字列はそのまま', () => {
     expect(redactFreeText('plain error message')).toBe('plain error message');
   });

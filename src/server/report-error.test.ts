@@ -3,6 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { reportDegradation, reportTRPCError } from './report-error';
 
+const captureMessageMock = vi.fn();
+vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock, captureException: vi.fn() }));
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 /**
  * `isSentryEnabled()` は NODE_ENV=test で常に false（config.test.ts で確認済み）なので、
  * ここでは「Sentry へ実際に送るかどうか」ではなく「console.error を呼ぶ/呼ばない」だけを見る。
@@ -48,7 +53,13 @@ describe('reportTRPCError', () => {
 });
 
 describe('reportDegradation', () => {
-  it('NODE_ENV=test では Sentry 無効なので例外を投げず何もしない', () => {
-    expect(() => reportDegradation('degraded', { scope: 'test' })).not.toThrow();
+  afterEach(() => {
+    captureMessageMock.mockClear();
+  });
+
+  it('NODE_ENV=test では Sentry 無効なので通信も発生しない', async () => {
+    reportDegradation('degraded', { scope: 'test' });
+    await tick();
+    expect(captureMessageMock).not.toHaveBeenCalled();
   });
 });

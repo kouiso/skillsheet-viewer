@@ -19,7 +19,7 @@
 | `app/api/auth`・`app/api/logout`・`app/api/revalidate`（`route-error.ts`） | 同上（互換 REST アダプタ側） | 同上 |
 | `instrumentation.ts` の `onRequestError` | サーバーで捕捉されなかった例外（Next.js が最後に拾う） | 届く。ただし**設定不備は届かない**（次項） |
 | `app/error.tsx` | ルートセグメントの予期せぬエラー | 届く。ただし `err.digest` があるサーバー起源のエラーは `onRequestError` が既に報告済みなので二重送信しない |
-| `app/global-error.tsx` | `layout.tsx` 自体が同期 throw（＝必須環境変数の欠落） | **warning レベルで届く**。固定 fingerprint（`config-error-boundary`）で1つの Issue に集約される |
+| `app/global-error.tsx` | `layout.tsx` 自体が同期 throw（＝必須環境変数の欠落） | **warning レベルで届く**。固定 fingerprint で1つの Issue に集約し、同一ブラウザからは1時間に1回だけ送信する（次項） |
 | `sheet-view-client.tsx` の PDF 生成失敗 | フォント取得失敗・レンダリング例外 | 届く（`feature: 'pdf-export'` タグ付き） |
 | `auth-gate.ts` / `viewer-rate-limit.ts` | Better Auth セッション確認失敗・DB 経路の総当たり防御が fail open | **warning レベルで届く**（セキュリティの劣化信号。バグ報告ではない） |
 
@@ -36,8 +36,11 @@
   （未設定・トークン拒否・テーブル未マイグレーション・接続文字列の書式エラー）
 
 これらは「待っても直らない」原因であり、対処は環境変数の設定であって障害対応ではない。
-`app/global-error.tsx` だけが例外で、**warning レベル・固定 fingerprint** で1回だけ知らせる
+`app/global-error.tsx` だけが例外で、**warning レベル・固定 fingerprint** で送る
 （「デプロイが壊れている」という信号であって、個々のリクエストのエラーではないため）。
+固定 fingerprint は Sentry 上で1つの Issue にまとめるだけで送信自体は都度発生するため、
+同一ブラウザからの再送は `localStorage` で1時間に1回へ絞っている
+（直りもしない状態で毎ページロード送ると無料枠を溶かす）。
 
 ## PII が乗らないこと
 
@@ -63,8 +66,11 @@
 
 - **IP マスキング**: Sentry 側のプロジェクト設定（Data Scrubbing）で行う。コード側は
   `dataCollection` オプションを一切書かない設計にしている（書くと逆に緩くなる罠がある）。
-- **PostHog の cookie 同意**: 匿名 id を持つ first-party cookie を1つ置く。個人情報ではないが、
-  同意なしに置く cookie ではあるため、必要なら `persistence: 'memory'` に切り替える
+- **PostHog の cookie 同意**: 匿名 id を持つ first-party cookie を1つ置く。cookie ID は
+  UK/EU GDPR 上「個人データ」になりうる識別子であり、同意なしに置いてよいと断定はしない。
+  EU/UK 圏の閲覧者にも見せる前提なら、同意取得前に `posthog.init`/`posthog.capture` が
+  走らない同意ゲートが要る（**未実装。対象地域を絞るか同意ゲートを作るかは未決定**）。
+  cookie 自体を避けたいだけなら `persistence: 'memory'` に切り替えられる
   （`instrumentation-client.ts` の `posthog.init` オプション、1行）。
 - **本番スタックトレースの関数名可読性**: Next.js 16 + Turbopack 環境で Sentry の関数名が
   難読化されたままになる既知の不具合（sentry-javascript #18248、Vercel 側の対応待ち）。
