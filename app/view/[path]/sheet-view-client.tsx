@@ -6,6 +6,7 @@ import Header from '@/components/header';
 import SkillSheetViewer from '@/components/skill-sheet-viewer';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
 import type { Block } from '@/db/blocks';
+import { useReadDepth } from '@/hooks/use-read-depth';
 import { captureError, track } from '@/lib/observability/capture';
 import type { SheetSource } from '@/lib/observability/event';
 
@@ -89,6 +90,8 @@ const SheetViewClient = ({
       blockCount,
     });
   }, []);
+
+  useReadDepth();
 
   const toggleView = (view: ViewKey) => {
     // setState の updater 内で副作用（track）を呼ばない — StrictMode 下では updater が
