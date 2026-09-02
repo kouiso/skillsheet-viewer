@@ -1,5 +1,6 @@
 import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
+import { reportTRPCError } from '@/server/report-error';
 import { createTRPCContext } from '@/server/trpc/context';
 import { shouldLogTRPCError } from '@/server/trpc/log-error';
 import { appRouter } from '@/server/trpc/router';
@@ -18,8 +19,8 @@ function handler(req: Request) {
     // onError 未設定だとエラーが HTTP レスポンス（TRPCError の code/message）にしか残らず、
     // サーバー側ログには一切出ない。
     onError({ error, path }) {
-      if (!shouldLogTRPCError(error.code)) return;
-      console.error(`tRPC error on ${path ?? '<unknown>'}:`, error);
+      const label = `trpc:${path ?? '<unknown>'}`;
+      reportTRPCError({ error, scope: label, logArgs: [`tRPC error on ${path ?? '<unknown>'}:`, error] });
     },
   });
 }
