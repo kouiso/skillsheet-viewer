@@ -40,7 +40,9 @@ const ALLOWED_DIRECT_IMPORT_FILES = new Set(
 
 // `import type` は実行時コードを生成しない（Sentry.setUser 等を呼びようがない）ので許可する。
 // sentry-options.ts が型だけを共有ファイルから参照するために使っている。
-const IMPORT_PATTERN = /^\s*import\s+(?!type\s)[^;]*from\s+['"](@sentry\/[^'"]+|posthog-js)['"]/;
+// `import(...)` の動的呼び出し（report-error.ts が isSentryEnabled() 判定後にのみ読み込むために使う）も拾う。
+const IMPORT_PATTERN =
+  /^\s*import\s+(?!type\s)[^;]*from\s+['"](@sentry\/[^'"]+|posthog-js)['"]|import\(\s*['"](@sentry\/[^'"]+|posthog-js)['"]\s*\)/;
 const SET_USER_PATTERN = /Sentry\.setUser\s*\(/;
 const IDENTIFY_PATTERN = /posthog\.identify\s*\(/;
 
