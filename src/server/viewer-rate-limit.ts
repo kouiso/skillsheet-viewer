@@ -8,6 +8,7 @@ import {
   reserveViewerLoginAttempt,
   WINDOW_MS,
 } from '@/db/viewer-rate-limit';
+import { reportDegradation } from '@/server/report-error';
 
 /**
  * 閲覧コードの総当たり対策を、プロセス内カウンタと DB カウンタの二段で行う。
@@ -97,6 +98,11 @@ export async function checkViewerLoginRateLimit(key: string, now = Date.now()): 
   } catch (err) {
     // DB に届かないだけで閲覧を止めない。プロセス内の判定は生かす。
     console.warn('viewer rate limit: DB check failed, falling back to in-process counter', err);
+    // プロセス内カウンタは serverless インスタンスごとに別なので、DB が使えない間は
+    // 総当たり防御が事実上 fail open する（水平スケールで並列試行され放題になる）。
+    reportDegradation('viewer rate limit: DB check failed, brute-force defense degraded to in-process only', {
+      scope: 'viewer-rate-limit',
+    });
     return inMemory;
   }
 }
@@ -116,6 +122,9 @@ export async function reserveViewerLoginAttemptBoth(key: string, now = Date.now(
     return strictest(inMemory, inDb);
   } catch (err) {
     console.warn('viewer rate limit: DB reserve failed, falling back to in-process counter', err);
+    reportDegradation('viewer rate limit: DB reserve failed, brute-force defense degraded to in-process only', {
+      scope: 'viewer-rate-limit',
+    });
     return inMemory;
   }
 }
@@ -126,6 +135,9 @@ export async function clearViewerLoginRateLimit(key: string): Promise<void> {
     await clearViewerLoginFailures(key);
   } catch (err) {
     console.warn('viewer rate limit: DB clear failed', err);
+    // 正しい相手の記録を消し損ねるだけ（fail open ではない）だが、繰り返すとロック済みの
+    // 通知が来ないまま正規ユーザーが締め出され続ける事故になるので観測しておく。
+    reportDegradation('viewer rate limit: DB clear failed after successful login', { scope: 'viewer-rate-limit' });
   }
 }
 

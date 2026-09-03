@@ -7,6 +7,8 @@ import 'server-only';
 import { Buffer } from 'node:buffer';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import { SESSION_SECRET_MISSING_MESSAGE } from './known-config-error';
+
 const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60;
 const SESSION_COOKIE_NAME = 'session';
 
@@ -17,7 +19,7 @@ interface SessionPayload {
 
 function getSecret(): Buffer {
   const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error('SESSION_SECRET is not set');
+  if (!secret) throw new Error(SESSION_SECRET_MISSING_MESSAGE);
   return Buffer.from(secret, 'utf-8');
 }
 
