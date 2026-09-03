@@ -65,10 +65,12 @@ cp .env.example .env
 ```bash
 # 初回のみ：1Password から秘密鍵を取り出してローカルに保存
 umask 077
+# op / jq の失敗をパイプラインの終了ステータスに反映させる（`-e` は付けない: 対話シェルが落ちる）。
+set -o pipefail
 mkdir -p ~/.config/sops/age
 key_tmp="$(mktemp ~/.config/sops/age/skillsheet-viewer.XXXXXX)"
 # op / jq のどちらかが失敗しても mv しない（既存の鍵ファイルを空ファイルで潰さない）。
-# 対話シェルに貼る前提なので `set -e` は使わず、中身が age 秘密鍵であることを確認してから置き換える。
+# 念のため中身が age 秘密鍵であることも確認してから置き換える。
 if op item get "skillsheet-viewer SOPS age key" --vault RITMO --fields notesPlain --format json \
   | jq -r '.value' | grep -v '^#' > "$key_tmp" \
   && grep -q '^AGE-SECRET-KEY-' "$key_tmp"; then
