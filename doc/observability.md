@@ -73,7 +73,9 @@
   **対象は国内（日本）の閲覧者に限る前提**で運用する — 閲覧経路は `VIEWER_CODE` で守られ、
   コードを渡した相手だけが読める。EU/UK 圏へ共有する必要が出たら、共有する前に
   同意取得後だけ `posthog.init`/`posthog.capture` が走る同意ゲートを入れる（未実装）。
-  cookie 自体を避けたいだけなら `persistence: 'memory'` に切り替えられる
+  共有先の法域はコードでは判定できないので、共有する前に人が確認する。
+  `persistence: 'memory'` は識別子の保存場所を cookie からメモリに変えるだけの設定で、
+  送信そのものは止まらない。同意ゲートの代替にはならない
   （`instrumentation-client.ts` の `posthog.init` オプション、1行）。
 - **本番スタックトレースの関数名可読性**: Next.js 16 + Turbopack 環境で Sentry の関数名が
   難読化されたままになる既知の不具合（sentry-javascript #18248、Vercel 側の対応待ち）。
