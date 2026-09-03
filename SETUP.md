@@ -67,9 +67,15 @@ cp .env.example .env
 umask 077
 mkdir -p ~/.config/sops/age
 key_tmp="$(mktemp ~/.config/sops/age/skillsheet-viewer.XXXXXX)"
-op item get "skillsheet-viewer SOPS age key" --vault RITMO --fields notesPlain --format json \
-  | jq -r '.value' | grep -v '^#' > "$key_tmp"
-mv "$key_tmp" ~/.config/sops/age/skillsheet-viewer.txt
+# op / jq のどちらかが失敗しても mv しない（既存の鍵ファイルを空ファイルで潰さない）。
+# 対話シェルに貼る前提なので `set -e` は使わず、中身が age 秘密鍵であることを確認してから置き換える。
+if op item get "skillsheet-viewer SOPS age key" --vault RITMO --fields notesPlain --format json \
+  | jq -r '.value' | grep -v '^#' > "$key_tmp" \
+  && grep -q '^AGE-SECRET-KEY-' "$key_tmp"; then
+  mv "$key_tmp" ~/.config/sops/age/skillsheet-viewer.txt
+else
+  rm -f "$key_tmp"; echo "鍵の取得に失敗。既存ファイルは変更していない" >&2
+fi
 
 export SOPS_AGE_KEY_FILE=~/.config/sops/age/skillsheet-viewer.txt
 
