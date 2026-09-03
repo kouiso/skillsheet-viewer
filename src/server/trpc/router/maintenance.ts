@@ -3,6 +3,8 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { revalidateTag } from 'next/cache';
 
+import { REVALIDATE_SECRET_MISSING_MESSAGE } from '@/server/known-config-error';
+
 import { publicProcedure, router } from '../init';
 
 function safeEqual(a: string, b: string): boolean {
@@ -24,7 +26,7 @@ export const maintenanceRouter = router({
   revalidate: publicProcedure.mutation(({ ctx }) => {
     const secret = process.env.REVALIDATE_SECRET;
     if (!secret) {
-      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'REVALIDATE_SECRET is not configured' });
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: REVALIDATE_SECRET_MISSING_MESSAGE });
     }
 
     const provided = getProvidedSecret(ctx.request);

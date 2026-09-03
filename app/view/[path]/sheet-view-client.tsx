@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import Header from '@/components/header';
 import SkillSheetViewer from '@/components/skill-sheet-viewer';
@@ -8,7 +8,7 @@ import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-t
 import type { Block } from '@/db/blocks';
 import { useReadDepth } from '@/hooks/use-read-depth';
 import { captureError, track } from '@/lib/observability/capture';
-import type { SheetSource } from '@/lib/observability/event';
+import { type PdfFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
 interface SheetViewClientProps {
   title: string;
@@ -29,23 +29,15 @@ interface SheetViewClientProps {
   referenceMonth?: number;
 }
 
-const PDF_DURATION_BUCKETS = [
-  { max: 5_000, label: '0-5' },
-  { max: 15_000, label: '5-15' },
-  { max: 30_000, label: '15-30' },
-  { max: 60_000, label: '30-60' },
-] as const;
+// ブラウザの fetch はネットワーク失敗を `TypeError` で投げ、message はブラウザごとに違う
+// （Chrome "Failed to fetch" / Firefox "NetworkError when attempting to fetch resource." /
+// Safari "Load failed"）。`FetchError` という name は node-fetch 系のもので、ブラウザでは出ない。
+// message はここで分類にだけ使い、イベントには enum しか乗せない（URL 等が混ざっても送らない）。
+const BROWSER_FETCH_FAILURE_MESSAGE = /fetch|network|load failed/iu;
 
-function durationBucket(ms: number): (typeof PDF_DURATION_BUCKETS)[number]['label'] | '60+' {
-  const found = PDF_DURATION_BUCKETS.find((b) => ms < b.max);
-  return found?.label ?? '60+';
-}
-
-function pdfFailureReason(err: unknown): 'TypeError' | 'RangeError' | 'FetchError' | 'Error' | 'unknown' {
-  if (err instanceof TypeError) return 'TypeError';
+function pdfFailureReason(err: unknown): PdfFailureReason {
+  if (err instanceof TypeError) return BROWSER_FETCH_FAILURE_MESSAGE.test(err.message) ? 'FetchError' : 'TypeError';
   if (err instanceof RangeError) return 'RangeError';
-  // ブラウザの fetch 失敗（オフライン等）は環境依存の名前になりがちなので name で判定する
-  // （err.message はフォント URL 等を含みうるので使わない）。
   if (err instanceof Error && err.name === 'FetchError') return 'FetchError';
   if (err instanceof Error) return 'Error';
   return 'unknown';
@@ -79,17 +71,19 @@ const SheetViewClient = ({
 
   // 親が key={path}/key={id} でシートごとに再マウントする設計（トグル state を
   // 次のシートへ持ち越さないため）なので、このコンポーネントの mount は
-  // 「1シートを開いた」に一致する。ここが初の useEffect になるので依存配列を
-  // 貼り付けず個別に検討した — isDashboard/source/blockCount は再マウントでしか変わらない。
-  // biome-ignore lint/correctness/useExhaustiveDependencies: マウント1回だけで送る（下のコメント参照）。
+  // 「1シートを開いた」に一致する。依存配列は正直に書き、「1マウント1回」は ref で保証する
+  // （編集後の router.refresh() で blocks が差し替わっても sheet_viewed を二重送信しない）。
+  const sheetViewedSentRef = useRef(false);
   useEffect(() => {
+    if (sheetViewedSentRef.current) return;
+    sheetViewedSentRef.current = true;
     track({
       name: 'sheet_viewed',
       layout: isDashboard ? 'dashboard' : 'markdown',
       source,
       blockCount,
     });
-  }, []);
+  }, [isDashboard, source, blockCount]);
 
   useReadDepth();
 
@@ -134,14 +128,18 @@ const SheetViewClient = ({
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
       toast.success('PDFをダウンロードしました', { id: toastId });
-      track({ name: 'pdf_exported', result: 'success', durationBucket: durationBucket(performance.now() - startedAt) });
+      track({
+        name: 'pdf_exported',
+        result: 'success',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+      });
     } catch (err) {
       console.error('Error generating PDF:', err);
       toast.error('PDFの生成に失敗しました', { id: toastId });
       track({
         name: 'pdf_exported',
         result: 'failure',
-        durationBucket: durationBucket(performance.now() - startedAt),
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
         reason: pdfFailureReason(err),
       });
       captureError(err, { feature: 'pdf-export' });

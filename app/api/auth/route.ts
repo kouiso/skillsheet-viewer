@@ -1,11 +1,11 @@
 import { TRPCError } from '@trpc/server';
 import { type NextRequest, NextResponse } from 'next/server';
-
+import { VIEWER_AUTH_NOT_CONFIGURED_MESSAGE } from '@/server/known-config-error';
 import { createTRPCContext } from '@/server/trpc/context';
 import { createCallerFactory } from '@/server/trpc/init';
 import { trpcErrorToResponse } from '@/server/trpc/route-error';
 import { appRouter } from '@/server/trpc/router';
-import { isSameOriginRequest, VIEWER_AUTH_NOT_CONFIGURED_MESSAGE } from '@/server/trpc/router/auth';
+import { isSameOriginRequest } from '@/server/trpc/router/auth';
 
 const createCaller = createCallerFactory(appRouter);
 

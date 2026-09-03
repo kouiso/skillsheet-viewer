@@ -1,8 +1,7 @@
 import type { Instrumentation } from 'next';
 
-import { MISSING_SERVER_ENV_PREFIX } from '@/lib/env';
 import { isSentryEnabled } from '@/lib/observability/config';
-import { classifyConfigError } from '@/util/is-config-error';
+import { isKnownConfigError } from '@/server/known-config-error';
 
 /**
  * nodejs runtime かつキルスイッチが通っているときだけ `sentry.server.config` を読み込む。
@@ -15,17 +14,9 @@ export async function register(): Promise<void> {
   }
 }
 
-/**
- * `assertServerEnv()` の欠落判定と `classifyConfigError()` は別文言なので両方見る。
- * どちらかに該当するエラーは「設定不備」＝待っても直らない原因なので、ここでは報告しない
- * （全リクエストで throw し続けて Sentry の無料枠を食い尽くす事故を防ぐ）。
- * 設定不備自体は `app/global-error.tsx` が warning レベルで別途1回だけ拾う。
- */
-function isKnownConfigError(error: unknown): boolean {
-  if (classifyConfigError(error) !== null) return true;
-  return error instanceof Error && error.message.startsWith(MISSING_SERVER_ENV_PREFIX);
-}
-
+// 設定不備（待っても直らない原因）は報告しない。判定は `src/server/known-config-error.ts` に
+// 集約してあり、`report-error.ts` と同じ関数を使う（2か所に分けると文言の追加が片方に漏れる）。
+// 設定不備自体は `app/global-error.tsx` が warning レベルで別途1回だけ拾う。
 export const onRequestError: Instrumentation.onRequestError = async (error, request, context) => {
   if (!isSentryEnabled() || isKnownConfigError(error)) return;
   const Sentry = await import('@sentry/nextjs');
