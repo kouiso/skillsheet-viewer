@@ -25,6 +25,10 @@ describe('useReadDepth', () => {
       'requestAnimationFrame',
       (cb: FrameRequestCallback) => setTimeout(() => cb(0), 0) as unknown as number,
     );
+    // rAF を setTimeout に差し替えたので、キャンセル側も対応する clearTimeout にする
+    // （jsdom 本来の cancelAnimationFrame は setTimeout の ID を知らず、保留中の
+    // コールバックが cleanup 後も走ってしまい、rafRef の後始末漏れを検出できない）。
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
     setScroll(0, 2000, 1000);
   });
 
@@ -63,6 +67,23 @@ describe('useReadDepth', () => {
     renderHook(() => useReadDepth(false));
     window.dispatchEvent(new Event('scroll'));
     expect(handle.track).not.toHaveBeenCalled();
+  });
+
+  it('enabled を false→true に戻したあとも scroll で読了度が進む', async () => {
+    const { rerender } = renderHook(({ enabled }: { enabled: boolean }) => useReadDepth(enabled), {
+      initialProps: { enabled: true },
+    });
+    // 25/50% が mount 時に発火済み。scroll で rAF を予約したまま無効化 → cleanup がキャンセルする。
+    window.dispatchEvent(new Event('scroll'));
+    rerender({ enabled: false });
+    rerender({ enabled: true });
+    (handle.track as ReturnType<typeof vi.fn>).mockClear();
+
+    setScroll(1000, 2000, 1000); // 100%
+    window.dispatchEvent(new Event('scroll'));
+    await tick();
+    const depths = (handle.track as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0].depthPercent);
+    expect(depths).toEqual([75, 100]);
   });
 
   it('アンマウント後は scroll listener が残らない', async () => {

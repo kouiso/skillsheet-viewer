@@ -86,7 +86,13 @@ export function useReadDepth(enabled = true): void {
       window.removeEventListener('scroll', onScroll);
       window.removeEventListener('load', runInitialCheck);
       resizeObserver.disconnect();
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        // 保留中の rAF をキャンセルしたら ID も消し、「rafRef が非 null なら予約中」の不変条件を
+        // cleanup 側でも保つ。実害は無い（enabled を戻した直後の checkDepth() が先頭で null に
+        // するため詰まらない）が、不変条件を1か所の副作用に頼らないための後始末（レビュー指摘）。
+        rafRef.current = null;
+      }
     };
   }, [enabled]);
 }
