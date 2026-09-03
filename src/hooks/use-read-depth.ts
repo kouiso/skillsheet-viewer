@@ -1,21 +1,9 @@
 import { useEffect, useRef } from 'react';
 
 import { track } from '@/lib/observability/capture';
-import type { SecondsBucket } from '@/lib/observability/event';
+import { toSecondsBucket } from '@/lib/observability/event';
 
 const THRESHOLDS = [25, 50, 75, 100] as const;
-
-const SECONDS_BUCKETS: ReadonlyArray<{ maxMs: number; label: SecondsBucket }> = [
-  { maxMs: 5_000, label: '0-5' },
-  { maxMs: 15_000, label: '5-15' },
-  { maxMs: 30_000, label: '15-30' },
-  { maxMs: 60_000, label: '30-60' },
-];
-
-function secondsBucket(elapsedMs: number): SecondsBucket {
-  const found = SECONDS_BUCKETS.find((b) => elapsedMs < b.maxMs);
-  return found?.label ?? '60+';
-}
 
 function currentScrollPercent(): number {
   const doc = document.documentElement;
@@ -47,7 +35,7 @@ export function useReadDepth(enabled = true): void {
           track({
             name: 'sheet_read_depth',
             depthPercent: threshold,
-            secondsBucket: secondsBucket(performance.now() - startedAtRef.current),
+            secondsBucket: toSecondsBucket(performance.now() - startedAtRef.current),
           });
         }
       }

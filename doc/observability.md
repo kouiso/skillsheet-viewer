@@ -64,18 +64,30 @@
 
 ## コードでは保証できないもの（ベンダー側の設定）
 
-- **IP マスキング**: Sentry 側のプロジェクト設定（Data Scrubbing）で行う。コード側は
+- **IP マスキング（Sentry）**: Sentry 側のプロジェクト設定（Data Scrubbing）で行う。コード側は
   `dataCollection` オプションを一切書かない設計にしている（書くと逆に緩くなる罠がある）。
+- **IP の破棄（PostHog）**: PostHog は既定で受信時の IP を `$ip` としてサーバー側に保存する。
+  コードからは止められないので、プロジェクト設定の「Discard client IP data」を ON にする。
 - **PostHog の cookie 同意**: 匿名 id を持つ first-party cookie を1つ置く。cookie ID は
   UK/EU GDPR 上「個人データ」になりうる識別子であり、同意なしに置いてよいと断定はしない。
-  EU/UK 圏の閲覧者にも見せる前提なら、同意取得前に `posthog.init`/`posthog.capture` が
-  走らない同意ゲートが要る（**未実装。対象地域を絞るか同意ゲートを作るかは未決定**）。
+  **対象は国内（日本）の閲覧者に限る前提**で運用する — 閲覧経路は `VIEWER_CODE` で守られ、
+  コードを渡した相手だけが読める。EU/UK 圏へ共有する必要が出たら、共有する前に
+  同意取得後だけ `posthog.init`/`posthog.capture` が走る同意ゲートを入れる（未実装）。
   cookie 自体を避けたいだけなら `persistence: 'memory'` に切り替えられる
   （`instrumentation-client.ts` の `posthog.init` オプション、1行）。
 - **本番スタックトレースの関数名可読性**: Next.js 16 + Turbopack 環境で Sentry の関数名が
   難読化されたままになる既知の不具合（sentry-javascript #18248、Vercel 側の対応待ち）。
   現状はコードで閉じられない。実際に起きたエラーで確認し、読めなければ Issue の説明欄で
   「入っているが役に立たない」ことを明示する運用でしのぐ。
+
+## 欠測（広告ブロッカー）
+
+`us.i.posthog.com` と Sentry の ingest ドメインは主要なブロックリストに載っている。読者が
+エンジニア中心なら、`sheet_viewed` / `pdf_exported` は相当な割合が届かない前提で数字を読む
+（「0 件」は「誰も読んでいない」ではなく「ブロックされた」かもしれない）。
+本気で数えたくなったら、Sentry は `withSentryConfig` の `tunnelRoute`、PostHog は Next の
+`rewrites` で `/ingest/*` を逆プロキシする（どちらも自ドメイン経由にするだけで、送る内容は変わらない）。
+未実装。まず届く数を見てから決める。
 
 ## 6つのイベント（PostHog）
 

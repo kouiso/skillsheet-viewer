@@ -63,8 +63,11 @@ const URL_PATTERN = /https?:\/\/[^\s"'<>)]+/giu;
 // クエリ文字列を運びうる。既知ルートの接頭辞に一致する場合のみルート名 enum に丸める
 // （任意の "/" を丸めると "3/4" のような無関係な文字列まで壊すため、既知ルートに限定する）。
 // 直前が単語文字だと絶対 URL のパス部分（ドメイン直後の "/"）を二重処理してしまうため除外する。
+// 候補は長いものを先に並べ、接頭辞の直後に境界（/ ? # 空白 引用符 括弧 末尾）を要求する。
+// 順序だけに頼ると `view|viewer-auth` の順で `/viewer-auth?code=...` が `/view` で確定して
+// 後続の `er-auth?code=...` がそのまま残っていた（レビュー指摘）。
 const RELATIVE_ROUTE_PATTERN =
-  /(?<![\w-])\/(?:view\/db|view|viewer-auth|login|builder\/preview|builder|api\/auth|api\/logout|api\/revalidate|api\/trpc)(?:\/[^\s?#"'<>)]*)?(?:\?[^\s#"'<>)]*)?(?:#[^\s"'<>)]*)?/gu;
+  /(?<![\w-])\/(?:view\/db|viewer-auth|view|builder\/preview|builder|login|api\/auth|api\/logout|api\/revalidate|api\/trpc)(?=[/?#\s"'<>)]|$)(?:\/[^\s?#"'<>)]*)?(?:\?[^\s#"'<>)]*)?(?:#[^\s"'<>)]*)?/gu;
 // Drizzle の `DrizzleQueryError` は `Failed query: <sql>\nparams: <値>` という形式で、
 // params 以降に職務経歴書の本文（会社名・案件名等）がそのまま入る。SQL 本体はプレースホルダ
 // （$1, $2 ...）だけで実データを持たないため、params 以降だけを丸ごと落とす。
@@ -95,6 +98,12 @@ export function redactFreeText(input: string): string {
  */
 export interface ScrubbableSentryEvent {
   message?: string;
+  /**
+   * サーバーでは httpIntegration が isolation scope に `GET /view/<生パス>` を setTransactionName し、
+   * クライアントでは browserTracingIntegration が pageload の pathname を入れる。どちらも
+   * error event の `transaction` に転記される（scope データは type !== 'transaction' の event にも乗る）。
+   */
+  transaction?: string;
   request?: {
     url?: string;
     query_string?: unknown;
@@ -120,6 +129,17 @@ export interface ScrubbableBreadcrumb {
 
 function toRoutePlaceholder(rawUrl: string): string {
   return `/[route:${toRouteName(rawUrl)}]`;
+}
+
+/**
+ * `transaction` は `GET /view/x.md`（サーバー、HTTP メソッド付き）と `/view/x.md`（クライアント）の
+ * 2形式で来る。メソッドは残し、パス部分だけをルート名に丸める。Sentry が `/view/[path]` に
+ * parameterize 済みの値も `toRouteName` で `view-sheet` に落ちるので、区別せず同じ処理を通す。
+ */
+function scrubTransactionName(transaction: string): string {
+  const spaceAt = transaction.indexOf(' ');
+  if (spaceAt === -1) return toRoutePlaceholder(transaction);
+  return `${transaction.slice(0, spaceAt)} ${toRoutePlaceholder(transaction.slice(spaceAt + 1))}`;
 }
 
 const ROUTE_LIKE_KEYS = new Set(['to', 'from', 'url']);
@@ -166,6 +186,10 @@ export function scrubSentryEvent(event: ScrubbableSentryEvent): ScrubbableSentry
 
   if (typeof next.message === 'string') {
     next.message = redactFreeText(next.message);
+  }
+
+  if (typeof next.transaction === 'string') {
+    next.transaction = scrubTransactionName(next.transaction);
   }
 
   if (next.request) {

@@ -81,6 +81,15 @@ describe('redactFreeText', () => {
   it('既知ルートに一致しない "/" は無関係な文字列として壊さない', () => {
     expect(redactFreeText('3/4 done, review and/or approve')).toBe('3/4 done, review and/or approve');
   });
+
+  it('/viewer-auth のクエリも落とす（/view が接頭辞一致して残る回帰の防止）', () => {
+    expect(redactFreeText('fetch failed: /viewer-auth?code=1234')).toBe('fetch failed: /[route:viewer-auth]');
+    expect(redactFreeText('redirect: /viewer-auth?next=/view/機密.md')).toBe('redirect: /[route:viewer-auth]');
+  });
+
+  it('既知ルート名を接頭辞に持つだけの別パスは丸めない', () => {
+    expect(redactFreeText('see /views/x and /viewer-authx')).toBe('see /views/x and /viewer-authx');
+  });
 });
 
 describe('scrubBreadcrumb', () => {
@@ -143,6 +152,19 @@ describe('scrubSentryEvent', () => {
       exception: { values: [{ value: 'Failed to load sheet: 技術スキルシート.md' }] },
     });
     expect(result.exception?.values?.[0].value).toBe('Failed to load sheet: [redacted.md]');
+  });
+
+  it('transaction をルート名に丸める（サーバーはメソッド付き・クライアントはパスのみ）', () => {
+    expect(scrubSentryEvent({ transaction: 'GET /view/技術スキルシート.md' }).transaction).toBe(
+      'GET /[route:view-sheet]',
+    );
+    expect(scrubSentryEvent({ transaction: '/view/db/550e8400-e29b-41d4-a716-446655440000' }).transaction).toBe(
+      '/[route:view-db-sheet]',
+    );
+  });
+
+  it('parameterize 済みの transaction も同じルート名に落ちる', () => {
+    expect(scrubSentryEvent({ transaction: 'GET /view/[path]' }).transaction).toBe('GET /[route:view-sheet]');
   });
 
   it('user は常に落とす（setUser を呼んでいなくても防御）', () => {

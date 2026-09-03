@@ -23,8 +23,15 @@ import type { ObservabilityEvent } from '@/lib/observability/event';
 // 「初期化完了後に registerObservabilityHandle する」実装にすると、ハイドレーション中の
 // ごく初期の例外（例: app/providers.tsx の同期 throw）を取りこぼす窓ができてしまうため、
 // ハンドル自体は同期的に登録し、送信先が無ければキューへ積む方式にした。
+//
+// 動的 import が失敗した場合（デプロイ直後に古い HTML が消えた chunk を参照する等）は
+// その SDK を諦めてキューを捨てる。キュー自体にも上限を置く — 失敗を検知できるまでの間に
+// 例外が連発すると、送り先の無いキューがページの寿命いっぱい伸び続けるため（レビュー指摘）。
 let sentryClient: typeof import('@sentry/nextjs') | undefined;
 let posthogClient: typeof import('posthog-js')['default'] | undefined;
+let sentryUnavailable = false;
+let posthogUnavailable = false;
+const MAX_PENDING_ITEMS = 20;
 const pendingCaptures: Array<{ error: unknown; level: 'error' | 'warning'; context: CaptureContext }> = [];
 const pendingTracks: ObservabilityEvent[] = [];
 
@@ -36,7 +43,7 @@ registerObservabilityHandle({
         tags: { scope: context.scope, feature: context.feature },
         fingerprint: context.fingerprint,
       });
-    } else if (isSentryEnabled()) {
+    } else if (!sentryUnavailable && isSentryEnabled() && pendingCaptures.length < MAX_PENDING_ITEMS) {
       pendingCaptures.push({ error, level, context });
     }
   },
@@ -44,7 +51,7 @@ registerObservabilityHandle({
     if (posthogClient) {
       const { name, ...properties } = event;
       posthogClient.capture(name, properties);
-    } else if (isPostHogEnabled()) {
+    } else if (!posthogUnavailable && isPostHogEnabled() && pendingTracks.length < MAX_PENDING_ITEMS) {
       pendingTracks.push(event);
     }
   },
@@ -112,8 +119,14 @@ async function initPostHog(): Promise<void> {
   }
 }
 
-void initSentry();
-void initPostHog();
+initSentry().catch(() => {
+  sentryUnavailable = true;
+  pendingCaptures.length = 0;
+});
+initPostHog().catch(() => {
+  posthogUnavailable = true;
+  pendingTracks.length = 0;
+});
 
 export function onRouterTransitionStart(url: string, navigationType: 'push' | 'replace' | 'traverse'): void {
   sentryClient?.captureRouterTransitionStart(url, navigationType);

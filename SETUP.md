@@ -57,6 +57,11 @@ cp .env.example .env
 
 このリポジトリでは、開発用の実値を入れた `.env` を [SOPS](https://github.com/getsops/sops) で暗号化した `.env.enc` としてリポジトリにコミットしています（平文の `.env` 自体はコミットしません）。復号鍵（age 秘密鍵）は 1Password の `RITMO` vault に `skillsheet-viewer SOPS age key` として保存済みです。
 
+**入れてよい値・漏れたときの手順**（このリポジトリは公開で、`.env.enc` は git 履歴に恒久的に残る）:
+
+- `.env.enc` に入れるのは**ローカル開発用の値だけ**。本番（Vercel）の `DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` は入れない（本番値は Vercel の環境変数だけに置く）。
+- age 秘密鍵が漏れた（漏れたかもしれない）ときは、`.env.enc` を消しても履歴から復号できるので、**中の全値をローテーションする**のが唯一の対処。鍵の再生成と `.sops.yaml` の recipient 更新はその後。
+
 ```bash
 # 初回のみ：1Password から秘密鍵を取り出してローカルに保存
 umask 077

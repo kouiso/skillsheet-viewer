@@ -7,6 +7,8 @@ import 'server-only';
 import { Buffer } from 'node:buffer';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
+import { SESSION_SECRET_MISSING_MESSAGE } from './known-config-error';
+
 const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60;
 const SESSION_COOKIE_NAME = 'session';
 
@@ -14,11 +16,6 @@ interface SessionPayload {
   iat: number;
   exp: number;
 }
-
-// report-error.ts の isKnownConfigError() が「待っても直らない設定不備」として
-// 個別に見分けるために import する（レビュー指摘: 未設定のまま個別に見ないと
-// SESSION_SECRET が1つ欠けた状態で全リクエストが Sentry へ送られ続ける）。
-export const SESSION_SECRET_MISSING_MESSAGE = 'SESSION_SECRET is not set';
 
 function getSecret(): Buffer {
   const secret = process.env.SESSION_SECRET;
