@@ -47,9 +47,45 @@ pnpm install
 ### 2. 環境変数の設定
 
 `.env.example` をコピーして `.env`（コミット禁止）に値を設定します。**すべてサーバー専用**で、ブラウザには公開しません（`NEXT_PUBLIC_` を付けないこと）。
+例外は Sentry/PostHog の DSN・キー・ホストと、ローカル検証用の非常口（後述）のみ — ブラウザ SDK に埋め込む前提の値で秘匿情報ではない。
 
 ```bash
 cp .env.example .env
+```
+
+#### 実際の値の共有（SOPS + age）
+
+このリポジトリでは、開発用の実値を入れた `.env` を [SOPS](https://github.com/getsops/sops) で暗号化した `.env.enc` としてリポジトリにコミットしています（平文の `.env` 自体はコミットしません）。復号鍵（age 秘密鍵）は 1Password の `RITMO` vault に `skillsheet-viewer SOPS age key` として保存済みです。
+
+**入れてよい値・漏れたときの手順**（このリポジトリは公開で、`.env.enc` は git 履歴に恒久的に残る）:
+
+- `.env.enc` に入れるのは**ローカル開発用の値だけ**。本番（Vercel）の `DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` は入れない（本番値は Vercel の環境変数だけに置く）。
+- age 秘密鍵が漏れた（漏れたかもしれない）ときは、`.env.enc` を消しても履歴から復号できるので、**中の全値をローテーションする**のが唯一の対処。鍵の再生成と `.sops.yaml` の recipient 更新はその後。
+
+```bash
+# 初回のみ：1Password から秘密鍵を取り出してローカルに保存
+umask 077
+# op / jq の失敗をパイプラインの終了ステータスに反映させる（`-e` は付けない: 対話シェルが落ちる）。
+set -o pipefail
+mkdir -p ~/.config/sops/age
+key_tmp="$(mktemp ~/.config/sops/age/skillsheet-viewer.XXXXXX)"
+# op / jq のどちらかが失敗しても mv しない（既存の鍵ファイルを空ファイルで潰さない）。
+# 念のため中身が age 秘密鍵であることも確認してから置き換える。
+if op item get "skillsheet-viewer SOPS age key" --vault RITMO --fields notesPlain --format json \
+  | jq -r '.value' | grep -v '^#' > "$key_tmp" \
+  && grep -q '^AGE-SECRET-KEY-' "$key_tmp"; then
+  mv "$key_tmp" ~/.config/sops/age/skillsheet-viewer.txt
+else
+  rm -f "$key_tmp"; echo "鍵の取得に失敗。既存ファイルは変更していない" >&2
+fi
+
+export SOPS_AGE_KEY_FILE=~/.config/sops/age/skillsheet-viewer.txt
+
+# 復号して .env を作る
+pnpm env:decrypt
+
+# .env を編集したら、暗号化し直してコミットする
+pnpm env:encrypt
 ```
 
 #### 必須（欠けると起動時に fail-fast で throw / `src/lib/env.ts`）
@@ -73,6 +109,16 @@ cp .env.example .env
 | `REVALIDATE_SECRET` | tRPC の `maintenance.revalidate` でキャッシュを手動失効させるためのシークレット |
 
 > DB 接続文字列は、実行時はプール用（`-pooler` ホスト）、マイグレーションは非プール文字列を使うと安定します。
+
+#### 監視・計測（Sentry / PostHog。すべて任意。未設定なら自動で no-op。詳細は [doc/observability.md](doc/observability.md)）
+
+| 変数 | 用途 |
+|------|------|
+| `NEXT_PUBLIC_SENTRY_DSN` | Sentry の送信先。未設定なら `Sentry.init` を呼ばない |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog のプロジェクトキー。未設定なら `posthog.init` を呼ばない |
+| `NEXT_PUBLIC_POSTHOG_HOST` | PostHog のホスト（既定 `https://us.i.posthog.com`） |
+| `NEXT_PUBLIC_OBSERVABILITY_FORCE` | ローカル検証用の非常口（`'1'` のみ有効）。**検証後は必ず消す** — 付けっぱなしだと e2e が本番プロジェクトに書く |
+| `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` | source map アップロード用。**Vercel のビルド環境にのみ**設定し、GitHub Actions には入れない |
 
 ### 3. DB マイグレーションの適用
 

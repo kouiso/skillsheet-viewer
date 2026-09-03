@@ -35,7 +35,7 @@ describe('DeferredEditSheetView', () => {
 
   it('編集者判定の待機中でも本文を表示し、編集導線は出さない', () => {
     useAuthStatusQuery.mockReturnValue({ data: undefined });
-    render(<DeferredEditSheetView title="T" content="本文" />);
+    render(<DeferredEditSheetView title="T" content="本文" source="db" />);
     expect(screen.getByRole('heading', { name: 'T' })).toBeInTheDocument();
     expect(screen.getByText('本文').closest('article')).toHaveAttribute('data-can-edit', 'false');
     expect(screen.getByText('本文').closest('article')).toHaveAttribute('data-reserve-edit-slot', 'true');
@@ -43,13 +43,13 @@ describe('DeferredEditSheetView', () => {
 
   it('編集者判定の失敗時も本文を表示し、編集導線は出さない', () => {
     useAuthStatusQuery.mockReturnValue({ data: undefined, error: new Error('db down') });
-    render(<DeferredEditSheetView title="T" content="本文" />);
+    render(<DeferredEditSheetView title="T" content="本文" source="db" />);
     expect(screen.getByText('本文').closest('article')).toHaveAttribute('data-can-edit', 'false');
   });
 
   it('編集者判定の成功後は編集導線を有効にする', () => {
     useAuthStatusQuery.mockReturnValue({ data: { canEdit: true, canView: true } });
-    render(<DeferredEditSheetView title="T" content="本文" />);
+    render(<DeferredEditSheetView title="T" content="本文" source="db" />);
     expect(screen.getByText('本文').closest('article')).toHaveAttribute('data-can-edit', 'true');
   });
 });

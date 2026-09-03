@@ -17,7 +17,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "biome check . --error-on-warnings && node scripts/check-jsdom-pdf-assertions.mjs && ./scripts/check-naming.sh",
+    "lint": "biome check . --error-on-warnings && node scripts/check-jsdom-pdf-assertions.mjs && node scripts/check-telemetry-imports.mjs && ./scripts/check-naming.sh",
     "format": "biome format --write .",
     "type-check": "tsc --noEmit",
     "test": "vitest run && vitest run --config vitest.config.node.ts && vitest run --config vitest.config.pdf.ts",
@@ -29,7 +29,9 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "env:decrypt": "tmp=$(mktemp .env.tmp.XXXXXX) && sops -d --input-type dotenv --output-type dotenv .env.enc > \"$tmp\" && mv \"$tmp\" .env",
+    "env:encrypt": "tmp=$(mktemp .env.enc.tmp.XXXXXX) && sops -e --input-type dotenv --output-type dotenv --filename-override .env.enc .env > \"$tmp\" && mv \"$tmp\" .env.enc"
   },
   "dependencies": {
     "@better-auth/core": "^1.6.25",
@@ -43,6 +45,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@react-pdf/renderer": "^4.3.1",
     "@react-pdf/textkit": "6.3.0",
+    "@sentry/nextjs": "^10.73.0",
     "@tanstack/react-query": "^5.101.4",
     "@trpc/client": "^11.18.0",
     "@trpc/react-query": "^11.18.0",
@@ -55,6 +58,7 @@
     "framer-motion": "^11.15.0",
     "lucide-react": "^1.17.0",
     "next": "^16.2.11",
+    "posthog-js": "^1.424.1",
     "react": "^19.2.0",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.0",
@@ -106,6 +110,7 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@sentry/cli",
       "esbuild",
       "sharp",
       "unrs-resolver"
@@ -116,8 +121,9 @@
       "sharp": "^0.35.3",
       "brace-expansion@>=3": "^5.0.9",
       "test-exclude": "^8.0.0",
-      "fast-uri@3": "^3.1.5",
-      "nanoid": "^3.3.17"
+      "fast-uri@3": "^3.1.7",
+      "nanoid": "^3.3.17",
+      "browserslist": "^4.28.7"
     },
     "patchedDependencies": {
       "@react-pdf/textkit@6.3.0": "patches/@react-pdf__textkit@6.3.0.patch"

@@ -2,13 +2,12 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { TRPCError } from '@trpc/server';
 import { clientKeyFromHeaders } from '@/db/viewer-rate-limit';
 
+import { VIEWER_AUTH_NOT_CONFIGURED_MESSAGE } from '@/server/known-config-error';
 import { appendExpiredSessionCookie, appendSessionCookie } from '@/server/session';
 import { clearViewerLoginRateLimit, reserveViewerLoginAttemptBoth } from '@/server/viewer-rate-limit';
 
 import { publicProcedure, router } from '../init';
 import { viewerLoginInputSchema } from '../schema';
-
-export const VIEWER_AUTH_NOT_CONFIGURED_MESSAGE = 'viewer authentication is not configured';
 
 export function isSameOriginRequest(request: Request): boolean {
   const origin = request.headers.get('origin');

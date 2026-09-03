@@ -63,7 +63,7 @@ const projectBlock: Block = { id: 'p1', type: 'project', order: 0, data: { compa
 const markdownBlock: Block = { id: 'm1', type: 'markdown', order: 0, data: { markdown: '# 目印' } };
 
 const renderClient = (props: Partial<React.ComponentProps<typeof SheetViewClient>> = {}) =>
-  render(<SheetViewClient title="テストシート" content="# 見出し" {...props} />);
+  render(<SheetViewClient title="テストシート" content="# 見出し" source="db" {...props} />);
 
 beforeEach(() => {
   vi.clearAllMocks();

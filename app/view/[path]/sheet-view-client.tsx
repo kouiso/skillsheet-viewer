@@ -1,16 +1,21 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import Header from '@/components/header';
 import SkillSheetViewer from '@/components/skill-sheet-viewer';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
 import type { Block } from '@/db/blocks';
+import { useReadDepth } from '@/hooks/use-read-depth';
+import { captureError, track } from '@/lib/observability/capture';
+import { type PdfFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
 interface SheetViewClientProps {
   title: string;
   content: string;
   blocks?: Block[];
+  /** シートの取得元。計測イベントの source プロパティにそのまま乗る。 */
+  source: SheetSource;
   /** 編集者ログイン済みか。false（閲覧コードのみ等）のときは編集導線を出さない。 */
   canEdit?: boolean;
   /** 編集者判定の前後で編集ボタン分の幅を固定し、レイアウトずれを防ぐ。 */
@@ -24,12 +29,27 @@ interface SheetViewClientProps {
   referenceMonth?: number;
 }
 
+// ブラウザの fetch はネットワーク失敗を `TypeError` で投げ、message はブラウザごとに違う
+// （Chrome "Failed to fetch" / Firefox "NetworkError when attempting to fetch resource." /
+// Safari "Load failed"）。`FetchError` という name は node-fetch 系のもので、ブラウザでは出ない。
+// message はここで分類にだけ使い、イベントには enum しか乗せない（URL 等が混ざっても送らない）。
+const BROWSER_FETCH_FAILURE_MESSAGE = /fetch|network|load failed/iu;
+
+function pdfFailureReason(err: unknown): PdfFailureReason {
+  if (err instanceof TypeError) return BROWSER_FETCH_FAILURE_MESSAGE.test(err.message) ? 'FetchError' : 'TypeError';
+  if (err instanceof RangeError) return 'RangeError';
+  if (err instanceof Error && err.name === 'FetchError') return 'FetchError';
+  if (err instanceof Error) return 'Error';
+  return 'unknown';
+}
+
 const REVOKE_OBJECT_URL_DELAY_MS = 100;
 
 const SheetViewClient = ({
   title,
   content,
   blocks,
+  source,
   canEdit = false,
   reserveEditSlot = false,
   stale = false,
@@ -47,13 +67,37 @@ const SheetViewClient = ({
     () => (blocks ?? []).find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile'),
     [blocks],
   );
+  const blockCount = blocks?.length ?? 0;
+
+  // 親が key={path}/key={id} でシートごとに再マウントする設計（トグル state を
+  // 次のシートへ持ち越さないため）なので、このコンポーネントの mount は
+  // 「1シートを開いた」に一致する。依存配列は正直に書き、「1マウント1回」は ref で保証する
+  // （編集後の router.refresh() で blocks が差し替わっても sheet_viewed を二重送信しない）。
+  const sheetViewedSentRef = useRef(false);
+  useEffect(() => {
+    if (sheetViewedSentRef.current) return;
+    sheetViewedSentRef.current = true;
+    track({
+      name: 'sheet_viewed',
+      layout: isDashboard ? 'dashboard' : 'markdown',
+      source,
+      blockCount,
+    });
+  }, [isDashboard, source, blockCount]);
+
+  useReadDepth();
 
   const toggleView = (view: ViewKey) => {
-    setViews((prev) => (prev.includes(view) ? prev.filter((v) => v !== view) : [...prev, view]));
+    // setState の updater 内で副作用（track）を呼ばない — StrictMode 下では updater が
+    // 2回呼ばれうるため、外側で現在値から次の状態を決めてから1回だけ送る。
+    const enabled = !views.includes(view);
+    track({ name: 'sheet_view_toggled', view, enabled });
+    setViews((prev) => (enabled ? [...prev, view] : prev.filter((v) => v !== view)));
   };
 
   const handleDownloadPdf = async () => {
     const toastId = toast.loading('PDFを生成中…');
+    const startedAt = performance.now();
     // 生成に失敗したときの後始末。import が済んだ時点で掴んでおく — catch の中で
     // 改めて動的 import すると、その await の分だけ finally が遅れてボタンが busy のまま残る。
     let resetFontsOnFailure: (() => void) | undefined;
@@ -84,9 +128,21 @@ const SheetViewClient = ({
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
       toast.success('PDFをダウンロードしました', { id: toastId });
+      track({
+        name: 'pdf_exported',
+        result: 'success',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+      });
     } catch (err) {
       console.error('Error generating PDF:', err);
       toast.error('PDFの生成に失敗しました', { id: toastId });
+      track({
+        name: 'pdf_exported',
+        result: 'failure',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+        reason: pdfFailureReason(err),
+      });
+      captureError(err, { feature: 'pdf-export' });
       // フォント取得の失敗（オフライン・5xx 等）は @react-pdf/font 内で reject 済みの
       // Promise として永久にキャッシュされ、次のクリックも即座に同じ失敗を再現する
       // （リロードしないと直らない「詰み」状態になる）。失敗のたびに登録をリセットし、
