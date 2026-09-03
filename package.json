@@ -121,7 +121,7 @@
       "sharp": "^0.35.3",
       "brace-expansion@>=3": "^5.0.9",
       "test-exclude": "^8.0.0",
-      "fast-uri@3": "^3.1.5",
+      "fast-uri@3": "^3.1.7",
       "nanoid": "^3.3.17",
       "browserslist": "^4.28.7"
     },
