@@ -6,6 +6,7 @@ on:
       - "CI"
       - "Merge Quality Gate"
       - "PR Labeler"
+      - "PDF Layout Check"
       - "Security Audit"
       - "Security Scan"
       - "Semgrep"
