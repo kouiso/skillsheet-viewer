@@ -1,0 +1,112 @@
+import { TRPCError } from '@trpc/server';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import * as config from '@/lib/observability/config';
+
+import { reportDegradation, reportTRPCError } from './report-error';
+
+const captureMessageMock = vi.fn();
+const captureExceptionMock = vi.fn();
+vi.mock('@sentry/nextjs', () => ({ captureMessage: captureMessageMock, captureException: captureExceptionMock }));
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/**
+ * `isSentryEnabled()` は NODE_ENV=test で常に false（config.test.ts で確認済み）なので、
+ * ここでは「Sentry へ実際に送るかどうか」ではなく「console.error を呼ぶ/呼ばない」だけを見る。
+ * Sentry 側の実送信保証は動作確認手順（DevTools 目視・手順4）で行う — 単体テストでは
+ * `NEXT_PUBLIC_*` のビルド時インライン化を再現できないため代替できない。
+ */
+describe('reportTRPCError', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each(['UNAUTHORIZED', 'NOT_FOUND', 'CONFLICT'])('%s は想定内なので console.error を呼ばない', (code) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    reportTRPCError({
+      error: new TRPCError({ code: code as never, message: 'x' }),
+      scope: 'test',
+      logArgs: ['test: unexpected error:', new Error('x')],
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('FORBIDDEN は CSRF 試行の唯一のシグナルなので console.error を呼ぶ', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new TRPCError({ code: 'FORBIDDEN', message: 'cross-origin' });
+    reportTRPCError({ error, scope: 'test', logArgs: ['test: unexpected error:', error] });
+    expect(spy).toHaveBeenCalledWith('test: unexpected error:', error);
+  });
+
+  it('logArgs をそのまま console.error に渡す（既存ログ文言を一字一句維持する）', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('boom');
+    reportTRPCError({ error, scope: 'test', logArgs: ['POST /api/auth: unexpected error:', error] });
+    expect(spy).toHaveBeenCalledWith('POST /api/auth: unexpected error:', error);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('TRPCError でない例外は常にログする', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('unexpected');
+    reportTRPCError({ error, scope: 'test', logArgs: ['test: unexpected error:', error] });
+    expect(spy).toHaveBeenCalledWith('test: unexpected error:', error);
+  });
+});
+
+describe('reportTRPCError — Sentry 送信の抑制（isSentryEnabled をモックして検証）', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    captureExceptionMock.mockClear();
+  });
+
+  it('VIEWER_CODE 未設定（auth.login）は Sentry へ送らない', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'viewer authentication is not configured' });
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it('SESSION_SECRET 未設定は Sentry へ送らない', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'SESSION_SECRET is not set' });
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it('TOO_MANY_REQUESTS はログするが Sentry へは送らない（攻撃者による無料枠消費を防ぐ）', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'too many requests' });
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(spy).toHaveBeenCalled();
+    expect(captureExceptionMock).not.toHaveBeenCalled();
+  });
+
+  it('未知のエラーは通常どおり Sentry へ送る（抑制条件を広げすぎていないかの回帰防止）', async () => {
+    vi.spyOn(config, 'isSentryEnabled').mockReturnValue(true);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const error = new Error('something unexpected');
+    reportTRPCError({ error, scope: 'test', logArgs: ['x', error] });
+    await tick();
+    expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('reportDegradation', () => {
+  afterEach(() => {
+    captureMessageMock.mockClear();
+  });
+
+  it('NODE_ENV=test では Sentry 無効なので通信も発生しない', async () => {
+    reportDegradation('degraded', { scope: 'test' });
+    await tick();
+    expect(captureMessageMock).not.toHaveBeenCalled();
+  });
+});
