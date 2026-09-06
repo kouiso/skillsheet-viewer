@@ -367,8 +367,12 @@ const SkillSheetViewer = ({
                   return (
                     <FadeUpSection key={key}>
                       <SectionHead kicker="Skill Matrix" title="スキルマトリクス" />
-                      {/* design: gap 28px(縦) 40px(横) の auto-fit グリッド */}
-                      <div className="grid gap-x-10 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
+                      {/* design: gap 28px(縦) 40px(横) の auto-fit グリッド。
+                          横 gap は 40px から 24px へ詰めた — 3 列に割ったときの 1 列が
+                          283px しかなく、スキル名の列が 1 語を語中で折るほど狭かったため
+                          （skill-matrix.tsx の列幅コメント参照）。列の最小幅 240px は
+                          この gap でも 3 列を保つ（1280px 幅で実測）。 */}
+                      <div className="grid gap-x-6 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
                         {group.blocks.map((block) => (
                           <SkillMatrix
                             key={block.id}

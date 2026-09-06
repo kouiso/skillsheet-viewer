@@ -104,17 +104,23 @@ const styles = StyleSheet.create({
 /** 下罫線の判定・開始終了マーカーの位置決めに使うブロック識別子。ヘッダーは常に出るので数えない。 */
 type BlockKey = 'meta' | 'tech' | 'duties' | 'acquired' | 'comment';
 
-export function shouldBreakBeforeComment(fitsOnePage: boolean, firstBlock: BlockKey | undefined): boolean {
-  return !fitsOnePage && firstBlock !== 'comment';
-}
-
 export function ProjectCardDetail({
   project,
   spanTracker,
+  splitAcrossPages = false,
 }: {
   project: PrintProject;
   /** カードの開始・終了ページを記録する器。ページ直下の継続見出しがこれを読む。 */
   spanTracker: ReturnType<typeof createSpanTracker>;
+  /**
+   * 1 ページに収まる大きさでも、分割を許して描く。
+   *
+   * 会社見出しの直後のカードが「見出し + カード」で 1 ページに入らないときに呼び出し側が
+   * 立てる。分割禁止のままだとカードは丸ごと次ページへ飛び、見出しだけのページが残る
+   * （実測: 53 ページ版の p42、紙面の 89% が白）。ヘッダーと先頭ブロックの束ねは維持する
+   * ので、割れるのはブロックの区切りだけ。
+   */
+  splitAcrossPages?: boolean;
 }) {
   // 会社名と区分の結合はビューモデル側で済んでいる（実データは名前に区分を含むため、
   // ここで機械的に足すと「Q 社（自社サービス事業会社）（自社サービス事業会社）」になる）。
@@ -203,8 +209,20 @@ export function ProjectCardDetail({
         {markEnd('acquired')}
       </View>
     ),
+    // **コメントブロックに `break` を付けないこと。** 以前は 1 ページに収まらないカードで
+    // 無条件に改ページしていたが、`break` は残り高さを一切見ないため、直前のページが
+    // 3 行だけで終わり紙面の 9 割が白く残った（実測: 53 ページ版の p13、p19、p22、p26）。
+    // 他のブロックと同じく行の切れ目で普通に分割させるのが正しく、実データでも
+    // 53 → 49 ページ・空白ページ 0 になる。
+    //
+    // 代わりに見出し（`SectionLabel`）だけを `wrap={false} minPresenceAhead` の単位に
+    // する案も試したが、見出しが送られたときにブロックの枠だけが前のページに残り、
+    // 高さ 117pt の空の箱が描かれた（合成フィクスチャ p9 で実測）。@react-pdf の
+    // 「中身が全部次ページへ送られるなら親ごと送る」救済は、断片の子が 0 個のときしか
+    // 働かない（ファイル冒頭のコメント参照）ため、余白を要求する View を子に足した
+    // 時点でこの救済が効かなくなる。
     comment: present.includes('comment') && (
-      <View key="comment" style={styles.block} break={shouldBreakBeforeComment(project.fitsOnePage, present[0])}>
+      <View key="comment" style={styles.block}>
         {markStart('comment')}
         <View style={styles.section}>
           <SectionLabel>コメント</SectionLabel>
@@ -224,7 +242,7 @@ export function ProjectCardDetail({
     // これだけで「案件が改ページで途切れる」を防げる（実測、company-grouping 作業）。
     // 見積りで 1 ページを超えるカード（`fitsOnePage === false`）だけ既定の分割可能な
     // 形（メタ表・チップ分類・本文ブロックの区切りでのみ割れる）のまま描画する。
-    <View style={styles.card} wrap={!project.fitsOnePage}>
+    <View style={styles.card} wrap={!project.fitsOnePage || splitAcrossPages}>
       {/* ヘッダーと先頭ブロックを 1 つの分割単位にする（ファイル冒頭コメント参照）。
           ただし 1 ページに収まらないカードでは束ねない。先頭ブロックが 1 ページより高い
           （長い業務内容・大きな技術セクション）と、その塊はどのページにも入らず、

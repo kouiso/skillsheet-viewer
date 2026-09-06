@@ -52,8 +52,14 @@ export const SkillMatrix = ({ data, projectItems = [], referenceMonth, className
             // 名前列は truncate（1行省略）だと 320px 幅で実効幅が約50pxまで縮み、
             // 一般的な技術名すら読めなくなる（issue #197）。items-center → items-start は
             // 折り返しが発生しない限り単一行時の見た目に影響しない（行高＝内容高のため）。
+            //
+            // 右 3 列は必要最小限まで詰める。3 分割グリッドの 1 列（実測 283px）から
+            // 44+72+64px と gap 12px×3 を引くと名前列が 69px しか残らず、`Kubernetes`
+            // `Firestore` `Terraform` のような 1 語が語中で折れて 2〜3 行になっていた
+            // （実測 1280px 幅）。level は 2 文字（12px×2）、バーは目盛りではなく相対量の
+            // 目安、年数は `4年10ヶ月`（mono 11px で約 53px）が入れば足りる。
             // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
-            <div key={i} className="grid grid-cols-[minmax(0,1fr)_44px_72px_64px] items-start gap-2 sm:gap-3">
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_32px_44px_58px] items-start gap-1.5">
               <span className="min-w-0 break-words text-sm text-foreground" title={sanitizeHtml(skill.name)}>
                 {sanitizeHtml(skill.name)}
               </span>
