@@ -49,6 +49,7 @@ export default async function DbSheetByIdPage({ params }: Props) {
         title={sheet.title}
         content={sheet.content}
         blocks={sheet.blocks}
+        source="db"
         canEdit={canEdit}
         stale={sheet.stale}
         referenceMonth={currentMonthKey()}
@@ -64,6 +65,8 @@ export default async function DbSheetByIdPage({ params }: Props) {
     // 直前まで形式検証が無く、DB 側の型エラーがそのまま 500 として抜けていた）。
     notFoundOnTrpcCodes(err, ['NOT_FOUND', 'BAD_REQUEST']);
     // #157: 待っても直らない設定不備は 200 ＋ 原因と対処を返し、一時的な障害は再スローする。
-    return configErrorNoticeOrRethrow(err, `Failed to load sheet: ${id}`);
+    // ログ文字列にシート識別子（id）を埋め込まない — 監視基盤の
+    // 送信側 breadcrumb・console キャプチャに乗る余地を発生源で断つ。
+    return configErrorNoticeOrRethrow(err, 'Failed to load sheet');
   }
 }

@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { cache } from 'react';
 
 import { getAuth } from '@/lib/auth';
+import { reportDegradation } from '@/server/report-error';
 
 /**
  * 編集者（オーナー）認可の単一チェックポイント（DAL）。
@@ -34,6 +35,9 @@ async function resolveEditorUserId(requestHeaders?: Headers): Promise<string | n
     return userId;
   } catch (err) {
     console.error('Better Auth session check failed:', err);
+    // セッション確認が例外で落ちると、本物のオーナーも黙って編集者から降格する
+    // （fail-safe だが気づけないと「保存できない」で問い合わせが来るまで放置される）。
+    reportDegradation('Better Auth session check failed; editor status downgraded', { scope: 'auth-gate' });
     return null;
   }
 }

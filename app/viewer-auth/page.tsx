@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { track } from '@/lib/observability/capture';
 import { trpc } from '@/lib/trpc-client';
 import { resolveNextPath } from '@/util/resolve-next-path';
 
@@ -24,6 +25,7 @@ const ViewerAuthPage = () => {
 
     try {
       await loginMutation.mutateAsync({ code });
+      track({ name: 'viewer_auth_submitted', outcome: 'success' });
       // 認証後の遷移先。?next= が内部パスのときのみ許可（オープンリダイレクト防止）。
       const next = new URLSearchParams(window.location.search).get('next');
       const dest = resolveNextPath(next, '/view', window.location.origin);
@@ -31,8 +33,13 @@ const ViewerAuthPage = () => {
     } catch (err) {
       if (err instanceof TRPCClientError && err.data?.code === 'UNAUTHORIZED') {
         setError('認証コードが正しくありません');
+        track({ name: 'viewer_auth_submitted', outcome: 'invalid_code' });
+      } else if (err instanceof TRPCClientError && err.data?.code === 'TOO_MANY_REQUESTS') {
+        setError('認証に失敗しました。もう一度お試しください。');
+        track({ name: 'viewer_auth_submitted', outcome: 'rate_limited' });
       } else {
         setError('認証に失敗しました。もう一度お試しください。');
+        track({ name: 'viewer_auth_submitted', outcome: 'error' });
       }
     }
   };

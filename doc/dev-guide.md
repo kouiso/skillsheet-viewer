@@ -97,6 +97,17 @@
 - Tailwind CSS v4 + shadcn/ui（Radix UI）を使用
 - 共通 UI 部品は `src/components/ui` に集約
 
+## 監視・計測（Sentry / PostHog）
+
+詳細は [doc/observability.md](observability.md)。規約だけここに書く。
+
+- `@sentry/*` / `posthog-js` をアプリコードから直接 import しない。必ず
+  `src/lib/observability/capture.ts`（`captureError` / `captureWarning` / `track`）を経由する
+  （`pnpm lint` が `scripts/check-telemetry-imports.mjs` で機械的に強制する）。
+- 送信するイベントのプロパティに自由記述の `string` を書かない。enum・数値・真偽値のみ
+  （`src/lib/observability/event.ts` の閉じた判別共用体を参照。シート名・ファイル名が
+  「書けてしまう」余地を型から消すための制約）。
+
 ## Markdown レンダリング
 
 ### react-markdown

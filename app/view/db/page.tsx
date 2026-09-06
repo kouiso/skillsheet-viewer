@@ -37,6 +37,7 @@ export default async function DbSheetPage() {
         title={sheet.title}
         content={sheet.content}
         blocks={sheet.blocks}
+        source="db"
         canEdit={canEdit}
         stale={sheet.stale}
         referenceMonth={currentMonthKey()}
