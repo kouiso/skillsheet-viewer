@@ -37,7 +37,8 @@ describe('SkillMatrix', () => {
     expect(screen.getByText('5年')).toBeInTheDocument();
 
     const row = screen.getByText('TypeScript').closest('div');
-    expect(row?.className).toContain('grid-cols-[minmax(0,1fr)_44px_72px_64px]');
+    // 右 3 列は名前列を潰さない幅まで詰めてある（skill-matrix.tsx の列幅コメント参照）。
+    expect(row?.className).toContain('grid-cols-[minmax(0,1fr)_32px_44px_58px]');
   });
 
   it('一致案件の重複月を除いて年月表示する', () => {

@@ -230,7 +230,11 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: PRINT_SIZE.chipGap },
 
   techGroup: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  techGroups: { flexDirection: 'column', gap: 5 },
+  // 分類同士の間隔は `gap` ではなく 2 つ目以降の marginTop で作る。列に高さ 0 の
+  // 先行兄弟（下記 TechChipGroups のコメント参照）を足す必要があり、gap だとその
+  // 兄弟の後ろにも隙間が空いて分類全体が 5pt 下へずれるため。
+  techGroups: { flexDirection: 'column' },
+  techGroupSpaced: { marginTop: 5 },
   techLabel: {
     ...PRINT_TYPE.meta,
     color: PRINT_COLOR.label,
@@ -322,13 +326,24 @@ export function ChipRow({ chips }: { chips: PrintChip[] }) {
  * `wrap={false}` にして、ページ跨ぎでチップが半端に切れた塊が下端に残らないようにする
  * （実測: 塗りチップ 1 個 + 文字の無い枠線チップ 2 個が下端に残り、次ページで表全体が
  * 再度描かれていた）。分類が複数あるときは分類同士の間でだけページを送ってよい。
+ *
+ * その `wrap={false}` は**高さ 0 の先行兄弟とセットでしか正しく効かない**。先頭の分類は
+ * この列の最初の子になり、@react-pdf は「親の最初の子は既にページ先頭にいる」と見なして
+ * 改ページの判断を省くため、ページが埋まっていてもその場に描いて版面の下端を突き抜ける
+ * （実測: 50 ページ版 p6、「言語 / TypeScript / HCL (Terraform)」がフッターに重なった）。
+ * BulletRow・PrintMarkdown と同じ対策。
  */
 export function TechChipGroups({ groups }: { groups: PrintTechGroup[] }) {
   if (groups.length === 0) return null;
   return (
     <View style={styles.techGroups}>
-      {groups.map((group) => (
-        <View key={group.label} style={styles.techGroup} wrap={false}>
+      <View />
+      {groups.map((group, index) => (
+        <View
+          key={group.label}
+          style={index === 0 ? styles.techGroup : [styles.techGroup, styles.techGroupSpaced]}
+          wrap={false}
+        >
           <PrintText style={styles.techLabel}>{group.label}</PrintText>
           <View style={styles.techChips}>
             {group.chips.map((chip) => (
@@ -374,25 +389,35 @@ export function MetaTable({ rows }: { rows: PrintMetaRow[] }) {
 /**
  * 箇条書きの 1 項目。
  *
- * **既知の未解決**: この行がページの境目に当たると、記号（`—`）だけが前のページの
- * 下端に残り、本文が次のページへ行くことがある（実測: 46 ページ版の p9）。
- * 直す手を 2 つ試して、どちらも今より悪い壊れ方を出したので入れていない。
+ * 記号と本文は別の `Text` にした flex 行なので、行がページの境目に当たると
+ * @react-pdf が記号（`—`）側だけを前のページの下端に残す。これを `wrap={false}` で
+ * 割れなくするだけでは直らず、下端の突き抜けが増えた（実測: 46 ページ版）。原因は
+ * 箇条書きの行が親（`print-markdown.tsx` の項目 View）の**最初の子**に来ることで、
+ * @react-pdf は「親の最初の子は既にページ先頭にいる」と見なして改ページの判断自体を
+ * 省き、ページが埋まっていてもその場に描くため（`project-card-compact.tsx` の
+ * コメントと同じ仕組み）。
  *
- *  - `wrap={false}` で割れなくする → 箇条書きは必ず「親の最初の子」の位置に来るため、
- *    @react-pdf のページ割りが『現在ページは空』と誤判定して改ページせずに描く
- *    （project-card-compact.tsx のコメント参照）。実データで下端の突き抜けが 2 件出た。
- *  - 1 つの Text にまとめ、負の textIndent で 1 行目だけ左へ戻す（ぶら下げインデント）
- *    → @react-pdf は textIndent の符号を無視して 1 行目を右へ送るので、2 行目以降が
- *    左端に残って字下げが逆になった。
+ * だから **高さ 0 の先行兄弟 + `wrap={false}`** の 2 つを必ずセットで出す。兄弟が 1 つ
+ * あるだけで最初の子の判定が外れ、収まらない行は記号ごと次ページへ送られる。
+ * 兄弟は行の外（この fragment の先頭）に置く — 行の中に入れると flex 行の
+ * 1 列目になり、記号が右へずれる。
  *
- * 記号 1 個が下端に残るのは読み違えを生まない範囲の傷なので、上の 2 つより軽いと判断した。
+ * 却下した案: 1 つの `Text` にまとめて負の `textIndent` で 1 行目だけ左へ戻す
+ * （ぶら下げインデント）→ @react-pdf は `textIndent` の符号を無視して 1 行目を右へ
+ * 送るので、字下げが逆になった。
+ *
+ * 残る制約: 1 項目が 1 ページ（754pt ≒ 37 行）を超えると `wrap={false}` は
+ * ページ送りではなく圧縮を起こす。実データの最長項目は 4 行で、桁が 1 つ違う。
  */
 export function BulletRow({ children, marker = '—' }: { children: ReactNode; marker?: string }) {
   return (
-    <View style={styles.bulletRow}>
-      <PrintText style={styles.bulletMark}>{marker}</PrintText>
-      <PrintText style={styles.bulletBody}>{children}</PrintText>
-    </View>
+    <>
+      <View />
+      <View style={styles.bulletRow} wrap={false}>
+        <PrintText style={styles.bulletMark}>{marker}</PrintText>
+        <PrintText style={styles.bulletBody}>{children}</PrintText>
+      </View>
+    </>
   );
 }
 
