@@ -43,6 +43,7 @@
     "@radix-ui/react-popover": "^1.1.19",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@react-pdf/layout": "4.6.1",
     "@react-pdf/renderer": "^4.3.1",
     "@react-pdf/textkit": "6.3.0",
     "@sentry/nextjs": "^10.73.0",
