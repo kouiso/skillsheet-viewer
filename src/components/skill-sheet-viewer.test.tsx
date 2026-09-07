@@ -269,6 +269,27 @@ describe('SkillSheetViewer', () => {
     expect(grid.className).toContain('minmax(min(240px,100%),1fr)');
   });
 
+  it('サニタイズ後に空となる推し名では推しモードを有効にしない', async () => {
+    const blocks: Block[] = [
+      {
+        id: 'b1',
+        type: 'skills',
+        order: 0,
+        data: {
+          category: '言語',
+          skills: [
+            { name: '<script>x</script>', years: 3, level: '★★☆', featured: true },
+            { name: 'TypeScript', years: 3, level: '★★☆' },
+          ],
+        },
+      },
+    ];
+    render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '' }} blocks={blocks} />);
+
+    await waitFor(() => expect(screen.getByText('TypeScript')).toBeInTheDocument());
+    expect(screen.getByText('TypeScript')).not.toHaveClass('font-semibold');
+  });
+
   it('相対パスの画像を押すと、押した画像そのものが Lightbox で開く', async () => {
     const user = userEvent.setup();
     // 画面の <img src> は絶対URLへ解決されるので、Markdown の生値（相対パス）と

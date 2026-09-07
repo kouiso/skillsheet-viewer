@@ -204,6 +204,20 @@ describe('BuilderClient', () => {
     expect(raw).toBe('経歴の概要テキスト。\n\n| 言語 | 経験 |\n| :--- | :--- |\n| TS | 3年 |');
   });
 
+  it('推しモードはすべての skills 表で推し列を維持する', () => {
+    const items: EditorItem[] = [
+      {
+        id: 'skills-1',
+        type: 'skills',
+        category: 'フロントエンド',
+        skills: [{ name: 'React', years: 3, level: '実務経験あり', featured: true }],
+      },
+      { id: 'skills-2', type: 'skills', category: 'その他', skills: [] },
+    ];
+    const raw = assembleMarkdown(items);
+    expect(raw.match(/\| スキル \| 経験年数 \| 習熟度 \| 推し \|/g)).toHaveLength(2);
+  });
+
   it('「テーブル」追加→セル入力が table ブロックとして保存 payload に入る', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={[]} initialTitle="t" {...defaultProps} />);
