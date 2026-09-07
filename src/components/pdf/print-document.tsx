@@ -95,21 +95,39 @@ type Tracker = ReturnType<typeof createSpanTracker>;
  * 1 ページに収まらないカード（`fitsOnePage === false`）は分割されて見出しの直後から
  * 描かれ始めるので、取り残されない。その場合は既定の 240pt でよい。
  *
- * 上限を置くのは、要求が満たせない大きさになると「送っても解決しない」からで、
- * その時は 240pt と同じ挙動に落ちる。見出し 1 つ分（帯 + 概要 2 行）を実測で約 110pt と
- * 見て、本文の高さ 754pt から引いた残りを上限にする。カードの見積りは安全側に大きめへ
- * 振ってあるので、上限に当たったカードも実際の高さでは収まることが多い。
+ * 見出し 1 つ分（帯 + 概要 2 行）を実測で約 110pt と見て、本文の高さ 754pt から引いた残りを
+ * 「見出しの後ろに置ける最大」とする。これを超えるカードは、どのページでも見出しと同居
+ * できない。以前はそこで要求を上限へ丸めていたが、丸めても入らないものは入らないので、
+ * 見出しだけのページが残った（実測: 53 ページ版の p42、紙面の 89% が白。B 社の
+ * カードは見積り 675pt で上限 644pt を 31pt 超えていた）。同居できないと分かった時は
+ * 要求を丸めるのではなく、**カード側の分割禁止を解いて見出しの直後から描き始める**
+ * （`splitAcrossPages`）。割れるのはブロックの区切りだけで、ヘッダーと先頭ブロックは
+ * 束ねたまま残る。
  */
 const HEADING_BLOCK_HEIGHT = 110;
 const MAX_ROOM_AFTER_HEADING = PRINT_SIZE.cardMaxSinglePageHeight - HEADING_BLOCK_HEIGHT;
 
-function requiredRoomAfterHeading(company: PrintCompany): number | undefined {
+/** 見出しの直後に、分割禁止のまま置くために必要な高さ（pt）。 */
+function roomNeededByFirstCard(company: PrintCompany): number | undefined {
   const first = company.projects[0];
   // 見積り（estimatedHeight / fitsOnePage）は**詳細版カードの寸法**なので、簡約版には当てない
   // （レビュー指摘）。簡約版は 1 段目の行だけを分割禁止にして 2 段目は割れる作りなので、
   // 見出しの直後に必ず中身が乗る。取り残される心配が無いぶん、既定の要求で足りる。
   if (first?.level !== 'detail' || !first.fitsOnePage) return undefined;
-  return Math.min(first.estimatedHeight + PRINT_SIZE.cardGap, MAX_ROOM_AFTER_HEADING);
+  return first.estimatedHeight + PRINT_SIZE.cardGap;
+}
+
+function requiredRoomAfterHeading(company: PrintCompany): number | undefined {
+  const needed = roomNeededByFirstCard(company);
+  // 同居できない大きさなら要求しても解決しない（カード側を分割可能にして解く）。既定へ戻す。
+  if (needed === undefined || needed > MAX_ROOM_AFTER_HEADING) return undefined;
+  return needed;
+}
+
+/** 先頭カードが見出しと同居できず、分割可能にしないと見出しだけのページが残るか。 */
+function firstCardMustSplit(company: PrintCompany): boolean {
+  const needed = roomNeededByFirstCard(company);
+  return needed !== undefined && needed > MAX_ROOM_AFTER_HEADING;
 }
 
 /**
@@ -176,6 +194,9 @@ function CompanySection({
     }
   }
 
+  // 見出しと同居できない先頭カードだけ、分割禁止を解く（上の firstCardMustSplit のコメント参照）。
+  const splitFirstCardId = firstCardMustSplit(company) ? company.projects[0]?.id : undefined;
+
   return (
     <>
       {/*
@@ -203,7 +224,12 @@ function CompanySection({
         {runs.map((run, runIndex) =>
           run.level === 'detail' ? (
             run.projects.map((project) => (
-              <ProjectCardDetail key={project.id} project={project} spanTracker={projectSpanTracker} />
+              <ProjectCardDetail
+                key={project.id}
+                project={project}
+                spanTracker={projectSpanTracker}
+                splitAcrossPages={project.id === splitFirstCardId}
+              />
             ))
           ) : (
             // 連続する簡約案件を 1 つの表にまとめた塊。塊自体は並び順以外の識別子を持たず、

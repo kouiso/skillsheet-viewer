@@ -1,0 +1,56 @@
+name: PDF Layout Check
+
+# PDF のレイアウトは本文の長さで崩れる。本文は DB 側で変わるので、コードが無変更でも
+# ある日突然崩れる。PR の CI は fixture しか見ないため原理的に捕まらない。
+# ここだけが実データを引いて崩れを見張る経路。
+# 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（この workflow 名で登録済み）。
+on:
+  schedule:
+    # JST 06:00。朝いちで気づけるようにする。
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
+jobs:
+  pdf-layout-check:
+    name: PDF layout check (real data)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # 後続の pnpm install / tsx / vitest が実行する第三者コードへ
+          # Git 認証情報を渡さない。この job は push しない。
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          # ci.yml と同じ理由で mise.toml を読めないため、バージョンを手動で同期させる。
+          node-version: '22.21.1'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install system dependencies for PDF rasterization
+        # ci.yml の test ジョブと同じ依存。ラスタ検査が PDF ページをビットマップ化する。
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
+
+      - name: Dump blocks from database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # 書き出し先を RUNNER_TEMP に置く。実在の案件本文を含むので、
+        # 成果物としてアップロードしない（このリポジトリは public）。
+        run: pnpm exec tsx scripts/dump-blocks.ts --out "$RUNNER_TEMP/blocks.json"
+
+      - name: PDF layout check against real data
+        env:
+          REAL_BLOCKS_JSON: ${{ runner.temp }}/blocks.json
+        run: pnpm exec vitest run --config vitest.config.pdf.ts
