@@ -1,8 +1,9 @@
 import layoutDocument from '@react-pdf/layout';
-import { Document, Font, Page, pdf, View } from '@react-pdf/renderer';
+import { Document, Font, Page, pdf } from '@react-pdf/renderer';
 
 import PDF_FONT_FAMILY from './constants';
 import type { Leaf, MeasuredLeaf, MeasuredLine } from './print-leaf';
+import { frameLeaf } from './print-leaf-frame';
 import { printStyles } from './print-primitives';
 import { PRINT_SIZE } from './print-tokens';
 
@@ -63,9 +64,9 @@ function linesOf(node: LayoutNode): MeasuredLine[] | undefined {
   return texts[0].lines.map((line) => ({ height: line.box.height, string: line.string ?? '' }));
 }
 
-/** 葉を 1 枚の View に包む。Fragment を返す葉でも Page 直下の子が 1 つになり、index がずれない。 */
+/** 葉を枠ごと 1 枚の View にする。描画側も同じ関数を通す（print-leaf-frame.tsx）。 */
 export function wrapLeaf(leaf: Leaf) {
-  return <View key={leaf.id}>{leaf.el}</View>;
+  return frameLeaf(leaf);
 }
 
 function assertFontsReady(fontStore: typeof Font): void {

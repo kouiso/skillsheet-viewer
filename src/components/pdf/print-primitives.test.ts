@@ -7,13 +7,16 @@
  * 兄弟だけ、あるいは wrap 指定だけを消しても型は通り、壊れるのは実データの特定ページ
  * だけなので、ここで組として固定する。
  *
+ * この組が要るのは自動改ページに任せている 1 ページ目（自己紹介の PrintMarkdown）だけ。
+ * 案件セクションは measure-then-place（print-leaves.tsx）で葉ごとに置くので `BulletLine` を使う。
+ *
  * 描画（renderToBuffer）はしない — jsdom 側では @react-pdf の実描画を禁じているため
  * （CLAUDE.md）。見たいのは要素ツリーの形だけで、それは戻り値を歩けば確認できる。
  */
 import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 
-import { BulletRow, TechChipGroups } from './print-primitives';
+import { BulletRow } from './print-primitives';
 
 interface ElementLike {
   props: Record<string, unknown> & { children?: ReactNode };
@@ -42,27 +45,5 @@ describe('BulletRow', () => {
     expect(children[0].props.children).toBeUndefined();
     expect(children[0].props.style).toBeUndefined();
     expect(children[1].props.wrap).toBe(false);
-  });
-});
-
-describe('TechChipGroups', () => {
-  const groups = [
-    { label: '言語', chips: [{ label: 'TypeScript', emphasis: 'solid' as const }] },
-    { label: 'インフラ', chips: [{ label: 'AWS', emphasis: 'outline' as const }] },
-  ];
-
-  it('分類の列の先頭に高さ 0 の兄弟を置き、各分類は分割禁止にする', () => {
-    const column = childrenOf(TechChipGroups({ groups }))[0];
-    const items = childrenOf(column.props.children);
-    expect(items).toHaveLength(3);
-    expect(items[0].props.children).toBeUndefined();
-    for (const group of items.slice(1)) expect(group.props.wrap).toBe(false);
-  });
-
-  it('分類同士の間隔は 2 つ目以降の marginTop で作る（先行兄弟の後ろに隙間を空けない）', () => {
-    const column = childrenOf(TechChipGroups({ groups }))[0];
-    const [, first, second] = childrenOf(column.props.children);
-    expect(Array.isArray(first.props.style)).toBe(false);
-    expect(Array.isArray(second.props.style)).toBe(true);
   });
 });

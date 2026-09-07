@@ -113,22 +113,6 @@ export interface PrintProject {
    */
   compactNote: string;
   level: DetailLevel;
-  /**
-   * 詳細版カードが 1 ページに収まると見積れるか。
-   *
-   * true なら描画側はカード全体を `wrap={false}` にしてよい（1 案件がページを跨いで
-   * 途中で切れることを防ぐ）。false（見積り高さが `PRINT_SIZE.cardMaxSinglePageHeight`
-   * を超える）のカードは、区切り単位（メタ表・チップ分類・本文ブロック）ごとに
-   * 分割できる形のまま描画する — カード全体を `wrap={false}` にすると、1 ページを
-   * 超える内容は改ページではなく文字の圧縮・重なりを起こす（実測）。
-   * 見積りは `estimateProjectCardHeight` 参照。
-   */
-  fitsOnePage: boolean;
-  /**
-   * 詳細版カード 1 枚の見積り高さ（pt）。会社見出しが「最初のカードごと」次ページへ
-   * 送られるべきかの判定に使う（print-document.tsx の CompanySection）。
-   */
-  estimatedHeight: number;
 }
 
 export interface PrintCompany {
@@ -299,6 +283,21 @@ export function compactPeriod(period: string): string {
   return `${start}–${endMatch[1].slice(2)}.${endMatch[2]}`;
 }
 
+/** 半角相当とみなす文字（ASCII 全般・半角カナ）か。それ以外は全角として扱う。 */
+function isHalfWidthChar(codePoint: number): boolean {
+  return codePoint <= 0xff || (codePoint >= 0xff61 && codePoint <= 0xffdc);
+}
+
+/** 文字列の概算幅（pt）。全角 1em・半角 0.55em として積み上げる（継続見出しを 1 行に収める判定用）。 */
+function estimateTextWidth(text: string, fontSizePt: number): number {
+  let width = 0;
+  for (const ch of text) {
+    const isHalf = isHalfWidthChar(ch.codePointAt(0) ?? 0);
+    width += fontSizePt * (isHalf ? 0.55 : 1);
+  }
+  return width;
+}
+
 /**
  * ページ跨ぎの継続見出し（「A 社（つづき）　案件名（続き）」）を **1 行に収める**。
  *
@@ -457,138 +456,6 @@ function emptyTech(): ProjectTech {
 
 // --- 組み立て -------------------------------------------------------------
 
-// --- 案件カードの高さ見積り（1 ページに収まるかの判定用） -----------------------
-//
-// @react-pdf に実レイアウトさせずに概算するので、荒い近似を使う。文字幅は「全角相当
-// （CJK 等）は 1 文字 ≒ フォントサイズと同じ pt 幅、半角（英数記号）は 0.55 倍」で
-// 見積る。全部を全角換算で見積ると、技術チップ（ほぼ英数字の技術名）の折り返し行数を
-// 実際の 2 倍近く多く見積り、1 ページに収まるはずのカードまで分割方針に倒してしまう
-// （実測: 全角換算のみだと実データの詳細版 14 件中 11 件が「分割」判定になった）。
-//
-// 見積りが外れて「1 ページに収まる」はずが実際は超える方向の誤りは致命的
-// （`wrap={false}` は 1 ページを超える中身を改ページせず圧縮して重ねる。実測、
-// company-grouping 作業の zz-wrapfalse-overflow-probe）。見積りが逆向きに外れる
-// （実際は収まるのに「超える」と判定する）方向の誤りは、分割可能な形のまま描画される
-// だけで崩れない。だから半角の 0.55 倍という値自体は狭め（安全側）に取ってある。
-
-/** 半角相当とみなす文字（ASCII 全般・半角カナ）か。それ以外は全角として扱う。 */
-function isHalfWidthChar(codePoint: number): boolean {
-  return codePoint <= 0xff || (codePoint >= 0xff61 && codePoint <= 0xffdc);
-}
-
-/** 文字列の概算幅（pt）。全角 1em・半角 0.55em として積み上げる。 */
-function estimateTextWidth(text: string, fontSizePt: number): number {
-  let width = 0;
-  for (const ch of text) {
-    const isHalf = isHalfWidthChar(ch.codePointAt(0) ?? 0);
-    width += fontSizePt * (isHalf ? 0.55 : 1);
-  }
-  return width;
-}
-
-function estimateWrappedLines(text: string, columnWidthPt: number, fontSizePt: number): number {
-  if (!text) return 0;
-  const totalWidth = estimateTextWidth(text, fontSizePt);
-  if (totalWidth <= 0) return 0;
-  return Math.max(1, Math.ceil(totalWidth / Math.max(1, columnWidthPt)));
-}
-
-/** duties / acquired / comment 1 本ぶんの見積り高さ（pt）。行ごとに折り返しを見積る。 */
-function estimateMarkdownHeight(text: string, columnWidthPt: number): number {
-  const lines = text
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  if (lines.length === 0) return 0;
-  const bodyLineHeight = PRINT_TYPE.body.fontSize * PRINT_TYPE.body.lineHeight;
-  // 箇条書き記号・見出し記号ぶんの実効幅の目減りを安全側に一律 12pt 見る。
-  const effectiveWidth = Math.max(40, columnWidthPt - 12);
-  let total = 0;
-  for (const line of lines) {
-    total += estimateWrappedLines(line, effectiveWidth, PRINT_TYPE.body.fontSize) * bodyLineHeight;
-  }
-  // 段落間の gap（PrintMarkdown の段落間隔。厳密値ではなく行間 1 個分の安全マージン）。
-  return total + Math.max(0, lines.length - 1) * 4;
-}
-
-/** カード本文の実効幅（カードの左右パディングを引いた分）。 */
-const CARD_CONTENT_WIDTH = PRINT_SIZE.contentWidth - PRINT_SIZE.cardPadHorizontal * 2;
-
-/**
- * 詳細版カード 1 枚の見積り高さ（pt）。project-card-detail.tsx の実レイアウト
- * （ヘッダー・メタ表・技術チップ・業務内容/習得スキル/コメント）に対応させる。
- */
-export function estimateProjectCardHeight(fields: {
-  title: string;
-  companyLabel: string;
-  metaRows: PrintMetaRow[];
-  techGroups: PrintTechGroup[];
-  duties: string;
-  acquired: string;
-  comment: string;
-}): number {
-  let height = 0;
-
-  // ヘッダー: 上下パディング(10*2) + 見出し列内の gap(3) + タイトル行 + 会社行。
-  // タイトルは headerRight（期間バッジ等）と横並びなので、見積りの実効幅は保守的に狭めに取る。
-  const titleLineHeight = PRINT_TYPE.projectTitle.fontSize * PRINT_TYPE.projectTitle.lineHeight;
-  height +=
-    20 +
-    3 +
-    estimateWrappedLines(fields.title, 320, PRINT_TYPE.projectTitle.fontSize) * titleLineHeight +
-    (fields.companyLabel ? PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight : 0);
-
-  // メタ表: 2 列。各行の値は半ページ幅の列で折り返すので、行ごとに折り返し行数を数える。
-  // 1 行固定で数えると、担当工程や役割が長い案件で見積りが実際より低く出て fitsOnePage が
-  // 誤って true になり、1 ページを超えるカードごと wrap={false} になる（圧縮・重なりの原因）。
-  if (fields.metaRows.length > 0) {
-    const metaLineHeight = PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight;
-    const metaValueWidth = CARD_CONTENT_WIDTH / 2 - PRINT_SIZE.labelColMeta - PRINT_SIZE.metaRowPadHorizontal * 2;
-    const rowHeights = fields.metaRows.map(
-      (row) =>
-        PRINT_SIZE.metaRowPadVertical * 2 +
-        estimateWrappedLines(row.value, metaValueWidth, PRINT_TYPE.meta.fontSize) * metaLineHeight,
-    );
-    // 2 列に上から詰めるので、列ごとの合計の大きい方がメタ表の高さになる。
-    const half = Math.ceil(rowHeights.length / 2);
-    const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
-    height += Math.max(sum(rowHeights.slice(0, half)), sum(rowHeights.slice(half)));
-  }
-
-  // 技術チップ: 分類ごとにチップの概算幅を積んで折り返し行数を見積る。
-  if (fields.techGroups.length > 0) {
-    height += PRINT_SIZE.cardPadVertical * 2;
-    const chipsAreaWidth = CARD_CONTENT_WIDTH - PRINT_SIZE.labelColTech - 8;
-    const chipLineHeight = PRINT_TYPE.meta.fontSize * PRINT_TYPE.meta.lineHeight + PRINT_SIZE.chipPadVertical * 2;
-    for (const group of fields.techGroups) {
-      let used = 0;
-      let rows = 1;
-      for (const chip of group.chips) {
-        const chipTextWidth = estimateTextWidth(chip.label, PRINT_TYPE.meta.fontSize);
-        const chipWidth = chipTextWidth + PRINT_SIZE.chipPadHorizontal * 2 + PRINT_SIZE.chipGap;
-        if (used > 0 && used + chipWidth > chipsAreaWidth) {
-          rows += 1;
-          used = chipWidth;
-        } else {
-          used += chipWidth;
-        }
-      }
-      height += rows * chipLineHeight;
-    }
-  }
-
-  // 業務内容 / 習得スキル・実績 / コメント: それぞれ paddingVertical(9*2) + ラベル 1 行 + 本文。
-  const sectionLabelHeight = PRINT_TYPE.sectionLabel.fontSize * PRINT_TYPE.sectionLabel.lineHeight;
-  for (const text of [fields.duties, fields.acquired, fields.comment]) {
-    if (!text) continue;
-    height += PRINT_SIZE.cardPadVertical * 2 + 4 + sectionLabelHeight;
-    height += estimateMarkdownHeight(text, CARD_CONTENT_WIDTH);
-  }
-
-  // 外枠罫線・ブロック仕切り・丸め誤差ぶんの安全マージン。
-  return height + 24;
-}
-
 /**
  * 役割名を 1 つずつに割って重複を除き、読点で繋ぎ直す。
  *
@@ -637,21 +504,10 @@ function buildProject(
   // PrintProject には duties 専用フィールドしか無く、要約だけ入力して担当業務を空にした
   // 案件（詳細版カード）は 業務内容 ブロックが 1 つも出ない静かなデータ欠落だった
   // （no-abbreviated-rendering skill 違反）。表示名は duties のままにし、ここで解決済みの
-  // 値を詰める — 呼び出し側（ProjectCardDetail 等）に判断を分散させない。
+  // 値を詰める — 呼び出し側（print-leaves.tsx 等）に判断を分散させない。
   const duties = markdownText(item.summary) || markdownText(item.duties);
   const acquired = markdownText(item.acquired);
   const comment = markdownText(item.comment);
-  const estimatedHeight = estimateProjectCardHeight({
-    title,
-    companyLabel,
-    metaRows,
-    techGroups,
-    duties,
-    acquired,
-    comment,
-  });
-  const fitsOnePage = estimatedHeight <= PRINT_SIZE.cardMaxSinglePageHeight;
-
   return {
     id: item.id,
     index,
@@ -669,8 +525,6 @@ function buildProject(
     comment,
     compactNote: firstSentence(duties || comment),
     level,
-    fitsOnePage,
-    estimatedHeight,
   };
 }
 
