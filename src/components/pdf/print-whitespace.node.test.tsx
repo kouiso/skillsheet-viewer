@@ -16,7 +16,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import PDF_FONT_FAMILY from './constants';
 import { buildPdfQualityFixtureBlocks, PDF_QUALITY_FIXTURE_TITLE } from './fixtures/print-quality-fixture';
 import { splitForHyphenation } from './fonts';
-import { PrintSkillSheetDocument } from './print-document';
+import { buildPrintSkillSheetDocument } from './print-document';
 import {
   continuesPreviousCard,
   DEFAULT_QUALITY_OPTIONS,
@@ -115,7 +115,9 @@ describe('版面の空白の検査', () => {
       Font.registerHyphenationCallback(splitForHyphenation);
     }
     const blocks = buildPdfQualityFixtureBlocks();
-    const buffer = await renderToBuffer(<PrintSkillSheetDocument title={PDF_QUALITY_FIXTURE_TITLE} blocks={blocks} />);
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks }),
+    );
     fixturePages = await extractQualityPages(buffer);
   }, 300_000);
 

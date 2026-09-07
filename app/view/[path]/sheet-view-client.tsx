@@ -104,7 +104,7 @@ const SheetViewClient = ({
     try {
       setPdfLoading(true);
 
-      const [{ pdf }, { SkillSheetPDF, resetPdfFontsAfterFailure }] = await Promise.all([
+      const [{ pdf }, { createSkillSheetPdf, resetPdfFontsAfterFailure }] = await Promise.all([
         import('@react-pdf/renderer'),
         import('@/components/pdf-export'),
       ]);
@@ -112,9 +112,9 @@ const SheetViewClient = ({
 
       // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
       // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
-      const blob = await pdf(
-        <SkillSheetPDF title={title} content={content} blocks={blocks} views={views} referenceMonth={referenceMonth} />,
-      ).toBlob();
+      // 印刷デザイン経路は描く前に案件セクションの高さを測る（非同期）ので、要素を先に作ってから渡す。
+      const pdfDocument = await createSkillSheetPdf({ title, content, blocks, views, referenceMonth });
+      const blob = await pdf(pdfDocument).toBlob();
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');

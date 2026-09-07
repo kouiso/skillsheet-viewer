@@ -11,7 +11,8 @@ import type { Leaf, MeasuredLeaf, MeasuredLine } from './print-leaf';
  * - 連鎖の合計が 1 ページを超えるときだけ連鎖を尻から切る（同居不可の逃げ道）
  * - `splittable: 'lines'` の葉は 4 行以上のときだけ、頭 ≥ 2 行・尻 ≥ 2 行で割る。
  *   割った頭・尻は `measure` で測り直す（Knuth-Plass が段落全体で最適化するため、
- *   切った後の改行位置は変わり得る。実測では行数は 36/36 で不変だったが保証ではない）
+ *   切った後の改行位置は変わり得る。実測では行数は 36/36 で不変だったが保証ではない）。
+ *   測り直した頭が入らなければ 1 行減らして試し、頭・尻が本文と対応付けられない葉は割らない
  *
  * `measure` と `split` は引数で受ける。単体テストでは高さを返すだけのモックにできる。
  */
@@ -20,6 +21,8 @@ export interface PlacedLeaf {
   leaf: MeasuredLeaf;
   /** ページ本文上端からの pt。 */
   top: number;
+  /** ページ先頭に静的に置いた継続用の葉（簡約表の列ヘッダー等）。本文の葉ではない。 */
+  leadIn?: boolean;
 }
 
 export interface PrintPage {
@@ -36,11 +39,17 @@ export interface SplitResult {
 export interface PaginateOptions {
   contentHeight: number;
   /** 段落を行境界で 2 つに分けた葉を作る。頭は記号付き、尻は記号なし、などは呼び出し側が決める。 */
-  split: (leaf: MeasuredLeaf, headLines: MeasuredLine[], tailLines: MeasuredLine[]) => SplitResult;
+  split: (leaf: MeasuredLeaf, headLines: MeasuredLine[], tailLines: MeasuredLine[]) => SplitResult | undefined;
   measure: (leaf: Leaf) => Promise<MeasuredLeaf>;
   /** 割るときに頭・尻へ最低限残す行数。既定 2（widow / orphan を出さない）。 */
   minLinesHead?: number;
   minLinesTail?: number;
+  /**
+   * 2 ページ目以降の先頭に静的に置く葉（前ページから続く簡約表の列ヘッダー等）。
+   * `first` はそのページの本文の先頭に来る葉、`previous` は前ページの最後の葉。
+   * 継続見出しのように高さを持たない絶対配置のものはここでは扱わず、描画側で付ける。
+   */
+  continuation?: (first: MeasuredLeaf, previous: MeasuredLeaf) => MeasuredLeaf | undefined;
 }
 
 /** 浮動小数の足し合わせで 754.0000001 になったものを「収まらない」と扱わないための遊び。 */
@@ -105,6 +114,8 @@ async function trySplit(
   // 見積りで入る k から始め、測り直して入らなければ 1 行ずつ減らす。
   for (; k >= minLinesHead; k--) {
     const parts = split(leaf, leaf.lines.slice(0, k), leaf.lines.slice(k));
+    // 本文と行が対応付けられない葉は割らない（呼び出し側の判断。葉ごと次ページへ送る）。
+    if (!parts) return null;
     const head = await measure({ ...parts.head, keepWithNext: false });
     if (head.marginTop + head.height <= remaining + EPSILON) {
       const tail = await measure({ ...parts.tail, keepWithNext: leaf.keepWithNext });
@@ -125,8 +136,8 @@ export async function paginate(leaves: MeasuredLeaf[], options: PaginateOptions)
   let y = 0;
   const queue = [...leaves];
 
-  const place = (leaf: MeasuredLeaf): void => {
-    page.leaves.push({ leaf, top: y + leaf.marginTop });
+  const place = (leaf: MeasuredLeaf, leadIn = false): void => {
+    page.leaves.push(leadIn ? { leaf, top: y + leaf.marginTop, leadIn } : { leaf, top: y + leaf.marginTop });
     y += outerHeight(leaf);
     page.usedHeight = y;
   };
@@ -139,8 +150,16 @@ export async function paginate(leaves: MeasuredLeaf[], options: PaginateOptions)
   let index = 0;
   while (index < queue.length) {
     const leaf = queue[index];
+    // 継続用の葉しか無いページは、本文の葉にとってはまだ空。ここを「空でない」と扱うと、
+    // 継続用の葉を置いた直後に入らない葉が来たとき改ページを繰り返して止まらなくなる。
+    const pageEmpty = page.leaves.every((placed) => placed.leadIn);
+    if (pageEmpty && pages.length > 0 && page.leaves.length === 0 && options.continuation) {
+      const previousPage = pages[pages.length - 1];
+      const previous = previousPage.leaves[previousPage.leaves.length - 1]?.leaf;
+      const lead = previous ? options.continuation(leaf, previous) : undefined;
+      if (lead) place(lead, true);
+    }
     const remaining = contentHeight - y;
-    const pageEmpty = page.leaves.length === 0;
 
     if (leaf.marginTop + leaf.height <= remaining + EPSILON) {
       const requirement = chainRequirement(queue, index, contentHeight, minLinesHead, minLinesTail);

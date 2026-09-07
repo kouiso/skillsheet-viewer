@@ -22,6 +22,7 @@ import { type PaginateOptions, type PrintPage, paginate } from './print-paginate
 import { BulletRow, Paragraph, printStyles, SectionLabel } from './print-primitives';
 import { findBottomOverflows, findOverlaps } from './print-quality';
 import { extractQualityPages } from './print-quality-extract.node';
+import { splitTextAtLine } from './print-split-text';
 import { PRINT_SIZE } from './print-tokens';
 import { BOLD_TTF, REGULAR_TTF } from './test-font-paths';
 
@@ -62,7 +63,8 @@ function buildLeaves(): Leaf[] {
   };
   for (let i = 0; i < 40; i++) {
     push('section-label', <SectionLabel>{`見出し ${i + 1}`}</SectionLabel>, { keepWithNext: true });
-    push('paragraph', <Paragraph>{sentence(i, 1 + (i % 40))}</Paragraph>, { splittable: 'lines' });
+    const text = sentence(i, 1 + (i % 40));
+    push('paragraph', <Paragraph>{text}</Paragraph>, { splittable: 'lines', text });
     if (i % 3 === 0) {
       push('bullet', <BulletRow>{sentence(i + 2, 1 + (i % 4))}</BulletRow>);
       push('bullet', <BulletRow>{sentence(i + 5, 2)}</BulletRow>);
@@ -71,11 +73,16 @@ function buildLeaves(): Leaf[] {
   return leaves;
 }
 
-/** 段落を行境界で 2 つに割る。行の文字列を繋ぎ直せば元の本文に戻る（ハイフネーションのマーカーは空文字）。 */
-const splitParagraph: PaginateOptions['split'] = (leaf, head, tail) => ({
-  head: { ...leaf, id: `${leaf.id}:head`, el: <Paragraph>{head.map((l) => l.string).join('')}</Paragraph> },
-  tail: { ...leaf, id: `${leaf.id}:tail`, el: <Paragraph>{tail.map((l) => l.string).join('')}</Paragraph> },
-});
+/** 段落を行境界で 2 つに割る。切れ目は元の本文の上で行の文字列を辿って決める（print-split-text.ts）。 */
+const splitParagraph: PaginateOptions['split'] = (leaf, head) => {
+  if (leaf.text === undefined || !leaf.lines) return undefined;
+  const texts = splitTextAtLine(leaf.text, leaf.lines, head.length);
+  if (!texts) return undefined;
+  return {
+    head: { ...leaf, id: `${leaf.id}:head`, text: texts.head, el: <Paragraph>{texts.head}</Paragraph> },
+    tail: { ...leaf, id: `${leaf.id}:tail`, text: texts.tail, el: <Paragraph>{texts.tail}</Paragraph> },
+  };
+};
 
 interface LayoutNode {
   type: string;
