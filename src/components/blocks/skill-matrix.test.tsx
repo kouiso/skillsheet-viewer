@@ -89,7 +89,7 @@ describe('SkillMatrix', () => {
       backgroundColor: 'var(--primary)',
     });
     expect(screen.getByText('TypeScript').closest('div')?.className).toContain(
-      'grid-cols-[minmax(0,1fr)_44px_72px_64px]',
+      'grid-cols-[minmax(0,1fr)_32px_44px_58px]',
     );
   });
 });

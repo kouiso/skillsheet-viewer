@@ -220,7 +220,7 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     const skills = featuredBlocks.find((block) => block.type === 'skills');
     if (skills?.type === 'skills' && skills.data.skills[0]) skills.data.skills[0].featured = true;
 
-    const buffer = await renderToBuffer(<PrintSkillSheetDocument title={title} blocks={featuredBlocks} />);
+    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks: featuredBlocks }));
     const pages = await extractQualityPages(buffer);
     const fullText = pages.flatMap((page) => page.map((item) => item.text)).join('');
     const normalized = fullText.replaceAll(/\s/g, '');

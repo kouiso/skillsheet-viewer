@@ -74,7 +74,6 @@ export const SkillMatrix = ({
                 className={`min-w-0 break-words text-sm ${isFeatured ? 'font-semibold text-primary-dark' : 'text-foreground'}`}
                 title={sanitizeHtml(skill.name)}
               >
-
                 {sanitizeHtml(skill.name)}
               </span>
               <span className="truncate text-center text-xs text-foreground" title={skill.level}>
