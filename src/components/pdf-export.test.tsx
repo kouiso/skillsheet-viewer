@@ -1,6 +1,14 @@
 import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
+import type { Block } from '@/db/blocks';
+import { buildPrintSkillSheetDocument } from './pdf/print-document';
 import { createSkillSheetPdf } from './pdf-export';
+
+// 構造化経路は描く前に案件セクションを測る（@react-pdf/layout）。jsdom では動かせないので、
+// 「呼ばれること・引数・戻り値がそのまま返ること」だけをモックで見る。
+vi.mock('./pdf/print-document', () => ({
+  buildPrintSkillSheetDocument: vi.fn(async () => ({ type: 'structured-document' })),
+}));
 
 // @react-pdf/renderer のモック
 vi.mock('@react-pdf/renderer', async () => {
@@ -38,6 +46,35 @@ const test = 'code';
 
 **太字テキスト**と*イタリックテキスト*
   `.trim();
+
+  it('構造化ブロックがあれば印刷デザインの factory に渡し、その戻り値を返す', async () => {
+    const blocks: Block[] = [
+      { id: 'b1', type: 'profile', order: 0, data: { name: 'テスト太郎' } } as Block,
+      { id: 'b2', type: 'project', order: 1, data: { companies: [], items: [] } } as Block,
+    ];
+    const element = await createSkillSheetPdf({
+      title: mockTitle,
+      content: mockContent,
+      blocks,
+      views: ['projects'],
+      referenceMonth: 202609,
+    });
+    expect(buildPrintSkillSheetDocument).toHaveBeenCalledWith({
+      title: mockTitle,
+      blocks,
+      views: ['projects'],
+      referenceMonth: 202609,
+    });
+    expect(element).toEqual({ type: 'structured-document' });
+  });
+
+  it('描けないブロック（markdown）を含むときはレガシー経路に倒す', async () => {
+    vi.mocked(buildPrintSkillSheetDocument).mockClear();
+    const blocks: Block[] = [{ id: 'b3', type: 'markdown', order: 0, data: { markdown: '# x' } } as Block];
+    const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent, blocks });
+    expect(buildPrintSkillSheetDocument).not.toHaveBeenCalled();
+    expect(isValidElement(element)).toBe(true);
+  });
 
   it('should render PDF document with title', async () => {
     const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent });

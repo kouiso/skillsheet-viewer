@@ -127,6 +127,15 @@ describe('toLeaves', () => {
     expect(leaves.filter((leaf) => leaf.splittable === 'lines').every((leaf) => leaf.text && leaf.remake)).toBe(true);
   });
 
+  it('GFM の表は行ごとの葉になり、見出し行だけが次の行と同居する', () => {
+    const table = '| 項目 | 値 |\n| --- | --- |\n| a | 1 |\n| b | 2 |';
+    const leaves = toLeaves(vm([company([project({ duties: table, acquired: '', comment: '' })])]));
+    const rows = leaves.filter((leaf) => leaf.kind === 'block');
+    expect(rows).toHaveLength(3);
+    expect(rows.map((leaf) => leaf.keepWithNext)).toEqual([true, false, false]);
+    expect(rows.every((leaf) => leaf.splittable === 'never')).toBe(true);
+  });
+
   it('簡約版は列ヘッダー + 行 + 本文の葉になり、同じ表の葉は groupId を共有する', () => {
     const compact = project({ id: 'p3', index: 3, level: 'compact' });
     const leaves = toLeaves(vm([company([compact, { ...compact, id: 'p4', index: 4 }])]));
