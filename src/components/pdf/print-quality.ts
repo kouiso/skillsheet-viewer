@@ -5,6 +5,11 @@
  * 表からの溢れ、ページ番号が 1 ページも出ていない）は、どれもエラーを出さない。
  * 目で 36 ページを確認するのは現実的でないので、pdfjs が返す 1 文字単位の座標から判定する。
  *
+ * 検査は長らく「文字が壊れているか」しか見ておらず、**紙面の空白を面積で測るものが 1 つも
+ * 無かった**。そのせいで本文を長文化しただけで出た崩れ（強制改ページで版面の 7 割が白、
+ * 会社見出しだけのページ、ページ下端に箇条書きの記号だけが残る）を全部素通りさせた。
+ * `underfilled-page` と `orphan-list-marker` はその穴を塞ぐためのもの。
+ *
  * ここは純関数だけを置く。PDF の描画も DB へのアクセスもしない（テストから素で呼べるように）。
  */
 
@@ -95,6 +100,17 @@ export interface QualityOptions {
    * 本文 1 行目は 11.5pt × 行間 1.75 ＝ 13.4pt 下に来るので、12pt なら本文には当たらない。
    */
   headerBandSlack: number;
+  /**
+   * 同じカードが次ページへ続くときに、ページ下端へ残してよい空きの上限（pt）。
+   * これを超える空きは「まだ入る場所があるのに送った」＝強制改ページの跡。
+   */
+  maxContinuedBottomGap: number;
+  /**
+   * 次ページが新しい見出しから始まるとき（カードを丸ごと送った後）に、
+   * 最低限使っていてほしい版面の割合。ここを下回るページは、紙を 1 枚めくらせる
+   * 価値が無い。
+   */
+  minSectionEndUsedRatio: number;
 }
 
 export const DEFAULT_QUALITY_OPTIONS: QualityOptions = {
@@ -113,6 +129,12 @@ export const DEFAULT_QUALITY_OPTIONS: QualityOptions = {
   // 842（A4 の高さ）− 42（padTop）。
   contentTop: 800,
   headerBandSlack: 12,
+  // 本文 1 行 = 11.5pt × 行間 1.75 ≒ 20.1pt。5 行ぶんの空きを上限にする。
+  // 実測（53 ページ版）: 正常に「次の塊が入らないので送った」ページの空きは最大 82pt、
+  // 強制改ページの跡は最小 134pt。その間を取った。
+  maxContinuedBottomGap: 100,
+  // 実測（同上）: 正常なセクション末尾は最小 55.2%、指摘したいページは最大 28.6%。
+  minSectionEndUsedRatio: 0.4,
 };
 
 /**
@@ -336,7 +358,112 @@ function startsWithHeading(page: QualityPage, headings: string[], options: Quali
   });
 }
 
-/** 7 項目の検査を回して、指摘の一覧を返す。空配列なら提出できる。 */
+/**
+ * ページ跨ぎの継続見出しに使う印。会社は `会社名（つづき）`、案件は `案件名（続き）` と
+ * 表記が分かれている（print-view-model.ts の `fitContinuationHeading`）。**同じカードが
+ * 続いているか**を見たいので、案件側の漢字表記だけを探す。
+ */
+const CARD_CONTINUATION_MARK = '（続き）';
+
+/**
+ * ページ上端の絶対配置ヘッダー（継続見出し）のテキスト。
+ *
+ * 継続見出しは `position:absolute, top:16pt` で描かれ、本文の流れに高さとして寄与しない。
+ * つまり本文上端 `contentTop` より上に出るのはこの見出しだけで、座標だけで切り出せる
+ * （`findWrappedHeaderLines` が同じ性質を使っている）。
+ */
+export function continuationHeadingText(page: QualityPage, options: QualityOptions = DEFAULT_QUALITY_OPTIONS): string {
+  return normalize(
+    page
+      .filter((item) => item.y > options.contentTop)
+      .sort((p, q) => q.y - p.y || p.x - q.x)
+      .map((item) => item.text)
+      .join(''),
+  );
+}
+
+/** このページが、前ページから続く**同じ案件カード**の続きか。 */
+export function continuesPreviousCard(page: QualityPage, options: QualityOptions = DEFAULT_QUALITY_OPTIONS): boolean {
+  return continuationHeadingText(page, options).includes(CARD_CONTINUATION_MARK);
+}
+
+/**
+ * 本文が最後に描かれたベースライン（ページ内で最も下）。本文が 1 行も無ければ undefined。
+ *
+ * 除くのは 2 つ。running footer（全ページに出るので、これを本文の下端と数えると
+ * どのページも「下まで埋まっている」ことになる）と、`contentTop` より上の絶対配置の
+ * 継続見出し（本文の流れに含まれない）。
+ */
+export function bodyBottomBaseline(
+  page: QualityPage,
+  options: QualityOptions = DEFAULT_QUALITY_OPTIONS,
+  footerText = '',
+): number | undefined {
+  const body = page.filter((item) => item.y <= options.contentTop && !isFooterItem(item, options, footerText));
+  if (body.length === 0) return undefined;
+  return Math.min(...body.map((item) => item.y));
+}
+
+export interface PageFill {
+  /** 本文の最下段のベースライン。本文が無いページは本文上端と同じ値になる。 */
+  bottom: number;
+  /** 本文の最下段から本文下端までの空き（pt）。 */
+  gap: number;
+  /** 版面（`contentTop` − `contentBottom`）のうち、本文が届いている割合。 */
+  usedRatio: number;
+}
+
+/**
+ * 版面をどれだけ使っているかを**面積（縦の到達点）で**測る。
+ *
+ * 既存の `sparse-page` は文字数（`minCharsPerPage`）で薄いページを見ていた。だが実測で、
+ * 版面の 32% しか使っていないのに 284 文字あるページが存在する（表のセルやチップは
+ * 面積の割に文字数が多い）。文字数では原理的に分離できないので、縦の到達点で測る。
+ *
+ * ラスタのインク量ではなく**テキスト座標**を使うのは、会社セクションの縦罫線が版面の
+ * 下端まで伸びるページがあるため。罫線を数えると空白ページが「埋まっている」ことになる。
+ */
+export function measurePageFill(
+  page: QualityPage,
+  options: QualityOptions = DEFAULT_QUALITY_OPTIONS,
+  footerText = '',
+): PageFill {
+  const bottom = bodyBottomBaseline(page, options, footerText) ?? options.contentTop;
+  const height = options.contentTop - options.contentBottom;
+  return { bottom, gap: bottom - options.contentBottom, usedRatio: (options.contentTop - bottom) / height };
+}
+
+/** 箇条書きの行頭記号だけで構成された行か（`—` と `1.` は print-markdown.tsx の listMarker）。 */
+const ORPHAN_MARKER_LINE = /^(?:[-\u2014\u2013\u2022\u30FB]|\d{1,3}[.)])$/;
+
+/**
+ * ページ最下段の行が、箇条書きの行頭記号だけになっていないかを見る（検査 12）。
+ *
+ * `BulletRow` は記号と本文を別の `Text` にした flex 行で、行がページ境界に当たると
+ * @react-pdf が記号側だけを前ページに残す（print-primitives.tsx に「既知の未解決」と
+ * 記載がある形）。記号は版面の内側の正規の行位置に居るので座標の検査には掛からず、
+ * `normalize()` は突合の両側から `—` を落とすので文字列の検査にも掛からない。
+ * **正規化前の生テキスト**で最下段の行だけを見る。
+ */
+export function findOrphanListMarker(
+  page: QualityPage,
+  options: QualityOptions = DEFAULT_QUALITY_OPTIONS,
+  footerText = '',
+): string | undefined {
+  const bottom = bodyBottomBaseline(page, options, footerText);
+  if (bottom === undefined) return undefined;
+  // pdfjs は同じ行を字種ごとの run に割る。1.5pt 以内を同じ行として畳む
+  // （本文の行間は 20.1pt あるので隣の行を巻き込まない）。
+  const line = page
+    .filter((item) => item.y <= options.contentTop && Math.abs(item.y - bottom) < 1.5)
+    .sort((p, q) => p.x - q.x)
+    .map((item) => item.text)
+    .join('')
+    .trim();
+  return ORPHAN_MARKER_LINE.test(line) ? line : undefined;
+}
+
+/** 検査を一通り回して、指摘の一覧を返す。空配列なら提出できる。 */
 export function runQualityChecks(
   input: QualityInput,
   options: QualityOptions = DEFAULT_QUALITY_OPTIONS,
@@ -365,6 +492,37 @@ export function runQualityChecks(
       });
     }
 
+    // 11. 版面が埋まっていないページ（面積で見る空白の検査）
+    //
+    // 最終ページは本文が尽きて短くなるので除外する。それ以外は、次のページとの関係で
+    // 判定を 2 つに分ける:
+    //
+    //  a. **同じカードが次ページへ続く**（次ページに `案件名（続き）` が乗っている）
+    //     → 続きを書く場所がまだあったのに送っている。`maxContinuedBottomGap` を超える
+    //       空きは強制改ページの跡。
+    //  b. **次ページが新しい見出しから始まる**（カードを丸ごと送った後）
+    //     → 「途中で切れるより丸ごと送る」はオーナーの指示なので空白自体は許す。ただし
+    //       版面の大半が白いページは、紙を 1 枚めくらせる価値が無い。
+    //
+    // 文字数ではなく縦の到達点で測るのは、版面の 32% しか使っていないのに 284 文字ある
+    // ページが実在するため（表のセル・チップは面積の割に文字数が多い）。
+    const next = index + 1 < pages.length ? pages[index + 1] : undefined;
+    const fill = measurePageFill(page, options, input.footerText);
+    const continued = next !== undefined && continuesPreviousCard(next, options);
+    let underfilled: string | undefined;
+    if (next !== undefined) {
+      if (continued && fill.gap > options.maxContinuedBottomGap) {
+        underfilled =
+          `本文の下に ${fill.gap.toFixed(0)}pt（約 ${(fill.gap / 20.1).toFixed(1)} 行）空いているのに、` +
+          `同じカードの続きを次ページへ送っている（版面の ${(fill.usedRatio * 100).toFixed(1)}% しか使っていない）`;
+      } else if (!continued && fill.usedRatio < options.minSectionEndUsedRatio) {
+        underfilled =
+          `版面の ${(fill.usedRatio * 100).toFixed(1)}% しか使っていない` +
+          `（下に ${fill.gap.toFixed(0)}pt 空き / 本文 ${normalize(pageText(page)).length} 文字）`;
+      }
+    }
+    if (underfilled) findings.push({ check: 'underfilled-page', page: pageNumber, detail: underfilled });
+
     // 3. 空ページ（最終ページは本文が尽きて短くなるので除外）
     //
     // 例外がもう 1 つある。「1 案件がページを跨いで途中で切れるくらいなら、丸ごと
@@ -375,9 +533,11 @@ export function runQualityChecks(
     // 意図した空白として除外する。両方を要求するのは、本文が途中で千切れて消えた本物の
     // 欠落（次ページが見出しでなく、途切れた本文の続きから始まる）を従来どおり検出する
     // ため——閾値（200 文字）自体は変えない。
+    //
+    // この例外が D-4（会社見出しだけのページ）をそのまま通していた。塞いだのは検査 11 側で、
+    // 面積で既に指摘したページは文字数で二重に指摘しない（同じ 1 枚の紙の話なので）。
     const chars = normalize(pageText(page)).length;
-    if (pageNumber < pages.length && chars < options.minCharsPerPage) {
-      const next = pages[index + 1];
+    if (!underfilled && pageNumber < pages.length && chars < options.minCharsPerPage) {
       const isDeliberateWhitespace =
         startsWithHeading(page, input.headings, options) &&
         next !== undefined &&
@@ -385,6 +545,16 @@ export function runQualityChecks(
       if (!isDeliberateWhitespace) {
         findings.push({ check: 'sparse-page', page: pageNumber, detail: `本文が ${chars} 文字しかない` });
       }
+    }
+
+    // 12. 箇条書きの記号だけがページ下端に取り残された
+    const orphan = findOrphanListMarker(page, options, input.footerText);
+    if (orphan !== undefined) {
+      findings.push({
+        check: 'orphan-list-marker',
+        page: pageNumber,
+        detail: `最下段の行が箇条書きの記号「${orphan}」だけになっている（本文が次ページへ行っている）`,
+      });
     }
 
     // 8. 矩形としての重なり（検査 1 が拾えない、数 pt ずれた重なり）

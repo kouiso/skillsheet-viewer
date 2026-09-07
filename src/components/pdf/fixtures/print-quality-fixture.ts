@@ -12,6 +12,11 @@
  *  - 長文・短文、必須フィールドの欠落（team / scope / process / acquired / comment 空）
  *  - 非常に長いタイトル、技術タグが PRINT_CHIP_LIMIT を超える案件（他 N 件の畳み込み）
  *  - スキル一覧が 2 ページに跨るだけの件数
+ *  - **崩れやすい形**（T社）: 本物の markdown 箇条書き 11〜18 項目、ASCII 用語と和文が
+ *    混じる本文、1 ページに収まらない複数段落のコメント、ページ境界に当たる長さの階段
+ *
+ * 最後の 1 行は後から足したもの。それ以前のフィクスチャは和文だけ・`・` 始まりの擬似
+ * 箇条書きだけでできており、`BulletRow` も字種の境界も 1 度も通らないまま緑になっていた。
  *
  * `resolveDetailLevels`（project-detail-level.ts）の分岐に日付の実行時依存が無いよう、
  * どの案件も period に「現在」を使わない（固定の終了年月にする）。`現在` を 1 件でも混ぜると、
@@ -66,6 +71,57 @@ function longComment(targetChars: number, seed: number): string {
   return parts.join('');
 }
 
+/**
+ * ASCII の用語と日本語が混じる文。実データの本文はこの形が多い。
+ *
+ * `longParagraph` / `longComment` は和文だけで書かれているので、**字種の境界が 1 度も
+ * 出てこない**。改行機会の付与（fonts.ts の `splitForHyphenation`）も行末の処理も、
+ * 効くのはこの境界なので、和文だけのフィクスチャでは行の折り返しの崩れが原理的に出ない。
+ */
+const MIXED_SENTENCES = [
+  'PostgreSQL + pgvector で類似検索を組み、OpenAPI の定義から型を生成する構成にした。',
+  'ECS Fargate 上のバッチと SQS（+ DLQ）で非同期化し、失敗したジョブを再投入できるようにした。',
+  'Structured Output でモデルの応答をスキーマに固定し、後段の TypeScript 側で検証している。',
+  'CI/CD は GitHub Actions と Terraform で組み、plan の差分をレビューに載せる運用にした。',
+  'Datadog の APM と分散トレースを入れ、レイテンシの内訳を p95 で見られるようにした。',
+  'gpt-4o-mini と Gemini を用途で使い分け、キャッシュ有無のトークン内訳を計測している。',
+];
+
+function mixedParagraph(targetChars: number, seed: number): string {
+  const parts: string[] = [];
+  let total = 0;
+  let i = 0;
+  while (total < targetChars) {
+    const s = MIXED_SENTENCES[(seed + i) % MIXED_SENTENCES.length];
+    parts.push(s);
+    total += s.length;
+    i++;
+  }
+  return parts.join('');
+}
+
+/**
+ * **本物の markdown 箇条書き**（`- ` で始まる行）。
+ *
+ * `longParagraph` の `・` は行頭の文字でしかなく、remark からは 1 段落の軟改行に見える。
+ * つまり既存のフィクスチャは `BulletRow`（記号と本文を別の Text にした flex 行）を
+ * 1 度も通っていない。ページ下端に記号だけが取り残される崩れは、この経路でしか出ない。
+ */
+function bulletList(count: number, seed: number): string {
+  const lines: string[] = [];
+  for (let i = 0; i < count; i++) {
+    lines.push(`- ${MIXED_SENTENCES[(seed + i) % MIXED_SENTENCES.length]}`);
+  }
+  return lines.join('\n');
+}
+
+/** 段落を空行で区切った長文コメント。1 ページに収まらない長さにして、跨ぎの経路へ入れる。 */
+function multiParagraphComment(paragraphs: number, charsEach: number, seed: number): string {
+  const out: string[] = [];
+  for (let i = 0; i < paragraphs; i++) out.push(mixedParagraph(charsEach, seed + i));
+  return out.join('\n\n');
+}
+
 let idCounter = 0;
 const nextId = (label: string) => `fx-${label}-${idCounter++}`;
 
@@ -101,6 +157,15 @@ const COMPANY_F: CompanyInfo = { id: nextId('company'), name: '個人開発', ki
 // 名前に区分をそのまま含む会社（companyLabelOf / kindLabel の重複排除分岐を通す）。
 const COMPANY_G: CompanyInfo = { id: nextId('company'), name: '受託', kind: '受託', period: '', note: '' };
 const COMPANY_H: CompanyInfo = { id: nextId('company'), name: 'U社', kind: '', period: '', note: '' };
+// 「壊れやすい形」を集めた会社。本物の箇条書き・ASCII 混じりの本文・ページに収まらない
+// コメント・ページ境界を跨ぐ長さの階段を、ここに固めて置く（下の items のコメント参照）。
+const COMPANY_I: CompanyInfo = {
+  id: nextId('company'),
+  name: 'T社（プロダクト開発）',
+  kind: '',
+  period: '',
+  note: 'プロダクト開発チームで、AI を組み込む機能の設計と実装を担当。',
+};
 
 const COMPANIES: CompanyInfo[] = [
   COMPANY_A,
@@ -111,6 +176,7 @@ const COMPANIES: CompanyInfo[] = [
   COMPANY_F,
   COMPANY_G,
   COMPANY_H,
+  COMPANY_I,
 ];
 
 // --- 案件 --------------------------------------------------------------
@@ -334,6 +400,87 @@ const items: ProjectItem[] = [
     role: 'SE',
     duties: '・月次集計処理の不具合を修正した。',
   }),
+
+  // 会社 I: 崩れやすい形だけを集めた 4 案件。
+  //
+  // ここより上の案件は、和文だけの本文と `・` 始まりの擬似箇条書きでできている。それだと
+  //  (a) 字種の境界が出ない（行の折り返しの崩れが原理的に出ない）
+  //  (b) `BulletRow` を 1 度も通らない（記号だけがページ下端に残る崩れが出ない）
+  //  (c) 本文がページに収まってしまう（跨ぎの経路に入らない）
+  // の 3 つが揃って、CI が緑のまま実データだけが崩れる。以下はその 3 つを潰すためのもの。
+
+  // 本物の markdown 箇条書き 18 項目 + ASCII 混じりの長文。箇条書きがページ境界に当たる。
+  project({
+    companyId: COMPANY_I.id,
+    title: 'AI アシスタント機能のバックエンド開発（RAG / 非同期ジョブ基盤）',
+    period: '2025.04 — 2025.09',
+    role: 'バックエンドエンジニア',
+    team: '6名',
+    scope: 'バックエンド / インフラ',
+    process: ['要件定義', '基本設計', '詳細設計', '実装', '結合テスト'],
+    tech: {
+      lang: ['TypeScript', 'Python'],
+      fw: ['NestJS', 'FastAPI'],
+      db: ['PostgreSQL', 'DynamoDB'],
+      infra: ['AWS', 'Terraform'],
+      tools: ['Datadog'],
+      collab: ['Slack'],
+    },
+    duties: bulletList(18, 0),
+    acquired: bulletList(15, 3),
+    comment: multiParagraphComment(4, 400, 1),
+  }),
+
+  // 1 ページに収まらないコメント（段落 6 つ）。コメント前の改ページの経路へ必ず入る。
+  project({
+    companyId: COMPANY_I.id,
+    title: '社内ナレッジ検索基盤の刷新',
+    period: '2025.01 — 2025.06',
+    role: 'PL',
+    team: '8名',
+    scope: 'フルスタック',
+    process: ['要件定義', '基本設計', '実装', '結合テスト', '運用・保守'],
+    tech: {
+      lang: ['TypeScript'],
+      fw: ['Next.js', 'NestJS'],
+      db: ['PostgreSQL'],
+      infra: ['GCP', 'Terraform'],
+      tools: ['Sentry'],
+      collab: ['Notion'],
+    },
+    duties: bulletList(16, 2),
+    acquired: mixedParagraph(600, 4),
+    comment: multiParagraphComment(6, 450, 0),
+  }),
+
+  // ページ境界を跨ぐ長さの階段（2 件）。本文の長さを少しずつ変えて、どこかの案件が
+  // ちょうど境界に当たるようにする。1 つの長さだけだと「たまたま収まった」で緑になる。
+  project({
+    companyId: COMPANY_I.id,
+    title: '通知配信ワーカーの再設計（境界サンプル A）',
+    period: '2024.10 — 2025.03',
+    role: 'SE',
+    team: '4名',
+    scope: 'バックエンド',
+    process: ['基本設計', '実装', '結合テスト'],
+    tech: { lang: ['Go'], fw: [], db: ['PostgreSQL'], infra: ['AWS'], tools: [], collab: ['Slack'] },
+    duties: bulletList(11, 1),
+    acquired: mixedParagraph(500, 2),
+    comment: mixedParagraph(1500, 3),
+  }),
+  project({
+    companyId: COMPANY_I.id,
+    title: '通知配信ワーカーの再設計（境界サンプル B）',
+    period: '2024.07 — 2024.12',
+    role: 'SE',
+    team: '4名',
+    scope: 'バックエンド',
+    process: ['基本設計', '実装', '結合テスト'],
+    tech: { lang: ['Go'], fw: [], db: ['PostgreSQL'], infra: ['AWS'], tools: [], collab: ['Slack'] },
+    duties: bulletList(13, 4),
+    acquired: mixedParagraph(650, 5),
+    comment: mixedParagraph(1800, 2),
+  }),
 ];
 
 // --- スキル一覧: 2 ページに跨るだけの件数 + 長めの自己紹介 -------------------
@@ -385,8 +532,8 @@ export function buildPdfQualityFixtureBlocks(): Block[] {
       data: {
         items: [
           { value: '11', unit: '年', label: '経験年数' },
-          { value: '14', unit: '件', label: '案件数' },
-          { value: '8', unit: '社', label: '取引社数' },
+          { value: '18', unit: '件', label: '案件数' },
+          { value: '9', unit: '社', label: '取引社数' },
         ],
       },
     },
