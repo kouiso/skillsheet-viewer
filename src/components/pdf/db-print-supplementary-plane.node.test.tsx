@@ -16,7 +16,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Block, ProjectTech } from '@/db/blocks';
 
 import PDF_FONT_FAMILY from './constants';
-import { PrintSkillSheetDocument } from './print-document';
+import { splitForHyphenation } from './fonts';
+import { buildPrintSkillSheetDocument } from './print-document';
 import { BOLD_TTF, REGULAR_TTF } from './test-font-paths';
 
 const emptyTech: ProjectTech = { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] };
@@ -91,11 +92,13 @@ describe('DB 印刷経路: 補助面文字（サロゲートペア）', () => {
         { src: BOLD_TTF, fontWeight: 700, fontStyle: 'italic' },
       ],
     });
+    // 案件セクションの測定（measureLeaves）は本番と同じ改行ロジックを要求する。
+    Font.registerHyphenationCallback(splitForHyphenation);
   });
 
   it('氏名・案件名の補助面文字が直後の文字を潰さない（そのままか 〓 に倒れる）', { timeout: 60_000 }, async () => {
     const buffer = await renderToBuffer(
-      <PrintSkillSheetDocument title="補助面文字テスト" blocks={blocksWithSupplementaryName()} />,
+      await buildPrintSkillSheetDocument({ title: '補助面文字テスト', blocks: blocksWithSupplementaryName() }),
     );
     const extracted = (await extractText(buffer)).replace(/\s+/g, '');
 

@@ -11,12 +11,12 @@
  */
 
 import { StyleSheet, View } from '@react-pdf/renderer';
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { isSafeLinkHref, PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
-import { BulletRow, Link, Paragraph, PrintText, printStyles } from './print-primitives';
+import { BulletLine, BulletRow, Link, Paragraph, PrintText, printStyles } from './print-primitives';
 import { PRINT_COLOR, PRINT_TYPE, PRINT_WEIGHT } from './print-tokens';
 
 export interface MdNode {
@@ -229,4 +229,135 @@ export function PrintMarkdown({ text }: { text: string }) {
       {(tree.children ?? []).map((node, index) => renderBlock(node, `b${index}`))}
     </View>
   );
+}
+
+/**
+ * 自由記述を measure-then-place の葉の材料に分解したもの（案件セクション用）。
+ *
+ * `PrintMarkdown` は 1 枚の View に段落と箇条書きを積むが、それではフィールド全体が
+ * 1 つの葉になり、長い本文でページに置けなくなる。段落・箇条書き 1 項目・表 をそれぞれ
+ * 独立した要素にして返し、呼び出し側（print-leaves.tsx）が葉に仕立てる。
+ * 装飾の無い段落だけ `text` と `remake` を持ち、行境界で割れる。
+ */
+export interface MarkdownPiece {
+  el: ReactElement;
+  kind: 'paragraph' | 'bullet' | 'block';
+  /** 装飾の無い段落の本文。割った頭・尻を `remake` に渡して作り直す。 */
+  text?: string;
+  remake?: (text: string) => ReactElement;
+  /** 入れ子の深さぶんの字下げ（pt）。 */
+  indent: number;
+  /** 直前の要素との間隔（pt）。PrintMarkdown の gap と同じ値。 */
+  gap: number;
+  /** 次の要素と同じページに置く（表の見出し行）。 */
+  keepWithNext?: boolean;
+}
+
+const BLOCK_GAP = 4;
+const NESTED_GAP = 3;
+const NESTED_INDENT = 10;
+
+/** 太字・リンク等の入れ子 Text を持たず、文字列を繋ぎ直しても見た目が変わらない段落か。 */
+function isPlainParagraph(node: MdNode): boolean {
+  return (node.children ?? []).every((child) => child.type === 'text' || child.type === 'html');
+}
+
+function plainText(node: MdNode): string {
+  return (node.children ?? [])
+    .map((child) => (child.type === 'html' ? stripHtmlTags(child.value) : (child.value ?? '')))
+    .join('');
+}
+
+function listItemPieces(item: MdNode, key: string, marker: string, depth: number, out: MarkdownPiece[]): void {
+  const children = item.children ?? [];
+  const nestedLists = children.filter((child) => child.type === 'list');
+  const ownBlocks = children.filter((child) => child.type !== 'list');
+  out.push({
+    kind: 'bullet',
+    el: (
+      <BulletLine key={key} marker={marker}>
+        {ownBlocks.flatMap((block) => renderInline(block.children))}
+      </BulletLine>
+    ),
+    indent: depth * NESTED_INDENT,
+    gap: depth === 0 ? BLOCK_GAP : NESTED_GAP,
+  });
+  nestedLists.forEach((list, li) => {
+    (list.children ?? []).forEach((child, ci) => {
+      listItemPieces(child, `${key}-n${li}-${ci}`, listMarker(list, ci), depth + 1, out);
+    });
+  });
+}
+
+function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiece[]): void {
+  if (node.type === 'paragraph') {
+    if (isPlainParagraph(node) && !isHeadingLikeParagraph(node)) {
+      const text = plainText(node);
+      const remake = (value: string) => <Paragraph key={key}>{value}</Paragraph>;
+      out.push({ kind: 'paragraph', el: remake(text), text, remake, indent: depth * NESTED_INDENT, gap: BLOCK_GAP });
+      return;
+    }
+    out.push({
+      kind: 'paragraph',
+      el: renderBlock(node, key) as ReactElement,
+      indent: depth * NESTED_INDENT,
+      gap: BLOCK_GAP,
+    });
+    return;
+  }
+  if (node.type === 'list') {
+    (node.children ?? []).forEach((item, index) => {
+      listItemPieces(item, `${key}-${index}`, listMarker(node, index), depth, out);
+    });
+    return;
+  }
+  if (node.type === 'blockquote') {
+    (node.children ?? []).forEach((child, index) => {
+      blockPieces(child, `${key}-${index}`, depth + 1, out);
+    });
+    return;
+  }
+  if (node.type === 'code') {
+    const text = node.value ?? '';
+    const remake = (value: string) => <Paragraph key={key}>{value}</Paragraph>;
+    out.push({ kind: 'paragraph', el: remake(text), text, remake, indent: depth * NESTED_INDENT, gap: BLOCK_GAP });
+    return;
+  }
+  if (node.type === 'table') {
+    // 表を 1 つの要素にすると、行数が多いときに 1 ページに置けず版面から溢れる。
+    // 行ごとに要素にして、見出し行だけは 1 行目と同居させる。
+    const rows = node.children ?? [];
+    rows.forEach((row, ri) => {
+      out.push({
+        kind: 'block',
+        el: (
+          // biome-ignore lint/suspicious/noArrayIndexKey: 表の行は位置そのものが識別子で、内容は重複しうる。
+          <View key={`${key}-r${ri}`} style={ri === 0 ? [styles.table, styles.tableHeadRow] : styles.tableRow}>
+            {(row.children ?? []).map((cell, ci) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: 表の行と列は位置そのものが識別子で、内容は重複しうる。
+              <PrintText key={`${key}-r${ri}-c${ci}`} style={ri === 0 ? styles.tableHeadCell : styles.tableCell}>
+                {renderInline(cell.children)}
+              </PrintText>
+            ))}
+          </View>
+        ),
+        indent: depth * NESTED_INDENT,
+        gap: ri === 0 ? BLOCK_GAP : 0,
+        keepWithNext: ri === 0,
+      });
+    });
+    return;
+  }
+  const el = renderBlock(node, key);
+  if (el) out.push({ kind: 'block', el: el as ReactElement, indent: depth * NESTED_INDENT, gap: BLOCK_GAP });
+}
+
+export function markdownPieces(text: string): MarkdownPiece[] {
+  if (!text.trim()) return [];
+  const tree = processor.runSync(processor.parse(text)) as unknown as MdNode;
+  const out: MarkdownPiece[] = [];
+  (tree.children ?? []).forEach((node, index) => {
+    blockPieces(node, `b${index}`, 0, out);
+  });
+  return out;
 }

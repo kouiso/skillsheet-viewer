@@ -25,7 +25,7 @@ vi.mock('sonner', () => ({
 // handleDownloadPdf の分岐（成功/失敗）だけを制御できるモックに置き換える。
 vi.mock('@react-pdf/renderer', () => ({ pdf: () => ({ toBlob }), Font: { fontFamilies, register: vi.fn() } }));
 vi.mock('@/components/pdf-export', () => ({
-  SkillSheetPDF: () => null,
+  createSkillSheetPdf: async () => null,
   // 後始末は pdf-export から同じ import で受け取る（catch 内で再度 await しないため）。
   resetPdfFontsAfterFailure: () => {
     delete fontFamilies['Noto Sans JP'];

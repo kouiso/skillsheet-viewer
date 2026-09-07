@@ -31,6 +31,10 @@
  *    border box が基準）。続きページでは親の断片が必ずページ本文の先頭から始まるため、
  *    `top:0` は「本文 1 行目と同じ高さ」になる。会社の「つづき」見出しはこれを使い、
  *    `headerTop - padTop`（負値）で本文の上の余白帯まで引き上げている。
+ * J. `wrap={false}` の背の高い 1 ページに対して `@react-pdf/layout` の `layout()` を呼ぶと、
+ *    分割されずに全ノードの `box` と Text の `lines[]` が取れ、その高さ・行数は同じノードを
+ *    明示的な `<Page>` に置き直した実描画と一致する（top の差 < 0.01pt）。measure-then-place の
+ *    土台で、検証は `print-measure-place.node.test.tsx` に置く（合成した葉で毎回割り付けまで通す）。
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';
