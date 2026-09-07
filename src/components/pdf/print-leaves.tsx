@@ -162,7 +162,7 @@ function detailCardDrafts(project: PrintProject): LeafDraft[] {
       drafts.push({
         kind: piece.kind,
         el: piece.el,
-        keepWithNext: false,
+        keepWithNext: piece.keepWithNext ?? false,
         text: piece.text,
         remake: piece.remake,
         frame: {

@@ -249,6 +249,8 @@ export interface MarkdownPiece {
   indent: number;
   /** 直前の要素との間隔（pt）。PrintMarkdown の gap と同じ値。 */
   gap: number;
+  /** 次の要素と同じページに置く（表の見出し行）。 */
+  keepWithNext?: boolean;
 }
 
 const BLOCK_GAP = 4;
@@ -319,6 +321,31 @@ function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiec
     const text = node.value ?? '';
     const remake = (value: string) => <Paragraph key={key}>{value}</Paragraph>;
     out.push({ kind: 'paragraph', el: remake(text), text, remake, indent: depth * NESTED_INDENT, gap: BLOCK_GAP });
+    return;
+  }
+  if (node.type === 'table') {
+    // 表を 1 つの要素にすると、行数が多いときに 1 ページに置けず版面から溢れる。
+    // 行ごとに要素にして、見出し行だけは 1 行目と同居させる。
+    const rows = node.children ?? [];
+    rows.forEach((row, ri) => {
+      out.push({
+        kind: 'block',
+        el: (
+          // biome-ignore lint/suspicious/noArrayIndexKey: 表の行は位置そのものが識別子で、内容は重複しうる。
+          <View key={`${key}-r${ri}`} style={ri === 0 ? [styles.table, styles.tableHeadRow] : styles.tableRow}>
+            {(row.children ?? []).map((cell, ci) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: 表の行と列は位置そのものが識別子で、内容は重複しうる。
+              <PrintText key={`${key}-r${ri}-c${ci}`} style={ri === 0 ? styles.tableHeadCell : styles.tableCell}>
+                {renderInline(cell.children)}
+              </PrintText>
+            ))}
+          </View>
+        ),
+        indent: depth * NESTED_INDENT,
+        gap: ri === 0 ? BLOCK_GAP : 0,
+        keepWithNext: ri === 0,
+      });
+    });
     return;
   }
   const el = renderBlock(node, key);

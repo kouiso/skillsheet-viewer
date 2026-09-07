@@ -224,7 +224,7 @@ export function compactBodyPieces(project: PrintProject): CompactBodyPiece[] {
       const remake = piece.remake;
       pieces.push({
         kind: piece.kind,
-        keepWithNext: false,
+        keepWithNext: piece.keepWithNext ?? false,
         el: wrap(piece.el),
         ...(piece.text !== undefined && remake
           ? { text: piece.text, remake: (text: string) => wrap(remake(text)) }
