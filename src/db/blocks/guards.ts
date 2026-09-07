@@ -58,7 +58,8 @@ export function isSkillsBlockData(data: unknown): data is SkillsBlockData {
       s !== null &&
       typeof (s as SkillEntry).name === 'string' &&
       typeof (s as SkillEntry).years === 'number' &&
-      typeof (s as SkillEntry).level === 'string',
+      typeof (s as SkillEntry).level === 'string' &&
+      ((s as SkillEntry).featured === undefined || typeof (s as SkillEntry).featured === 'boolean'),
   );
 }
 
