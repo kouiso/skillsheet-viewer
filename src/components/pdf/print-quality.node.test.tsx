@@ -203,13 +203,26 @@ describe('underfilled-page: 強制改ページの跡（検査 11）', () => {
 
   it('カードを丸ごと送った後のページは、版面の 4 割を使っていれば拾わない', () => {
     // 「途中で切れるより丸ごと送る」はオーナーの指示。空白そのものは許す。
+    // y=498 は (800-498)/754 ≒ 40.05%。閾値 0.4 のすぐ上に置いて、閾値が黙って
+    // 上がった時にこのテストが落ちるようにする。
     const pages: QualityPage[] = [
-      [item('会社見出し', 800), item('ここで終わる', 420)],
+      [item('会社見出し', 800), item('ここで終わる', 498)],
       [item('次の案件', 800), item('末尾', 100)],
       [item('最終ページ', 800), item('末尾', 100)],
     ];
     const findings = runQualityChecks({ pages, headings: ['会社見出し', '次の案件', '最終ページ'], requiredTexts: [] });
     expect(findings.filter((f) => f.check === 'underfilled-page')).toEqual([]);
+  });
+
+  it('カードを丸ごと送った後でも、版面の 4 割を切るページは拾う', () => {
+    // y=499 は (800-499)/754 ≒ 39.9%。上のテストと 1pt 違いで境界を挟む。
+    const pages: QualityPage[] = [
+      [item('会社見出し', 800), item('ここで終わる', 499)],
+      [item('次の案件', 800), item('末尾', 100)],
+      [item('最終ページ', 800), item('末尾', 100)],
+    ];
+    const findings = runQualityChecks({ pages, headings: ['会社見出し', '次の案件', '最終ページ'], requiredTexts: [] });
+    expect(findings.filter((f) => f.check === 'underfilled-page').map((f) => f.page)).toEqual([1]);
   });
 
   it('最終ページは本文が尽きて短くなるので拾わない', () => {
