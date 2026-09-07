@@ -1,6 +1,14 @@
-import { render } from '@testing-library/react';
+import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { SkillSheetPDF } from './pdf-export';
+import type { Block } from '@/db/blocks';
+import { buildPrintSkillSheetDocument } from './pdf/print-document';
+import { createSkillSheetPdf } from './pdf-export';
+
+// 構造化経路は描く前に案件セクションを測る（@react-pdf/layout）。jsdom では動かせないので、
+// 「呼ばれること・引数・戻り値がそのまま返ること」だけをモックで見る。
+vi.mock('./pdf/print-document', () => ({
+  buildPrintSkillSheetDocument: vi.fn(async () => ({ type: 'structured-document' })),
+}));
 
 // @react-pdf/renderer のモック
 vi.mock('@react-pdf/renderer', async () => {
@@ -13,7 +21,7 @@ vi.mock('@react-pdf/renderer', async () => {
   };
 });
 
-describe('SkillSheetPDF', () => {
+describe('createSkillSheetPdf', () => {
   const mockTitle = 'テストスキルシート';
   const mockContent = `
 # 見出し1
@@ -39,27 +47,56 @@ const test = 'code';
 **太字テキスト**と*イタリックテキスト*
   `.trim();
 
-  it('should render PDF document with title', () => {
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={mockContent} />);
-    expect(container).toBeDefined();
+  it('構造化ブロックがあれば印刷デザインの factory に渡し、その戻り値を返す', async () => {
+    const blocks: Block[] = [
+      { id: 'b1', type: 'profile', order: 0, data: { name: 'テスト太郎' } } as Block,
+      { id: 'b2', type: 'project', order: 1, data: { companies: [], items: [] } } as Block,
+    ];
+    const element = await createSkillSheetPdf({
+      title: mockTitle,
+      content: mockContent,
+      blocks,
+      views: ['projects'],
+      referenceMonth: 202609,
+    });
+    expect(buildPrintSkillSheetDocument).toHaveBeenCalledWith({
+      title: mockTitle,
+      blocks,
+      views: ['projects'],
+      referenceMonth: 202609,
+    });
+    expect(element).toEqual({ type: 'structured-document' });
   });
 
-  it('should handle empty content', () => {
-    const { container } = render(<SkillSheetPDF title={mockTitle} content="" />);
-    expect(container).toBeDefined();
+  it('描けないブロック（markdown）を含むときはレガシー経路に倒す', async () => {
+    vi.mocked(buildPrintSkillSheetDocument).mockClear();
+    const blocks: Block[] = [{ id: 'b3', type: 'markdown', order: 0, data: { markdown: '# x' } } as Block];
+    const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent, blocks });
+    expect(buildPrintSkillSheetDocument).not.toHaveBeenCalled();
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle content with only headings', () => {
+  it('should render PDF document with title', async () => {
+    const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle empty content', async () => {
+    const element = await createSkillSheetPdf({ title: mockTitle, content: '' });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle content with only headings', async () => {
     const headingContent = `
 # Heading 1
 ## Heading 2
 ### Heading 3
     `.trim();
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={headingContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: headingContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle content with lists', () => {
+  it('should handle content with lists', async () => {
     const listContent = `
 - Item 1
 - Item 2
@@ -68,31 +105,31 @@ const test = 'code';
 1. Numbered item 1
 2. Numbered item 2
     `.trim();
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={listContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: listContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle content with code blocks', () => {
+  it('should handle content with code blocks', async () => {
     const codeContent = `
 \`\`\`javascript
 const hello = 'world';
 console.log(hello);
 \`\`\`
     `.trim();
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={codeContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: codeContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle content with blockquotes', () => {
+  it('should handle content with blockquotes', async () => {
     const quoteContent = `
 > This is a quote
 > Multiple lines
     `.trim();
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={quoteContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: quoteContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle content with horizontal rules', () => {
+  it('should handle content with horizontal rules', async () => {
     const hrContent = `
 Some text
 
@@ -100,34 +137,34 @@ Some text
 
 More text
     `.trim();
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={hrContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: hrContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle content with inline markdown', () => {
+  it('should handle content with inline markdown', async () => {
     const inlineContent = `
 This is **bold** and *italic* text.
 This is \`inline code\`.
 This is [a link](https://example.com).
     `.trim();
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={inlineContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: inlineContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle complex mixed content', () => {
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={mockContent} />);
-    expect(container).toBeDefined();
+  it('should handle complex mixed content', async () => {
+    const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should render with special characters in title', () => {
+  it('should render with special characters in title', async () => {
     const specialTitle = 'スキルシート_テスト & Special <Characters> 123';
-    const { container } = render(<SkillSheetPDF title={specialTitle} content={mockContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: specialTitle, content: mockContent });
+    expect(isValidElement(element)).toBe(true);
   });
 
-  it('should handle very long content', () => {
+  it('should handle very long content', async () => {
     const longContent = Array(100).fill('これは長いテキストです。').join('\n\n');
-    const { container } = render(<SkillSheetPDF title={mockTitle} content={longContent} />);
-    expect(container).toBeDefined();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: longContent });
+    expect(isValidElement(element)).toBe(true);
   });
 });

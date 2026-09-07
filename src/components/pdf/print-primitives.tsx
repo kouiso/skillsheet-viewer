@@ -10,7 +10,9 @@
  *    → 動的な内容は `DynamicView`（View 側の render）で受け、中で普通の Text を返す。
  * 3. `render` は 1 ページにつき 2 回呼ばれ、1 回目（分割中）は `subPageNumber` を持たず、
  *    まだそのページに無いカードに対しても呼ばれる。
- *    → 開始ページを覚える処理は `subPageNumber` を持つ呼び出しだけを見る。
+ *    → 動的な判断は `subPageNumber` を持つ呼び出しだけを見る（1 ページ目・スキル一覧の
+ *      継続見出し）。案件セクションは measure-then-place で静的にページを決めるので、
+ *      `render` に頼らない（print-leaves.tsx / print-pages.tsx）。
  */
 
 import { Link, Text as PdfText, StyleSheet, View } from '@react-pdf/renderer';
@@ -87,94 +89,6 @@ export const DynamicView = View as unknown as ComponentType<{
   render: (props: PageRenderProps) => ReactNode;
 }>;
 
-/**
- * カードの「開始ページ」を覚える器。
- *
- * `render` は分割中にも呼ばれ、その呼び出しは `subPageNumber` を持たず、まだそのページに
- * 存在しないカードにも来る（実測）。だから確定パスだけを見る。さらに順序に依存しないよう
- * 「見た中の最小ページ番号」を保持する — 順序が崩れても継続表記が 1 個ズレるだけで、
- * ヘッダー自体が消えることはない。
- *
- * ドキュメント 1 回の描画ごとに新しく作ること（モジュール変数にすると前回の描画が残る）。
- */
-export function createFirstPageTracker() {
-  const firstPageById = new Map<string, number>();
-  return {
-    /** 確定パスの呼び出しだけを記録し、この呼び出しが継続ページかを返す。 */
-    isContinuation(id: string, props: PageRenderProps): boolean {
-      if (props.subPageNumber === undefined) return false;
-      const known = firstPageById.get(id);
-      if (known === undefined || props.pageNumber < known) {
-        firstPageById.set(id, props.pageNumber);
-        return false;
-      }
-      return props.pageNumber > known;
-    },
-  };
-}
-
-/**
- * ある単位（会社・案件）が「指定ページの先頭で、まだ閉じずに続いているか」を、
- * 開始・終了マーカーの記録から判定する器。
- *
- * 素朴に「開始 < 対象ページ ≦ 終了」で判定すると 2 通りの実測の壊れ方をした
- * （zz-pagelevel-span-probe.node.test.tsx）:
- *  1. 終了を「見た最大値」で記録すると、3 ページ以上に跨る単位の**中間ページ**では
- *     終了マーカーにまだ到達しておらず（@react-pdf の確定パスはページを文書順に
- *     確定させるため、未来のページの内容はまだ評価されていない）、終了が開始と
- *     同じ値のまま＝「同じページで閉じた」と誤判定した。
- *  2. 「今どの単位が開いているか」という 1 個のポインタを開始で立て・終了で下ろす
- *     方式に変えると 1. は直るが、**同じページの中で前の単位が終わり次の単位が
- *     始まる**とポインタが新しい方に付け替わり、そのページの先頭（実際は前の単位の
- *     続き）を新しい単位の名前で誤表示した。また、文書末尾の単位は「次に開始する
- *     ものが無い」ため、自分自身の最終ページでポインタが下りたまま照会され、
- *     続き表示が消えた。
- *
- * 正しい形: 終了は「見た値」をそのまま使わず、**未確定（undefined）と確定した値を
- * 区別する**。対象ページより前に開始した単位のうち最後に開始したものを選び、
- * その終了が「まだ未確定」または「対象ページ以上」なら開いていると判定する。
- * 未確定はまだ終了マーカーに到達していない＝続いている可能性を残す、という
- * 文書順の確定パスの性質にそのまま対応する。
- */
-export function createSpanTracker() {
-  interface Span {
-    label: string;
-    start: number;
-    /** 終了マーカーにまだ到達していなければ undefined（＝まだ続いている可能性がある）。 */
-    end: number | undefined;
-  }
-  const byId = new Map<string, Span>();
-  const order: Span[] = [];
-  return {
-    /** 単位の最初の内容が乗ったところで呼ぶ（確定パスのみ）。1 つの id につき最初の 1 回だけ記録する。 */
-    markStart(id: string, label: string, props: PageRenderProps): void {
-      if (props.subPageNumber === undefined || byId.has(id)) return;
-      const span: Span = { label, start: props.pageNumber, end: undefined };
-      byId.set(id, span);
-      order.push(span);
-    },
-    /** 単位の最後の内容が乗ったところで呼ぶ（確定パスのみ）。まだ未確定なら終了ページを確定する。 */
-    markEnd(id: string, props: PageRenderProps): void {
-      if (props.subPageNumber === undefined) return;
-      const span = byId.get(id);
-      if (span && span.end === undefined) span.end = props.pageNumber;
-    },
-    /** 指定ページの先頭で開いている単位のラベルを返す（無ければ undefined）。 */
-    openLabel(pageNumber: number): string | undefined {
-      // 同じページで始まった単位が 2 つあるとき（前の会社が終わった直後に次が始まる）、
-      // start の大小だけで選ぶと先に登録された方が残り、それが既に閉じていると
-      // 継続ページの見出しが消える。まだ閉じていない候補だけを見て、同点は登録順で後を採る。
-      let latest: Span | undefined;
-      for (const span of order) {
-        if (span.start >= pageNumber) continue;
-        if (span.end !== undefined && span.end < pageNumber) continue;
-        if (latest === undefined || span.start >= latest.start) latest = span;
-      }
-      return latest?.label;
-    },
-  };
-}
-
 const styles = StyleSheet.create({
   page: {
     paddingTop: PRINT_SIZE.padTop,
@@ -230,10 +144,8 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: PRINT_SIZE.chipGap },
 
   techGroup: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
-  // 分類同士の間隔は `gap` ではなく 2 つ目以降の marginTop で作る。列に高さ 0 の
-  // 先行兄弟（下記 TechChipGroups のコメント参照）を足す必要があり、gap だとその
-  // 兄弟の後ろにも隙間が空いて分類全体が 5pt 下へずれるため。
-  techGroups: { flexDirection: 'column' },
+  // 分類同士の間隔。分類ごとに葉になるので、間隔は葉の枠（print-leaves.tsx）が持つ。
+  // 自動改ページのページで使うときだけ 2 つ目以降に付ける。
   techGroupSpaced: { marginTop: 5 },
   techLabel: {
     ...PRINT_TYPE.meta,
@@ -320,38 +232,21 @@ export function ChipRow({ chips }: { chips: PrintChip[] }) {
 }
 
 /**
- * 技術スタック（分類ラベル + チップ）。
+ * 技術スタックの 1 分類（ラベル + チップ）。
  *
- * 件数の上限は無い（元データを全件表示する標準指示）。1 分類のチップ行は
- * `wrap={false}` にして、ページ跨ぎでチップが半端に切れた塊が下端に残らないようにする
- * （実測: 塗りチップ 1 個 + 文字の無い枠線チップ 2 個が下端に残り、次ページで表全体が
- * 再度描かれていた）。分類が複数あるときは分類同士の間でだけページを送ってよい。
- *
- * その `wrap={false}` は**高さ 0 の先行兄弟とセットでしか正しく効かない**。先頭の分類は
- * この列の最初の子になり、@react-pdf は「親の最初の子は既にページ先頭にいる」と見なして
- * 改ページの判断を省くため、ページが埋まっていてもその場に描いて版面の下端を突き抜ける
- * （実測: 50 ページ版 p6、「言語 / TypeScript / HCL (Terraform)」がフッターに重なった）。
- * BulletRow・PrintMarkdown と同じ対策。
+ * 件数の上限は無い（元データを全件表示する標準指示）。分類 1 つが measure-then-place の
+ * 葉 1 つになるので、チップ行がページ跨ぎで半端に切れることは構造上起きない。
+ * `spaced` は 2 つ目以降の分類に付け、分類同士の間隔を作る。
  */
-export function TechChipGroups({ groups }: { groups: PrintTechGroup[] }) {
-  if (groups.length === 0) return null;
+export function TechChipGroup({ group, spaced }: { group: PrintTechGroup; spaced: boolean }) {
   return (
-    <View style={styles.techGroups}>
-      <View />
-      {groups.map((group, index) => (
-        <View
-          key={group.label}
-          style={index === 0 ? styles.techGroup : [styles.techGroup, styles.techGroupSpaced]}
-          wrap={false}
-        >
-          <PrintText style={styles.techLabel}>{group.label}</PrintText>
-          <View style={styles.techChips}>
-            {group.chips.map((chip) => (
-              <Chip key={chip.label} chip={chip} />
-            ))}
-          </View>
-        </View>
-      ))}
+    <View style={spaced ? [styles.techGroup, styles.techGroupSpaced] : styles.techGroup}>
+      <PrintText style={styles.techLabel}>{group.label}</PrintText>
+      <View style={styles.techChips}>
+        {group.chips.map((chip) => (
+          <Chip key={chip.label} chip={chip} />
+        ))}
+      </View>
     </View>
   );
 }
@@ -418,6 +313,21 @@ export function BulletRow({ children, marker = '—' }: { children: ReactNode; m
         <PrintText style={styles.bulletBody}>{children}</PrintText>
       </View>
     </>
+  );
+}
+
+/**
+ * 箇条書き 1 項目（measure-then-place の葉として置く形）。
+ *
+ * `BulletRow` と違い、先行兄弟も `wrap={false}` も持たない。葉は割り付け側が必ず 1 ページに
+ * 収まる位置へ置くので、@react-pdf の改ページ判定に介入する必要が無い。
+ */
+export function BulletLine({ children, marker = '—' }: { children: ReactNode; marker?: string }) {
+  return (
+    <View style={styles.bulletRow}>
+      <PrintText style={styles.bulletMark}>{marker}</PrintText>
+      <PrintText style={styles.bulletBody}>{children}</PrintText>
+    </View>
   );
 }
 

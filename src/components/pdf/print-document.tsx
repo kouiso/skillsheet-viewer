@@ -4,253 +4,32 @@
  * 3 層構造にしている。エージェントが最初に読む 1 ページ、企業の PM が読む案件セクション、
  * 経歴の裏付けとして流し見されるスキル一覧、という読まれ方に合わせたもの。
  *
- * 案件セクションを 1 つの `<Page>` にまとめているのは、会社ごとに Page を分けると
- * 案件が 1〜2 件しかない会社（実データで 19 社のうち 12 社）の後ろに大きな空白が出て、
- * ページ数がむやみに増えるため。ページ跨ぎの見出しは、この Page の最後の子に置いた
- * 1 つの継続見出し（下記）が会社・案件どちらの分もまとめて担う。
+ * 案件セクションは measure-then-place で組む: 会社見出し・カードの各ブロック・段落を葉に
+ * 分解し（print-leaves.tsx）、描く前に全部の高さを測り（print-measure.tsx）、自前で
+ * ページに割り付け（print-paginate.ts）、明示的な `<Page>` に並べる（print-pages.tsx）。
+ * 測定が非同期なので、この文書は `buildPrintSkillSheetDocument` で組み立てる。
+ * 1 ページ目とスキル一覧は @react-pdf の自動改ページのまま（崩れの報告が無い）。
  */
 
-import { Document, Page, StyleSheet, View } from '@react-pdf/renderer';
+import { Document, type DocumentProps, Font, Page, View } from '@react-pdf/renderer';
+import type { ReactElement } from 'react';
 import type { Block } from '@/db/blocks';
 
-import { CompanyHeading } from './company-heading';
-import { createSpanTracker, DynamicView, PrintText, printStyles, RunningFooter } from './print-primitives';
-import { PRINT_COLOR, PRINT_SIZE, PRINT_TYPE } from './print-tokens';
-import type { PrintCompany, PrintViewKey } from './print-view-model';
-import { buildPrintViewModel, fitContinuationHeading } from './print-view-model';
-import { CompactTableHeader, ProjectCardCompact } from './project-card-compact';
-import { ProjectCardDetail } from './project-card-detail';
+import { COMPACT_HEADER_TEMPLATE, compactContinuationLeaf, splitLeaf, toLeaves } from './print-leaves';
+import { measureLeaf, measureLeaves } from './print-measure';
+import { continuationStyles, ProjectPages } from './print-pages';
+import { type PaginateOptions, type PrintPage, paginate } from './print-paginate';
+import { DynamicView, PrintText, printStyles, RunningFooter } from './print-primitives';
+import { PRINT_SIZE } from './print-tokens';
+import type { PrintViewKey, PrintViewModel } from './print-view-model';
+import { buildPrintViewModel } from './print-view-model';
 import { SkillsPage } from './skills-page';
 import { SummaryPage } from './summary-page';
 
-const styles = StyleSheet.create({
-  // 会社セクション全体を囲むレール。borderLeftWidth は折り返す View でもページ断片ごとに
-  // 再描画される（実測、react-pdf-capability.node.test.tsx の H）ので wrap={false} は不要。
-  // paddingLeft がレールから見出し帯・カードまでの間隔を作る。
-  /**
-   * 会社セクション左のレール（縦罫線）と、その内側の余白。
-   *
-   * **会社の全体を 1 枚の View で囲ってレールを持たせてはいけない。** 囲うと、余白が
-   * 足りず見出しが次ページへ送られたときに囲いの View だけが前のページに断片として
-   * 残り、中身の無い縦線がページ下端まで伸びる（実測: 42 ページ版の p15）。
-   * 見出しと案件の並びにそれぞれ当てて、送られるときは線も一緒に送られるようにする。
-   */
-  companyRail: {
-    borderLeftWidth: PRINT_SIZE.companyRailWidth,
-    borderLeftColor: PRINT_COLOR.rule,
-    paddingLeft: PRINT_SIZE.companyRailIndent,
-  },
-  /** 案件の並び。会社と会社の間隔はここで作る（見出し側に付けると帯の上が空く）。 */
-  companyBody: {
-    marginBottom: PRINT_SIZE.companySectionGap,
-    borderLeftWidth: PRINT_SIZE.companyRailWidth,
-    borderLeftColor: PRINT_COLOR.rule,
-    paddingLeft: PRINT_SIZE.companyRailIndent,
-  },
-  // ページ跨ぎの継続ヘッダー。**height を与えないこと**（与えると描画が消える）。
-  // 外枠は位置だけを持つ。罫線を外枠に付けると、継続ヘッダーを出さない 1 ページ目にも
-  // 線だけが描かれる（render が null を返しても枠のスタイルは適用される）。
-  continuationHeader: {
-    position: 'absolute',
-    top: PRINT_SIZE.headerTop,
-    left: PRINT_SIZE.padHorizontal,
-    right: PRINT_SIZE.padHorizontal,
-  },
-  continuationInner: {
-    borderBottomWidth: PRINT_SIZE.ruleThin,
-    borderBottomColor: PRINT_COLOR.rule,
-    paddingBottom: 4,
-  },
-  // maxLines / textOverflow は @react-pdf では props ではなく **style** で渡す
-  // （@react-pdf/layout の getMaxLines は node.style を見る）。
-  // 2 行目は本文の 1 行目に重なるので、文字列側（fitContinuationHeading）で 1 行に
-  // 収めたうえで、ここでも折り返しを禁じて二重に塞ぐ。
-  continuationText: {
-    ...PRINT_TYPE.meta,
-    fontWeight: 700,
-    color: PRINT_COLOR.accent,
-    maxLines: 1,
-    textOverflow: 'ellipsis',
-  },
-  compactGroup: { marginTop: PRINT_SIZE.cardGap },
-  // 会社の終わり。帯にすると重いので、短い罫線 1 本だけでセクションが閉じたことを示す。
-  companyEndMarker: {
-    marginTop: 8,
-    width: PRINT_SIZE.companyEndMarkerWidth,
-    borderBottomWidth: PRINT_SIZE.ruleStrong,
-    borderBottomColor: PRINT_COLOR.rule,
-  },
-});
+/** 本文の高さ = ページ高 − 上余白 − （下余白 + フッター余白）。printStyles.page と同じ値。 */
+export const PROJECT_CONTENT_HEIGHT = PRINT_SIZE.pageHeight - PRINT_SIZE.padTop - (PRINT_SIZE.padBottom + 14);
 
-type Tracker = ReturnType<typeof createSpanTracker>;
-
-/**
- * 会社見出しの後ろに要求する高さ（pt）。
- *
- * 最初のカードが 1 ページに収まる大きさのときは、**そのカードごと入る高さ**を要求する。
- * 固定値（240pt）だけだと、見出しは残り 300pt のページに乗るのに、分割禁止の 500pt の
- * カードは丸ごと次ページへ行き、見出しと会社概要だけがページの末尾に取り残される
- * （実測: 42 ページ版の p19、E 社の見出しの下が 1 枚まるごと白かった）。
- *
- * 1 ページに収まらないカード（`fitsOnePage === false`）は分割されて見出しの直後から
- * 描かれ始めるので、取り残されない。その場合は既定の 240pt でよい。
- *
- * 見出し 1 つ分（帯 + 概要 2 行）を実測で約 110pt と見て、本文の高さ 754pt から引いた残りを
- * 「見出しの後ろに置ける最大」とする。これを超えるカードは、どのページでも見出しと同居
- * できない。以前はそこで要求を上限へ丸めていたが、丸めても入らないものは入らないので、
- * 見出しだけのページが残った（実測: 53 ページ版の p42、紙面の 89% が白。B 社の
- * カードは見積り 675pt で上限 644pt を 31pt 超えていた）。同居できないと分かった時は
- * 要求を丸めるのではなく、**カード側の分割禁止を解いて見出しの直後から描き始める**
- * （`splitAcrossPages`）。割れるのはブロックの区切りだけで、ヘッダーと先頭ブロックは
- * 束ねたまま残る。
- */
-const HEADING_BLOCK_HEIGHT = 110;
-const MAX_ROOM_AFTER_HEADING = PRINT_SIZE.cardMaxSinglePageHeight - HEADING_BLOCK_HEIGHT;
-
-/** 見出しの直後に、分割禁止のまま置くために必要な高さ（pt）。 */
-function roomNeededByFirstCard(company: PrintCompany): number | undefined {
-  const first = company.projects[0];
-  // 見積り（estimatedHeight / fitsOnePage）は**詳細版カードの寸法**なので、簡約版には当てない
-  // （レビュー指摘）。簡約版は 1 段目の行だけを分割禁止にして 2 段目は割れる作りなので、
-  // 見出しの直後に必ず中身が乗る。取り残される心配が無いぶん、既定の要求で足りる。
-  if (first?.level !== 'detail' || !first.fitsOnePage) return undefined;
-  return first.estimatedHeight + PRINT_SIZE.cardGap;
-}
-
-function requiredRoomAfterHeading(company: PrintCompany): number | undefined {
-  const needed = roomNeededByFirstCard(company);
-  // 同居できない大きさなら要求しても解決しない（カード側を分割可能にして解く）。既定へ戻す。
-  if (needed === undefined || needed > MAX_ROOM_AFTER_HEADING) return undefined;
-  return needed;
-}
-
-/** 先頭カードが見出しと同居できず、分割可能にしないと見出しだけのページが残るか。 */
-function firstCardMustSplit(company: PrintCompany): boolean {
-  const needed = roomNeededByFirstCard(company);
-  return needed !== undefined && needed > MAX_ROOM_AFTER_HEADING;
-}
-
-/**
- * 簡約表 1 区間ぶん。列ヘッダーは先頭案件と 1 つの `wrap={false}` 単位に束ねて、
- * データ行 0 件のまま列ヘッダーだけが改ページするのを防ぐ（project-card-compact.tsx の
- * leadingHeader コメント参照）。2 ページ目以降の継続ヘッダーは、先頭案件が実際に乗った
- * ページを覚えて `fixed` で出す（継続ヘッダー自身には開始ページを記録させない）。
- * この区間はどの案件も 1 ページに収まる前提の簡約表なので、詳細版カードの幽霊ヘッダー
- * 問題（project-card-detail.tsx 冒頭のコメント参照）は起きない。
- */
-function CompactRun({ projects }: { projects: PrintCompany['projects'] }) {
-  const [first, ...rest] = projects;
-  let headerPage: number | undefined;
-  return (
-    <View style={styles.compactGroup}>
-      <DynamicView
-        fixed
-        render={(pageProps) =>
-          headerPage !== undefined && pageProps.pageNumber > headerPage ? <CompactTableHeader /> : null
-        }
-      />
-      {first && (
-        <ProjectCardCompact
-          project={first}
-          leadingHeader={<CompactTableHeader />}
-          onLeadingHeaderPage={(pageProps) => {
-            if (headerPage === undefined || pageProps.pageNumber < headerPage) headerPage = pageProps.pageNumber;
-          }}
-        />
-      )}
-      {rest.map((project) => (
-        <ProjectCardCompact key={project.id} project={project} />
-      ))}
-    </View>
-  );
-}
-
-/**
- * 会社 1 社ぶん。詳細版はカードとして 1 枚ずつ、簡約版は連続する分をまとめて
- * 1 つの表（列ヘッダーは先頭に 1 回だけ）にする。
- *
- * 会社の開始・終了ページは `companySpanTracker` に記録するだけで、「つづき」の表示判断は
- * しない（Page 直下に一本化した継続見出しがまとめて読む。理由は project-card-detail.tsx
- * 冒頭のコメント参照 — 条件付きレンダーをここに置くと同じ幽霊ヘッダーの壊れ方をする）。
- */
-function CompanySection({
-  company,
-  projectSpanTracker,
-  companySpanTracker,
-}: {
-  company: PrintCompany;
-  projectSpanTracker: Tracker;
-  companySpanTracker: Tracker;
-}) {
-  // 簡約版が連続する区間をまとめる。会社の中で詳細版と簡約版が交互に現れても、
-  // 列ヘッダーが必要な回数だけ出るようにする。
-  const runs: { level: 'detail' | 'compact'; projects: PrintCompany['projects'] }[] = [];
-  for (const project of company.projects) {
-    const last = runs.at(-1);
-    if (last && last.level === project.level && project.level === 'compact') {
-      last.projects.push(project);
-    } else {
-      runs.push({ level: project.level, projects: [project] });
-    }
-  }
-
-  // 見出しと同居できない先頭カードだけ、分割禁止を解く（上の firstCardMustSplit のコメント参照）。
-  const splitFirstCardId = firstCardMustSplit(company) ? company.projects[0]?.id : undefined;
-
-  return (
-    <>
-      {/*
-        会社の見出しと案件の並びを、**Page 直下の兄弟として並べる**（会社全体を 1 枚の
-        View で囲わない）。理由は 2 つあり、どちらもページ割りの実装に由来する。
-
-        1. 見出しの「後ろにこれだけ余白が要る」（minPresenceAhead）は、その見出しに
-           先行する兄弟がいないと無視される。@react-pdf は「親の最初の子は既にページの
-           先頭にいる」と見なして判断を省くため（layout の shouldBreak の
-           breakingImprovesPresence）。会社全体を囲うと見出しは必ずその最初の子になり、
-           余白の要求が 120 でも 320 でも出力が 1 ページも変わらなかった（実測）。
-           Page 直下なら前の会社が先行兄弟になるので、そのまま効く。
-
-        2. 囲った View に左のレール（縦罫線）を持たせると、見出しが次ページへ送られた
-           ときに囲いの断片だけが前のページに残り、中身の無い縦線がページ下端まで伸びる。
-           レールを見出しと案件それぞれに持たせれば、送られるときは線も一緒に送られる。
-      */}
-      <CompanyHeading
-        company={company}
-        railStyle={styles.companyRail}
-        minPresenceAhead={requiredRoomAfterHeading(company)}
-        onFirstPage={(pageProps) => companySpanTracker.markStart(company.id, company.name, pageProps)}
-      />
-      <View style={styles.companyBody}>
-        {runs.map((run, runIndex) =>
-          run.level === 'detail' ? (
-            run.projects.map((project) => (
-              <ProjectCardDetail
-                key={project.id}
-                project={project}
-                spanTracker={projectSpanTracker}
-                splitAcrossPages={project.id === splitFirstCardId}
-              />
-            ))
-          ) : (
-            // 連続する簡約案件を 1 つの表にまとめた塊。塊自体は並び順以外の識別子を持たず、
-            // 会社内での位置がそのまま同一性になるので index を鍵に使う。
-            // biome-ignore lint/suspicious/noArrayIndexKey: 塊は並び順でしか識別できない
-            <CompactRun key={`compact-${runIndex}`} projects={run.projects} />
-          ),
-        )}
-        <DynamicView
-          render={(pageProps) => {
-            companySpanTracker.markEnd(company.id, pageProps);
-            return null;
-          }}
-        />
-        <View style={styles.companyEndMarker} />
-      </View>
-    </>
-  );
-}
-
-export interface PrintSkillSheetDocumentProps {
+export interface PrintSkillSheetDocumentInput {
   title: string;
   blocks: Block[];
   /** 画面のビュートグルの状態。未指定は全 ON（画面側 isViewOn と同じ既定）。 */
@@ -259,12 +38,40 @@ export interface PrintSkillSheetDocumentProps {
   referenceMonth?: number;
 }
 
-export function PrintSkillSheetDocument({ title, blocks, views, referenceMonth }: PrintSkillSheetDocumentProps) {
-  const vm = buildPrintViewModel(title, blocks, views, referenceMonth);
-  // カード・会社それぞれの開始・終了ページを覚える器は、この描画 1 回ぶんだけ生きる。
-  // モジュール変数にすると前回の描画の記録が残り、継続ヘッダーの判定が狂う。
-  const projectSpanTracker = createSpanTracker();
-  const companySpanTracker = createSpanTracker();
+export interface PrintSkillSheetDocumentProps {
+  title: string;
+  vm: PrintViewModel;
+  /** 割り付け済みの案件セクション。案件を出さないときは空配列。 */
+  projectPages: PrintPage[];
+}
+
+/**
+ * 案件セクションを葉に分解して測り、ページに割り付ける。
+ * `fontStore` は測定に使う（ブラウザでは renderer の `Font`、テストでも同じ）。
+ */
+export async function paginateProjects(vm: PrintViewModel, fontStore: typeof Font = Font): Promise<PrintPage[]> {
+  if (!vm.showProjects || vm.companies.length === 0) return [];
+  const leaves = toLeaves(vm);
+  const [header, ...measured] = await measureLeaves([COMPACT_HEADER_TEMPLATE, ...leaves], fontStore);
+  const options: PaginateOptions = {
+    contentHeight: PROJECT_CONTENT_HEIGHT,
+    split: splitLeaf,
+    measure: (leaf) => measureLeaf(leaf, fontStore),
+    continuation: compactContinuationLeaf(header),
+  };
+  return paginate(measured, options);
+}
+
+export async function buildPrintSkillSheetDocument(
+  input: PrintSkillSheetDocumentInput,
+  fontStore: typeof Font = Font,
+): Promise<ReactElement<DocumentProps>> {
+  const vm = buildPrintViewModel(input.title, input.blocks, input.views, input.referenceMonth);
+  const projectPages = await paginateProjects(vm, fontStore);
+  return <PrintSkillSheetDocument title={input.title} vm={vm} projectPages={projectPages} />;
+}
+
+export function PrintSkillSheetDocument({ title, vm, projectPages }: PrintSkillSheetDocumentProps) {
   const footer = <RunningFooter name={vm.summary.name} sheetTitle={vm.summary.sheetTitle} />;
   // スキル一覧セクション自体が出ない（ビュートグル OFF、またはスキルブロックが 0 件）とき、
   // 得意分野・得意業務（expertiseRows）の行き先が無くなり本文から丸ごと消えていた
@@ -278,11 +85,11 @@ export function PrintSkillSheetDocument({ title, blocks, views, referenceMonth }
             跨いだページが見出し無しで始まらないよう、2 ページ目以降だけ継続ヘッダーを出す。 */}
         <DynamicView
           fixed
-          style={styles.continuationHeader}
+          style={continuationStyles.header}
           render={({ subPageNumber }) =>
             subPageNumber !== undefined && subPageNumber > 1 ? (
-              <View style={styles.continuationInner}>
-                <PrintText style={styles.continuationText}>{`${vm.summary.sheetTitle}（続き）`}</PrintText>
+              <View style={continuationStyles.inner}>
+                <PrintText style={continuationStyles.text}>{`${vm.summary.sheetTitle}（続き）`}</PrintText>
               </View>
             ) : null
           }
@@ -301,11 +108,11 @@ export function PrintSkillSheetDocument({ title, blocks, views, referenceMonth }
               跨いだページが見出し無しで始まらないよう、2 ページ目以降だけ継続ヘッダーを出す。 */}
           <DynamicView
             fixed
-            style={styles.continuationHeader}
+            style={continuationStyles.header}
             render={({ subPageNumber }) =>
               subPageNumber !== undefined && subPageNumber > 1 ? (
-                <View style={styles.continuationInner}>
-                  <PrintText style={styles.continuationText}>スキル一覧（続き）</PrintText>
+                <View style={continuationStyles.inner}>
+                  <PrintText style={continuationStyles.text}>スキル一覧（続き）</PrintText>
                 </View>
               ) : null
             }
@@ -315,44 +122,7 @@ export function PrintSkillSheetDocument({ title, blocks, views, referenceMonth }
         </Page>
       )}
 
-      {vm.showProjects && vm.companies.length > 0 && (
-        <Page size="A4" style={printStyles.page}>
-          {vm.companies.map((company) => (
-            <CompanySection
-              key={company.id}
-              company={company}
-              projectSpanTracker={projectSpanTracker}
-              companySpanTracker={companySpanTracker}
-            />
-          ))}
-          {footer}
-          {/*
-            会社・案件どちらの継続見出しもここ 1 箇所に一本化する（Page の最後の子。
-            この Page 内の会社・案件それぞれの開始・終了マーカーより後に解決させるため）。
-            カードや会社の枠の内側に置かない理由は project-card-detail.tsx 冒頭のコメント
-            参照。案件が続いているページは会社も必ず続いている（案件は会社をまたがない）ので、
-            両方が続いているときは 1 行にまとめる。
-          */}
-          <DynamicView
-            fixed
-            style={styles.continuationHeader}
-            render={(pageProps) => {
-              if (pageProps.subPageNumber === undefined) return null;
-              const companyLabel = companySpanTracker.openLabel(pageProps.pageNumber);
-              const projectLabel = projectSpanTracker.openLabel(pageProps.pageNumber);
-              // 2 行に折り返すと 2 行目が本文の 1 行目に重なる（絶対配置で高さを持たないため）。
-              // 収まらないときに何を落とすかの判断は fitContinuationHeading に一本化する。
-              const text = fitContinuationHeading(companyLabel, projectLabel);
-              if (!text) return null;
-              return (
-                <View style={styles.continuationInner}>
-                  <PrintText style={styles.continuationText}>{text}</PrintText>
-                </View>
-              );
-            }}
-          />
-        </Page>
-      )}
+      {projectPages.length > 0 && <ProjectPages pages={projectPages} footer={footer} />}
     </Document>
   );
 }

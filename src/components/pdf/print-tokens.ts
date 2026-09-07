@@ -106,25 +106,6 @@ export const PRINT_SIZE = {
   ruleStrong: 1.5,
   ruleThin: 0.75,
   cardRadius: 3,
-  /**
-   * 案件カード 1 枚が「1 ページに収まり得る」上限高さ。
-   * pageHeight(842) − padTop(42) − ページの paddingBottom（`padBottom`32 + フッター余白 14）= 754。
-   * カードの見積り高さがこれ以下なら `wrap={false}` でカード全体を分割禁止にできる
-   * （@react-pdf は wrap={false} のノードがこの高さを超えると、ページ送りではなく
-   * 文字を圧縮して重ねる — 実測、company-grouping 作業の zz-wrapfalse-overflow-probe）。
-   * 超えるカードだけ、区切り単位（メタ表・チップ分類・本文ブロック）ごとに分割可能な形へ戻す。
-   */
-  cardMaxSinglePageHeight: 754,
-  /**
-   * 簡約表の列ヘッダーの後ろにこれだけの高さが残っていなければページを送る。
-   * 列ヘッダー（HEAD_PAD_VERTICAL 5×2 + meta 1 行 ≒ 27pt）+ 先頭案件の 1 行目
-   * （ROW_PAD_VERTICAL 7×2 + 本文 2 行分の折り返しを見込んで ≒ 48pt）の合計に
-   * 安全マージンを足した値。これが無いと、実行時点で残り高さが少ないページに
-   * 列ヘッダーだけが乗り、データ行 0 件のまま改ページして次ページで表が再度
-   * 描かれる（実測: p19→p20 / p25→p26 境界、company-heading.tsx の
-   * MIN_PRESENCE_AHEAD と同種の不具合）。
-   */
-  compactHeaderMinPresenceAhead: 90,
 } as const;
 
 /**

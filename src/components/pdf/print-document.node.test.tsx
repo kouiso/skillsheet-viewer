@@ -19,7 +19,7 @@ import type { Block } from '@/db/blocks';
 import PDF_FONT_FAMILY from './constants';
 import { buildPdfQualityFixtureBlocks, PDF_QUALITY_FIXTURE_TITLE } from './fixtures/print-quality-fixture';
 import { splitForHyphenation } from './fonts';
-import { PrintSkillSheetDocument } from './print-document';
+import { buildPrintSkillSheetDocument } from './print-document';
 import { DEFAULT_QUALITY_OPTIONS, runQualityChecks, summarize, toSearchKey } from './print-quality';
 import { runDuplicateHeadingChecks } from './print-quality-duplicate-heading';
 import { extractQualityPages } from './print-quality-extract.node';
@@ -102,7 +102,9 @@ describe('新しい印刷経路の品質', () => {
 
     const blocks = buildPdfQualityFixtureBlocks();
     fixtureVm = buildPrintViewModel(PDF_QUALITY_FIXTURE_TITLE, blocks);
-    fixtureBuffer = await renderToBuffer(<PrintSkillSheetDocument title={PDF_QUALITY_FIXTURE_TITLE} blocks={blocks} />);
+    fixtureBuffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks }),
+    );
     fixturePages = await extractQualityPages(fixtureBuffer);
   }, 120_000);
 
@@ -145,7 +147,7 @@ describe('新しい印刷経路の品質', () => {
       const title = 'エンジニアスキルシート';
       const vm = buildPrintViewModel(title, blocks);
 
-      const buffer = await renderToBuffer(<PrintSkillSheetDocument title={title} blocks={blocks} />);
+      const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks }));
       if (OUT_PDF) writeFileSync(OUT_PDF, buffer);
 
       const pages = await extractQualityPages(buffer);
@@ -192,7 +194,7 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
   const blocks: Block[] = buildPdfQualityFixtureBlocks();
 
   async function renderHeadingSet(views: PrintViewKey[] | undefined): Promise<Set<string>> {
-    const buffer = await renderToBuffer(<PrintSkillSheetDocument title={title} blocks={blocks} views={views} />);
+    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views }));
     const pages = await extractQualityPages(buffer);
     const fullText = pages.map((page) => page.map((item) => item.text).join('')).join('\n');
     return new Set(fullText.includes('スキル一覧') ? ['スキル一覧'] : []);

@@ -1,7 +1,9 @@
+import type { DocumentProps } from '@react-pdf/renderer';
+import type { ReactElement } from 'react';
 import type { Block, BlockType } from '@/db/blocks';
 
 import registerPdfFonts from './pdf/fonts';
-import { PrintSkillSheetDocument } from './pdf/print-document';
+import { buildPrintSkillSheetDocument } from './pdf/print-document';
 import type { PrintViewKey } from './pdf/print-view-model';
 import { SkillSheetDocument, type SkillSheetDocumentProps } from './pdf/skill-sheet-document';
 
@@ -15,8 +17,10 @@ export interface SkillSheetPDFProps extends SkillSheetDocumentProps {
 }
 
 /**
- * スキルシート PDF コンポーネント。ブラウザ用フォント（バンドルした Noto Sans JP）を
+ * スキルシート PDF の文書要素を作る。ブラウザ用フォント（バンドルした Noto Sans JP）を
  * 登録したうえでドキュメントを返す。sheet-view-client から動的 import して生成する。
+ * 印刷デザイン経路は描く前に案件セクションの高さを測る（非同期）ので、コンポーネントではなく
+ * async factory になっている。
  *
  * blocks があれば**印刷デザインの構造描画**（会社セクション + 案件カード）を使う。
  * 無い場合はレガシーの markdown 経路にフォールバックする — GitHub 閲覧経路
@@ -41,17 +45,23 @@ function canRenderStructured(blocks: Block[] | undefined): blocks is Block[] {
   );
 }
 
-export const SkillSheetPDF = ({ title, content, blocks, views, referenceMonth }: SkillSheetPDFProps) => {
+export async function createSkillSheetPdf({
+  title,
+  content,
+  blocks,
+  views,
+  referenceMonth,
+}: SkillSheetPDFProps): Promise<ReactElement<DocumentProps>> {
   registerPdfFonts();
   if (canRenderStructured(blocks)) {
-    return <PrintSkillSheetDocument title={title} blocks={blocks} views={views} referenceMonth={referenceMonth} />;
+    return buildPrintSkillSheetDocument({ title, blocks, views, referenceMonth });
   }
   return <SkillSheetDocument title={title} content={content} />;
-};
+}
 
 // 失敗時の後始末も同じモジュールから出す。呼び出し側の catch で改めて動的 import すると、
 // その await が終わるまで finally（ローディング解除）が走らず、ボタンが busy のまま残って
 // 「押し直し」自体ができなくなる（実測でボタンが aria-busy のまま固まった）。
 export { resetPdfFontsAfterFailure } from './pdf/fonts';
 
-export default SkillSheetPDF;
+export default createSkillSheetPdf;

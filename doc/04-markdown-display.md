@@ -111,18 +111,21 @@ PDF はクライアントで動的 import して生成する。重い `@react-pd
 ```tsx
 // app/view/[path]/sheet-view-client.tsx（抜粋）
 const handleDownloadPdf = async () => {
-  const [{ pdf }, { SkillSheetPDF }] = await Promise.all([
+  const [{ pdf }, { createSkillSheetPdf }] = await Promise.all([
     import('@react-pdf/renderer'),
     import('@/components/pdf-export'),
   ]);
-  const blob = await pdf(<SkillSheetPDF title={title} content={content} />).toBlob();
+  // 印刷デザイン経路は描く前に案件セクションの高さを測る（非同期）ので、要素を先に作る
+  const document = await createSkillSheetPdf({ title, content, blocks, views, referenceMonth });
+  const blob = await pdf(document).toBlob();
   const url = URL.createObjectURL(blob);
   // <a download> を生成してクリック → 生成した ObjectURL は遅延 revoke
 };
 ```
 
 - `@react-pdf/renderer` の `pdf(...).toBlob()` でドキュメントを Blob 化し、`URL.createObjectURL` + 一時 `<a download>` でダウンロードさせる。ObjectURL は少し遅延させて `revokeObjectURL` する。
-- `SkillSheetPDF`（`src/components/pdf-export.tsx`）は描画前に `registerPdfFonts()` でバンドル済み日本語フォント（Noto Sans JP）を登録し、純粋描画の `SkillSheetDocument`（`src/components/pdf/skill-sheet-document.tsx`）を返す。
+- `createSkillSheetPdf`（`src/components/pdf-export.tsx`）は描画前に `registerPdfFonts()` でバンドル済み日本語フォント（Noto Sans JP）を登録し、DB 由来の構造化ブロックがあれば印刷デザインの `buildPrintSkillSheetDocument`（`src/components/pdf/print-document.tsx`）、無ければ純粋描画の `SkillSheetDocument`（`src/components/pdf/skill-sheet-document.tsx`）を返す。
+- 印刷デザインの案件セクションは **measure-then-place** で組む。会社見出し・カードの各ブロック・段落を「葉」に分解し（`print-leaves.tsx`）、`@react-pdf/layout` の `layout()` を背の高い 1 ページに当てて全葉の高さと行を先に測り（`print-measure.tsx`）、自前でページに割り付け（`print-paginate.ts`）、明示的な `<Page>` に並べる（`print-pages.tsx`）。@react-pdf の自動改ページ（`wrap` / `minPresenceAhead`）には頼らない — 本文の長さが閾値をまたぐたびに別の場所で崩れていたため。測った高さと実描画の一致は `print-measure-place.node.test.tsx` が固定している。
 - PDF 側も Web と同じ Markdown を入力とし、mdast → `@react-pdf` プリミティブへ変換して描画する（表レイアウトは `src/components/pdf/table-layout.ts`）。Web と PDF で描画元の Markdown を共有するため、二重メンテナンスを避けられる。
 
 ---
