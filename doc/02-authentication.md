@@ -45,7 +45,7 @@ betterAuth({
 
 要点:
 
-- **単一オーナー運用**。`disableSignUp: true` で公開サインアップ endpoint（`/api/auth/sign-up/email`）を塞ぎ、第三者が自己登録して編集者になる権限昇格を防ぐ。オーナーアカウントは `SKILLSHEET_OWNER_ID` に対応する既存アカウントを利用する（ブートストラップ手順は `SETUP.md`）。
+- **単一オーナー運用**。`disableSignUp: true` で公開サインアップ endpoint（`/api/auth/sign-up/email`）を塞ぎ、第三者が自己登録して編集者になる権限昇格を防ぐ。オーナーアカウントは `SKILLSHEET_OWNER_ID` に対応する既存アカウントを利用する（ブートストラップ手順は `setup.md`）。
 - `getAuth()` は遅延シングルトン。`DATABASE_URL` はリクエスト時にしか無いため、`next build` の静的解析で初期化されないようにしている。
 
 ### エンドポイントとログイン画面

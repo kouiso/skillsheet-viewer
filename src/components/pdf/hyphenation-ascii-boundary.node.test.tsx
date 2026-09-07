@@ -23,8 +23,8 @@ import { splitForHyphenation } from './fonts';
 import { extractQualityPages } from './print-quality-extract.node';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 
 // 実データ（コンテンツメディアの開発 / comment）から採った、defect を含む実際の一文。
 // "Workers（OpenNext）" の ASCII → 全角括弧の境界と、句読点直前の境界を複数含む。

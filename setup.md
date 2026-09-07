@@ -127,7 +127,7 @@ pnpm db:migrate
 ```
 
 - **新規（fresh）DB**: そのまま実行すれば Drizzle が全マイグレーションを適用します。
-- **既存本番 DB**: Better Auth CLI などで先にテーブルが作られている場合、そのまま流すと「テーブルが既に存在する」で失敗します。最初に 1 回だけ baseline を行ってから通常運用に移します。手順は [`drizzle/MIGRATION-BASELINE.md`](./drizzle/MIGRATION-BASELINE.md) を参照してください。
+- **既存本番 DB**: Better Auth CLI などで先にテーブルが作られている場合、そのまま流すと「テーブルが既に存在する」で失敗します。最初に 1 回だけ baseline を行ってから通常運用に移します。手順は [`drizzle/migration-baseline.md`](./drizzle/migration-baseline.md) を参照してください。
 
 ### 4. 開発サーバーの起動
 

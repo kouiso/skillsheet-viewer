@@ -20,9 +20,9 @@ const USAGE = `使い方:
 
 // DATABASE_URL / BETTER_AUTH_SECRET を .env ファイルから読み込む。
 //
-// SETUP.md はリポジトリルートの `.env`（`cp .env.example .env`）を案内しているが、
+// setup.md はリポジトリルートの `.env`（`cp .env.example .env`）を案内しているが、
 // 他のスクリプトは `.env.local` を読む方式のみだった。この不一致で、
-// SETUP.md の手順どおりに進めると「.env.local が見つかりません」で止まっていた
+// setup.md の手順どおりに進めると「.env.local が見つかりません」で止まっていた
 // （レビュー指摘）。両方の場所を候補にして先に見つかった方を使い、既存の process.env の
 // 値は上書きしない。どちらの候補ファイルも無くても、必須の環境変数が実行環境
 // （CI/Vercel 等）に既に設定済みなら、そのまま処理を継続する（ファイルが無いことだけを

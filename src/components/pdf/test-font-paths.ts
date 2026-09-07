@@ -18,5 +18,5 @@ export const FONTS_DIR = path.resolve(
   'public',
   'fonts',
 );
-export const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-export const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+export const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+export const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');

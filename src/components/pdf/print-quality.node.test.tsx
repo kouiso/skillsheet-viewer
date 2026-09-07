@@ -34,8 +34,8 @@ import { buildPrintViewModel } from './print-view-model';
 import { SkillSheetDocument } from './skill-sheet-document';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 
 const REAL_BLOCKS_JSON = process.env.REAL_BLOCKS_JSON;
 
