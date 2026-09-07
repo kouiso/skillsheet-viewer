@@ -41,7 +41,12 @@ const themeInitScript = THEME_INIT_SCRIPT;
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   assertServerEnv();
   return (
-    <html lang="ja" suppressHydrationWarning className={`${ibmPlexSansJP.variable} ${ibmPlexMono.variable}`}>
+    <html
+      lang="ja"
+      suppressHydrationWarning
+      data-scroll-behavior="smooth"
+      className={`${ibmPlexSansJP.variable} ${ibmPlexMono.variable}`}
+    >
       <head>
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: baseURI から認証情報を除去し相対 URL の fetch を有効化する */}
         <script dangerouslySetInnerHTML={{ __html: baseInitScript }} />
