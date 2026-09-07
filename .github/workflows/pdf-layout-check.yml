@@ -10,6 +10,10 @@ on:
     - cron: '0 21 * * *'
   workflow_dispatch:
 
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
 jobs:
   pdf-layout-check:
     name: PDF layout check (real data)
@@ -17,6 +21,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # 後続の pnpm install / tsx / vitest が実行する第三者コードへ
+          # Git 認証情報を渡さない。この job は push しない。
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa

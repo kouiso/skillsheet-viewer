@@ -26,7 +26,19 @@ function parseArg(name: string): string | undefined {
 
 /** 省略時に黙って 1 枚を選ぶと、シートが増えた日から別のシートを検査し続けることになる。 */
 async function resolveSheetId(db: Database, explicit: string | undefined): Promise<string> {
-  if (explicit) return explicit;
+  if (explicit) {
+    // 存在しない id をそのまま通すと blocks が空配列で書き出され、下流の検査が
+    // 「実データ 0 件」を正常として通してしまう。
+    const [sheet] = await db
+      .select({ id: skillSheets.id })
+      .from(skillSheets)
+      .where(eq(skillSheets.id, explicit))
+      .limit(1);
+    if (!sheet) {
+      throw new Error(`指定したシートが存在しません: ${explicit}`);
+    }
+    return sheet.id;
+  }
 
   const sheets = await db.select({ id: skillSheets.id, title: skillSheets.title }).from(skillSheets);
   if (sheets.length === 0) {
