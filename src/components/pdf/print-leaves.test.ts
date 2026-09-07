@@ -60,6 +60,7 @@ function vm(companies: PrintCompany[]): PrintViewModel {
       companyName: '',
       stats: [],
       topSkills: [],
+      skillEmphasisMode: 'level',
       processLabels: [],
       profileRows: [],
       expertiseRows: [],
@@ -71,6 +72,7 @@ function vm(companies: PrintCompany[]): PrintViewModel {
     showProjects: true,
     showSkills: true,
     showProcess: true,
+    skillEmphasisMode: 'level',
   };
 }
 

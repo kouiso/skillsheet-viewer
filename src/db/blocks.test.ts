@@ -178,6 +178,22 @@ describe('skillsBlockToMarkdown', () => {
     const md = skillsBlockToMarkdown({ category: '', skills: [{ name: 'Rust', years: 0, level: '学習中' }] });
     expect(md).toContain('| Rust | - | 学習中 |');
   });
+
+  it('推しがあるときだけ推し列を足す', () => {
+    const md = skillsBlockToMarkdown({
+      ...SKILLS,
+      skills: [{ ...SKILLS.skills[0], featured: true }, SKILLS.skills[1]],
+    });
+    expect(md).toContain('| スキル | 経験年数 | 習熟度 | 推し |');
+    expect(md).toContain('| TypeScript | 3年 | 実務経験あり | ✓ |');
+    expect(md).toContain('| Go | 1年 | 業務利用可 |  |');
+  });
+
+  it('空のスキル表も推しモードでは推し列を維持する', () => {
+    const md = skillsBlockToMarkdown({ category: 'その他', skills: [] }, true);
+    expect(md).toContain('| スキル | 経験年数 | 習熟度 | 推し |');
+    expect(md).toContain('| :--- | :---: | :--- | :---: |');
+  });
 });
 
 const EXP: ExperienceBlockData = {
@@ -244,6 +260,60 @@ describe('blocksToMarkdown — type 別 dispatch', () => {
     expect(md).toContain('## スキル');
     expect(md).toContain('### プログラミング言語');
     expect(md).toContain('| TypeScript | 3年 | 実務経験あり |');
+  });
+
+  it('推しモードは同一シートのすべての skills 表へ推し列を付ける', () => {
+    const blocks: Block[] = [
+      {
+        id: 'featured',
+        type: 'skills',
+        order: 0,
+        data: { ...SKILLS, skills: [{ ...SKILLS.skills[0], featured: true }] },
+      },
+      {
+        id: 'plain',
+        type: 'skills',
+        order: 1,
+        data: { category: 'バックエンド', skills: [{ name: 'Nest.js', years: 2, level: '業務利用可' }] },
+      },
+    ];
+
+    const md = blocksToMarkdown(blocks);
+    expect(md.match(/\| スキル \| 経験年数 \| 習熟度 \| 推し \|/g)).toHaveLength(2);
+    expect(md).toContain('| Nest.js | 2年 | 業務利用可 |  |');
+  });
+
+  it('サニタイズ後に空となる推し名では推しモードを有効にしない', () => {
+    const blocks: Block[] = [
+      {
+        id: 'skills',
+        type: 'skills',
+        order: 0,
+        data: {
+          category: '言語',
+          skills: [
+            { name: '<script>x</script>', years: 1, level: '学習中', featured: true },
+            { name: 'TypeScript', years: 3, level: '実務経験あり' },
+          ],
+        },
+      },
+    ];
+    expect(blocksToMarkdown(blocks)).not.toContain('| 推し |');
+  });
+
+  it('サニタイズ後に空となる行には推し印を出さない', () => {
+    const md = skillsBlockToMarkdown(
+      {
+        category: '言語',
+        skills: [
+          { name: 'TypeScript', years: 3, level: '実務経験あり', featured: true },
+          { name: '<script>x</script>', years: 1, level: '学習中', featured: true },
+        ],
+      },
+      true,
+    );
+    expect(md).toContain('| TypeScript | 3年 | 実務経験あり | ✓ |');
+    expect(md).not.toContain('|  | 1年 | 学習中 | ✓ |');
   });
 
   it('experience ブロックを markdown セクションへ変換して連結する', () => {
@@ -380,6 +450,12 @@ describe('バリデータ', () => {
   it('isSkillsBlockData', () => {
     expect(isSkillsBlockData(SKILLS)).toBe(true);
     expect(isSkillsBlockData({ category: 'x', skills: [] })).toBe(true);
+    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: true }] })).toBe(
+      true,
+    );
+    expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: 3, level: 'ok', featured: 'true' }] })).toBe(
+      false,
+    );
     expect(isSkillsBlockData({ category: 1, skills: [] })).toBe(false);
     expect(isSkillsBlockData({ category: 'x', skills: 'y' })).toBe(false);
     expect(isSkillsBlockData({ category: 'x', skills: [{ name: 'A', years: '3', level: 'ok' }] })).toBe(false);

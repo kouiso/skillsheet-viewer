@@ -117,7 +117,11 @@ export function PrintSkillSheetDocument({ title, vm, projectPages }: PrintSkillS
               ) : null
             }
           />
-          <SkillsPage groups={vm.skillGroups} expertiseRows={vm.summary.expertiseRows} />
+          <SkillsPage
+            groups={vm.skillGroups}
+            expertiseRows={vm.summary.expertiseRows}
+            skillEmphasisMode={vm.skillEmphasisMode}
+          />
           {footer}
         </Page>
       )}

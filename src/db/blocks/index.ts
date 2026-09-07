@@ -8,6 +8,8 @@
  * 既存の描画パイプラインをそのまま再利用できる（描画コードの新規追加ゼロ）。
  */
 
+import { sanitizeHtml } from '../sanitize-html';
+
 export type BlockType = 'markdown' | 'table' | 'skills' | 'experience' | 'profile' | 'stats' | 'project';
 
 export interface MarkdownBlockData {
@@ -34,6 +36,8 @@ export interface SkillEntry {
   name: string;
   years: number;
   level: string;
+  /** 推し。塗り強調の唯一の根拠で、未設定なら従来の習熟度強調を使う。 */
+  featured?: boolean;
 }
 
 /** スキル一覧ブロックの構造化データ。カテゴリ名＋スキルの配列。 */
@@ -472,9 +476,14 @@ export function blockJoinSeparator(prevType: BlockType, curType: BlockType, curM
  */
 export function blocksToMarkdown(blocks: Block[]): string {
   const sorted = [...blocks].filter((b) => !isBlockInputEmpty(b)).sort((a, b) => a.order - b.order);
+  const hasFeatured = sorted.some(
+    (block) =>
+      block.type === 'skills' &&
+      block.data.skills.some((skill) => skill.featured === true && sanitizeHtml(skill.name).trim() !== ''),
+  );
   let result = '';
   for (let i = 0; i < sorted.length; i++) {
-    const markdown = blockToMarkdown(sorted[i]);
+    const markdown = blockToMarkdown(sorted[i], hasFeatured);
     if (i === 0) {
       result = markdown;
       continue;

@@ -6,6 +6,8 @@ import { loadScriptEnv } from './env';
 export interface BlockUpdate {
   id: string;
   sheetId: string;
+  /** 読み取り時点のシート更新時刻。別編集が先行したら書き込まず中断する。 */
+  expectedUpdatedAt?: Date;
   /** 更新後の data。元の data と deep-equal なら書き込みをスキップする。 */
   data: unknown;
   /** 元の data。差分判定に使う。 */
@@ -38,7 +40,20 @@ export async function writeBlockUpdates(db: Database, updates: BlockUpdate[]): P
   }
   await db.transaction(async (tx) => {
     // アプリ側の保存と同じ行ロックを取り、保存トランザクションと直列化する。
-    await tx.select({ id: skillSheets.id }).from(skillSheets).where(inArray(skillSheets.id, sheetIds)).for('update');
+    const lockedSheets = await tx
+      .select({ id: skillSheets.id, updatedAt: skillSheets.updatedAt })
+      .from(skillSheets)
+      .where(inArray(skillSheets.id, sheetIds))
+      .for('update');
+    const currentUpdatedAt = new Map(lockedSheets.map((sheet) => [sheet.id, sheet.updatedAt]));
+    for (const update of changed) {
+      if (!update.expectedUpdatedAt) continue;
+      const expectedTime = new Date(update.expectedUpdatedAt).getTime();
+      const currentTime = new Date(currentUpdatedAt.get(update.sheetId) ?? 0).getTime();
+      if (currentTime > expectedTime) {
+        throw new Error(`Concurrent update detected for sheet: ${update.sheetId}`);
+      }
+    }
     for (const update of changed) {
       await tx.update(blocks).set({ data: update.data }).where(eq(blocks.id, update.id));
     }
