@@ -66,7 +66,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-詳細な手順・環境変数・デプロイは [SETUP.md](./SETUP.md) を参照してください。
+詳細な手順・環境変数・デプロイは [setup.md](./setup.md) を参照してください。
 
 ### アクセス経路
 

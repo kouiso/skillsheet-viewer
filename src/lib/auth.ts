@@ -39,7 +39,7 @@ function createAuth() {
       requireEmailVerification: false,
       // 単一オーナー運用。公開サインアップ endpoint (/api/auth/sign-up/email) を塞ぎ、
       // 第三者が自己登録して編集者になる権限昇格を防ぐ。オーナーアカウントは
-      // SKILLSHEET_OWNER_ID に対応する既存アカウントを利用する（ブートストラップは SETUP.md 参照）。
+      // SKILLSHEET_OWNER_ID に対応する既存アカウントを利用する（ブートストラップは setup.md 参照）。
       disableSignUp: true,
     },
     session: {

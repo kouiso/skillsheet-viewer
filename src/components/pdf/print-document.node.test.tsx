@@ -27,8 +27,8 @@ import { runRasterQualityChecks, summarizeRaster } from './print-quality-raster.
 import { buildPrintViewModel, type PrintViewKey, type PrintViewModel } from './print-view-model';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 
 const REAL_BLOCKS_JSON = process.env.REAL_BLOCKS_JSON;
 const OUT_PDF = process.env.PRINT_PDF_OUT;

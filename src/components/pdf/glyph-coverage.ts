@@ -1,4 +1,4 @@
-// Noto Sans JP（public/fonts/NotoSansJP-{Regular,Bold}.ttf）が字形を持つコードポイントの表。
+// Noto Sans JP（public/fonts/noto-sans-jp-{regular,bold}.ttf）が字形を持つコードポイントの表。
 //
 // なぜ必要か（Issue #263 E）:
 // 登録フォントが glyph を持たないコードポイントに出会うと、@react-pdf/textkit の

@@ -75,7 +75,7 @@ test.afterAll(async () => {
 });
 
 test('PDF 生成がフォント取得失敗のあとリロード無しで回復する', async ({ browser }: { browser: Browser }) => {
-  // フォント取得（/fonts/NotoSansJP-*.ttf）だけを落とし、回線復旧後の再クリックで
+  // フォント取得（/fonts/noto-sans-jp-*.ttf）だけを落とし、回線復旧後の再クリックで
   // リロード無しに PDF が生成できることを確認する。
   //
   // 赤くなることを確認済み: src/components/pdf/fonts.ts の resetPdfFontsAfterFailure
@@ -94,7 +94,7 @@ test('PDF 生成がフォント取得失敗のあとリロード無しで回復�
 
   await page.goto(`/view/db/${sheetId}`, { waitUntil: 'networkidle' });
 
-  const fontGlob = '**/fonts/NotoSansJP-*.ttf';
+  const fontGlob = '**/fonts/noto-sans-jp-*.ttf';
 
   // 1 回目: フォント取得だけを落とす（回線不良・5xx の再現）。
   await page.route(fontGlob, (route) => route.abort());

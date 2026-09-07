@@ -25,8 +25,8 @@ import { splitForHyphenation } from './fonts';
 import { extractQualityPages } from './print-quality-extract.node';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 const REAL_BLOCKS_JSON = process.env.REAL_BLOCKS_JSON;
 
 if (!REAL_BLOCKS_JSON) {

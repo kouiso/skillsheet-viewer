@@ -18,8 +18,8 @@ import { extractQualityPages } from './print-quality-extract.node';
 import { DEFAULT_RASTER_OPTIONS, runRasterQualityChecks } from './print-quality-raster.node';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 
 const styles = StyleSheet.create({
   page: { paddingTop: 42, paddingBottom: 46, paddingHorizontal: 40, fontFamily: PDF_FONT_FAMILY, fontSize: 11 },

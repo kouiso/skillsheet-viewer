@@ -73,7 +73,7 @@ pnpm db:generate     # Drizzle マイグレーション生成
 pnpm db:migrate      # マイグレーション適用
 ```
 
-環境変数のセットアップ手順は `SETUP.md` を参照。必須変数（`DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`）は `src/lib/env.ts` の `assertServerEnv()` が起動時に検証し、欠けていれば全欠落を列挙して即座に throw する。
+環境変数のセットアップ手順は `setup.md` を参照。必須変数（`DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`）は `src/lib/env.ts` の `assertServerEnv()` が起動時に検証し、欠けていれば全欠落を列挙して即座に throw する。
 
 ---
 
