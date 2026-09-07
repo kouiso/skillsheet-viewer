@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
  *
  * 以前は 4 本のスクリプトがそれぞれ .env のパスを直に書き、パース処理も各自コピーして
  * いた。そのせいで bootstrap-owner だけがリポジトリルートの `.env` にも対応していて、
- * SETUP.md の手順どおりに進めた人が他のスクリプトで「.env が見つかりません」で止まる、
+ * setup.md の手順どおりに進めた人が他のスクリプトで「.env が見つかりません」で止まる、
  * という食い違いが起きていた。
  */
 
@@ -30,7 +30,7 @@ export function parseEnvFile(content: string): Record<string, string> {
   return result;
 }
 
-/** 探す順番。SETUP.md が案内する `.env` を先に、Next.js が読む `.env.local` を次に見る。 */
+/** 探す順番。setup.md が案内する `.env` を先に、Next.js が読む `.env.local` を次に見る。 */
 function envCandidates(): string[] {
   // scripts/ はリポジトリルート直下なので、1つ上がルート。
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');

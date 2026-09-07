@@ -53,8 +53,8 @@ async function main() {
   console.log(`[repro-194] sheet="${sheet.title}" blocks=${sheet.blocks.length}`);
 
   const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-  const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-  const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+  const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+  const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
   if (!existsSync(REGULAR_TTF) || !existsSync(BOLD_TTF)) throw new Error(`fonts not found under ${FONTS_DIR}`);
 
   Font.register({

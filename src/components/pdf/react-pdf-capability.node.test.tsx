@@ -45,8 +45,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import PDF_FONT_FAMILY from './constants';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');
-const REGULAR_TTF = path.join(FONTS_DIR, 'NotoSansJP-Regular.ttf');
-const BOLD_TTF = path.join(FONTS_DIR, 'NotoSansJP-Bold.ttf');
+const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
+const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 
 const GAP = 12;
 const CELL = 20;

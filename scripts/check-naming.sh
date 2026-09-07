@@ -23,10 +23,14 @@ cd "$(dirname "$0")/.."
 KEBAB='^[a-z0-9]+(-[a-z0-9]+)*$'
 
 # --- 除外（理由を必ず添える。増やすときはここに理由ごと書く） ---
-# 全大文字のルート文書は言語を問わない普遍的な慣習
+# README/LICENSE/Makefile/Dockerfile はツールが厳密な大文字綴りで exact match する。
+# CLAUDE.md は Claude Code、AGENTS.md はコーディングエージェント各種がリポジトリ直下の
+# 正確なファイル名として読む規約ファイル。SETUP.md は独自ドキュメントでどのツールも
+# 名前を強制しないため setup.md へ改名済み（このリストには含めない）。
 # ドットファイルは各ツールがファイル名を規定している
-# drizzle/ 配下は drizzle-kit の生成物（手で変えるとマイグレーションが壊れる）
-# public/fonts・material は配布物・素材の原名
+# drizzle/ 配下は drizzle-kit の生成物（手で変えるとマイグレーションが壊れる）。
+# public/fonts は独自バンドルの静的アセットでどのツールも元のファイル名を強制しない
+# ため kebab-case へ改名済み（このリストには含めない）。material は配布物・素材の原名。
 # .github/ISSUE_TEMPLATE・PULL_REQUEST_TEMPLATE は GitHub が名前を規定している
 # patches/ は `pnpm patch-commit` が `<パッケージ名>@<バージョン>.patch`
 # （スコープ付きは `@` を `__` に置換）という形式でファイル名を自動生成し、
@@ -34,10 +38,9 @@ KEBAB='^[a-z0-9]+(-[a-z0-9]+)*$'
 # 参照されるため、手でケバブケースへ変えると解決できなくなる。
 is_exempt() {
   case "$1" in
-    README.md|SETUP.md|CLAUDE.md|AGENTS.md|LICENSE|Makefile|Dockerfile) return 0 ;;
+    README.md|CLAUDE.md|AGENTS.md|LICENSE|Makefile|Dockerfile) return 0 ;;
     .*|*/.*) return 0 ;;
     drizzle/*) return 0 ;;
-    public/fonts/*) return 0 ;;
     material/*) return 0 ;;
     .github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE*) return 0 ;;
     patches/*) return 0 ;;

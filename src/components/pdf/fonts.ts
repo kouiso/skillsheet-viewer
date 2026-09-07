@@ -8,8 +8,8 @@ import PDF_FONT_FAMILY from './constants';
 // Noto Sans JP の CFF(OTF) 版を使うと @react-pdf/renderer の CFF サブセット化が
 // 壊れ、文字が豆腐（tofu）になったり、大量描画時にコンテンツが無音で消失する
 // （Issue #172）。TrueType 版を使うことで、埋め込み・抽出・ビューア表示が正常になる。
-const NotoSansJPRegular = '/fonts/NotoSansJP-Regular.ttf';
-const NotoSansJPBold = '/fonts/NotoSansJP-Bold.ttf';
+const NotoSansJPRegular = '/fonts/noto-sans-jp-regular.ttf';
+const NotoSansJPBold = '/fonts/noto-sans-jp-bold.ttf';
 
 // CJK/全角文字の開始コードポイント。これ以上は1文字単位で改行を許可する。
 const CODEPOINT = { CJK_START: 0x2e80 } as const;
