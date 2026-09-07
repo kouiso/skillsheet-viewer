@@ -42,6 +42,15 @@ describe('TechFilter', () => {
     expect(screen.getByRole('option', { name: /OnlyOnce/ })).toBeTruthy();
   });
 
+  it('候補パネルは固定会社見出しより前面に表示する', async () => {
+    const user = userEvent.setup();
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} />);
+
+    await user.click(screen.getByLabelText('技術を選ぶ'));
+
+    expect(screen.getByRole('listbox')).toHaveClass('z-30');
+  });
+
   it('選んだ技術はチップになり aria-pressed=true になる', async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();

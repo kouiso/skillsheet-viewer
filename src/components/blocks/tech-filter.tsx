@@ -134,7 +134,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             role="listbox"
             id={listboxId}
             aria-label="技術の候補"
-            className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-[var(--radius)] border border-border bg-card py-1 shadow-md"
+            className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-[var(--radius)] border border-border bg-card py-1 shadow-md"
           >
             {matches.map((tech, i) => (
               <button
