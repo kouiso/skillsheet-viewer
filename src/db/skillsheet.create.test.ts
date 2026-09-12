@@ -34,6 +34,7 @@ function createFakeDb(insertedSheetId: string, opts: { defaultExists?: boolean }
       }
       return { values: insertValues };
     }),
+    execute: vi.fn().mockResolvedValue(undefined),
   };
   const db = { transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) };
   return { db, insertValues, sheetValues };

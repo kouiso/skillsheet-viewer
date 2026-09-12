@@ -112,11 +112,26 @@ export function normalizeTechnologyCandidates(value: string): Set<string> {
   return new Set([...primary, ...annotation]);
 }
 
+/**
+ * 同一技術かどうかの判定。本体名（括弧注釈を除く正規形）の一致だけを同一視する。
+ * 「PostgreSQL (RDS)」と「RDS」は同一技術ではない（RDSは注釈=関連技術）。
+ * 経験月数の集計では technologyNamesRelated を使うこと。
+ */
 export function technologyNamesMatch(skillName: string, projectTechnology: string): boolean {
   const skill = normalizeTechnologyParts(skillName);
   const project = normalizeTechnologyParts(projectTechnology);
-  // 注釈どうし（例: "PostgreSQL (RDS)" と "MySQL (RDS)" の rds）だけでは一致にしない。
-  // 本体名が絡む一致だけを同一技術とみなす。
+  return [...skill.primary].some((c) => project.primary.has(c));
+}
+
+/**
+ * 経験月数集計用の「関連技術」判定。同一技術（本体名一致）に加えて、
+ * 片方の本体名が他方の注釈と一致する場合も関連ありとみなす。
+ * 例: スキル「RDS」は「MySQL (RDS)」「PostgreSQL (RDS)」を使う案件の経験に含む。
+ * 注釈どうし（「PostgreSQL (RDS)」と「MySQL (RDS)」の rds）だけでは関連にしない。
+ */
+export function technologyNamesRelated(skillName: string, projectTechnology: string): boolean {
+  const skill = normalizeTechnologyParts(skillName);
+  const project = normalizeTechnologyParts(projectTechnology);
   return (
     [...skill.primary].some((c) => project.primary.has(c)) ||
     [...skill.primary].some((c) => project.annotation.has(c)) ||
@@ -131,7 +146,7 @@ export function deriveSkillExperienceMonths(
 ): number {
   return collectProjectMonths(
     visibleProjects,
-    (item) => flattenTech(item.tech).some((technology) => technologyNamesMatch(skillName, technology)),
+    (item) => flattenTech(item.tech).some((technology) => technologyNamesRelated(skillName, technology)),
     referenceMonth,
   ).size;
 }

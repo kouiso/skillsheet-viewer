@@ -7,6 +7,7 @@ import {
   resolveDisplayedSkillExperience,
   resolveDisplayedStats,
   technologyNamesMatch,
+  technologyNamesRelated,
 } from './derived-display';
 
 const EMPTY_TECH: ProjectTech = { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] };
@@ -94,7 +95,9 @@ describe('技術名の完全一致', () => {
       new Set(['typescript/javascript', 'typescript', 'javascript']),
     );
     expect(technologyNamesMatch('Python', 'Python 3.13')).toBe(true);
-    expect(technologyNamesMatch('CI/CD (GitHub Actions)', 'GitHub Actions')).toBe(true);
+    // 括弧注釈との一致は同一ではなく関連（経験集計は関連判定で行う）
+    expect(technologyNamesMatch('CI/CD (GitHub Actions)', 'GitHub Actions')).toBe(false);
+    expect(technologyNamesRelated('CI/CD (GitHub Actions)', 'GitHub Actions')).toBe(true);
   });
 
   it('JavaとJavaScript、ReactとReact Nativeを誤って一致させない', () => {
@@ -129,11 +132,14 @@ describe('技術名の完全一致', () => {
   it('括弧内注釈どうしでは一致させない（PostgreSQL (RDS) ≠ MySQL (RDS)）', () => {
     // 本体名が違うのに注釈 (RDS) が同じだけで経験を統合すると水増しになる（再レビュー指摘）
     expect(technologyNamesMatch('PostgreSQL (RDS)', 'MySQL (RDS)')).toBe(false);
-    // 本体名が絡む一致は従来どおり有効
-    expect(technologyNamesMatch('Vue.js (Nuxt)', 'Nuxt')).toBe(true);
+    expect(technologyNamesRelated('PostgreSQL (RDS)', 'MySQL (RDS)')).toBe(false);
+    // 本体名の一致は同一技術として扱う
     expect(technologyNamesMatch('PostgreSQL (RDS)', 'PostgreSQL')).toBe(true);
-    // スキル名が注釈語そのもの（RDS 単体）なら、RDS を使う案件へ一致してよい
-    expect(technologyNamesMatch('RDS', 'MySQL (RDS)')).toBe(true);
+    // 本体↔注釈の一致は「同一」ではなく「関連」。経験月数は関連で集計する
+    expect(technologyNamesMatch('RDS', 'MySQL (RDS)')).toBe(false);
+    expect(technologyNamesRelated('RDS', 'MySQL (RDS)')).toBe(true);
+    expect(technologyNamesMatch('Vue.js (Nuxt)', 'Nuxt')).toBe(false);
+    expect(technologyNamesRelated('Vue.js (Nuxt)', 'Nuxt')).toBe(true);
   });
 
   it('末尾バージョンは除去して本体名で一致させる', () => {

@@ -25,7 +25,7 @@ import {
 } from './blocks';
 import { type Database, getDb } from './client';
 import { fetchMarkdownFromGitHub, getGitHubSeedConfig } from './github-seed';
-import { blocks, skillSheets } from './schema';
+import { blocks, skillSheets, skillsheetState } from './schema';
 
 export { fetchMarkdownFromGitHub, getGitHubSeedConfig, isGitHubSeedConfigured } from './github-seed';
 
@@ -90,10 +90,37 @@ export interface SheetSummary {
   updatedAt: Date;
 }
 
-/** オーナーの既定シート（is_default）を取得、なければ既存最古シートを昇格、さらに無ければ作成して ID を返す。 */
-async function getOrCreateDefaultSheetId(db: DbOrTx): Promise<string> {
+/**
+ * owner 単位のアドバイザリロック。既定フラグや初期化を変更する書込トランザクションの
+ * 先頭で取り、同時実行の createSheetInTx / deleteSheet / 初回初期化が
+ * 「既定なし」を同時に観測して部分ユニーク索引違反（500）にならないようにする（S09）。
+ * トランザクション終了時に自動解放される。
+ */
+async function lockOwner(tx: DbOrTx, ownerId: string): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${ownerId}))`);
+}
+
+/** 既定シートが無いときの実効既定（最古）を返す。昇格の書き込みは行わない。 */
+async function findOldestSheetId(db: DbOrTx, ownerId: string): Promise<string | undefined> {
+  const [oldest] = await db
+    .select({ id: skillSheets.id })
+    .from(skillSheets)
+    .where(eq(skillSheets.ownerId, ownerId))
+    .orderBy(asc(skillSheets.createdAt), asc(skillSheets.id))
+    .limit(1);
+  return oldest?.id;
+}
+
+/**
+ * オーナーの既定シート ID を返す。なければ既存最古シートを昇格、さらに無ければ作成する。
+ * 書込経路（保存・作成）からだけ呼ぶこと。読取では書き込まない（S09）。
+ * 呼び出し側のトランザクション内で lockOwner を取り、既定操作を owner 単位で直列化する。
+ */
+async function getOrCreateDefaultSheetId(tx: DbOrTx): Promise<string> {
   const ownerId = getOwnerId();
-  const existing = await db
+  await lockOwner(tx, ownerId);
+
+  const existing = await tx
     .select({ id: skillSheets.id })
     .from(skillSheets)
     .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
@@ -101,32 +128,28 @@ async function getOrCreateDefaultSheetId(db: DbOrTx): Promise<string> {
   if (existing[0]?.id) return existing[0].id;
 
   // 既定だけが失われた状態（既定シートの削除・旧データ移行直後など）では、
-  // 空の既定シートを新規に増やすのではなく最古シートを既定へ昇格する。
-  // is_default 導入前は「最も古いシートが既定」だったので、その意味を維持する（S09）。
-  const [oldest] = await db
-    .select({ id: skillSheets.id })
-    .from(skillSheets)
-    .where(eq(skillSheets.ownerId, ownerId))
-    .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
-    .limit(1);
-  if (oldest) {
-    // 同時実行では同じ行を同じ値で更新するだけなので冪等。別系統が先に既定を
-    // 作っていた場合は部分ユニーク索引が落とす（稀なレースで利用者には再試行させる）。
-    await db.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldest.id));
-    return oldest.id;
+  // 空の既定シートを新規に増やすのではなく最古シートを既定へ昇格する（S09）。
+  const oldestId = await findOldestSheetId(tx, ownerId);
+  if (oldestId) {
+    await tx.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldestId));
+    return oldestId;
   }
 
-  // 部分ユニーク索引により owner ごとの既定は高々 1 枚。同時作成は conflict で
-  // 片方だけが入り、負けた側は再 SELECT で勝者の ID を拾う（初回並行アクセスで
-  // 既定が 2 枚生まれない、S09）。
-  const inserted = await db
+  // 部分ユニーク索引により owner ごとの既定は高々 1 枚。advisory lock で直列化済み
+  // だが、ロック範囲外（手動SQL等）で作られた場合に備え conflict フォールバックも残す。
+  const inserted = await tx
     .insert(skillSheets)
     .values({ ownerId, title: TITLE, isDefault: true })
     .onConflictDoNothing()
     .returning({ id: skillSheets.id });
-  if (inserted[0]?.id) return inserted[0].id;
+  if (inserted[0]?.id) {
+    // 書込経路での作成は「初期化済み」の印も立てる。初回 seed は読取側の一度だけの
+    // 初期化が担うので、ここでは空の既定を作るだけに留める。
+    await tx.insert(skillsheetState).values({ ownerId }).onConflictDoNothing();
+    return inserted[0].id;
+  }
 
-  const retry = await db
+  const retry = await tx
     .select({ id: skillSheets.id })
     .from(skillSheets)
     .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
@@ -140,7 +163,14 @@ async function getOrCreateDefaultSheetId(db: DbOrTx): Promise<string> {
   return retryId;
 }
 
-async function ensureSeeded(db: Database): Promise<string> {
+/**
+ * 読取用の既定シート解決。通常読取では一切書き込まない（S09 の要求）。
+ * - is_default あり → その ID
+ * - フラグ無し・シートあり → 最古を実効既定として返すだけ（書かない）
+ * - シート 0 枚・初期化済み → null（全削除済み。初期データを復活させない）
+ * - シート 0 枚・未初期化 → 一度だけの初期化として既定を作り seed する
+ */
+async function ensureSeeded(db: Database): Promise<string | null> {
   const ownerId = getOwnerId();
   const existingDefault = await db
     .select({ id: skillSheets.id })
@@ -149,21 +179,19 @@ async function ensureSeeded(db: Database): Promise<string> {
     .limit(1);
   if (existingDefault[0]?.id) return existingDefault[0].id;
 
-  // 通常読取では書き込まない（S09 の要求）。is_default が全く無い期間だけ
-  // 「最古」を実効既定として読む。フラグの確定は書込経路（削除時昇格・
-  // 初回シート作成・既定への保存）に任せ、ここでは UPDATE/INSERT しない。
-  const [oldest] = await db
-    .select({ id: skillSheets.id })
-    .from(skillSheets)
-    .where(eq(skillSheets.ownerId, ownerId))
-    .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
-    .limit(1);
-  if (oldest) return oldest.id;
+  const oldestId = await findOldestSheetId(db, ownerId);
+  if (oldestId) return oldestId;
 
-  // GitHub seed は「オーナーにシートが 1 枚も無い初回導入」だけで実行する。
-  // ブロック 0 件を再取り込みの合図にすると、ユーザーが全削除した直後に
-  // 古い GitHub 本文が復活する（S09）。seed 取得に失敗した場合はシートも作らず
-  // throw が伝播し、次回アクセスで再試行できる。
+  // シート 0 枚。初期化済みなら「ユーザーが全削除した状態」なので何も作らない。
+  const [state] = await db
+    .select({ ownerId: skillsheetState.ownerId })
+    .from(skillsheetState)
+    .where(eq(skillsheetState.ownerId, ownerId))
+    .limit(1);
+  if (state) return null;
+
+  // 未初期化 = 初回導入。GitHub seed はこの一度だけ実行する。
+  // seed 取得に失敗した場合はシートも作らず throw が伝播し、次回アクセスで再試行できる。
   let segments: ReturnType<typeof splitMarkdownIntoBlocks> = [];
   const config = getGitHubSeedConfig();
   if (config) {
@@ -176,8 +204,19 @@ async function ensureSeeded(db: Database): Promise<string> {
     console.warn('[skillsheet] GitHub seed is not configured (GITHUB_TOKEN/OWNER/REPO); starting with an empty sheet.');
   }
 
-  // 初回導入の一度だけの初期化。通常読取ではここに来ない（上で既存シートを返す）。
   return db.transaction(async (tx) => {
+    await lockOwner(tx, ownerId);
+    // ロック待ちの間に別系統が初期化した可能性があるため再確認する
+    const [state2] = await tx
+      .select({ ownerId: skillsheetState.ownerId })
+      .from(skillsheetState)
+      .where(eq(skillsheetState.ownerId, ownerId))
+      .limit(1);
+    if (state2) {
+      return (await findOldestSheetId(tx, ownerId)) ?? null;
+    }
+    await tx.insert(skillsheetState).values({ ownerId }).onConflictDoNothing();
+
     const inserted = await tx
       .insert(skillSheets)
       .values({ ownerId, title: TITLE, isDefault: true })
@@ -288,6 +327,10 @@ export async function createSheetInTx(tx: DbOrTx, title: string, initialBlocks?:
   const ownerId = getOwnerId();
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
+  // 既定フラグの読み書きを owner 単位で直列化する。これを取らないと
+  // 同時作成の両方が「既定なし」を観測して部分ユニーク索引で 500 になる（S09）。
+  await lockOwner(tx, ownerId);
+
   // 既定が無い状態で最初のシートを作るなら、それを既定にする。
   // 削除時昇格と合わせて「is_default が全く無い期間」を通常経路では発生させない。
   const [defaultExists] = await tx
@@ -326,19 +369,15 @@ export async function deleteSheet(sheetId: string): Promise<void> {
   const db = getDb();
   const ownerId = getOwnerId();
   await db.transaction(async (tx) => {
+    await lockOwner(tx, ownerId);
     const [deleted] = await tx
       .delete(skillSheets)
       .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)))
       .returning({ isDefault: skillSheets.isDefault });
     if (!deleted?.isDefault) return;
-    const [oldest] = await tx
-      .select({ id: skillSheets.id })
-      .from(skillSheets)
-      .where(eq(skillSheets.ownerId, ownerId))
-      .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
-      .limit(1);
-    if (oldest) {
-      await tx.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldest.id));
+    const oldestId = await findOldestSheetId(tx, ownerId);
+    if (oldestId) {
+      await tx.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldestId));
     }
   });
 }
@@ -349,10 +388,13 @@ export async function getSkillSheetById(sheetId: string): Promise<SkillSheet> {
   return fetchSheetById(db, sheetId, true);
 }
 
-/** Read the skill sheet from the DB, seeding from GitHub on first access. */
+/** Read the skill sheet from the DB, seeding from GitHub only on the very first initialization. */
 export async function getSkillSheet(): Promise<SkillSheet> {
   const db = getDb();
   const sheetId = await ensureSeeded(db);
+  // null は「初期化済みだがシート 0 枚 = ユーザーが全削除した状態」。
+  // 空シートをそのまま返し、初期データを復活させない（S09）。
+  if (!sheetId) return { title: TITLE, content: '', blocks: [] };
   return fetchSheetById(db, sheetId);
 }
 
