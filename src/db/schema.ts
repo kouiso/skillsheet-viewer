@@ -1,9 +1,23 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 /**
  * スキルシート本体。将来のマルチユーザー化を見据え owner_id を持つ。
  * #50 で複数シート対応のため owner_id の unique 制約を除去し、代わりにインデックスを追加。
+ *
+ * is_default: 編集で既定が移動しないよう、既定シートを updated_at 昇順ではなく
+ * 明示フラグで持つ（S09）。owner ごとに高々 1 枚を部分ユニーク索引で保証する。
  */
 export const skillSheets = pgTable(
   'skill_sheets',
@@ -12,9 +26,13 @@ export const skillSheets = pgTable(
     ownerId: text('owner_id').notNull(),
     title: text('title').notNull(),
     theme: text('theme').notNull().default('light'),
+    isDefault: boolean('is_default').notNull().default(false),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
   },
-  (table) => [index('skill_sheets_owner_id_idx').on(table.ownerId)],
+  (table) => [
+    index('skill_sheets_owner_id_idx').on(table.ownerId),
+    uniqueIndex('skill_sheets_owner_default_unique').on(table.ownerId).where(sql`${table.isDefault}`),
+  ],
 );
 
 /**

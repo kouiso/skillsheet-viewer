@@ -14,15 +14,26 @@ function selectChain(result: unknown[]) {
   return chain;
 }
 
-function fakeDb(results: unknown[][]) {
+function fakeDb(results: unknown[][], opts: { insertedSheetId?: string; txResults?: unknown[][] } = {}) {
   let index = 0;
-  const values = vi.fn(() => ({ onConflictDoNothing: vi.fn().mockResolvedValue(undefined) }));
+  let txIndex = 0;
+  const values = vi.fn(() => ({
+    onConflictDoNothing: vi.fn(() => ({
+      returning: vi.fn().mockResolvedValue(opts.insertedSheetId ? [{ id: opts.insertedSheetId }] : []),
+    })),
+  }));
+  const tx = {
+    select: vi.fn(() => selectChain((opts.txResults ?? [])[txIndex++] ?? [])),
+    insert: vi.fn(() => ({ values })),
+    update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })) })),
+  };
   const db = {
     select: vi.fn(() => selectChain(results[index++] ?? [])),
     insert: vi.fn(() => ({ values })),
+    transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
   };
   dbHolder = db;
-  return { db, values };
+  return { db, tx, values };
 }
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -51,42 +62,68 @@ function configureSeed() {
 }
 
 describe('シート読み込み時のGitHub seed条件', () => {
-  it('既存ブロックがある場合は設定済みでもGitHubへアクセスしない', async () => {
+  it('既定シートがある場合は設定済みでもGitHubへアクセスしない', async () => {
     configureSeed();
-    const { db } = fakeDb([[{ id: 'sheet-1' }], [{ id: row.id }], [{ title: '合成シート' }], [row]]);
+    const { db } = fakeDb([[{ id: 'sheet-1' }], [{ title: '合成シート' }], [row]]);
     await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '合成本文', blocks: [row] });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
   });
 
-  it('空シートでも未設定なら警告を残して空のまま読む', async () => {
+  it('既定シートのブロックが 0 件でも再 seed しない（全削除後に GitHub 本文を復活させない、S09）', async () => {
+    configureSeed();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { db } = fakeDb([[{ id: 'sheet-1' }], [], [{ title: '合成シート' }], []]);
+    const { db } = fakeDb([[{ id: 'sheet-1' }], [{ title: '合成シート' }], []]);
+    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '', blocks: [] });
+    expect(warn).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('シートが 1 枚も無い初回導入かつ設定済みなら既定シートを作り Markdown を保存して読む', async () => {
+    configureSeed();
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ content: Buffer.from('合成本文').toString('base64') })));
+    const { db, tx, values } = fakeDb([[], [], [{ title: '合成シート' }], [row]], { insertedSheetId: 'sheet-1' });
+    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '合成本文', blocks: [row] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(tx.insert).toHaveBeenCalledTimes(2);
+    expect(values).toHaveBeenLastCalledWith([
+      { sheetId: 'sheet-1', type: 'markdown', order: 0, data: { markdown: '合成本文' } },
+    ]);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('シート 0 枚かつ未設定なら警告を残して空の既定シートを作る', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { tx } = fakeDb([[], [], [{ title: '合成シート' }], []], { insertedSheetId: 'sheet-1' });
     await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '', blocks: [] });
     expect(warn).toHaveBeenCalledExactlyOnceWith(
       '[skillsheet] GitHub seed is not configured (GITHUB_TOKEN/OWNER/REPO); starting with an empty sheet.',
     );
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(db.insert).not.toHaveBeenCalled();
+    // 既定シートの INSERT だけでブロックは挿入しない
+    expect(tx.insert).toHaveBeenCalledTimes(1);
   });
 
-  it('空シートかつ設定済みなら取得したMarkdownを保存して読む', async () => {
+  it('既定シート削除後に他シートだけ残っている場合は seed せず最古シートを既定へ昇格する', async () => {
     configureSeed();
-    fetchMock.mockResolvedValue(new Response(JSON.stringify({ content: Buffer.from('合成本文').toString('base64') })));
-    const { values } = fakeDb([[{ id: 'sheet-1' }], [], [{ title: '合成シート' }], [row]]);
-    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '合成本文', blocks: [row] });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(values).toHaveBeenCalledExactlyOnceWith([
-      { sheetId: 'sheet-1', type: 'markdown', order: 0, data: { markdown: '合成本文' } },
-    ]);
+    const { tx } = fakeDb([[], [{ id: 'other-sheet' }], [{ title: '別シート' }], [row]], {
+      txResults: [[{ id: 'other-sheet' }]],
+    });
+    await expect(getSkillSheet()).resolves.toEqual({ title: '別シート', content: '合成本文', blocks: [row] });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // 空の既定シートを新設せず、UPDATE で既存シートを昇格する
+    expect(tx.update).toHaveBeenCalledTimes(1);
+    expect(tx.insert).not.toHaveBeenCalled();
   });
 
   it('設定済みの取得失敗は保存せず読み込み元へ伝播する', async () => {
     configureSeed();
     fetchMock.mockResolvedValue(new Response('', { status: 403, statusText: 'Forbidden' }));
-    const { db } = fakeDb([[{ id: 'sheet-1' }], []]);
+    const { db, tx } = fakeDb([[], []]);
     await expect(getSkillSheet()).rejects.toThrow('GitHub API error: 403 Forbidden');
     expect(db.insert).not.toHaveBeenCalled();
+    expect(tx.insert).not.toHaveBeenCalled();
   });
 
   it('ID指定の読み込みは空シートでもGitHub seedを実行しない', async () => {
@@ -95,5 +132,12 @@ describe('シート読み込み時のGitHub seed条件', () => {
     await expect(getSkillSheetById('sheet-1')).resolves.toEqual({ title: '合成シート', content: '', blocks: [] });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('ID指定の読み込みは別オーナー・不存在を同じ NOT_FOUND にする（S08）', async () => {
+    const { SkillSheetNotFoundError } = await import('./skillsheet');
+    // owner_id 一致の行が無ければ親もブロックも読まずに終了する
+    fakeDb([[]]);
+    await expect(getSkillSheetById('foreign-sheet')).rejects.toBeInstanceOf(SkillSheetNotFoundError);
   });
 });

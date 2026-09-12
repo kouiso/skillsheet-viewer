@@ -67,6 +67,17 @@ function stripTrailingVersion(value: string): string {
 }
 
 /**
+ * 表記揺れを同一技術の正規キーへ寄せる承認済み別名辞書。
+ * 正規化（NFKC・小文字化・版除去）の後でだけ適用し、キーは正規化済みの小文字形で持つ。
+ * React / React Native のような関連技術の同一視は経験期間の水増しになるため禁止。
+ * 追加する別名は「同一技術である」と確認できたものだけに絞る。
+ */
+const TECHNOLOGY_ALIASES: Record<string, string> = {
+  // NestJS / Nest.js は同一フレームワーク。表記揺れで経験月数が過小算出されていた（issue M01）。
+  nestjs: 'nest.js',
+};
+
+/**
  * 複合名・括弧注釈・バージョン付きの既存データを、完全一致用の候補へ分解する。
  * 元データ自体は変更せず、表示時の導出にだけ用いる。
  */
@@ -80,6 +91,7 @@ export function normalizeTechnologyCandidates(value: string): Set<string> {
     .flatMap((part) => [part, ...part.split(/\s*(?:\/|(?<!\+)\+(?!\+)|,|、|・|&)\s*/)])
     .map(stripTrailingVersion)
     .map((part) => part.replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US'))
+    .map((part) => TECHNOLOGY_ALIASES[part] ?? part)
     .filter(Boolean);
   return new Set(candidates);
 }

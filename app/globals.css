@@ -348,7 +348,9 @@ body {
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
 }
 .markdown-content a {
-  color: var(--primary);
+  /* --primary はライト背景で 3.74:1 と AA(4.5)未達（監査実測）。--primary-dark は
+     ライト 5.8:1・ダーク（#0d9488 on #0a0d0f）も約5:1で両テーマ AA を満たす。 */
+  color: var(--primary-dark);
   text-decoration: none;
   font-weight: 500;
   border-bottom: 1px solid transparent;
