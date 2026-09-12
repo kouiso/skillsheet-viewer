@@ -11,7 +11,7 @@ function trpcClientError(code: string): TRPCClientError<never> {
   return new TRPCClientError(code, { result: { error: { data: { code } } } } as never);
 }
 
-const mockSave = vi.fn().mockResolvedValue({ updatedAt: new Date() });
+const mockSave = vi.fn().mockResolvedValue({ updatedAt: new Date(), revision: 6 });
 const mockCreate = vi.fn().mockResolvedValue({ sheetId: 'new-id' });
 const mockDelete = vi.fn().mockResolvedValue({ ok: true });
 const mockInvalidate = vi.fn().mockResolvedValue(undefined);
@@ -482,6 +482,70 @@ describe('BuilderClient 自動保存', () => {
       vi.advanceTimersByTime(5000);
     });
     expect(mockSave).toHaveBeenCalledTimes(1);
+  });
+
+  // R01: 応答の逆順到着。サーバ採番の版は単調増加なので、古い版の応答が後着しても
+  // クライアントの版を戻してはいけない（戻すと次回保存が誤 Conflict する）。
+  it('古い版の応答が後着しても版を戻さない（R01: 逆順到着対策）', async () => {
+    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: 6 });
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    typeMarkdown('## A1');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 5 }));
+
+    // 直前より古い版 3 を返す応答（逆順到着の縮約モデル）
+    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: 3 });
+    typeMarkdown('## A12');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 6 }));
+
+    // 古い応答で版が 3 へ戻っていないことを、次の保存の期待版で確認する
+    mockSave.mockResolvedValue({ updatedAt: new Date(), revision: 7 });
+    typeMarkdown('## A123');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 6 }));
+  });
+
+  // R01: 保存の飛行中に入った編集を、応答ハンドラが誤って「保存済み」へ戻さない。
+  // 応答時の dirty 判定は自分のスナップショットではなくライブの items/title と比較する。
+  it('保存中に入った編集は応答で dirty が解消されず、追撃保存が最新内容を送る', async () => {
+    let resolveSave: (value: { updatedAt: Date; revision: number }) => void = () => {};
+    mockSave.mockImplementationOnce(
+      () =>
+        new Promise<{ updatedAt: Date; revision: number }>((resolve) => {
+          resolveSave = resolve;
+        }),
+    );
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    typeMarkdown('## A1');
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+
+    // 飛行中の編集 — 古い応答がこの内容を消したり dirty を誤解消してはいけない
+    typeMarkdown('## A12');
+    await act(async () => {
+      resolveSave({ updatedAt: new Date(), revision: 6 });
+    });
+
+    mockSave.mockResolvedValue({ updatedAt: new Date(), revision: 7 });
+    await act(async () => {
+      vi.advanceTimersByTime(600);
+    });
+    // 追撃保存は「飛行中に編集した最新内容」と「応答で得た新版」を送る
+    expect(mockSave).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        expectedRevision: 6,
+        blocks: [{ type: 'markdown', data: { markdown: '## A12' } }],
+      }),
+    );
   });
 
   // 読み込みに失敗したまま保存すると、sheetId が空のまま既定シートを上書きしてしまう。

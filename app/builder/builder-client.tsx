@@ -356,7 +356,10 @@ const BuilderClient = ({
       savedRef.current = true;
       // 応答がネットワーク上で逆順到着しても版を後退させない（古い応答で最新版を
       // 上書きすると次回保存が誤 Conflict する）。版はサーバ採番で単調増加。
-      savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
+      // 版が欠けた応答（古いサーバ等）では現在値を維持する（NaN化防止）。
+      if (typeof result.revision === 'number') {
+        savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
+      }
       if (savedTitleRef.current !== currentTitle) {
         savedTitleRef.current = currentTitle;
         void utils.sheet.list.invalidate();
@@ -639,8 +642,10 @@ const BuilderClient = ({
         const result = await saveMutation.mutateAsync(payload);
         savedRef.current = true;
         // R01: 次回の競合判定基準にはサーバーが返した版を使う。応答の逆順到着で
-        // 版を後退させないよう単調増加を守る。
-        savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
+        // 版を後退させないよう単調増加を守る（版が欠けた応答では現状維持）。
+        if (typeof result.revision === 'number') {
+          savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
+        }
         if (savedTitleRef.current !== payload.title) {
           savedTitleRef.current = payload.title;
           void utils.sheet.list.invalidate();
