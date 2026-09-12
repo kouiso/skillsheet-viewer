@@ -8,9 +8,9 @@ export interface BlockUpdate {
   sheetId: string;
   /** 読み取り時点のシート更新時刻。別編集が先行したら書き込まず中断する。 */
   expectedUpdatedAt?: Date;
-  /** 更新後の data。元の data と deep-equal なら書き込みをスキップする。 */
+  /** 更新後の data。ロック後のDB値と同値なら書き込みをスキップする。 */
   data: unknown;
-  /** 元の data。差分判定に使う。 */
+  /** 読み取り時点の data。ロック後に変更前値として照合する。 */
   previous: unknown;
 }
 
@@ -33,34 +33,65 @@ function sortKeys(value: unknown): unknown {
 }
 
 export async function writeBlockUpdates(db: Database, updates: BlockUpdate[]): Promise<WriteResult> {
-  const changed = updates.filter((u) => !isSameJson(u.data, u.previous));
-  const sheetIds = [...new Set(changed.map((u) => u.sheetId))];
-  if (changed.length === 0) {
-    return { written: 0, skipped: updates.length, sheets: 0 };
+  if (updates.length === 0) return { written: 0, skipped: 0, sheets: 0 };
+  if (new Set(updates.map((update) => update.id)).size !== updates.length) {
+    throw new Error('Duplicate block update');
   }
-  await db.transaction(async (tx) => {
-    // アプリ側の保存と同じ行ロックを取り、保存トランザクションと直列化する。
+  const sheetIds = [...new Set(updates.map((update) => update.sheetId))].sort();
+  return db.transaction(async (tx) => {
+    // アプリ側の保存と同じシート行を、安定した順序でロックする。
     const lockedSheets = await tx
       .select({ id: skillSheets.id, updatedAt: skillSheets.updatedAt })
       .from(skillSheets)
       .where(inArray(skillSheets.id, sheetIds))
+      .orderBy(skillSheets.id)
       .for('update');
     const currentUpdatedAt = new Map(lockedSheets.map((sheet) => [sheet.id, sheet.updatedAt]));
-    for (const update of changed) {
-      if (!update.expectedUpdatedAt) continue;
-      const expectedTime = new Date(update.expectedUpdatedAt).getTime();
-      const currentTime = new Date(currentUpdatedAt.get(update.sheetId) ?? 0).getTime();
-      if (currentTime > expectedTime) {
-        throw new Error(`Concurrent update detected for sheet: ${update.sheetId}`);
+    for (const sheetId of sheetIds) {
+      if (!currentUpdatedAt.has(sheetId)) throw new Error(`Sheet not found: ${sheetId}`);
+    }
+    const currentBlocks = await tx
+      .select({ id: blocks.id, sheetId: blocks.sheetId, data: blocks.data })
+      .from(blocks)
+      .where(
+        inArray(
+          blocks.id,
+          updates.map((update) => update.id),
+        ),
+      );
+    const byId = new Map(currentBlocks.map((block) => [block.id, block]));
+    const changed: BlockUpdate[] = [];
+    for (const update of updates) {
+      const current = byId.get(update.id);
+      if (!current || current.sheetId !== update.sheetId) {
+        throw new Error(`Block missing or moved: ${update.id}`);
       }
+      // 成功済みの再実行では、古い更新時刻でも書き込みを発生させない。
+      if (isSameJson(current.data, update.data)) continue;
+      if (!isSameJson(current.data, update.previous)) {
+        throw new Error(`Concurrent update detected for block: ${update.id}`);
+      }
+      if (update.expectedUpdatedAt) {
+        const expectedTime = new Date(update.expectedUpdatedAt).getTime();
+        const currentTime = new Date(currentUpdatedAt.get(update.sheetId) ?? 0).getTime();
+        if (!Number.isFinite(expectedTime) || currentTime !== expectedTime) {
+          throw new Error(`Concurrent update detected for sheet: ${update.sheetId}`);
+        }
+      }
+      changed.push(update);
     }
     for (const update of changed) {
-      await tx.update(blocks).set({ data: update.data }).where(eq(blocks.id, update.id));
+      await tx
+        .update(blocks)
+        .set({ data: update.data })
+        .where(and(eq(blocks.id, update.id), eq(blocks.sheetId, update.sheetId)));
     }
-    // 古い expectedUpdatedAt を持つ編集タブの保存が ConflictError になるよう、必ず進める。
-    await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(inArray(skillSheets.id, sheetIds));
+    const changedSheetIds = [...new Set(changed.map((update) => update.sheetId))];
+    if (changedSheetIds.length > 0) {
+      await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(inArray(skillSheets.id, changedSheetIds));
+    }
+    return { written: changed.length, skipped: updates.length - changed.length, sheets: changedSheetIds.length };
   });
-  return { written: changed.length, skipped: updates.length - changed.length, sheets: sheetIds.length };
 }
 
 /**

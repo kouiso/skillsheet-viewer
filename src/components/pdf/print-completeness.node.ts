@@ -25,11 +25,13 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import type { Block, ProjectTech } from '@/db/blocks';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/blocks';
+import { resolveDisplayedSkillExperience } from '@/db/derived-display';
 import { flattenTech, TECH_BUCKET_LABELS, TECH_BUCKET_ORDER } from '@/db/process';
+import { sanitizeHtml } from '@/db/sanitize-html';
 
 import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import type { QualityPage } from './print-quality';
-import { PRINT_SIZE } from './print-tokens';
+import { PRINT_SIZE, PRINT_TOP_SKILL_LIMIT, PRINT_TYPE, PRINT_YEAR_VISIBLE_CATEGORIES } from './print-tokens';
 import type { PrintViewKey } from './print-view-model';
 import { buildPrintViewModel } from './print-view-model';
 
@@ -43,13 +45,18 @@ const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline'];
  */
 const PROFILE_SHORT_VALUE_CHARS = 30;
 
-export type CompletenessCategory = 'profile' | 'stats' | 'pr' | 'company' | 'project';
+export type CompletenessCategory = 'profile' | 'stats' | 'pr' | 'company' | 'project' | 'skills';
 
 /** 「印刷結果のどこかに載っているはず」の 1 個の事実。 */
 export interface CompletenessFact {
+  /** 簡約表では案件名より前に描画する期間。範囲開始をこの列まで含める。 */
+  headingPrefix?: string;
+  region?: 'topSkills' | 'strengths' | 'skills';
   category: CompletenessCategory;
   /** どの実体の事実か（会社名・案件名・'page1'）。欠落レポートのグルーピング単位。 */
   scope: string;
+  /** 同名案件を区別する内部ID。省略時はscopeを使う。 */
+  scopeId?: string;
   /** 人間向けの説明（例: "技術(言語): TypeScript" "業務内容 2行目"）。 */
   label: string;
   /** PDF のテキストレイヤーに現れるはずの原文（正規化前）。 */
@@ -214,7 +221,10 @@ const FOOTER_TOP_Y = PRINT_SIZE.padBottom + 14;
  */
 function footerFilteredItems(page: QualityPage): QualityPage {
   const withoutFooter = page.filter((item) => item.y >= FOOTER_TOP_Y);
-  return withoutFooter.length > 0 ? withoutFooter : page;
+  const body = withoutFooter.length > 0 ? withoutFooter : page;
+  // pdfjsのyは下端原点。本文はA4高さ842pt−上余白42pt以下にあり、
+  // この上の絶対配置ヘッダーは省略記号で「続き」が消えても本文に混ぜない。
+  return body.filter((item) => item.y <= PRINT_SIZE.pageHeight - PRINT_SIZE.padTop);
 }
 
 /**
@@ -245,33 +255,21 @@ function buildNormalizedPage(page: QualityPage): NormalizedPage {
   return { text, itemSpans };
 }
 
-/**
- * `key` がこのページの中に「見出しとして」現れているかを判定する。
- *
- * 会社概要の地の文（`company.note`）は、複数の案件名を「業務委託にて、A、B を担当。」の
- * ように 1 文の中で羅列する。この文字列は改行も区切り文字も無いまま案件名を含むため、
- * 単純な部分文字列一致では「本文中の言及」と「その案件のカード自体の見出し」を区別
- * できない（実測: E社の概要が『3D メディア販売向けのポートフォリオサイトの構築』に
- * 言及した時点でその案件の開始ページと誤認し、実際のカード 1 ページぶんが範囲の外に
- * 出て 21 個の事実が missing 化した）。
- *
- * 見出しは `project-card-detail.tsx` / `project-card-compact.tsx` がその案件名だけを
- * 単独の `PrintText` として描画するため、pdfjs の item 境界が案件名の先頭・末尾と
- * ぴったり揃う（実測: 見出し側は item が "3" から "構築" まで案件名の文字だけで完結する。
- * 地の文側は同じ案件名が "にて、3"（前方に余分な文字が同居した item）から始まる）。
- * 地の文はその文全体が変数長の item に分割されるだけで、案件名の前後で item が
- * 綺麗に切れる保証が無い。この「item 境界が一致するか」を見出しかどうかの判定に使う。
- */
-function hasHeadingOccurrence(np: NormalizedPage, key: string): boolean {
-  if (!key) return false;
-  let from = 0;
+/** 本文中の言及を避け、item境界または通し番号の直後にある案件名を探す。 */
+function headingOccurrence(np: NormalizedPage, key: string, from = 0): number {
+  if (!key) return -1;
   for (;;) {
     const idx = np.text.indexOf(key, from);
-    if (idx === -1) return false;
+    if (idx === -1) return -1;
     const end = idx + key.length;
-    const startsAtItem = np.itemSpans.some((span) => span.start === idx);
+    // 通し番号と案件名の先頭が同じpdfjs itemに入る場合もある。
+    const startsAtItem = np.itemSpans.some(
+      (span) =>
+        span.start === idx || (span.start < idx && span.end > idx && /^\d+\.$/.test(np.text.slice(span.start, idx))),
+    );
     const endsAtItem = np.itemSpans.some((span) => span.end === end);
-    if (startsAtItem && endsAtItem) return true;
+    const isContinuation = np.text.slice(end).startsWith('（続き）');
+    if (startsAtItem && endsAtItem && !isContinuation) return idx;
     from = idx + 1;
   }
 }
@@ -290,19 +288,79 @@ function hasHeadingOccurrence(np: NormalizedPage, key: string): boolean {
  *    `ProjectTech`（`filterVisibleProjectData` 通過後）から `flattenTech` で
  *    分類ごとに取り直す。
  */
-export function enumerateCompletenessFacts(blocks: Block[], views: PrintViewKey[] = ALL_VIEWS): CompletenessFact[] {
+export function enumerateCompletenessFacts(
+  blocks: Block[],
+  views: PrintViewKey[] = ALL_VIEWS,
+  referenceMonth?: number,
+): CompletenessFact[] {
   const on = (key: PrintViewKey) => views.includes(key);
   const facts: CompletenessFact[] = [];
   // sheetTitle はここでは無視してよい（このファイルの呼び出し元が別途タイトル文字列の
   // 有無を検証する対象ではなく、あらゆる呼び出しで固定の "エンジニアスキルシート" になる）。
-  const vm = buildPrintViewModel('', blocks, views);
+  const vm = buildPrintViewModel('', blocks, views, referenceMonth);
 
   // --- 1 ページ目: 氏名・肩書き・プロフィール項目・統計・自己紹介 ---
   const profile = blocks.find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile')?.data;
-  const stats = blocks.find((b): b is Extract<Block, { type: 'stats' }> => b.type === 'stats')?.data;
 
   pushFact(facts, 'profile', 'page1', '氏名', profile?.name);
   pushFact(facts, 'profile', 'page1', '肩書き', profile?.title);
+
+  // VMのスキルや強みが誤って削られても、元ブロックから欠落を検出する。
+  for (const [index, strength] of (profile?.strengths ?? []).entries()) {
+    pushFact(facts, 'profile', 'page1', `強み ${index + 1}`, sanitizeHtml(strength).trim());
+    if (sanitizeHtml(strength).trim()) facts[facts.length - 1].region = 'strengths';
+  }
+  if (on('skills')) {
+    const projectSource = blocks.find(
+      (block): block is Extract<Block, { type: 'project' }> => block.type === 'project',
+    );
+    const projects = projectSource ? filterVisibleProjectData(projectSource.data).items : [];
+    const sourceSkills = blocks
+      .filter((block): block is Extract<Block, { type: 'skills' }> => block.type === 'skills')
+      .flatMap((block, groupIndex) => {
+        const category = sanitizeHtml(block.data.category ?? '').trim();
+        const skills = (block.data.skills ?? []).filter((skill) => sanitizeHtml(skill.name ?? '').trim());
+        if (skills.length > 0) pushFact(facts, 'skills', block.id, 'スキル分類', category);
+        return skills.map((skill, skillIndex) => {
+          const name = sanitizeHtml(skill.name).trim();
+          const experience = resolveDisplayedSkillExperience(skill, projects, referenceMonth);
+          const years = PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
+            ? experience.label.replace(/^(\d+)年(?:(\d+)ヶ月)?$/, (_, year, month) =>
+                month === undefined ? `${year} 年` : `${year} 年 ${month} ヶ月`,
+              )
+            : '';
+          pushFact(facts, 'skills', block.id, `スキル: ${name}`, years ? `${name}（${years}）` : name);
+          return {
+            name,
+            years,
+            months: experience.months,
+            featured: skill.featured === true,
+            order: groupIndex * 1000 + skillIndex,
+          };
+        });
+      });
+    const featuredMode = sourceSkills.some((skill) => skill.featured);
+    const top = [...sourceSkills]
+      .sort(
+        (a, b) =>
+          (featuredMode ? Number(b.featured) - Number(a.featured) : 0) || b.months - a.months || a.order - b.order,
+      )
+      .slice(0, PRINT_TOP_SKILL_LIMIT);
+    for (const skill of top) {
+      pushFact(
+        facts,
+        'profile',
+        'page1',
+        `主力スタック: ${skill.name}`,
+        skill.years ? `${skill.name} ${skill.years}` : skill.name,
+      );
+    }
+  }
+
+  for (const fact of facts) {
+    if (fact.category === 'skills') fact.region = 'skills';
+    if (fact.label.startsWith('主力スタック:')) fact.region = 'topSkills';
+  }
 
   // 所属 + meta の各項目。buildSummary と同じ並びで集め、30 文字を超える値は
   // 1 ページ目ではなくスキル一覧ページ（skills-page.tsx の expertiseRows）に回る。
@@ -324,7 +382,7 @@ export function enumerateCompletenessFacts(blocks: Block[], views: PrintViewKey[
     facts.push({ category: 'pr', scope: 'page1', label: `自己紹介 ${i + 1}段落目`, text: line });
   });
 
-  for (const item of stats?.items ?? []) {
+  for (const item of vm.summary.stats) {
     const value = trimmed(item.value);
     const unit = trimmed(item.unit);
     const label = trimmed(item.label);
@@ -350,8 +408,15 @@ export function enumerateCompletenessFacts(blocks: Block[], views: PrintViewKey[
       pushFact(facts, 'company', scope, '会社概要', company.note);
 
       for (const project of company.projects) {
+        const firstFact = facts.length;
         const projectScope = project.title;
-        facts.push({ category: 'project', scope: projectScope, label: '案件名', text: project.title });
+        facts.push({
+          category: 'project',
+          scope: projectScope,
+          label: '案件名',
+          text: project.title,
+          headingPrefix: project.level === 'detail' ? undefined : project.compactPeriodText,
+        });
 
         // 期間: 簡約版と詳細版で「印刷される文字列そのもの」が違う
         // （project-card-compact.tsx は compactPeriodText、project-card-detail.tsx は
@@ -399,6 +464,7 @@ export function enumerateCompletenessFacts(blocks: Block[], views: PrintViewKey[
         extractMarkdownFacts(project.comment).forEach((line, i) => {
           facts.push({ category: 'project', scope: projectScope, label: `コメント ${i + 1}行目`, text: line });
         });
+        for (let i = firstFact; i < facts.length; i++) facts[i].scopeId = project.id;
       }
     }
   }
@@ -409,40 +475,16 @@ export function enumerateCompletenessFacts(blocks: Block[], views: PrintViewKey[
 // --- PDF テキストとの照合 ---------------------------------------------------------
 
 /**
- * ブロック配列から列挙した事実を、抽出済みの PDF ページ配列と突き合わせる。
- *
- * 案件ごとの事実（技術名・メタ表・本文行）は、**その案件が乗っているページ範囲だけ**を
- * 相手に探す。文書全体から探すと、複数案件で使い回される技術名（React / TypeScript /
- * AWS 等）や似た文言が「別の案件の記述で見つかった」ことになり、当の案件では
- * PRINT_CHIP_LIMIT で切り捨てられているのに missing を検出できない（実測で確認）。
- * ページ範囲は「案件名が最初に現れるページ」から「次の案件名が現れるページ」まで
- * （境界の 1 ページは両案件で共有する。詳細版カードは前の案件の本文が乗ったまま次の
- * 案件の見出しが同じページに始まることがあり、`nextStart - 1` で切ると本文ごと
- * 範囲の外に出て誤検出になる — 実測で発見）。案件名自体と、会社・プロフィール・
- * 統計など単一箇所にしか現れない事実は文書全体を相手にする。
- *
- * ページをまたいで分割された本文は、境界に**もう 1 種類**の割り込みが入る（実測で発見）。
- * 詳細版カードの継続ヘッダー（`DynamicView fixed`、project-card-detail.tsx）と簡約表の
- * 列ヘッダー（`CompactTableHeader`）はどちらも `fixed` で、pdfjs の抽出順では継続先
- * ページの**先頭**（本文の直前）に literal に出る（実測: 「…を統合。認」の直後、次の
- * ページの先頭に「企業向けドキュメント管理・AI活用支援システム（続き）A社（大手
- * SIベンダー）2025.06~2025.07」が丸ごと乗ってから「証基盤では…」の続きが始まる —
- * 制御文字などの区切りは無く、単にそのページの最初の内容として出る）。
- *
- * 「案件名（続き）」自体は blind に（文書全体から）剥がしてよい — 初出には絶対に
- * 付かない接尾辞なので、正しい初出を巻き込む心配がない。だが続く会社名・期間・稼働期間は
- * 接尾辞を持たず、**同じ文字列がその案件の初出ページにも正しく出る**。ここを blind に
- * 剥がすと、その案件の「期間」の事実そのものを消してしまう（実測で自己回帰: 追加した
- * 瞬間に 14 件の期間の欠落を新たに作った）。そのため会社名・期間・稼働期間の除去は
- * 「その案件の**継続ページ**（開始ページより後、終了ページまで）の**先頭**に一致した
- * ときだけ」に絞る。開始ページ自身と、他の案件の初出ページは対象にならないので安全。
+ * 案件見出しから次案件の見出し直前までを照合する。同名案件はscopeIdで分離する。
+ * 簡約表の期間列は見出しより前にあるためheadingPrefixまで開始位置を広げる。
+ * 継続ページの固定見出しとfooterを除き、改ページした本文を連結する。
  */
 export function checkCompleteness(
   facts: CompletenessFact[],
   pages: QualityPage[],
   continuationHeaderNoise: ContinuationHeaderNoise[] = [],
 ): CompletenessReport {
-  // item 境界つきの正規化結果を作っておく（`hasHeadingOccurrence` が使う）。
+  // item 境界つきの正規化結果を作っておく（`headingOccurrence` が使う）。
   // `np.text` はページを 1 本の文字列として正規化したものと常に一致する
   // （buildNormalizedPage のコメント参照）ため、以降の rawPageTexts はここから作る。
   const normalizedPages = pages.map(buildNormalizedPage);
@@ -471,104 +513,134 @@ export function checkCompleteness(
 
   const pageTexts = rawPageTexts.map(stripGlobalSafeNoise);
 
-  const projectScopesInOrder: string[] = [];
-  const seenScopes = new Set<string>();
-  for (const fact of facts) {
-    if (fact.category !== 'project' || seenScopes.has(fact.scope)) continue;
-    seenScopes.add(fact.scope);
-    projectScopesInOrder.push(fact.scope);
+  const scopeKey = (fact: { scope: string; scopeId?: string }) => fact.scopeId ?? fact.scope;
+  const titles = facts.filter((fact) => fact.category === 'project' && fact.label === '案件名');
+  type Position = { page: number; offset: number };
+  const starts = new Map<string, Position>();
+  let cursor: Position = { page: 0, offset: 0 };
+  for (const title of titles) {
+    const key = normalizeForMatch(title.text);
+    for (let page = cursor.page; page < normalizedPages.length; page++) {
+      const offset = headingOccurrence(normalizedPages[page], key, page === cursor.page ? cursor.offset : 0);
+      if (offset === -1) continue;
+      const beforeTitle = normalizedPages[page].text.slice(0, offset);
+      const prefix = normalizeForMatch(title.headingPrefix ?? '');
+      const prefixStart = prefix ? beforeTitle.lastIndexOf(prefix) : -1;
+      const between = prefixStart >= 0 ? beforeTitle.slice(prefixStart + prefix.length) : '';
+      const startOffset = prefixStart >= 0 && (between === '' || /^\d+\.$/.test(between)) ? prefixStart : offset;
+      starts.set(scopeKey(title), { page, offset: startOffset });
+      cursor = { page, offset: offset + key.length };
+      break;
+    }
   }
 
-  // 案件名の先頭ページを、直前の案件の開始ページ以降から単調に探す（文書順を前提にする
-  // ことで、短い/汎用的なタイトルが文書の前の方に偶然一致する事故を避ける）。
-  //
-  // まず「見出しとしての一致」（hasHeadingOccurrence）だけを探す。会社概要の地の文が
-  // 後続の案件名に言及していても、それは見出しの item 境界を持たないため候補にならず、
-  // 本物のカード見出しがあるページまで正しく読み飛ばせる。
-  // 見出しとしての一致が 1 件も無いときだけ、旧来のブラインドな部分文字列一致
-  // （`pageTexts[i].includes(key)`）にフォールバックする。案件そのものが本当に
-  // 描画されていない場合はここでも見つからず、`found === -1` のまま個別の fact 判定
-  // （文書全体を相手にする）に委ねられる — 検出を弱めない（見出しの判定基準を厳しく
-  // する方向にしか変えていない）。
-  const startPage = new Map<string, number>();
-  let cursor = 0;
-  for (const scope of projectScopesInOrder) {
-    const key = normalizeForMatch(scope);
-    let found = -1;
-    for (let i = cursor; i < normalizedPages.length; i++) {
-      if (hasHeadingOccurrence(normalizedPages[i], key)) {
-        found = i;
-        break;
-      }
-    }
-    if (found === -1) {
-      for (let i = cursor; i < pageTexts.length; i++) {
-        if (pageTexts[i].includes(key)) {
-          found = i;
-          break;
+  // ページ境界ではなく次案件の見出し位置で切る。前案件の続きは残し、隣接案件の
+  // 同文・同技術による欠落の埋め合わせを防ぐ。見出し不在時に全体検索へ逃がさない。
+  const rangeHaystack = new Map<string, string>();
+  for (let index = 0; index < titles.length; index++) {
+    const scope = scopeKey(titles[index]);
+    const start = starts.get(scope);
+    if (!start) continue;
+    const next = titles
+      .slice(index + 1)
+      .map((title) => starts.get(scopeKey(title)))
+      .find(Boolean);
+    const end = next ?? { page: rawPageTexts.length - 1, offset: rawPageTexts.at(-1)?.length ?? 0 };
+    const segments: string[] = [];
+    for (let page = start.page; page <= end.page; page++) {
+      let text = stripGlobalSafeNoise(
+        rawPageTexts[page].slice(page === start.page ? start.offset : 0, page === end.page ? end.offset : undefined),
+      );
+      if (page > start.page) {
+        for (const noise of continuationHeaderNoise) {
+          if (scopeKey(noise) !== scope) continue;
+          const pattern = normalizeForMatch(noise.text);
+          if (pattern && text.startsWith(pattern)) text = text.slice(pattern.length);
         }
       }
+      segments.push(text);
     }
-    if (found === -1) continue; // 案件名自体が見つからない → 個別の fact 判定で missing になる
-    startPage.set(scope, found);
-    cursor = found;
+    rangeHaystack.set(scope, segments.join(''));
   }
-
-  const endPage = new Map<string, number>();
-  for (let i = 0; i < projectScopesInOrder.length; i++) {
-    const scope = projectScopesInOrder[i];
-    const start = startPage.get(scope);
-    if (start === undefined) continue;
-    let end = pageTexts.length - 1;
-    for (let j = i + 1; j < projectScopesInOrder.length; j++) {
-      const nextStart = startPage.get(projectScopesInOrder[j]);
-      if (nextStart !== undefined) {
-        // 次の案件の開始ページ**自身**まで含める（`nextStart - 1` で切ると壊れる）。
-        // @react-pdf は密に詰めるため、詳細版カードは前の案件の本文が乗ったまま
-        // 次の案件の見出しが同じページに始まる（実測: 動画配信サービス案件のコメントが
-        // 次の案件「マッチングアプリの開発」の開始ページと同じページに乗っていた。
-        // `nextStart - 1` で切ると、その本文ごと範囲の外に出て「見つからない」误検出になる）。
-        // 境界ページを両案件で共有する分だけ、隣接案件間で技術名が誤って「見つかった」
-        // ことになるリスクはあるが、本文を丸ごと取りこぼす方が実害が大きい。
-        end = Math.max(start, nextStart);
-        break;
-      }
-    }
-    endPage.set(scope, end);
-  }
-
-  // 会社名・期間・稼働期間は、その案件自身の「継続ページ」の先頭に一致したときだけ剥がす
-  // （開始ページそのものと、他の案件の初出ページは対象にしない）。
-  for (const noise of continuationHeaderNoise) {
-    const start = startPage.get(noise.scope);
-    const end = endPage.get(noise.scope);
-    if (start === undefined || end === undefined) continue;
-    const pattern = normalizeForMatch(noise.text);
-    if (!pattern) continue;
-    for (let p = start + 1; p <= end; p++) {
-      if (pageTexts[p].startsWith(pattern)) pageTexts[p] = pageTexts[p].slice(pattern.length);
-    }
-  }
-
   const globalHaystack = pageTexts.join('');
-  const rangeHaystack = new Map<string, string>();
-  for (const scope of projectScopesInOrder) {
-    const start = startPage.get(scope);
-    const end = endPage.get(scope);
-    if (start === undefined || end === undefined) continue;
-    rangeHaystack.set(scope, pageTexts.slice(start, end + 1).join(''));
+  // 同じ技術名が案件や一覧にあっても、表紙の主力チップの代わりにはしない。
+  const fragments = pages.flatMap((page, pageIndex) =>
+    footerFilteredItems(page).map((item) => ({ ...item, pageIndex })),
+  );
+  // pdfjsは和文見出しを複数itemへ分割する。同じベースライン・サイズの隣接断片を復元する。
+  const items: typeof fragments = [];
+  for (const item of fragments) {
+    const previous = items.at(-1);
+    if (
+      previous &&
+      previous.pageIndex === item.pageIndex &&
+      Math.abs(previous.y - item.y) < 0.2 &&
+      Math.abs(previous.size - item.size) < 0.2 &&
+      item.x >= previous.x &&
+      item.x - (previous.x + previous.width) >= -0.2 &&
+      item.x - (previous.x + previous.width) < 2
+    ) {
+      previous.text += item.text;
+      previous.width = item.x + item.width - previous.x;
+    } else items.push({ ...item });
   }
+  const atLeft = (item: (typeof items)[number]) => Math.abs(item.x - PRINT_SIZE.padHorizontal) < 2;
+  const heading = (item: (typeof items)[number], names: string[], size: number) =>
+    atLeft(item) && Math.abs(item.size - size) < 0.2 && names.includes(normalizeForMatch(item.text));
+  const skillStart = items.findIndex((item) => heading(item, ['スキル一覧'], PRINT_TYPE.company.fontSize));
+  const projectPages = [...starts.values()].map((position) => position.page);
+  const firstProjectPage = projectPages.length ? Math.min(...projectPages) : pages.length;
+  const summaryEnd = skillStart >= 0 ? skillStart : items.findIndex((item) => item.pageIndex >= firstProjectPage);
+  const summaryItems = items.slice(0, summaryEnd < 0 ? undefined : summaryEnd);
+  const metaLabels = facts
+    .filter((fact) => fact.label.startsWith('プロフィール: '))
+    .map((fact) => normalizeForMatch(fact.label.slice('プロフィール: '.length)));
+  const sectionNames = [
+    ...metaLabels,
+    '主力スタック',
+    '主力スタック（経験年数）',
+    '対応可能工程',
+    '得意分野',
+    '自己紹介',
+  ];
+  const summaryRegion = (names: string[]) => {
+    const start = summaryItems.findIndex((item) => heading(item, names, PRINT_TYPE.sectionLabel.fontSize));
+    if (start < 0) return '';
+    const tail = summaryItems.slice(start + 1);
+    const end = tail.findIndex((item) => heading(item, sectionNames, PRINT_TYPE.sectionLabel.fontSize));
+    return tail
+      .slice(0, end < 0 ? undefined : end)
+      .map((item) => normalizeForMatch(item.text))
+      .join('');
+  };
+  const regionHaystacks = {
+    topSkills: summaryRegion(['主力スタック', '主力スタック（経験年数）']),
+    strengths: summaryRegion(['得意分野']),
+    skills:
+      skillStart < 0
+        ? ''
+        : items
+            .slice(skillStart + 1)
+            .filter((item) => item.pageIndex < firstProjectPage)
+            .map((item) => normalizeForMatch(item.text))
+            .join(''),
+  };
 
   const missing: CompletenessFinding[] = [];
   let totalFound = 0;
+  const regionOccurrences = new Map<string, number>();
   for (const fact of facts) {
     const key = normalizeForMatch(fact.text);
     if (!key) continue;
-    // 案件名そのものは範囲探索の前提になる事実なので、範囲に自分自身を探す循環を避けて
-    // 文書全体で判定する。
-    const isTitleFact = fact.category === 'project' && fact.label === '案件名';
-    const haystack = isTitleFact ? globalHaystack : (rangeHaystack.get(fact.scope) ?? globalHaystack);
-    if (haystack.includes(key)) {
+    const haystack = fact.region
+      ? regionHaystacks[fact.region]
+      : fact.category === 'project'
+        ? (rangeHaystack.get(scopeKey(fact)) ?? '')
+        : globalHaystack;
+    const occurrenceKey = `${fact.region}:${key}`;
+    const occurrence = haystack.indexOf(key, fact.region ? (regionOccurrences.get(occurrenceKey) ?? 0) : 0);
+    if (occurrence >= 0) {
+      if (fact.region) regionOccurrences.set(occurrenceKey, occurrence + key.length);
       totalFound += 1;
     } else {
       missing.push({ fact });
@@ -582,6 +654,8 @@ export function checkCompleteness(
 export interface ContinuationHeaderNoise {
   /** どの案件の継続ページに出る断片か（その案件の継続ページ範囲だけを対象にする）。 */
   scope: string;
+  /** 同名案件を区別する内部ID。省略時はscopeを使う。 */
+  scopeId?: string;
   /** 剥がす文字列（正規化前）。 */
   text: string;
 }
@@ -595,8 +669,9 @@ export interface ContinuationHeaderNoise {
 export function buildContinuationHeaderNoise(
   blocks: Block[],
   views: PrintViewKey[] = ALL_VIEWS,
+  referenceMonth?: number,
 ): ContinuationHeaderNoise[] {
-  const vm = buildPrintViewModel('', blocks, views);
+  const vm = buildPrintViewModel('', blocks, views, referenceMonth);
   const noise: ContinuationHeaderNoise[] = [];
   for (const company of vm.companies) {
     for (const project of company.projects) {
@@ -606,6 +681,7 @@ export function buildContinuationHeaderNoise(
       // （実測で発見した自己バグ）。残りの会社名・期間・稼働期間だけを渡す。
       noise.push({
         scope: project.title,
+        scopeId: project.id,
         text: `${project.companyLabel}${project.periodText}${project.durationText}`,
       });
     }
@@ -618,9 +694,10 @@ export function buildCompletenessReport(
   blocks: Block[],
   pages: QualityPage[],
   views: PrintViewKey[] = ALL_VIEWS,
+  referenceMonth?: number,
 ): CompletenessReport {
-  const facts = enumerateCompletenessFacts(blocks, views);
-  const extraNoise = buildContinuationHeaderNoise(blocks, views);
+  const facts = enumerateCompletenessFacts(blocks, views, referenceMonth);
+  const extraNoise = buildContinuationHeaderNoise(blocks, views, referenceMonth);
   return checkCompleteness(facts, pages, extraNoise);
 }
 

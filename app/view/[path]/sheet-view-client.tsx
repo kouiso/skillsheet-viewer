@@ -7,6 +7,7 @@ import SkillSheetViewer from '@/components/skill-sheet-viewer';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
 import type { Block } from '@/db/blocks';
 import { useReadDepth } from '@/hooks/use-read-depth';
+import { generateSkillSheetPdfBlob } from '@/lib/generate-skillsheet-pdf';
 import { captureError, track } from '@/lib/observability/capture';
 import { type PdfFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
@@ -98,23 +99,9 @@ const SheetViewClient = ({
   const handleDownloadPdf = async () => {
     const toastId = toast.loading('PDFを生成中…');
     const startedAt = performance.now();
-    // 生成に失敗したときの後始末。import が済んだ時点で掴んでおく — catch の中で
-    // 改めて動的 import すると、その await の分だけ finally が遅れてボタンが busy のまま残る。
-    let resetFontsOnFailure: (() => void) | undefined;
     try {
       setPdfLoading(true);
-
-      const [{ pdf }, { createSkillSheetPdf, resetPdfFontsAfterFailure }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('@/components/pdf-export'),
-      ]);
-      resetFontsOnFailure = resetPdfFontsAfterFailure;
-
-      // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
-      // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
-      // 印刷デザイン経路は描く前に案件セクションの高さを測る（非同期）ので、要素を先に作ってから渡す。
-      const pdfDocument = await createSkillSheetPdf({ title, content, blocks, views, referenceMonth });
-      const blob = await pdf(pdfDocument).toBlob();
+      const blob = await generateSkillSheetPdfBlob({ title, content, blocks, views, referenceMonth });
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -143,12 +130,6 @@ const SheetViewClient = ({
         reason: pdfFailureReason(err),
       });
       captureError(err, { feature: 'pdf-export' });
-      // フォント取得の失敗（オフライン・5xx 等）は @react-pdf/font 内で reject 済みの
-      // Promise として永久にキャッシュされ、次のクリックも即座に同じ失敗を再現する
-      // （リロードしないと直らない「詰み」状態になる）。失敗のたびに登録をリセットし、
-      // 次のクリックで新しい FontSource から取得し直させる（フォント取得以外の失敗
-      // でも安全 — 単に次回また登録し直すだけで副作用は無い）。
-      resetFontsOnFailure?.();
     } finally {
       setPdfLoading(false);
     }
