@@ -6,8 +6,8 @@ import { loadScriptEnv } from './env';
 export interface BlockUpdate {
   id: string;
   sheetId: string;
-  /** 読み取り時点のシート更新時刻。別編集が先行したら書き込まず中断する。 */
-  expectedUpdatedAt?: Date;
+  /** 読み取り時点のシート版。別編集が先行したら書き込まず中断する（R01: 時刻ではなく版で照合）。 */
+  expectedRevision?: number;
   /** 更新後の data。ロック後のDB値と同値なら書き込みをスキップする。 */
   data: unknown;
   /** 読み取り時点の data。ロック後に変更前値として照合する。 */
@@ -41,14 +41,14 @@ export async function writeBlockUpdates(db: Database, updates: BlockUpdate[]): P
   return db.transaction(async (tx) => {
     // アプリ側の保存と同じシート行を、安定した順序でロックする。
     const lockedSheets = await tx
-      .select({ id: skillSheets.id, updatedAt: skillSheets.updatedAt })
+      .select({ id: skillSheets.id, revision: skillSheets.revision })
       .from(skillSheets)
       .where(inArray(skillSheets.id, sheetIds))
       .orderBy(skillSheets.id)
       .for('update');
-    const currentUpdatedAt = new Map(lockedSheets.map((sheet) => [sheet.id, sheet.updatedAt]));
+    const currentRevision = new Map(lockedSheets.map((sheet) => [sheet.id, sheet.revision]));
     for (const sheetId of sheetIds) {
-      if (!currentUpdatedAt.has(sheetId)) throw new Error(`Sheet not found: ${sheetId}`);
+      if (!currentRevision.has(sheetId)) throw new Error(`Sheet not found: ${sheetId}`);
     }
     const currentBlocks = await tx
       .select({ id: blocks.id, sheetId: blocks.sheetId, data: blocks.data })
@@ -71,10 +71,9 @@ export async function writeBlockUpdates(db: Database, updates: BlockUpdate[]): P
       if (!isSameJson(current.data, update.previous)) {
         throw new Error(`Concurrent update detected for block: ${update.id}`);
       }
-      if (update.expectedUpdatedAt) {
-        const expectedTime = new Date(update.expectedUpdatedAt).getTime();
-        const currentTime = new Date(currentUpdatedAt.get(update.sheetId) ?? 0).getTime();
-        if (!Number.isFinite(expectedTime) || currentTime !== expectedTime) {
+      if (update.expectedRevision !== undefined) {
+        const current = currentRevision.get(update.sheetId);
+        if (current !== update.expectedRevision) {
           throw new Error(`Concurrent update detected for sheet: ${update.sheetId}`);
         }
       }
@@ -88,7 +87,12 @@ export async function writeBlockUpdates(db: Database, updates: BlockUpdate[]): P
     }
     const changedSheetIds = [...new Set(changed.map((update) => update.sheetId))];
     if (changedSheetIds.length > 0) {
-      await tx.update(skillSheets).set({ updatedAt: sql`now()` }).where(inArray(skillSheets.id, changedSheetIds));
+      // 内容を変える全 writer は revision を進める（R01）。ここを通さない
+      // saveSkillSheetBlocks 側の CAS と版の意味を一致させるための更新。
+      await tx
+        .update(skillSheets)
+        .set({ updatedAt: sql`now()`, revision: sql`${skillSheets.revision} + 1` })
+        .where(inArray(skillSheets.id, changedSheetIds));
     }
     return { written: changed.length, skipped: updates.length - changed.length, sheets: changedSheetIds.length };
   });

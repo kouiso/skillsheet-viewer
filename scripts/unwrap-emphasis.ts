@@ -63,7 +63,8 @@ async function main(): Promise<void> {
     console.log('DRY RUN — DB へは書き込んでいません（--write で実行すると保存します）');
     return;
   }
-  await saveSkillSheetBlocks(sheet.title, nextBlocks, SHEET_ID);
+  // R01: 既存シートの更新は本文と同一スナップショットの版を必須にする。
+  await saveSkillSheetBlocks(sheet.title, nextBlocks, SHEET_ID, sheet.revision);
   console.log('SAVED', SHEET_ID);
 }
 

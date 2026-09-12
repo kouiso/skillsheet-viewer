@@ -98,17 +98,42 @@ export function hasPeriodRangeSeparator(period: string): boolean {
 // 判定（会社の最新判定など）が全社「解釈不能」で機能しなくなる（実測、company-grouping 作業）。
 function parseYearMonth(token: string): number | null {
   if (!token) return null;
+  // 月は 1〜12 のみ受理する。「2020.13」のような壊れた値が 1 ヶ月として
+  // 経験月数へ混入するのを防ぐ（R02）。日付部は厳密な暦日判定までは行わず
+  // 1〜31 の範囲だけを見る（月またぎの暦差は期間集計の精度に影響しない）。
   let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
-  m = token.match(/^(\d{4})\.(\d{1,2})$/);
-  if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
-  m = token.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月$/);
-  if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
-  m = token.match(/^(\d{4})-(\d{1,2})$/);
-  if (m) return Number(m[1]) + (Number(m[2]) - 1) / 12;
+  if (m) {
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return Number(m[1]) + (month - 1) / 12;
+  }
+  m =
+    token.match(/^(\d{4})\.(\d{1,2})$/) ??
+    token.match(/^(\d{4})\s*年\s*(\d{1,2})\s*月$/) ??
+    token.match(/^(\d{4})-(\d{1,2})$/);
+  if (m) {
+    const month = Number(m[2]);
+    if (month < 1 || month > 12) return null;
+    return Number(m[1]) + (month - 1) / 12;
+  }
   m = token.match(/^(\d{4})$/);
   if (m) return Number(m[1]);
   return null;
+}
+
+/**
+ * 「日付らしい形だが値が範囲外」のトークンか（月 13 等）。
+ * classifyPeriod で「解釈不能（unknown）」と「壊れた日付（invalid）」を分ける判定用。
+ */
+function looksLikeYearMonth(token: string): boolean {
+  const t = token.trim();
+  return (
+    /^(\d{4})-(\d{1,2})-(\d{1,2})$/.test(t) ||
+    /^(\d{4})\.(\d{1,2})$/.test(t) ||
+    /^(\d{4})-(\d{1,2})$/.test(t) ||
+    /^(\d{4})\s*年\s*\d{1,2}\s*月$/.test(t)
+  );
 }
 
 /**
@@ -130,7 +155,7 @@ export function formatMonthToken(rawToken: string): string {
 
 /**
  * period 文字列（"開始〜終了" or 単独トークン）を月精度表示へ整形する。
- * 区切り文字が存在するのに終了トークンが空 = 進行中（現在）を意味する。
+ * 区切りの後ろが空 = 終了未記載として「現在」を補わずそのまま残す（R02）。
  */
 export function formatPeriodDisplay(period: string): string {
   if (typeof period !== 'string' || period.length === 0) return period;
@@ -139,7 +164,9 @@ export function formatPeriodDisplay(period: string): string {
   if (!startToken) return period;
   const start = formatMonthToken(startToken);
   if (!hasSeparator) return start;
-  return `${start}〜${endToken ? formatMonthToken(endToken) : '現在'}`;
+  // 区切りの後ろが空 = 「終了が未記載」。明示された「現在」と混同しないため
+  // 「現在」を補わず、書かれた区切りだけを残す（R02: 終了不明と明示継続を区別）。
+  return `${start}〜${endToken ? formatMonthToken(endToken) : ''}`;
 }
 
 /** ISO日付文字列（YYYY-MM-DD）へシリアライズする（ピッカーの書き込み用）。 */
@@ -220,6 +247,78 @@ export function parsePeriodBounds(period: string): PeriodBounds | null {
     precise: startPrecise && hasMonthPrecision(endToken),
     openEnded: false,
   };
+}
+
+/**
+ * 期間文字列の解析結果。経験月数の集計に使ってよいのは 'valid' のみ。
+ * - valid:   開始<=終了で、開始が基準月より未来でない（openEnded の「現在」も含む）
+ * - planned: 開始が基準月より未来 — 予定であり実績月へ加えない（R02）
+ * - invalid: 日付の形だが値が壊れている（月 13・開始>終了の逆転）
+ * - unknown: 解釈不能・年のみ・終了未記載 — 月数を確定できない
+ * 元の期間文字列自体はどの状態でも保持し、集計側だけが状態で振る舞いを分ける。
+ */
+export type PeriodStatus = 'valid' | 'planned' | 'invalid' | 'unknown';
+
+export interface ClassifiedPeriod {
+  status: PeriodStatus;
+  /** 解析できた範囲の境界。invalid/unknown では null のことがある。 */
+  bounds: PeriodBounds | null;
+  /** 編集画面向けの診断理由（公開表示の数値には出さない）。 */
+  reason?: string;
+}
+
+/** 実行時点の年月を parseYearMonth と同じ数値尺度で返す（基準月未指定時の planned 判定用）。 */
+function currentYearMonthScale(): number {
+  const now = new Date();
+  return now.getFullYear() + now.getMonth() / 12;
+}
+
+/**
+ * period を集計用の状態へ分類する。原文は変更せず、解析結果だけを返す（R02）。
+ * referenceMonth は「現在」「未来」の基準となる月キー（year*12 + monthIndex）。
+ * 省略時は実行時点 — SSR/ブラウザで月をまたぐと結果がずれるため、表示側は
+ * サーバが決めた固定月を渡すこと（periodMonthKeys と同じ約束）。
+ */
+export function classifyPeriod(period: string, referenceMonth?: number): ClassifiedPeriod {
+  if (typeof period !== 'string' || period.length === 0) return { status: 'unknown', bounds: null, reason: '期間が空' };
+  const refScale = referenceMonth === undefined ? currentYearMonthScale() : referenceMonth / 12;
+  const [startToken, endToken] = splitPeriodRange(period);
+  const start = parseYearMonth(startToken);
+  if (!startToken || start === null) {
+    const status = startToken && looksLikeYearMonth(startToken) ? 'invalid' : 'unknown';
+    return { status, bounds: null, reason: status === 'invalid' ? '開始日の値が範囲外' : '開始を解釈できない' };
+  }
+  const startPrecise = hasMonthPrecision(startToken);
+  if (/現在/.test(endToken)) {
+    const bounds: PeriodBounds = { start, end: Math.max(refScale, start), precise: startPrecise, openEnded: true };
+    if (start > refScale) return { status: 'planned', bounds, reason: '開始が基準月より未来' };
+    return { status: 'valid', bounds };
+  }
+  // 終了未記載（単独トークン・末尾空の区切り）は「継続中」と推測しない（R02）。
+  // 月数の出せない unknown として原文を保持する。
+  if (!endToken) {
+    return {
+      status: 'unknown',
+      bounds: { start, end: start, precise: false, openEnded: false },
+      reason: '終了が未記載',
+    };
+  }
+  const end = parseYearMonth(endToken);
+  if (end === null) {
+    const status = looksLikeYearMonth(endToken) ? 'invalid' : 'unknown';
+    return { status, bounds: null, reason: status === 'invalid' ? '終了日の値が範囲外' : '終了を解釈できない' };
+  }
+  if (end < start) {
+    return { status: 'invalid', bounds: null, reason: '開始と終了が逆転' };
+  }
+  const bounds: PeriodBounds = { start, end, precise: startPrecise && hasMonthPrecision(endToken), openEnded: false };
+  // 両端とも月まで書かれていないと何ヶ月か確定できない（"2020 — 2021" を
+  // 発明した月数として経験へ足さない、R02）。bounds は表示・並び替え用に残す。
+  if (!bounds.precise) {
+    return { status: 'unknown', bounds, reason: '期間が月単位で書かれていない' };
+  }
+  if (start > refScale) return { status: 'planned', bounds, reason: '開始が基準月より未来' };
+  return { status: 'valid', bounds };
 }
 
 /**
@@ -328,6 +427,8 @@ export function deriveCompanyPeriod(periods: string[]): string {
     // 終端不明として end の集計には寄与させず、開始側の寄与のみ残す。
     if (!endToken) continue;
     const end = parseYearMonth(endToken);
+    // 開始>終了の逆転期間は会社期間の終端集計にも混ぜない（R02: 日付を入れ替えない）。
+    if (end !== null && start !== null && end < start) continue;
     if (end !== null && (maxEnd === null || end > maxEnd)) {
       maxEnd = end;
       maxEndToken = endToken;

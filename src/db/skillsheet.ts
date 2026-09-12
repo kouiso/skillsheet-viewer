@@ -44,6 +44,18 @@ export class ConflictError extends Error {
   }
 }
 
+/**
+ * 既存シートへの更新で期待版（expectedRevision）が渡されなかったことを示すエラー。
+ * 版なしの一括更新は先行する別編集を黙って上書きするため、既存行への更新では
+ * 必須とする（R01）。新規作成だけは例外（初期版を返す側に責任がある）。
+ */
+export class MissingRevisionError extends Error {
+  constructor() {
+    super('expectedRevision is required when updating an existing sheet');
+    this.name = 'MissingRevisionError';
+  }
+}
+
 /** 指定 ID のシートが存在しないことを示すエラー（getSkillSheetById から throw される）。 */
 export class SkillSheetNotFoundError extends Error {
   constructor(sheetId: string) {
@@ -82,6 +94,8 @@ export interface SkillSheet {
   title: string;
   content: string;
   blocks: Block[];
+  /** 保存の楽観ロック版。本文と同一の読取結果から返す（R01）。 */
+  revision: number;
 }
 
 export interface SheetSummary {
@@ -100,6 +114,17 @@ async function lockOwner(tx: DbOrTx, ownerId: string): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${ownerId}))`);
 }
 
+/**
+ * 書込経路の不変条件: 「シートに触れる書込が行われた = その owner は初期化済み」。
+ * state 行が無いままシートだけ存在する状態（import・手動復旧・別経路作成）から
+ * 全削除されると、state 無し + 0 件になり次の GET が「初回導入」と誤認して
+ * seed を復活させる。それを防ぐため、全ての書込トランザクションはロック取得後に
+ * state を upsert してから本体処理へ進む（S09 再々レビュー指摘）。
+ */
+async function ensureInitialized(tx: DbOrTx, ownerId: string): Promise<void> {
+  await tx.insert(skillsheetState).values({ ownerId }).onConflictDoNothing();
+}
+
 /** 既定シートが無いときの実効既定（最古）を返す。昇格の書き込みは行わない。 */
 async function findOldestSheetId(db: DbOrTx, ownerId: string): Promise<string | undefined> {
   const [oldest] = await db
@@ -116,23 +141,24 @@ async function findOldestSheetId(db: DbOrTx, ownerId: string): Promise<string | 
  * 書込経路（保存・作成）からだけ呼ぶこと。読取では書き込まない（S09）。
  * 呼び出し側のトランザクション内で lockOwner を取り、既定操作を owner 単位で直列化する。
  */
-async function getOrCreateDefaultSheetId(tx: DbOrTx): Promise<string> {
+async function getOrCreateDefaultSheetId(tx: DbOrTx): Promise<{ id: string; created: boolean }> {
   const ownerId = getOwnerId();
   await lockOwner(tx, ownerId);
+  await ensureInitialized(tx, ownerId);
 
   const existing = await tx
     .select({ id: skillSheets.id })
     .from(skillSheets)
     .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
     .limit(1);
-  if (existing[0]?.id) return existing[0].id;
+  if (existing[0]?.id) return { id: existing[0].id, created: false };
 
   // 既定だけが失われた状態（既定シートの削除・旧データ移行直後など）では、
   // 空の既定シートを新規に増やすのではなく最古シートを既定へ昇格する（S09）。
   const oldestId = await findOldestSheetId(tx, ownerId);
   if (oldestId) {
     await tx.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldestId));
-    return oldestId;
+    return { id: oldestId, created: false };
   }
 
   // 部分ユニーク索引により owner ごとの既定は高々 1 枚。advisory lock で直列化済み
@@ -143,10 +169,7 @@ async function getOrCreateDefaultSheetId(tx: DbOrTx): Promise<string> {
     .onConflictDoNothing()
     .returning({ id: skillSheets.id });
   if (inserted[0]?.id) {
-    // 書込経路での作成は「初期化済み」の印も立てる。初回 seed は読取側の一度だけの
-    // 初期化が担うので、ここでは空の既定を作るだけに留める。
-    await tx.insert(skillsheetState).values({ ownerId }).onConflictDoNothing();
-    return inserted[0].id;
+    return { id: inserted[0].id, created: true };
   }
 
   const retry = await tx
@@ -160,7 +183,7 @@ async function getOrCreateDefaultSheetId(tx: DbOrTx): Promise<string> {
     // 返すと下流で TypeError になるため、明示的に落として原因を分かるようにする。
     throw new Error('Failed to resolve default sheet id after insert conflict');
   }
-  return retryId;
+  return { id: retryId, created: false };
 }
 
 /**
@@ -278,27 +301,55 @@ function isReadableBlockRow(type: string, data: unknown): boolean {
   return rowToBlock('probe', type, 0, data) !== null;
 }
 
+interface SheetRowSnapshot {
+  title: string;
+  revision: number;
+  rows: { id: string; type: string; order: number; data: unknown }[];
+}
+
+/**
+ * シート行と配下ブロックを 1 ステートメントで取得する。
+ * Read Committed ではステートメント単位がスナップショットのため、別々の SELECT だと
+ * 2 クエリの合間に他 writer が割り込んで「古い本文 + 新しい revision」の組を返し得る。
+ * その組で保存すると CAS がすり抜けて先行更新を消す（R01）。jsonb_agg の副問合せで
+ * 本文・版・全ブロックを同一スナップショットから読む。
+ */
+async function fetchSheetSnapshot(db: Database, sheetId: string): Promise<SheetRowSnapshot | undefined> {
+  const result = await db.execute(sql`
+    select s.title, s.revision,
+      coalesce(
+        (select jsonb_agg(jsonb_build_object('id', b.id, 'type', b.type, 'order', b."order", 'data', b.data)
+                          order by b."order")
+         from ${blocks} b where b.sheet_id = s.id),
+        '[]'::jsonb
+      ) as block_rows
+    from ${skillSheets} s
+    where s.id = ${sheetId} and s.owner_id = ${getOwnerId()}
+    limit 1
+  `);
+  const row = result.rows[0] as { title?: unknown; revision?: unknown; block_rows?: unknown } | undefined;
+  if (!row) return undefined;
+  const rows = Array.isArray(row.block_rows)
+    ? (row.block_rows as { id: string; type: string; order: number; data: unknown }[])
+    : [];
+  return { title: String(row.title ?? ''), revision: Number(row.revision ?? 1), rows };
+}
+
 async function fetchSheetById(db: Database, sheetId: string, requireExists = false): Promise<SkillSheet> {
   // S08: ID 指定の読取にもオーナー境界を掛ける。一覧・保存・削除と揃え、
   // 別オーナーのシートと不存在を同じ「見つからない」にする（存在有無を漏らさない）。
-  const [sheet] = await db
-    .select({ title: skillSheets.title })
-    .from(skillSheets)
-    .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, getOwnerId())))
-    .limit(1);
+  const sheet = await fetchSheetSnapshot(db, sheetId);
   if (!sheet) {
     if (requireExists) throw new SkillSheetNotFoundError(sheetId);
     // 親が自オーナーでない以上、その配下ブロックも読まない（孤児行の混入防止）。
-    return { title: TITLE, content: '', blocks: [] };
+    return { title: TITLE, content: '', blocks: [], revision: 0 };
   }
-  const rows = await db.select().from(blocks).where(eq(blocks.sheetId, sheetId)).orderBy(asc(blocks.order));
-
-  const blockList: Block[] = rows
+  const blockList: Block[] = sheet.rows
     .map((r) => rowToBlock(r.id, r.type, r.order, r.data))
     .filter((b): b is Block => b !== null);
 
-  const title = sheet?.title && sheet.title.trim().length > 0 ? sheet.title : TITLE;
-  return { title, content: blocksToMarkdown(blockList), blocks: blockList };
+  const title = sheet.title && sheet.title.trim().length > 0 ? sheet.title : TITLE;
+  return { title, content: blocksToMarkdown(blockList), blocks: blockList, revision: sheet.revision };
 }
 
 /** オーナーのシート一覧を返す（updatedAt 降順）。 */
@@ -330,6 +381,9 @@ export async function createSheetInTx(tx: DbOrTx, title: string, initialBlocks?:
   // 既定フラグの読み書きを owner 単位で直列化する。これを取らないと
   // 同時作成の両方が「既定なし」を観測して部分ユニーク索引で 500 になる（S09）。
   await lockOwner(tx, ownerId);
+  // 作成経路を通った時点でこの owner は初期化済み。state 無しでシートだけ残る状態を
+  // 作らない（全削除後に seed が復活する経路を塞ぐ）。
+  await ensureInitialized(tx, ownerId);
 
   // 既定が無い状態で最初のシートを作るなら、それを既定にする。
   // 削除時昇格と合わせて「is_default が全く無い期間」を通常経路では発生させない。
@@ -370,6 +424,9 @@ export async function deleteSheet(sheetId: string): Promise<void> {
   const ownerId = getOwnerId();
   await db.transaction(async (tx) => {
     await lockOwner(tx, ownerId);
+    // 削除対象のシートが存在する = この owner は初期化済み。削除で 0 件になっても
+    // 読取側が「初回導入」と誤認しないよう state を先に確定させる（S09）。
+    await ensureInitialized(tx, ownerId);
     const [deleted] = await tx
       .delete(skillSheets)
       .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)))
@@ -394,7 +451,7 @@ export async function getSkillSheet(): Promise<SkillSheet> {
   const sheetId = await ensureSeeded(db);
   // null は「初期化済みだがシート 0 枚 = ユーザーが全削除した状態」。
   // 空シートをそのまま返し、初期データを復活させない（S09）。
-  if (!sheetId) return { title: TITLE, content: '', blocks: [] };
+  if (!sheetId) return { title: TITLE, content: '', blocks: [], revision: 0 };
   return fetchSheetById(db, sheetId);
 }
 
@@ -414,15 +471,17 @@ function normalizeBlockInput(block: BlockInput): BlockInput {
  * sheetId が未指定のときはオーナーのデフォルトシートへ保存する（後方互換）。
  *
  * A2: sheetId 指定時はオーナー検証を実施（他人のシートを破壊しない）。
- * A3: expectedUpdatedAt を指定すると、トランザクション内でシートの updatedAt が
- *     それより新しい場合に ConflictError を throw する（並行保存ガード）。
+ * R01: 既存シートの更新は期待版 `expectedRevision` 必須。`id AND revision = expected` の
+ *     条件付き UPDATE で 1 行だけ成功を確認し、0 行（古い版・未来版・不一致）なら
+ *     ConflictError。版は保存のたびに +1 される整数で、now()（tx 開始時刻）とは違い
+ *     更新順を一意に表す。新規作成（既定パスの暗黙作成）は初期版 1 で始まり期待版不要。
  */
 export async function saveSkillSheetBlocks(
   title: string,
   blocksInput: BlockInput[],
   sheetId?: string,
-  expectedUpdatedAt?: Date,
-): Promise<{ updatedAt: Date }> {
+  expectedRevision?: number,
+): Promise<{ updatedAt: Date; revision: number }> {
   const db = getDb();
   const ownerId = getOwnerId();
 
@@ -432,6 +491,7 @@ export async function saveSkillSheetBlocks(
 
   return db.transaction(async (tx) => {
     let resolvedSheetId: string;
+    let justCreated = false;
     if (sheetId) {
       // A2: 所有者検証 — deleteSheet と同じく、DELETE と同一トランザクション内で
       // id+ownerId を照合する（別クエリにすると TOCTOU の隙が生まれるため避ける）。
@@ -443,36 +503,45 @@ export async function saveSkillSheetBlocks(
       if (!existing) {
         throw new Error('Forbidden: sheet does not belong to the current owner');
       }
+      // 帯外で作られたシートへの保存でも「owner は初期化済み」を確定させる
+      // （state 無しのままシートだけが残る状態を作らない）。
+      await ensureInitialized(tx, ownerId);
       resolvedSheetId = sheetId;
     } else {
       // トランザクション内では外側の db ではなく tx を使い、デフォルトシートの
       // 作成も同一トランザクションに含める（ロールバック時に残留させない）。
-      resolvedSheetId = await getOrCreateDefaultSheetId(tx);
+      const resolved = await getOrCreateDefaultSheetId(tx);
+      resolvedSheetId = resolved.id;
+      justCreated = resolved.created;
     }
 
-    // A3: 並行保存ガード — 別セッションが先に保存していたら中断する。
-    // for('update') で行ロックを取得し、Read Committed 下でも他トランザクションの
-    // コミット待ちにして古い updatedAt を読まないようにする（ロストアップデート防止）。
-    if (expectedUpdatedAt) {
-      const [current] = await tx
-        .select({ updatedAt: skillSheets.updatedAt })
-        .from(skillSheets)
-        .where(eq(skillSheets.id, resolvedSheetId))
-        .for('update')
-        .limit(1);
-      // tRPC + superjson 経由なら Date のまま渡るが、DB ドライバーが文字列を
-      // 返すこともある。呼び出し元を問わず安全に比較できるよう、両辺を必ず
-      // Date へ正規化してから getTime() で比較する。
-      const expectedTime = new Date(expectedUpdatedAt).getTime();
-      const currentTime = current ? new Date(current.updatedAt).getTime() : 0;
-      if (current && currentTime > expectedTime) {
-        throw new ConflictError();
-      }
+    // R01: 既存行の更新は版必須。版なしの全置換は先行する別セッションの更新を
+    // 黙って消すため拒否する（暗黙作成直後のシートだけは初期版 1 で例外）。
+    if (!justCreated && expectedRevision === undefined) {
+      throw new MissingRevisionError();
+    }
+
+    // CAS: 期待版と一致する場合だけ revision+1・タイトル・updatedAt を更新し、
+    // 1 行の成功を確認してから子ブロックを保存する。古い版・未来版・不一致は
+    // 0 行ヒットで ConflictError。同時保存は先にコミットした側だけが版を進め、
+    // 後着側の条件は必ず外れる（1 成功 / 1 競合）。
+    const [updated] = await tx
+      .update(skillSheets)
+      .set({ title: resolvedTitle, updatedAt: sql`now()`, revision: sql`${skillSheets.revision} + 1` })
+      .where(
+        justCreated
+          ? eq(skillSheets.id, resolvedSheetId)
+          : and(eq(skillSheets.id, resolvedSheetId), eq(skillSheets.revision, expectedRevision ?? -1)),
+      )
+      .returning({ updatedAt: skillSheets.updatedAt, revision: skillSheets.revision });
+    if (!updated) {
+      throw new ConflictError();
     }
 
     // M08: 読み取れないブロックが残っているシートへの全置換を拒否する。
     // 読込側（rowToBlock → filter）は壊れた行を縮退して捨てるため、画面に出なかった
     // 元データまで delete→insert で失う経路をここで塞ぐ。修復は明示操作として分離する。
+    // ここで throw すると版更新ごとロールバックされ、失敗保存で版だけ進むことはない。
     const currentRows = await tx
       .select({ id: blocks.id, type: blocks.type, data: blocks.data })
       .from(blocks)
@@ -493,19 +562,10 @@ export async function saveSkillSheetBlocks(
         })),
       );
     }
-    const [updated] = await tx
-      .update(skillSheets)
-      .set({ title: resolvedTitle, updatedAt: sql`now()` })
-      .where(eq(skillSheets.id, resolvedSheetId))
-      .returning({ updatedAt: skillSheets.updatedAt });
-    if (!updated) {
-      throw new Error('Failed to update sheet: row not found');
-    }
-    // 保存後のサーバー時刻の updatedAt を返す。クライアントはこれを次回の
-    // expectedUpdatedAt に用いることで、クライアント時計とのズレによる誤 Conflict を防ぐ（A4）。
-    // DB ドライバーが文字列を返す場合も Date で統一する（Date インスタンスの場合はそのまま）。
+    // 保存後の版とサーバー時刻を返す。クライアントはこの revision を次回の
+    // expectedRevision に用いる（クライアント時計・独自採番を信用しない）。
     const updatedAt = updated.updatedAt instanceof Date ? updated.updatedAt : new Date(updated.updatedAt);
-    return { updatedAt };
+    return { updatedAt, revision: updated.revision };
   });
 }
 

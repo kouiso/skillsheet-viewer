@@ -5,6 +5,7 @@ import {
   createSheet,
   deleteSheet,
   listSheets as listDbSheets,
+  MissingRevisionError,
   SkillSheetNotFoundError,
   saveSkillSheetBlocks,
   UnreadableBlocksError,
@@ -89,12 +90,17 @@ export const sheetRouter = router({
 
   save: editorProcedure.input(saveSheetInputSchema).mutation(async ({ input }) => {
     try {
-      const result = await saveSkillSheetBlocks(input.title, input.blocks, input.sheetId, input.expectedUpdatedAt);
+      const result = await saveSkillSheetBlocks(input.title, input.blocks, input.sheetId, input.expectedRevision);
       invalidateDbSheetCache();
       return result;
     } catch (err) {
       if (err instanceof ConflictError) {
         throw new TRPCError({ code: 'CONFLICT', message: err.message });
+      }
+      if (err instanceof MissingRevisionError) {
+        // 版なしの既存更新は入力不備。競合（先行更新あり）ではなく呼び出し側の
+        // 契約違反なので CONFLICT ではなく BAD_REQUEST で返す（R01）。
+        throw new TRPCError({ code: 'BAD_REQUEST', message: err.message });
       }
       if (err instanceof UnreadableBlocksError) {
         // 見えていないブロックを巻き込む全置換の拒否。クライアントには
@@ -109,7 +115,9 @@ export const sheetRouter = router({
     const initialBlocks = input.templateId ? getTemplate(input.templateId)?.blocks : undefined;
     const sheetId = await createSheet(input.title, initialBlocks);
     invalidateDbSheetCache();
-    return { sheetId };
+    // R01: 作成は別操作。初期版は常に 1（skill_sheets.revision のデフォルト）で、
+    // 以降の保存はこの版を expectedRevision に用いる。
+    return { sheetId, revision: 1 };
   }),
 
   delete: editorProcedure.input(deleteSheetInputSchema).mutation(async ({ input }) => {

@@ -14,12 +14,26 @@ function selectChain(result: unknown[]) {
   return chain;
 }
 
-function fakeDb(results: unknown[][], opts: { insertedSheetId?: string; txResults?: unknown[][] } = {}) {
+// fetchSheetById は本文・版・ブロックを jsonb_agg 副問合せの 1 ステートメントで
+// 読む（R01: 同一スナップショット）。テストでは db.execute がその結果を返す。
+interface SheetSnapshot {
+  title: string;
+  revision: number;
+  block_rows: { id: string; type: string; order: number; data: unknown }[];
+}
+
+function fakeDb(
+  results: unknown[][],
+  opts: { insertedSheetId?: string; txResults?: unknown[][]; sheetSnapshot?: SheetSnapshot | null } = {},
+) {
   let index = 0;
   let txIndex = 0;
   const values = vi.fn(() => ({
     onConflictDoNothing: vi.fn(() => ({
       returning: vi.fn().mockResolvedValue(opts.insertedSheetId ? [{ id: opts.insertedSheetId }] : []),
+      // biome-ignore lint/suspicious/noThenProperty: drizzleのawait可能なクエリを再現する
+      then: (resolve: (value: unknown) => unknown, reject: (error: unknown) => unknown) =>
+        Promise.resolve(undefined).then(resolve, reject),
     })),
   }));
   const tx = {
@@ -28,10 +42,12 @@ function fakeDb(results: unknown[][], opts: { insertedSheetId?: string; txResult
     update: vi.fn(() => ({ set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })) })),
     execute: vi.fn().mockResolvedValue(undefined),
   };
+  const snapshotRows = opts.sheetSnapshot === null ? [] : opts.sheetSnapshot ? [opts.sheetSnapshot] : [];
   const db = {
     select: vi.fn(() => selectChain(results[index++] ?? [])),
     insert: vi.fn(() => ({ values })),
     transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)),
+    execute: vi.fn().mockResolvedValue({ rows: snapshotRows }),
   };
   dbHolder = db;
   return { db, tx, values };
@@ -39,6 +55,11 @@ function fakeDb(results: unknown[][], opts: { insertedSheetId?: string; txResult
 
 const fetchMock = vi.fn<typeof fetch>();
 const row = { id: 'block-1', type: 'markdown', order: 0, data: { markdown: '合成本文' } };
+const snapshotOf = (title: string, rows: SheetSnapshot['block_rows'], revision = 1): SheetSnapshot => ({
+  title,
+  revision,
+  block_rows: rows,
+});
 
 beforeEach(() => {
   vi.stubEnv('SKILLSHEET_OWNER_ID', 'synthetic-owner');
@@ -65,17 +86,30 @@ function configureSeed() {
 describe('シート読み込み時のGitHub seed条件', () => {
   it('既定シートがある場合は設定済みでもGitHubへアクセスしない', async () => {
     configureSeed();
-    const { db } = fakeDb([[{ id: 'sheet-1' }], [{ title: '合成シート' }], [row]]);
-    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '合成本文', blocks: [row] });
+    const { db } = fakeDb([[{ id: 'sheet-1' }]], { sheetSnapshot: snapshotOf('合成シート', [row], 4) });
+    await expect(getSkillSheet()).resolves.toEqual({
+      title: '合成シート',
+      content: '合成本文',
+      blocks: [row],
+      revision: 4,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
+  });
+
+  it('本文と版は同一スナップショット（同一ステートメント）から返る（R01）', async () => {
+    const { db } = fakeDb([[{ id: 'sheet-1' }]], { sheetSnapshot: snapshotOf('合成シート', [row], 9) });
+    const sheet = await getSkillSheet();
+    expect(sheet.revision).toBe(9);
+    // ブロック行と版は 1 クエリで取得される（db.execute 1 回）
+    expect(db.execute).toHaveBeenCalledTimes(1);
   });
 
   it('既定シートのブロックが 0 件でも再 seed しない（全削除後に GitHub 本文を復活させない、S09）', async () => {
     configureSeed();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { db } = fakeDb([[{ id: 'sheet-1' }], [{ title: '合成シート' }], []]);
-    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '', blocks: [] });
+    const { db } = fakeDb([[{ id: 'sheet-1' }]], { sheetSnapshot: snapshotOf('合成シート', []) });
+    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '', blocks: [], revision: 1 });
     expect(warn).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
@@ -84,12 +118,18 @@ describe('シート読み込み時のGitHub seed条件', () => {
   it('シートが 1 枚も無い初回導入かつ設定済みなら既定シートを作り Markdown を保存して読む', async () => {
     configureSeed();
     fetchMock.mockResolvedValue(new Response(JSON.stringify({ content: Buffer.from('合成本文').toString('base64') })));
-    // db.select: 既定なし → 最古なし → state無し（未初期化）→ fetchSheetById は title + blocks
-    const { db, tx, values } = fakeDb([[], [], [], [{ title: '合成シート' }], [row]], {
+    // db.select: 既定なし → 最古なし → state無し（未初期化）
+    const { db, tx, values } = fakeDb([[], [], []], {
       insertedSheetId: 'sheet-1',
       txResults: [[]],
+      sheetSnapshot: snapshotOf('合成シート', [row]),
     });
-    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '合成本文', blocks: [row] });
+    await expect(getSkillSheet()).resolves.toEqual({
+      title: '合成シート',
+      content: '合成本文',
+      blocks: [row],
+      revision: 1,
+    });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // skillsheet_state + skill_sheets + blocks の 3 insert
     expect(tx.insert).toHaveBeenCalledTimes(3);
@@ -101,11 +141,12 @@ describe('シート読み込み時のGitHub seed条件', () => {
 
   it('シート 0 枚かつ未設定なら警告を残して空の既定シートを作る', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { tx } = fakeDb([[], [], [], [{ title: '合成シート' }], []], {
+    const { tx } = fakeDb([[], [], []], {
       insertedSheetId: 'sheet-1',
       txResults: [[]],
+      sheetSnapshot: snapshotOf('合成シート', []),
     });
-    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '', blocks: [] });
+    await expect(getSkillSheet()).resolves.toEqual({ title: '合成シート', content: '', blocks: [], revision: 1 });
     expect(warn).toHaveBeenCalledExactlyOnceWith(
       '[skillsheet] GitHub seed is not configured (GITHUB_TOKEN/OWNER/REPO); starting with an empty sheet.',
     );
@@ -118,7 +159,12 @@ describe('シート読み込み時のGitHub seed条件', () => {
     configureSeed();
     // db.select: 既定なし → 最古なし → state あり（初期化済み）
     const { db, tx } = fakeDb([[], [], [{ ownerId: 'synthetic-owner' }]]);
-    await expect(getSkillSheet()).resolves.toEqual({ title: 'エンジニアスキルシート', content: '', blocks: [] });
+    await expect(getSkillSheet()).resolves.toEqual({
+      title: 'エンジニアスキルシート',
+      content: '',
+      blocks: [],
+      revision: 0,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     // 初期化済みなら読取は何も作らない・seed も取りにいかない
     expect(db.transaction).not.toHaveBeenCalled();
@@ -127,8 +173,15 @@ describe('シート読み込み時のGitHub seed条件', () => {
 
   it('is_default が無く他シートだけ残る場合は seed せず最古シートを実効既定として読み、読取では書き込まない', async () => {
     configureSeed();
-    const { db, tx } = fakeDb([[], [{ id: 'other-sheet' }], [{ title: '別シート' }], [row]]);
-    await expect(getSkillSheet()).resolves.toEqual({ title: '別シート', content: '合成本文', blocks: [row] });
+    const { db, tx } = fakeDb([[], [{ id: 'other-sheet' }]], {
+      sheetSnapshot: snapshotOf('別シート', [row], 7),
+    });
+    await expect(getSkillSheet()).resolves.toEqual({
+      title: '別シート',
+      content: '合成本文',
+      blocks: [row],
+      revision: 7,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     // 昇格の UPDATE/INSERT は読取では発生させない（書込経路側で確定する、S09）
     expect(db.transaction).not.toHaveBeenCalled();
@@ -147,8 +200,13 @@ describe('シート読み込み時のGitHub seed条件', () => {
 
   it('ID指定の読み込みは空シートでもGitHub seedを実行しない', async () => {
     configureSeed();
-    const { db } = fakeDb([[{ title: '合成シート' }], []]);
-    await expect(getSkillSheetById('sheet-1')).resolves.toEqual({ title: '合成シート', content: '', blocks: [] });
+    const { db } = fakeDb([], { sheetSnapshot: snapshotOf('合成シート', [], 2) });
+    await expect(getSkillSheetById('sheet-1')).resolves.toEqual({
+      title: '合成シート',
+      content: '',
+      blocks: [],
+      revision: 2,
+    });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
   });
@@ -156,7 +214,7 @@ describe('シート読み込み時のGitHub seed条件', () => {
   it('ID指定の読み込みは別オーナー・不存在を同じ NOT_FOUND にする（S08）', async () => {
     const { SkillSheetNotFoundError } = await import('./skillsheet');
     // owner_id 一致の行が無ければ親もブロックも読まずに終了する
-    fakeDb([[]]);
+    fakeDb([], { sheetSnapshot: null });
     await expect(getSkillSheetById('foreign-sheet')).rejects.toBeInstanceOf(SkillSheetNotFoundError);
   });
 });

@@ -31,6 +31,10 @@ export const skillSheets = pgTable(
     // updated_at は編集で変わるため、昇格・実効既定の対象決定には使わない。
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
+    // 楽観ロック用の版番号。内容を変える全ての書込経路（saveSkillSheetBlocks /
+    // writeBlockUpdates）が +1 する。updated_at は PostgreSQL の now()=tx開始時刻で
+    // 更新順を表す単調な版にはならないため、CAS はこの整数で行う（R01）。
+    revision: integer('revision').notNull().default(1),
   },
   (table) => [
     index('skill_sheets_owner_id_idx').on(table.ownerId),

@@ -925,8 +925,10 @@ async function main() {
     return;
   }
 
-  const { saveSkillSheetBlocks } = await import('../src/db/skillsheet');
-  await saveSkillSheetBlocks(SHEET_TITLE, finalBlocks, SHEET_ID);
+  const { getSkillSheetById, saveSkillSheetBlocks } = await import('../src/db/skillsheet');
+  // R01: 既存シートの更新は期待版必須。直前に同一スナップショットで版を取得して渡す。
+  const { revision } = await getSkillSheetById(SHEET_ID);
+  await saveSkillSheetBlocks(SHEET_TITLE, finalBlocks, SHEET_ID, revision);
   console.log('SAVED to sheetId', SHEET_ID);
 }
 
