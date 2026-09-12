@@ -124,6 +124,22 @@ async function main(): Promise<void> {
   const db = getDb();
   const sheetId = await resolveSheetId(db, explicit);
 
+  // owner 照合はブロック本文を読む前に済ませる。別 owner のシートなら
+  // 本文を一度も読まずに失敗させる（least privilege）。
+  let ownerMatch: DumpEvidence['ownerMatch'] = 'not-configured';
+  if (evidencePath) {
+    const [sheet] = await db
+      .select({ ownerId: skillSheets.ownerId })
+      .from(skillSheets)
+      .where(eq(skillSheets.id, sheetId))
+      .limit(1);
+    const expectedOwner = process.env.SKILLSHEET_OWNER_ID;
+    ownerMatch = expectedOwner ? (sheet?.ownerId === expectedOwner ? 'true' : 'false') : 'not-configured';
+    if (ownerMatch === 'false') {
+      throw new Error('対象シートの owner が期待値と一致しません');
+    }
+  }
+
   const rows = await db
     .select({ id: blocks.id, type: blocks.type, order: blocks.order, data: blocks.data })
     .from(blocks)
@@ -133,23 +149,6 @@ async function main(): Promise<void> {
   writePrivateDump(out, rows);
 
   if (evidencePath) {
-    // 対象シートの owner を照合する（意図したシートの検査である証跡）。
-    // SKILLSHEET_OWNER_ID が設定されていて一致しないなら、別 owner のシートを
-    // 検査していることになるため実行自体を失敗させる。
-    const [sheet] = await db
-      .select({ ownerId: skillSheets.ownerId })
-      .from(skillSheets)
-      .where(eq(skillSheets.id, sheetId))
-      .limit(1);
-    const expectedOwner = process.env.SKILLSHEET_OWNER_ID;
-    const ownerMatch: DumpEvidence['ownerMatch'] = expectedOwner
-      ? sheet?.ownerId === expectedOwner
-        ? 'true'
-        : 'false'
-      : 'not-configured';
-    if (ownerMatch === 'false') {
-      throw new Error('対象シートの owner が期待値と一致しません');
-    }
     const identity = connectionIdentity(process.env.DATABASE_URL ?? '');
     writeEvidence(evidencePath, {
       ...identity,
