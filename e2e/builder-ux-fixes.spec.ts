@@ -22,7 +22,9 @@ const getDashboardTemplateBlocks = () => {
 async function getBlockValues(handles: Locator) {
   return handles.evaluateAll((els) =>
     els.map((el) => {
-      const block = el.parentElement;
+      // ドラッグハンドルはモバイルレイアウト用のボタン用ラッパ（sm:contents）の中にあり、
+      // parentElement ではブロック本体に届かない。ブロックの外枠まで遡って入力を探す。
+      const block = el.closest('.rounded-lg');
       const input = block?.querySelector('textarea, input');
       if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
         return input.value;
