@@ -149,47 +149,35 @@ async function ensureSeeded(db: Database): Promise<string> {
     .limit(1);
   if (existingDefault[0]?.id) return existingDefault[0].id;
 
+  // 通常読取では書き込まない（S09 の要求）。is_default が全く無い期間だけ
+  // 「最古」を実効既定として読む。フラグの確定は書込経路（削除時昇格・
+  // 初回シート作成・既定への保存）に任せ、ここでは UPDATE/INSERT しない。
+  const [oldest] = await db
+    .select({ id: skillSheets.id })
+    .from(skillSheets)
+    .where(eq(skillSheets.ownerId, ownerId))
+    .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
+    .limit(1);
+  if (oldest) return oldest.id;
+
   // GitHub seed は「オーナーにシートが 1 枚も無い初回導入」だけで実行する。
   // ブロック 0 件を再取り込みの合図にすると、ユーザーが全削除した直後に
   // 古い GitHub 本文が復活する（S09）。seed 取得に失敗した場合はシートも作らず
   // throw が伝播し、次回アクセスで再試行できる。
-  const [anySheet] = await db
-    .select({ id: skillSheets.id })
-    .from(skillSheets)
-    .where(eq(skillSheets.ownerId, ownerId))
-    .limit(1);
   let segments: ReturnType<typeof splitMarkdownIntoBlocks> = [];
-  if (!anySheet) {
-    const config = getGitHubSeedConfig();
-    if (config) {
-      const markdown = await fetchMarkdownFromGitHub(config);
-      // 分割で生じる空白のみのセグメントは「著者が置いた構造」ではなく分割ノイズなので、
-      // ここは意図的に isBlockInputEmpty で除く（テンプレの空ブロックとは別物）。
-      segments = splitMarkdownIntoBlocks(markdown).filter((data) => !isBlockInputEmpty({ type: 'markdown', data }));
-    } else {
-      // 未設定は正常系だが、意図せぬ設定漏れの調査ができるよう記録だけは残す。
-      console.warn(
-        '[skillsheet] GitHub seed is not configured (GITHUB_TOKEN/OWNER/REPO); starting with an empty sheet.',
-      );
-    }
+  const config = getGitHubSeedConfig();
+  if (config) {
+    const markdown = await fetchMarkdownFromGitHub(config);
+    // 分割で生じる空白のみのセグメントは「著者が置いた構造」ではなく分割ノイズなので、
+    // ここは意図的に isBlockInputEmpty で除く（テンプレの空ブロックとは別物）。
+    segments = splitMarkdownIntoBlocks(markdown).filter((data) => !isBlockInputEmpty({ type: 'markdown', data }));
+  } else {
+    // 未設定は正常系だが、意図せぬ設定漏れの調査ができるよう記録だけは残す。
+    console.warn('[skillsheet] GitHub seed is not configured (GITHUB_TOKEN/OWNER/REPO); starting with an empty sheet.');
   }
 
+  // 初回導入の一度だけの初期化。通常読取ではここに来ない（上で既存シートを返す）。
   return db.transaction(async (tx) => {
-    if (anySheet) {
-      // シートはあるが既定だけ失われた状態。空シートを新設する代わりに最古の
-      // シートを既定へ昇格する（getOrCreateDefaultSheetId と同じ意味付け）。
-      // 外側で読んだ anySheet が消えている可能性を考慮し、昇格対象はトランザクション内で取り直す。
-      const [oldest] = await tx
-        .select({ id: skillSheets.id })
-        .from(skillSheets)
-        .where(eq(skillSheets.ownerId, ownerId))
-        .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
-        .limit(1);
-      if (oldest) {
-        await tx.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldest.id));
-        return oldest.id;
-      }
-    }
     const inserted = await tx
       .insert(skillSheets)
       .values({ ownerId, title: TITLE, isDefault: true })
@@ -300,9 +288,17 @@ export async function createSheetInTx(tx: DbOrTx, title: string, initialBlocks?:
   const ownerId = getOwnerId();
   const resolvedTitle = title.trim().length > 0 ? title.trim() : TITLE;
 
+  // 既定が無い状態で最初のシートを作るなら、それを既定にする。
+  // 削除時昇格と合わせて「is_default が全く無い期間」を通常経路では発生させない。
+  const [defaultExists] = await tx
+    .select({ id: skillSheets.id })
+    .from(skillSheets)
+    .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
+    .limit(1);
+
   const inserted = await tx
     .insert(skillSheets)
-    .values({ ownerId, title: resolvedTitle })
+    .values({ ownerId, title: resolvedTitle, isDefault: !defaultExists })
     .returning({ id: skillSheets.id });
   const sheetId = inserted[0]?.id;
   if (!sheetId) {
@@ -321,11 +317,30 @@ export async function createSheetInTx(tx: DbOrTx, title: string, initialBlocks?:
   return sheetId;
 }
 
-/** 指定シートを削除する（ブロックも cascade で削除される）。 */
+/**
+ * 指定シートを削除する（ブロックも cascade で削除される）。
+ * 削除したのが既定シートなら、同一トランザクション内で残りの最古シートを
+ * 既定へ昇格する（S09: 昇格は読取ではなく書込操作の中で行う）。
+ */
 export async function deleteSheet(sheetId: string): Promise<void> {
   const db = getDb();
   const ownerId = getOwnerId();
-  await db.delete(skillSheets).where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)));
+  await db.transaction(async (tx) => {
+    const [deleted] = await tx
+      .delete(skillSheets)
+      .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)))
+      .returning({ isDefault: skillSheets.isDefault });
+    if (!deleted?.isDefault) return;
+    const [oldest] = await tx
+      .select({ id: skillSheets.id })
+      .from(skillSheets)
+      .where(eq(skillSheets.ownerId, ownerId))
+      .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
+      .limit(1);
+    if (oldest) {
+      await tx.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldest.id));
+    }
+  });
 }
 
 /** 指定 ID のシートを読む。ID 未指定またはデフォルト読み込み時は GitHub シードを実行する。 */

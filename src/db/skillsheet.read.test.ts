@@ -105,15 +105,14 @@ describe('シート読み込み時のGitHub seed条件', () => {
     expect(tx.insert).toHaveBeenCalledTimes(1);
   });
 
-  it('既定シート削除後に他シートだけ残っている場合は seed せず最古シートを既定へ昇格する', async () => {
+  it('is_default が無く他シートだけ残る場合は seed せず最古シートを実効既定として読み、読取では書き込まない', async () => {
     configureSeed();
-    const { tx } = fakeDb([[], [{ id: 'other-sheet' }], [{ title: '別シート' }], [row]], {
-      txResults: [[{ id: 'other-sheet' }]],
-    });
+    const { db, tx } = fakeDb([[], [{ id: 'other-sheet' }], [{ title: '別シート' }], [row]]);
     await expect(getSkillSheet()).resolves.toEqual({ title: '別シート', content: '合成本文', blocks: [row] });
     expect(fetchMock).not.toHaveBeenCalled();
-    // 空の既定シートを新設せず、UPDATE で既存シートを昇格する
-    expect(tx.update).toHaveBeenCalledTimes(1);
+    // 昇格の UPDATE/INSERT は読取では発生させない（書込経路側で確定する、S09）
+    expect(db.transaction).not.toHaveBeenCalled();
+    expect(tx.update).not.toHaveBeenCalled();
     expect(tx.insert).not.toHaveBeenCalled();
   });
 

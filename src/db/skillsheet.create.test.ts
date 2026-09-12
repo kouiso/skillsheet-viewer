@@ -12,19 +12,31 @@ const thenable = (result: unknown) => ({
   then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) => Promise.resolve(result).then(res, rej),
 });
 
-function createFakeDb(insertedSheetId: string) {
+function selectChain(result: unknown[]) {
+  const chain: Record<string, unknown> = {};
+  for (const m of ['from', 'where', 'orderBy', 'limit']) chain[m] = () => chain;
+  // biome-ignore lint/suspicious/noThenProperty: drizzle ビルダの await 可能な挙動を模すフェイク
+  (chain as { then: unknown }).then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+    Promise.resolve(result).then(res, rej);
+  return chain;
+}
+
+function createFakeDb(insertedSheetId: string, opts: { defaultExists?: boolean } = {}) {
   const insertValues = vi.fn((_values: unknown[]) => thenable(undefined));
+  const sheetValues = vi.fn((_values: unknown) => ({ returning: () => thenable([{ id: insertedSheetId }]) }));
   const tx = {
+    // 既定シート存在チェック。指定が無ければ「既定あり」として振る舞う。
+    select: vi.fn(() => selectChain(opts.defaultExists === false ? [] : [{ id: 'sheet-default' }])),
     insert: vi.fn(() => {
       // 最初の insert は skillSheets（returning が要る）、2 回目以降は blocks（values のみ）。
       if (tx.insert.mock.calls.length === 1) {
-        return { values: () => ({ returning: () => thenable([{ id: insertedSheetId }]) }) };
+        return { values: sheetValues };
       }
       return { values: insertValues };
     }),
   };
   const db = { transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) };
-  return { db, insertValues };
+  return { db, insertValues, sheetValues };
 }
 
 let savedOwner: string | undefined;
@@ -60,5 +72,19 @@ describe('createSheet', () => {
     const sheetId = await createSheet('空白', []);
     expect(sheetId).toBe('sheet-blank');
     expect(f.insertValues).not.toHaveBeenCalled();
+  });
+
+  it('既定シートが既にあるなら新規シートは isDefault=false で作る', async () => {
+    const f = createFakeDb('sheet-new', { defaultExists: true });
+    dbHolder = f.db;
+    await createSheet('別シート', []);
+    expect(f.sheetValues).toHaveBeenCalledWith(expect.objectContaining({ isDefault: false }));
+  });
+
+  it('既定シートが無いなら新規シートを isDefault=true で作る（書込経路で既定を確定する、S09）', async () => {
+    const f = createFakeDb('sheet-first', { defaultExists: false });
+    dbHolder = f.db;
+    await createSheet('最初のシート', []);
+    expect(f.sheetValues).toHaveBeenCalledWith(expect.objectContaining({ isDefault: true }));
   });
 });
