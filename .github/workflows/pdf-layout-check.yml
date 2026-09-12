@@ -61,13 +61,20 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PDF_CHECK_DATABASE_URL }}
           PDF_CHECK_SHEET_ID: ${{ vars.PDF_CHECK_SHEET_ID }}
+          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
         # 本文やDBエラーは非公開の一時ファイルに限定する。成果物へはアップロードしない。
         run: |
           umask 077
           status=0
-          pnpm exec tsx scripts/dump-blocks.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$PDF_CHECK_SHEET_ID" > "$RUNNER_TEMP/pdf-dump.log" 2>&1 || status=$?
+          pnpm exec tsx scripts/dump-blocks.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$PDF_CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/pdf-dump.log" 2>&1 || status=$?
           echo "Database dump finished (exit $status)."
           exit "$status"
+
+      - name: Record dump evidence
+        # M07 の完了条件（接続先識別・owner一致・件数・スナップショット）を
+        # 非秘密の識別子だけで実行ログへ残す。内容は dump-blocks.ts が
+        # 非秘密値だけを書く evidence ファイルで、本文・認証情報は入らない。
+        run: cat "$RUNNER_TEMP/blocks.evidence"
 
       - name: PDF layout check against real data
         env:
@@ -82,4 +89,4 @@ jobs:
 
       - name: Remove private data and logs
         if: always()
-        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/pdf-dump.log" "$RUNNER_TEMP/pdf-layout.log"
+        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/pdf-dump.log" "$RUNNER_TEMP/pdf-layout.log"
