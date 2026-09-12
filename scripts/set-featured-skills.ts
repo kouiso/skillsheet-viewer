@@ -33,10 +33,10 @@ async function main(): Promise<void> {
     );
   }
   const sheets = await db
-    .select({ id: skillSheets.id, updatedAt: skillSheets.updatedAt })
+    .select({ id: skillSheets.id, revision: skillSheets.revision })
     .from(skillSheets)
     .where(inArray(skillSheets.id, sheetIds));
-  const expectedUpdatedAtBySheet = new Map(sheets.map((sheet) => [sheet.id, sheet.updatedAt]));
+  const expectedRevisionBySheet = new Map(sheets.map((sheet) => [sheet.id, sheet.revision]));
   const rows = await db.select().from(blocks).where(inArray(blocks.sheetId, sheetIds));
   const found = new Set<string>();
   let matched = 0;
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
     updates.push({
       id: row.id,
       sheetId: row.sheetId,
-      expectedUpdatedAt: expectedUpdatedAtBySheet.get(row.sheetId),
+      expectedRevision: expectedRevisionBySheet.get(row.sheetId),
       data,
       previous,
     });

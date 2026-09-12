@@ -150,6 +150,25 @@ describe('技術名の完全一致', () => {
     expect(normalizeTechnologyCandidates('Next.js 14')).toContain('next.js');
   });
 
+  it('Hooks 単体スキルは各FWの (Hooks) 注釈と関連付き、FW どうしは無関係のまま（仕様固定）', () => {
+    // 単体「Hooks」スキルは汎用技術名として、React/Vue どちらの (Hooks) 注釈案件も経験に数える。
+    // 同一技術ではないので一致判定は false、経験集計の関連判定だけ true。
+    expect(technologyNamesMatch('Hooks', 'React (Hooks)')).toBe(false);
+    expect(technologyNamesRelated('Hooks', 'React (Hooks)')).toBe(true);
+    expect(technologyNamesRelated('Hooks', 'Vue (Hooks)')).toBe(true);
+    // 括弧注釈どうしでは一致・関連ともにしない（React (Hooks) ≠ Vue (Hooks)）
+    expect(technologyNamesMatch('React (Hooks)', 'Vue (Hooks)')).toBe(false);
+    expect(technologyNamesRelated('React (Hooks)', 'Vue (Hooks)')).toBe(false);
+    // 集計は両FWの案件を重複なく月で数える
+    const items = [
+      project('p1', '2020.01 — 2020.06', { fw: ['React (Hooks)'] }),
+      project('p2', '2020.05 — 2020.12', { fw: ['Vue (Hooks)'] }),
+    ];
+    expect(deriveSkillExperienceMonths('Hooks', items)).toBe(12);
+    expect(deriveSkillExperienceMonths('React (Hooks)', items)).toBe(6);
+    expect(deriveSkillExperienceMonths('Vue (Hooks)', items)).toBe(8);
+  });
+
   it('実データで同一技術と確認できた別名だけを統合する', () => {
     // K8S / Prisma ORM / Sanity CMS は実データの表記揺れ（M01 と同種の過小算出）
     expect(technologyNamesMatch('Kubernetes', 'K8S')).toBe(true);
@@ -195,5 +214,63 @@ describe('技術名の完全一致', () => {
         project('p1', '2019.10 — 現在', { fw: ['React Native'] }),
       ]),
     ).toEqual({ months: 12, label: '1年', derived: false });
+  });
+});
+
+describe('期間の集計対象（R02: 不正・未来・未記載は経験月へ入れない）', () => {
+  const REF = 2026 * 12 + 8; // 2026-09 固定
+
+  it('月 13 の期間は 0 ヶ月（1ヶ月として混入しない）', () => {
+    const items = [project('p1', '2020.13 — 2020.14', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('開始 > 終了の逆転期間は 0 ヶ月（並び替えて計上しない）', () => {
+    const items = [project('p1', '2023.03 — 2020.04', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('未来開始の期間は 0 ヶ月（予定は実績月にしない）', () => {
+    const items = [project('p1', '2030.01 — 2030.12', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('終了未記載（末尾空）は 0 ヶ月（継続中と推測しない）', () => {
+    const items = [project('p1', '2020.04〜', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('年のみの期間は 0 ヶ月（1ヶ月として確定しない）', () => {
+    const items = [project('p1', '2020', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('明示の「現在」終端は基準月まで数える', () => {
+    // 2025.11〜2026.09 = 11ヶ月
+    const items = [project('p1', '2025.11 — 現在', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(11);
+  });
+
+  it('終了が基準月より未来の進行形期間は基準月で切る', () => {
+    // 2025.01〜2030.12 → 2025.01〜2026.09 = 21ヶ月
+    const items = [project('p1', '2025.01 — 2030.12', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(21);
+  });
+
+  it('不正期間が混在しても valid な期間だけを数える', () => {
+    const items = [
+      project('p1', '2020.01 — 2020.03', { lang: ['TypeScript'] }), // valid 3ヶ月
+      project('p2', '2020.13 — 2020.15', { lang: ['TypeScript'] }), // invalid
+      project('p3', '2030.01 — 2030.06', { lang: ['TypeScript'] }), // planned
+      project('p4', '2020.04〜', { lang: ['TypeScript'] }), // unknown
+    ];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(3);
+  });
+
+  it('逆転期間は会社期間の導出にも混入しない', () => {
+    const items = [project('p1', '2023.03 — 2020.04'), project('p2', '2021.01 — 2021.12')];
+    expect(resolveCompanyPeriod({ id: 'c1', name: '会社', kind: '', period: '', note: '' }, items)).toBe(
+      '2021.01 — 2021.12',
+    );
   });
 });

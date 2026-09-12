@@ -249,13 +249,30 @@ describe('sheet.save', () => {
     expect(revalidateTagMock).not.toHaveBeenCalled();
   });
 
-  it('成功時は updatedAt を返し db-sheet タグを即時失効させる', async () => {
+  it('成功時は updatedAt と新版を返し db-sheet タグを即時失効させる', async () => {
     const d = new Date('2026-05-01T00:00:00.000Z');
-    saveMock.mockResolvedValue({ updatedAt: d });
+    saveMock.mockResolvedValue({ updatedAt: d, revision: 3 });
     const caller = callerAs('owner');
     const result = await caller.sheet.save({ title: 'T', blocks: [MD] });
-    expect(result).toEqual({ updatedAt: d });
+    expect(result).toEqual({ updatedAt: d, revision: 3 });
     expect(revalidateTagMock).toHaveBeenCalledWith('db-sheet', { expire: 0 });
+  });
+
+  it('MissingRevisionError は BAD_REQUEST に変換する（R01: 版なし更新は契約違反）', async () => {
+    const { MissingRevisionError } = await import('@/db');
+    saveMock.mockRejectedValue(new MissingRevisionError());
+    const caller = callerAs('owner');
+    await expect(caller.sheet.save({ title: 'T', blocks: [MD] })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    expect(revalidateTagMock).not.toHaveBeenCalled();
+  });
+
+  it('expectedRevision は db 層へそのまま渡る', async () => {
+    saveMock.mockResolvedValue({ updatedAt: new Date(), revision: 4 });
+    const caller = callerAs('owner');
+    await caller.sheet.save({ title: 'T', blocks: [MD], sheetId: SHEET_ID, expectedRevision: 3 });
+    expect(saveMock).toHaveBeenCalledWith('T', [MD], SHEET_ID, 3);
   });
 });
 
@@ -270,7 +287,8 @@ describe('sheet.create', () => {
     createSheetMock.mockResolvedValue('new-id');
     const caller = callerAs('owner');
     const result = await caller.sheet.create({ title: 'New' });
-    expect(result).toEqual({ sheetId: 'new-id' });
+    // R01: 作成は別操作で初期版 1 を返す
+    expect(result).toEqual({ sheetId: 'new-id', revision: 1 });
     expect(createSheetMock).toHaveBeenCalledWith('New', undefined);
     expect(revalidateTagMock).toHaveBeenCalledWith('db-sheet', { expire: 0 });
   });
@@ -279,7 +297,7 @@ describe('sheet.create', () => {
     createSheetMock.mockResolvedValue('new-id-2');
     const caller = callerAs('owner');
     const result = await caller.sheet.create({ title: 'New', templateId: 'blank' });
-    expect(result).toEqual({ sheetId: 'new-id-2' });
+    expect(result).toEqual({ sheetId: 'new-id-2', revision: 1 });
     expect(createSheetMock).toHaveBeenCalledWith('New', expect.any(Array));
   });
 

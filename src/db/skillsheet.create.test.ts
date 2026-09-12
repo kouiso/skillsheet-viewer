@@ -22,22 +22,23 @@ function selectChain(result: unknown[]) {
 }
 
 function createFakeDb(insertedSheetId: string, opts: { defaultExists?: boolean } = {}) {
+  // insert の呼び出し順: 1=skillsheet_state(ensureInitialized), 2=skill_sheets, 3以降=blocks。
   const insertValues = vi.fn((_values: unknown[]) => thenable(undefined));
+  const stateValues = vi.fn((_values: unknown) => ({ onConflictDoNothing: () => thenable(undefined) }));
   const sheetValues = vi.fn((_values: unknown) => ({ returning: () => thenable([{ id: insertedSheetId }]) }));
   const tx = {
     // 既定シート存在チェック。指定が無ければ「既定あり」として振る舞う。
     select: vi.fn(() => selectChain(opts.defaultExists === false ? [] : [{ id: 'sheet-default' }])),
     insert: vi.fn(() => {
-      // 最初の insert は skillSheets（returning が要る）、2 回目以降は blocks（values のみ）。
-      if (tx.insert.mock.calls.length === 1) {
-        return { values: sheetValues };
-      }
+      const call = tx.insert.mock.calls.length;
+      if (call === 1) return { values: stateValues };
+      if (call === 2) return { values: sheetValues };
       return { values: insertValues };
     }),
     execute: vi.fn().mockResolvedValue(undefined),
   };
   const db = { transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) };
-  return { db, insertValues, sheetValues };
+  return { db, insertValues, sheetValues, stateValues };
 }
 
 let savedOwner: string | undefined;
@@ -87,5 +88,12 @@ describe('createSheet', () => {
     dbHolder = f.db;
     await createSheet('最初のシート', []);
     expect(f.sheetValues).toHaveBeenCalledWith(expect.objectContaining({ isDefault: true }));
+  });
+
+  it('作成の書込経路では skillsheet_state を upsert する（S09: state 無しのシートを残さない）', async () => {
+    const f = createFakeDb('sheet-new');
+    dbHolder = f.db;
+    await createSheet('新規', []);
+    expect(f.stateValues).toHaveBeenCalledWith({ ownerId: 'owner-1' });
   });
 });

@@ -17,9 +17,10 @@ export const saveSheetInputSchema = z.object({
   title: z.string(),
   blocks: z.array(blockInputSchema),
   sheetId: sheetIdSchema.optional(),
-  // Server Actions のシリアライズ境界と同様、tRPC の HTTP 経路でも Date が
-  // シリアライズを跨ぐ可能性があるため superjson 前提でも Date のまま受ける。
-  expectedUpdatedAt: z.date().optional(),
+  // R01: 既存シートの更新は期待版を必須にする。版は本文と同一スナップショットの
+  // 読取結果から取得し、サーバは id AND revision の条件付き UPDATE で照合する。
+  // 省略は「既定シートがまだ無い初回保存」だけで、その場合は DB 側が新規作成する。
+  expectedRevision: z.number().int().min(1).optional(),
 });
 
 export const createSheetInputSchema = z.object({

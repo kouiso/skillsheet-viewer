@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 let dbHolder: unknown;
 vi.mock('./client', () => ({ getDb: () => dbHolder }));
 
-import { ConflictError, deleteSheet, saveSkillSheetBlocks, UnreadableBlocksError } from './skillsheet';
+import {
+  ConflictError,
+  deleteSheet,
+  MissingRevisionError,
+  saveSkillSheetBlocks,
+  UnreadableBlocksError,
+} from './skillsheet';
 
 // drizzle のクエリビルダは chainable かつ await 可能（thenable）。実 DB 無しで
 // その挙動を模すため、意図的に then を持つフェイクを返す（noThenProperty は許容する）。
@@ -21,8 +27,27 @@ function selectChain(result: unknown[]) {
   return chain;
 }
 
-function createFakeDb(opts: { selectResults: unknown[][]; updateReturning: unknown[]; deleteReturning?: unknown[] }) {
-  const insertValues = vi.fn(() => thenable(undefined));
+function createFakeDb(opts: {
+  selectResults: unknown[][];
+  updateReturning: unknown[];
+  deleteReturning?: unknown[];
+  insertedSheetId?: string;
+}) {
+  // insert().values() は用途により thenable / .onConflictDoNothing() /
+  // .onConflictDoNothing().returning() / .returning() のいずれでも呼ばれる。
+  const insertValues = vi.fn((_values: unknown) => {
+    const base: Record<string, unknown> = {
+      onConflictDoNothing: () => ({
+        ...thenable(undefined),
+        returning: () => thenable(opts.insertedSheetId ? [{ id: opts.insertedSheetId }] : []),
+      }),
+      returning: () => thenable(opts.insertedSheetId ? [{ id: opts.insertedSheetId }] : []),
+    };
+    // biome-ignore lint/suspicious/noThenProperty: drizzle ビルダの await 可能な挙動を模すフェイク
+    (base as { then: unknown }).then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+      Promise.resolve(undefined).then(res, rej);
+    return base;
+  });
   let idx = 0;
   const tx = {
     select: vi.fn(() => selectChain(opts.selectResults[idx++] ?? [])),
@@ -33,7 +58,9 @@ function createFakeDb(opts: { selectResults: unknown[][]; updateReturning: unkno
     })),
     insert: vi.fn(() => ({ values: insertValues })),
     update: vi.fn(() => ({
-      set: () => ({ where: () => ({ returning: () => thenable(opts.updateReturning) }) }),
+      set: () => ({
+        where: () => ({ ...thenable(undefined), returning: () => thenable(opts.updateReturning) }),
+      }),
     })),
     execute: vi.fn().mockResolvedValue(undefined),
   };
@@ -58,83 +85,81 @@ const MD = { type: 'markdown' as const, data: { markdown: 'hello' } };
 describe('saveSkillSheetBlocks', () => {
   it('sheetId の所有者が一致しなければ Forbidden を throw する', async () => {
     dbHolder = createFakeDb({ selectResults: [[]], updateReturning: [] }).db;
-    await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x')).rejects.toThrow('Forbidden');
+    await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x', 1)).rejects.toThrow('Forbidden');
   });
 
-  it('expectedUpdatedAt より新しい updatedAt なら ConflictError を throw する', async () => {
-    const older = new Date('2026-01-01T00:00:00.000Z');
-    const newer = new Date('2026-02-01T00:00:00.000Z');
+  it('既存シートへの更新で期待版が無ければ MissingRevisionError を throw する（R01: 版なし更新を拒否）', async () => {
+    const f = createFakeDb({ selectResults: [[{ id: 'sheet-x' }]], updateReturning: [] });
+    dbHolder = f.db;
+    await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x')).rejects.toBeInstanceOf(MissingRevisionError);
+    // 版なしではシート行の更新自体も行わない
+    expect(f.tx.update).not.toHaveBeenCalled();
+  });
+
+  it('期待版と DB の版が一致しなければ ConflictError を throw する（古い版・未来版・不一致）', async () => {
     dbHolder = createFakeDb({
-      selectResults: [[{ id: 'sheet-x' }], [{ updatedAt: newer }]],
-      updateReturning: [],
+      selectResults: [[{ id: 'sheet-x' }]],
+      updateReturning: [], // CAS の条件付き UPDATE が 0 行 = 版不一致
     }).db;
-    await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x', older)).rejects.toBeInstanceOf(ConflictError);
+    await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x', 3)).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('保存成功時はサーバ採番の新版番号を返す', async () => {
+    const saved = new Date('2026-03-01T00:00:00.000Z');
+    const f = createFakeDb({
+      selectResults: [[{ id: 'sheet-x' }], []],
+      updateReturning: [{ updatedAt: saved, revision: 6 }],
+    });
+    dbHolder = f.db;
+    const res = await saveSkillSheetBlocks('T', [MD], 'sheet-x', 5);
+    expect(res.updatedAt).toBe(saved);
+    expect(res.revision).toBe(6);
   });
 
   it('空ブロックのみでも drop せず insert する（issue #128: テンプレの空スカフォールドを残す）', async () => {
-    const saved = new Date('2026-03-01T00:00:00.000Z');
-    const f = createFakeDb({ selectResults: [[{ id: 'sheet-x' }]], updateReturning: [{ updatedAt: saved }] });
-    dbHolder = f.db;
-    const res = await saveSkillSheetBlocks('T', [{ type: 'markdown', data: { markdown: '   ' } }], 'sheet-x');
-    expect(res.updatedAt).toBe(saved);
-    expect(f.insertValues).toHaveBeenCalledTimes(1);
-  });
-
-  it('非空ブロックは insert され、サーバー時刻の updatedAt を返す', async () => {
-    const saved = new Date('2026-04-01T00:00:00.000Z');
-    const f = createFakeDb({ selectResults: [[{ id: 'sheet-x' }]], updateReturning: [{ updatedAt: saved }] });
-    dbHolder = f.db;
-    const res = await saveSkillSheetBlocks('T', [MD], 'sheet-x');
-    expect(res.updatedAt).toBe(saved);
-    expect(f.insertValues).toHaveBeenCalledTimes(1);
-  });
-
-  it('expectedUpdatedAt 以下の updatedAt なら競合とみなさず保存する', async () => {
-    const older = new Date('2026-01-01T00:00:00.000Z');
-    const newer = new Date('2026-02-01T00:00:00.000Z');
     const f = createFakeDb({
-      selectResults: [[{ id: 'sheet-x' }], [{ updatedAt: older }]],
-      updateReturning: [{ updatedAt: newer }],
+      selectResults: [[{ id: 'sheet-x' }], []],
+      updateReturning: [{ updatedAt: new Date(), revision: 2 }],
     });
     dbHolder = f.db;
-    const res = await saveSkillSheetBlocks('T', [MD], 'sheet-x', newer);
-    expect(res.updatedAt).toBe(newer);
-  });
-
-  it('DB ドライバーが updatedAt を ISO 文字列で返しても競合を正しく判定する', async () => {
-    const older = new Date('2026-01-01T00:00:00.000Z');
-    const newer = new Date('2026-02-01T00:00:00.000Z');
-    dbHolder = createFakeDb({
-      selectResults: [[{ id: 'sheet-x' }], [{ updatedAt: newer.toISOString() }]],
-      updateReturning: [],
-    }).db;
-    await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x', older)).rejects.toBeInstanceOf(ConflictError);
+    await saveSkillSheetBlocks('T', [{ type: 'markdown', data: { markdown: '   ' } }], 'sheet-x', 1);
+    // ブロック insert が 1 回（state/sheet ではなく blocks への insert）
+    const blockInsert = f.insertValues.mock.calls.map((c) => c[0]).find((v) => Array.isArray(v));
+    expect(blockInsert).toHaveLength(1);
   });
 
   it('正本に読み取れないブロックが残っていると全置換を拒否する（M08: 見えない元データを消さない）', async () => {
     const f = createFakeDb({
       selectResults: [[{ id: 'sheet-x' }], [{ id: 'bad-1', type: 'markdown', data: { broken: true } }]],
-      updateReturning: [],
+      updateReturning: [{ updatedAt: new Date(), revision: 2 }],
     });
     dbHolder = f.db;
-    const err = await saveSkillSheetBlocks('T', [MD], 'sheet-x').catch((e) => e);
+    const err = await saveSkillSheetBlocks('T', [MD], 'sheet-x', 1).catch((e) => e);
     expect(err).toBeInstanceOf(UnreadableBlocksError);
     expect((err as UnreadableBlocksError).blockIds).toEqual(['bad-1']);
     // delete→insert へ進まないので元行は温存される
     expect(f.tx.delete).not.toHaveBeenCalled();
-    expect(f.insertValues).not.toHaveBeenCalled();
   });
 
-  it('DB ドライバーが更新後の updatedAt を ISO 文字列で返しても Date として返す', async () => {
-    const saved = new Date('2026-05-01T00:00:00.000Z');
+  it('sheetId 省略で既定シートが無ければ新規作成し、初期版で保存できる（作成は版不要）', async () => {
     const f = createFakeDb({
-      selectResults: [[{ id: 'sheet-x' }]],
-      updateReturning: [{ updatedAt: saved.toISOString() }],
+      // getOrCreateDefaultSheetId: 既定なし → 最古なし → insert
+      selectResults: [[], [], []],
+      updateReturning: [{ updatedAt: new Date(), revision: 2 }],
+      insertedSheetId: 'sheet-new',
     });
     dbHolder = f.db;
-    const res = await saveSkillSheetBlocks('T', [MD], 'sheet-x');
-    expect(res.updatedAt).toBeInstanceOf(Date);
-    expect(res.updatedAt.getTime()).toBe(saved.getTime());
+    const res = await saveSkillSheetBlocks('T', [MD]);
+    expect(res.revision).toBe(2);
+  });
+
+  it('sheetId 省略で既定シートが既にあれば既存更新となり版は必須', async () => {
+    const f = createFakeDb({
+      selectResults: [[{ id: 'sheet-default' }]],
+      updateReturning: [],
+    });
+    dbHolder = f.db;
+    await expect(saveSkillSheetBlocks('T', [MD])).rejects.toBeInstanceOf(MissingRevisionError);
   });
 });
 
@@ -173,5 +198,18 @@ describe('deleteSheet', () => {
     dbHolder = f.db;
     await deleteSheet('sheet-default');
     expect(f.tx.update).not.toHaveBeenCalled();
+  });
+
+  it('削除の書込経路では skillsheet_state を upsert して「初期化済み」を確定する（S09: 全削除後の seed 復活防止）', async () => {
+    const f = createFakeDb({
+      selectResults: [[]],
+      updateReturning: [],
+      deleteReturning: [{ isDefault: true }],
+    });
+    dbHolder = f.db;
+    await deleteSheet('sheet-default');
+    // insert の最初の呼び出しは skillsheet_state への upsert
+    expect(f.tx.insert).toHaveBeenCalled();
+    expect(f.insertValues).toHaveBeenNthCalledWith(1, { ownerId: 'owner-1' });
   });
 });

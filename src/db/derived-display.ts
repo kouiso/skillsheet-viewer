@@ -1,5 +1,5 @@
 import type { CompanyInfo, ProjectItem, SkillEntry, StatItem } from './blocks';
-import { deriveCompanyPeriod, flattenTech, parsePeriodBounds } from './process';
+import { classifyPeriod, deriveCompanyPeriod, flattenTech } from './process';
 
 const ENGINEER_EXPERIENCE_LABELS = new Set(['エンジニア歴', 'エンジニア経験', '経験年数', '実務経験']);
 const PROJECT_COUNT_LABELS = new Set(['案件数', 'プロジェクト数', '参画案件数', '参画プロジェクト数']);
@@ -11,12 +11,17 @@ export function currentMonthKey(date = new Date()): number {
 
 /** 月数を計算できる精度の期間を、重複排除に使う連続した月キーへ変換する。 */
 function periodMonthKeys(period: string, referenceMonth?: number): number[] {
-  const bounds = parsePeriodBounds(period);
+  // R02: 13月・逆転・終了未記載・未来開始の期間を黙って経験月へ変換しない。
+  // valid 以外（planned/invalid/unknown）は原文を保持したまま集計対象外にする。
+  const { status, bounds } = classifyPeriod(period, referenceMonth);
   // 年だけの期間から「1ヶ月」を捏造しない。継続中はSSRとHydrationで同じ固定月を使う。
-  if (!bounds?.precise) return [];
+  if (status !== 'valid' || !bounds?.precise) return [];
   const start = Math.round(bounds.start * 12);
   if (bounds.openEnded && referenceMonth === undefined) return [];
-  const end = bounds.openEnded ? Math.max(referenceMonth ?? start, start) : Math.round(bounds.end * 12);
+  const rawEnd = bounds.openEnded ? Math.max(referenceMonth ?? start, start) : Math.round(bounds.end * 12);
+  // 終了予定が基準月より先の期間も、実績として数えるのは基準月まで（R02:
+  // 予定の終了月と実績集計の終了月は別概念）。基準月が無いときは従来どおり書かれた範囲。
+  const end = referenceMonth === undefined ? rawEnd : Math.min(rawEnd, referenceMonth);
   const months: number[] = [];
   for (let month = start; month <= end; month += 1) months.push(month);
   return months;

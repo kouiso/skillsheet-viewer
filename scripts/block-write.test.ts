@@ -26,7 +26,7 @@ function database(rows = [{ id: 'block-a', sheetId: 'sheet-a', data: before }], 
             where: () => {
               queries++;
               if (table === blocks) return Promise.resolve(draft);
-              const result = [{ id: 'sheet-a', updatedAt: new Date(1) }];
+              const result = [{ id: 'sheet-a', revision: 1 }];
               return { for: () => Promise.resolve(result), orderBy: () => ({ for: () => Promise.resolve(result) }) };
             },
           }),
@@ -82,14 +82,12 @@ describe('writeBlockUpdates', () => {
     expect(state.queries()).toBeGreaterThan(0);
   });
 
-  it('変更前時刻の不一致は拒否し、成功済み再実行は許可する', async () => {
+  it('期待版の不一致は拒否し、成功済み再実行は許可する（R01: 版で照合）', async () => {
     const state = database();
-    await expect(writeBlockUpdates(state.db, [{ ...update, expectedUpdatedAt: new Date(2) }])).rejects.toThrow(
-      'Concurrent',
-    );
+    await expect(writeBlockUpdates(state.db, [{ ...update, expectedRevision: 2 }])).rejects.toThrow('Concurrent');
     expect(state.rows()[0].data).toEqual(before);
-    await writeBlockUpdates(state.db, [{ ...update, expectedUpdatedAt: new Date(1) }]);
-    expect(await writeBlockUpdates(state.db, [{ ...update, expectedUpdatedAt: new Date(0) }])).toEqual({
+    await writeBlockUpdates(state.db, [{ ...update, expectedRevision: 1 }]);
+    expect(await writeBlockUpdates(state.db, [{ ...update, expectedRevision: 1 }])).toEqual({
       written: 0,
       skipped: 1,
       sheets: 0,

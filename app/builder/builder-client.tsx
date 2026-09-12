@@ -77,6 +77,12 @@ type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
 interface BuilderClientProps {
   initialBlocks: Block[];
   initialTitle: string;
+  /**
+   * 本文と同一スナップショットから取った初期版（R01）。一覧（sheets）の別取得値を
+   * 使うと版と本文の読取時点がずれ、保存 CAS が誤作動/すり抜けるため分離した。
+   * 0 は「版未取得（古いキャッシュ形・シート未作成）」を表す。
+   */
+  initialRevision: number;
   sheets: SheetSummary[];
   activeSheetId: string;
   /**
@@ -91,6 +97,7 @@ interface BuilderClientProps {
 const BuilderClient = ({
   initialBlocks,
   initialTitle,
+  initialRevision,
   sheets: initialSheets,
   activeSheetId,
   loadFailure = null,
@@ -133,20 +140,12 @@ const BuilderClient = ({
   const sheets = sheetsList.sheets;
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newSheetTitle, setNewSheetTitle] = useState('新しいスキルシート');
-  // A3 並行保存ガード: 編集開始時（またはシート切替時）の updatedAt を保持する。
-  // 保存成功時は new Date() で更新し、次回保存時の基準にする。
-  // RSC からのプロップ（initialSheets）は unstable_cache のキャッシュ命中時に Date が
-  // ISO 文字列へ壊れることがある（unstable_cache は内部で JSON.stringify/JSON.parse を
-  // 通すため。next/dist/server/web/spec-extension/unstable-cache.js の cacheNewResult
-  // 参照）。expectedUpdatedAt は z.date() で厳密に Date のみを受けるため、ここで明示的に
-  // Date へ正規化しておかないと、既存シートを開いて保存するたびに autosave/手動保存が
-  // BAD_REQUEST として恒常的に失敗する（headless E2E の autosave.spec.ts で再現・確認済み。
-  // 新規作成直後のシートは expectedUpdatedAt が undefined のためこの経路を通らず、
-  // 症状が「既存シートを開いた場合のみ」に見えていた）。
-  const initialSavedUpdatedAt = initialSheets.find((s) => s.id === activeSheetId)?.updatedAt;
-  const savedUpdatedAtRef = useRef<Date | undefined>(
-    initialSavedUpdatedAt ? new Date(initialSavedUpdatedAt) : undefined,
-  );
+  // R01 並行保存ガード: 編集開始時の版番号を保持し、保存成功時にサーバが返す
+  // 新版で更新して次回保存の基準にする。版は本文と同一スナップショットから渡される
+  // initialRevision で初期化する（以前は別取得の一覧 updatedAt を使っており、
+  // 本文と版の読取時点がずれ得た）。新規作成直後・版未取得は 0 で、
+  // サーバ側は既存シートへの版なし更新を拒否する（MissingRevisionError）。
+  const savedRevisionRef = useRef<number>(initialRevision);
   const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
   const savedRef = useRef(false);
   // サイドバーの sheet.list は staleTime: 60s の間 initialData を再利用し続けるため、
@@ -352,12 +351,12 @@ const BuilderClient = ({
         title: currentTitle,
         blocks: currentItems.map(itemToBlockInput),
         sheetId: activeSheetId || undefined,
-        expectedUpdatedAt: savedUpdatedAtRef.current,
+        expectedRevision: savedRevisionRef.current > 0 ? savedRevisionRef.current : undefined,
       });
       savedRef.current = true;
-      // superjson transformer が Date を server caller / HTTP の両経路で保つため型どおり
-      // Date が返るが、念のため new Date() で正規化する（.getTime() 比較の破綻防止）。
-      savedUpdatedAtRef.current = new Date(result.updatedAt);
+      // 応答がネットワーク上で逆順到着しても版を後退させない（古い応答で最新版を
+      // 上書きすると次回保存が誤 Conflict する）。版はサーバ採番で単調増加。
+      savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
       if (savedTitleRef.current !== currentTitle) {
         savedTitleRef.current = currentTitle;
         void utils.sheet.list.invalidate();
@@ -598,7 +597,7 @@ const BuilderClient = ({
       toast.error('読み込みに失敗したままなので保存できません。ページを再読み込みしてください。');
       return;
     }
-    // 自動保存が実行中なら手動保存を開始しない（同じ expectedUpdatedAt を持つ 2 リクエストが
+    // 自動保存が実行中なら手動保存を開始しない（同じ expectedRevision を持つ 2 リクエストが
     // 競走して片方が誤 Conflict になる自己競合を防ぐ）。ボタンの disabled は次レンダーまで
     // 反映されないため、描画状態ではなく実行中フラグ自体をここで検査する。
     // 実行中に入った編集分は完了後の追撃自動保存が拾う。
@@ -628,20 +627,20 @@ const BuilderClient = ({
       title,
       blocks: items.map(itemToBlockInput),
       sheetId: activeSheetId || undefined,
-      expectedUpdatedAt: savedUpdatedAtRef.current,
+      expectedRevision: savedRevisionRef.current > 0 ? savedRevisionRef.current : undefined,
     };
     const savedSnapshot = snapshot(items, title);
 
     startSaving(async () => {
-      // 手動保存も自動保存と同じ実行中フラグを共有し、同時保存（expectedUpdatedAt の
+      // 手動保存も自動保存と同じ実行中フラグを共有し、同時保存（expectedRevision の
       // 取り違えによる誤 Conflict）を防ぐ。実行中の編集分は追撃自動保存が拾う。
       saveInFlightRef.current = true;
       try {
         const result = await saveMutation.mutateAsync(payload);
         savedRef.current = true;
-        // A4: 次回の競合判定基準にはサーバーが返した updatedAt を使う。クライアント
-        // 時計は使わない（サーバー時刻とズレると誤 Conflict を招くため）。
-        savedUpdatedAtRef.current = new Date(result.updatedAt);
+        // R01: 次回の競合判定基準にはサーバーが返した版を使う。応答の逆順到着で
+        // 版を後退させないよう単調増加を守る。
+        savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
         if (savedTitleRef.current !== payload.title) {
           savedTitleRef.current = payload.title;
           void utils.sheet.list.invalidate();
@@ -865,7 +864,7 @@ const BuilderClient = ({
                 閲覧へ
               </Link>
             </Button>
-            {/* 自動保存の実行中も無効化し、同時保存（expectedUpdatedAt 取り違えの誤 Conflict）を防ぐ */}
+            {/* 自動保存の実行中も無効化し、同時保存（expectedRevision 取り違えの誤 Conflict）を防ぐ */}
             <Button
               onClick={handleSave}
               disabled={isSaving || autosaveStatus === 'saving'}

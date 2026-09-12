@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifyPeriod,
   deriveCompanyPeriod,
   deriveDuration,
   durationFromRange,
@@ -233,8 +234,8 @@ describe('formatPeriodDisplay', () => {
     expect(formatPeriodDisplay('2020-04-15〜2023-03-20')).toBe('2020.04〜2023.03');
   });
 
-  it('区切りありで終了空 = 進行中（「現在」が付く）', () => {
-    expect(formatPeriodDisplay('2020.04〜')).toBe('2020.04〜現在');
+  it('区切りありで終了空 = 終了未記載（「現在」は補わない。R02: 明示継続と区別）', () => {
+    expect(formatPeriodDisplay('2020.04〜')).toBe('2020.04〜');
   });
 
   it('区切りなし単独トークンには「〜現在」を付けない（回帰防止）', () => {
@@ -404,5 +405,61 @@ describe('parsePeriodBounds: 精度と終端の扱い（レビュー指摘の回
 
   it('両端とも月まで書かれていれば月精度ありにする', () => {
     expect(parsePeriodBounds('2020.01 — 2020.03')).toMatchObject({ precise: true, openEnded: false });
+  });
+});
+
+describe('classifyPeriod（R02: 経験月へ計上してよいのは valid のみ）', () => {
+  // 基準月キー: year*12 + monthIndex（periodMonthKeys と同じ約束）。
+  // 2026 年 9 月 = 2026*12 + 8 = 24320。
+  const REF = 2026 * 12 + 8;
+
+  it('通常の期間は valid', () => {
+    expect(classifyPeriod('2025.11 — 2026.07', REF).status).toBe('valid');
+  });
+
+  it('明示の「現在」終端は valid（openEnded）', () => {
+    const c = classifyPeriod('2025.9 — 現在', REF);
+    expect(c.status).toBe('valid');
+    expect(c.bounds?.openEnded).toBe(true);
+  });
+
+  it('月 13 は範囲外として invalid（1ヶ月として混入しない）', () => {
+    expect(classifyPeriod('2020.13 — 2020.14', REF).status).toBe('invalid');
+    expect(classifyPeriod('2020.01 — 2020.13', REF).status).toBe('invalid');
+  });
+
+  it('開始 > 終了の逆転は invalid（黙って並び替えて計上しない）', () => {
+    expect(classifyPeriod('2023.03 — 2020.04', REF).status).toBe('invalid');
+  });
+
+  it('開始が基準月より未来は planned（実績月へ加えない）', () => {
+    expect(classifyPeriod('2030.01 — 2030.12', REF).status).toBe('planned');
+  });
+
+  it('未来開始＋「現在」終端も planned（現在に引き戻して計上しない）', () => {
+    expect(classifyPeriod('2030.01 — 現在', REF).status).toBe('planned');
+  });
+
+  it('終了未記載（末尾空）は unknown — 「現在」と推測しない', () => {
+    expect(classifyPeriod('2020.04〜', REF).status).toBe('unknown');
+    expect(classifyPeriod('2020.04', REF).status).toBe('unknown');
+  });
+
+  it('年のみの表記は unknown（1ヶ月として確定しない）', () => {
+    expect(classifyPeriod('2020', REF).status).toBe('unknown');
+    expect(classifyPeriod('2020 — 2021', REF).status).toBe('unknown');
+  });
+
+  it('解釈不能な文字列は unknown', () => {
+    expect(classifyPeriod('在籍期間不明', REF).status).toBe('unknown');
+    expect(classifyPeriod('', REF).status).toBe('unknown');
+  });
+
+  it('日付らしい形だが値が壊れた終端は invalid', () => {
+    expect(classifyPeriod('2020.01 — 2020.99', REF).status).toBe('invalid');
+  });
+
+  it('同月開始・同月終了は valid（1ヶ月として数えてよい）', () => {
+    expect(classifyPeriod('2020.04 — 2020.04', REF).status).toBe('valid');
   });
 });

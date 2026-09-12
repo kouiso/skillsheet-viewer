@@ -41,7 +41,7 @@ const mdBlocks = (markdowns: string[]): Block[] =>
   markdowns.map((markdown, order) => ({ id: `block-${order}`, type: 'markdown', order, data: { markdown } }));
 
 const defaultSheet = { id: 'sheet-1', title: 'テストシート', updatedAt: new Date() };
-const defaultProps = { sheets: [defaultSheet], activeSheetId: 'sheet-1' };
+const defaultProps = { sheets: [defaultSheet], activeSheetId: 'sheet-1', initialRevision: 5 };
 
 describe('BuilderClient', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -87,34 +87,35 @@ describe('BuilderClient', () => {
 
   it('DB 取得失敗後の空ビルダーは sheetId を省略して新規保存する', async () => {
     const user = userEvent.setup();
-    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" sheets={[]} activeSheetId="" />);
-    await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ sheetId: undefined }));
-  });
-
-  // headless E2E で再現した実バグの回帰テスト: unstable_cache のキャッシュ命中時は内部で
-  // JSON.stringify/JSON.parse を通すため、RSC が渡す sheets[].updatedAt が Date ではなく
-  // ISO 文字列になることがある（既存シートを開いて保存するたびに再現）。expectedUpdatedAt は
-  // z.date() を要求するため、文字列のまま送ると保存 mutation が BAD_REQUEST で毎回失敗していた。
-  it('initialSheets の updatedAt が文字列（unstable_cache 由来）でも Date として保存 mutation に渡る', async () => {
-    const user = userEvent.setup();
-    const sheetsWithStringUpdatedAt = [
-      { id: 'sheet-1', title: 'テストシート', updatedAt: '2026-08-05T12:00:00.000Z' as unknown as Date },
-    ];
     render(
       <BuilderClient
         initialBlocks={mdBlocks(['## A'])}
         initialTitle="マイシート"
-        sheets={sheetsWithStringUpdatedAt}
-        activeSheetId="sheet-1"
+        sheets={[]}
+        activeSheetId=""
+        initialRevision={0}
       />,
     );
     await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenCalledWith(
-      expect.objectContaining({ expectedUpdatedAt: new Date('2026-08-05T12:00:00.000Z') }),
-    );
-    const call = mockSave.mock.calls[0][0];
-    expect(call.expectedUpdatedAt).toBeInstanceOf(Date);
+    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ sheetId: undefined }));
+  });
+
+  // R01: 版は本文と同じスナップショット（initialRevision）から取り、保存の期待版として送る。
+  // 以前は別読取の一覧 updatedAt を使っていたため、本文と版がずれる設計だった。
+  it('initialRevision が保存 mutation の expectedRevision として渡る（R01）', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 5 }));
+  });
+
+  it('保存応答の新版で次の保存の期待版が更新される（遅延した古い応答で版が戻らない、R01）', async () => {
+    const user = userEvent.setup();
+    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: 6 });
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 6 }));
   });
 
   // 「新規シート」経由の router.push は key={activeSheetId} の再マウントで編集中 state を
@@ -261,6 +262,7 @@ describe('BuilderClient', () => {
         initialTitle="シートA"
         sheets={[sheetA, sheetB]}
         activeSheetId="sheet-a"
+        initialRevision={1}
       />,
     );
     expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Aの内容');
@@ -273,6 +275,7 @@ describe('BuilderClient', () => {
         initialTitle="シートB"
         sheets={[sheetA, sheetB]}
         activeSheetId="sheet-b"
+        initialRevision={1}
       />,
     );
     expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Bの内容');
@@ -470,7 +473,7 @@ describe('BuilderClient 自動保存', () => {
         title: 't',
         sheetId: 'sheet-1',
         blocks: [{ type: 'markdown', data: { markdown: '## A 追記' } }],
-        expectedUpdatedAt: defaultSheet.updatedAt,
+        expectedRevision: 5,
       }),
     );
     expect(screen.getByText('保存済み（自動）')).toBeInTheDocument();
@@ -490,6 +493,7 @@ describe('BuilderClient 自動保存', () => {
         sheets={[]}
         activeSheetId=""
         loadFailure="unknown"
+        initialRevision={0}
       />,
     );
     typeMarkdown('## 事故で入力してしまった1行');
@@ -506,7 +510,15 @@ describe('BuilderClient 自動保存', () => {
   });
 
   it('空ビルダーの自動保存は sheetId を省略して新規保存する', async () => {
-    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" sheets={[]} activeSheetId="" />);
+    render(
+      <BuilderClient
+        initialBlocks={mdBlocks(['## A'])}
+        initialTitle="t"
+        sheets={[]}
+        activeSheetId=""
+        initialRevision={0}
+      />,
+    );
     typeMarkdown('## B');
     await act(async () => {
       vi.advanceTimersByTime(600);
