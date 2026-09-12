@@ -166,7 +166,7 @@ export const ProfileBlockEditor = ({
   return (
     <div className="min-w-0 flex-1 space-y-2 text-sm">
       <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">プロフィール</p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <input
           value={data.name}
           onChange={(e) => set('name', e.target.value)}
@@ -208,7 +208,7 @@ export const ProfileBlockEditor = ({
           className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {KNOWN_PROFILE_META_FIELDS.map(({ key, placeholder }) => (
           <div key={key}>
             <p className="mb-1 text-xs text-muted-foreground">{PROFILE_META_LABELS[key]}</p>

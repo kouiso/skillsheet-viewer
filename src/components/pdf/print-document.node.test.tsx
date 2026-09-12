@@ -19,6 +19,7 @@ import type { Block } from '@/db/blocks';
 import PDF_FONT_FAMILY from './constants';
 import { buildPdfQualityFixtureBlocks, PDF_QUALITY_FIXTURE_TITLE } from './fixtures/print-quality-fixture';
 import { splitForHyphenation } from './fonts';
+import { buildCompletenessReport } from './print-completeness.node';
 import { buildPrintSkillSheetDocument } from './print-document';
 import { DEFAULT_QUALITY_OPTIONS, runQualityChecks, summarize, toSearchKey } from './print-quality';
 import { runDuplicateHeadingChecks } from './print-quality-duplicate-heading';
@@ -32,12 +33,19 @@ const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 
 const REAL_BLOCKS_JSON = process.env.REAL_BLOCKS_JSON;
 const OUT_PDF = process.env.PRINT_PDF_OUT;
+const generatedAt = new Date();
+const monthInput = process.env.PRINT_REFERENCE_MONTH;
+if (monthInput !== undefined && (!/^\d+$/.test(monthInput) || !Number.isSafeInteger(Number(monthInput)))) {
+  throw new Error('PRINT_REFERENCE_MONTH は年*12+月(0始まり)の整数で指定してください');
+}
+const referenceMonth =
+  monthInput === undefined ? generatedAt.getFullYear() * 12 + generatedAt.getMonth() : Number(monthInput);
 
-if (!REAL_BLOCKS_JSON) {
+if (REAL_BLOCKS_JSON === undefined) {
   // スキップは vitest の一覧上では見えるが、大量のテストに埋もれて「実データでの確認が
   // 1度も走っていない」という事実がログから読み取りにくい。ここで明示しておく。
   console.warn(
-    '[print-document.node.test.tsx] REAL_BLOCKS_JSON 未設定 — 「実データで 7 項目すべて緑になる」はスキップされる。' +
+    '[print-document.node.test.tsx] REAL_BLOCKS_JSON 未設定 — 実データのテキスト・ラスタ・見出し重複・完全性検査はスキップされる。' +
       'CI の実効ゲートは committed synthetic fixture を使うテストが担う（このファイルの別テスト）。',
   );
 }
@@ -45,6 +53,7 @@ if (!REAL_BLOCKS_JSON) {
 /**
  * pdfjs のテキスト層検査に必要な headings / requiredTexts を組み立てる。
  * 実データのテストと合成フィクスチャのテストで同じ組み立てを使う（重複を避ける）。
+ * 描画と同じ VM 由来のため、VM 自体の欠落は検出できない。元ブロックとの完全性検査は別途必要。
  */
 function buildTextQualityInputs(title: string, vm: PrintViewModel) {
   const projects = vm.companies.flatMap((c) => c.projects);
@@ -78,8 +87,14 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
   return { headings, requiredTexts, footerText };
 }
 
+/** 実データの欠落本文をCIログへ出さず、件数だけでゲートを判定する。 */
+function assertComplete(blocks: Block[], pages: Awaited<ReturnType<typeof extractQualityPages>>) {
+  const report = buildCompletenessReport(blocks, pages, undefined, referenceMonth);
+  expect(report.missing.length, 'PDF完全性: 元データの事実が欠落しています').toBe(0);
+}
+
 describe('新しい印刷経路の品質', () => {
-  // 3 つの検査（テキスト層 7 項目・ラスタ・見出し重複）で同じ 1 回のレンダーを使い回す。
+  // テキスト層・ラスタ・見出し重複・完全性で同じ1回のレンダーを使い回す。
   // 検査ごとに render し直すと合成フィクスチャでも数十秒かかる処理を 3 倍にしてしまう。
   let fixtureBuffer: Buffer;
   let fixturePages: Awaited<ReturnType<typeof extractQualityPages>>;
@@ -101,9 +116,9 @@ describe('新しい印刷経路の品質', () => {
     }
 
     const blocks = buildPdfQualityFixtureBlocks();
-    fixtureVm = buildPrintViewModel(PDF_QUALITY_FIXTURE_TITLE, blocks);
+    fixtureVm = buildPrintViewModel(PDF_QUALITY_FIXTURE_TITLE, blocks, undefined, referenceMonth);
     fixtureBuffer = await renderToBuffer(
-      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks }),
+      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks, referenceMonth }),
     );
     fixturePages = await extractQualityPages(fixtureBuffer);
   }, 120_000);
@@ -140,21 +155,38 @@ describe('新しい印刷経路の品質', () => {
     expect(findings).toEqual([]);
   });
 
-  it.skipIf(!REAL_BLOCKS_JSON)(
-    '実データで 7 項目すべて緑になる',
-    async () => {
-      const blocks = JSON.parse(readFileSync(REAL_BLOCKS_JSON as string, 'utf-8')) as Block[];
-      const title = 'エンジニアスキルシート';
-      const vm = buildPrintViewModel(title, blocks);
+  it('合成PDFの完全性が通り、未描画の事実を追加すると同じゲートが失敗する', () => {
+    const blocks = buildPdfQualityFixtureBlocks();
+    assertComplete(blocks, fixturePages);
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('合成案件がありません');
+    project.data.items[0].duties += '\n\n完全性検査専用の未描画合成事実。';
+    expect(() => assertComplete(blocks, fixturePages)).toThrow('PDF完全性');
+  });
 
-      const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks }));
-      if (OUT_PDF) writeFileSync(OUT_PDF, buffer);
+  it.skipIf(REAL_BLOCKS_JSON === undefined)(
+    '実データでテキスト・ラスタ・見出し重複・完全性の全検査が緑になる',
+    async () => {
+      if (!REAL_BLOCKS_JSON || !existsSync(REAL_BLOCKS_JSON)) {
+        throw new Error('REAL_BLOCKS_JSON の実データファイルがありません');
+      }
+      const parsed: unknown = JSON.parse(readFileSync(REAL_BLOCKS_JSON, 'utf-8'));
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error('REAL_BLOCKS_JSON は空でないブロック配列を指定してください');
+      }
+      const blocks = parsed as Block[];
+      const title = 'エンジニアスキルシート';
+      const vm = buildPrintViewModel(title, blocks, undefined, referenceMonth);
+
+      const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, referenceMonth }));
+      if (OUT_PDF) writeFileSync(OUT_PDF, buffer, { mode: 0o600 });
 
       const pages = await extractQualityPages(buffer);
       if (process.env.PRINT_TEXT_OUT) {
         writeFileSync(
           process.env.PRINT_TEXT_OUT,
           pages.map((items, i) => `=== page ${i + 1} ===\n${items.map((it) => it.text).join('')}`).join('\n\n'),
+          { mode: 0o600 },
         );
       }
       const { headings, requiredTexts, footerText } = buildTextQualityInputs(title, vm);
@@ -170,7 +202,19 @@ describe('新しい印刷経路の品質', () => {
         for (const f of list.slice(0, 20)) console.log(`[print] p${f.page} ${f.detail}`);
       }
 
-      expect(findings).toEqual([]);
+      // テキスト検査が失敗しても、同じ成果物に残りの検査を適用して結果をそろえる。
+      const rasterFindings = await runRasterQualityChecks(buffer, pages);
+      const titles = vm.companies.flatMap((company) => company.projects.map((project) => project.title));
+      const duplicateHeadings = runDuplicateHeadingChecks(pages, titles);
+      assertComplete(blocks, pages);
+      console.log(
+        `[print] raster findings=${rasterFindings.length} duplicate-heading findings=${duplicateHeadings.length}`,
+      );
+      expect({ text: findings, raster: rasterFindings, duplicateHeadings }).toEqual({
+        text: [],
+        raster: [],
+        duplicateHeadings: [],
+      });
     },
     300_000,
   );
@@ -194,7 +238,7 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
   const blocks: Block[] = buildPdfQualityFixtureBlocks();
 
   async function renderHeadingSet(views: PrintViewKey[] | undefined): Promise<Set<string>> {
-    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views }));
+    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views, referenceMonth }));
     const pages = await extractQualityPages(buffer);
     const fullText = pages.map((page) => page.map((item) => item.text).join('')).join('\n');
     return new Set(fullText.includes('スキル一覧') ? ['スキル一覧'] : []);
@@ -220,7 +264,9 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     const skills = featuredBlocks.find((block) => block.type === 'skills');
     if (skills?.type === 'skills' && skills.data.skills[0]) skills.data.skills[0].featured = true;
 
-    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks: featuredBlocks }));
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title, blocks: featuredBlocks, referenceMonth }),
+    );
     const pages = await extractQualityPages(buffer);
     const fullText = pages.flatMap((page) => page.map((item) => item.text)).join('');
     const normalized = fullText.replaceAll(/\s/g, '');

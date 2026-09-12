@@ -53,7 +53,7 @@
      --destructive-strong をそのまま流用する（新規の色を増やさない）。 */
   --destructive-hover: #b91c1c;
   --border: #dce3e4;
-  --input: #dce3e4;
+  --input: #71858c;
   --ring: #0d9488;
   --radius: 0.25rem;
 
@@ -137,7 +137,7 @@
      opacity を使わず不透明のまま 7.05:1 を確保する。 */
   --destructive-hover: #f87171;
   --border: #232d33;
-  --input: #1d262b;
+  --input: #71858c;
   --ring: #14b8a6;
 
   /* ハンドオフ redesign2（console.dark）のトークン語彙。 */
@@ -229,11 +229,17 @@
   --font-mono: var(--font-ibm-mono), 'IBM Plex Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
 }
 
-/* 枠線の既定色。レイヤ外の `*` セレクタなので、Tailwind の `border-*` ユーティリティより
-   後段に置かれて勝ってしまう。枠線の色をユーティリティで変えたい箇所は、
-   インラインの style={{ borderColor }} で指定すること（目次の行で実際に踏んだ）。 */
-* {
-  border-color: var(--border);
+/* 部品ごとの枠線色を優先できるよう既定色はbaseレイヤーに置く。 */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
 }
 
 html {

@@ -16,13 +16,14 @@
 import type { ReactElement } from 'react';
 
 import { CompanyHeadingBand, CompanyNote } from './company-heading';
+import { fitContinuationHeading } from './print-continuation-heading';
 import type { FrameSpec, Leaf, MeasuredLeaf, MeasuredLine } from './print-leaf';
 import { markdownPieces } from './print-markdown';
 import type { PrintPage } from './print-paginate';
 import { MetaTable, SectionLabel, TechChipGroup } from './print-primitives';
 import { splitTextAtLine } from './print-split-text';
 import { PRINT_SIZE } from './print-tokens';
-import { fitContinuationHeading, type PrintCompany, type PrintProject, type PrintViewModel } from './print-view-model';
+import type { PrintCompany, PrintProject, PrintViewModel } from './print-view-model';
 import { COMPACT_GROUP_PAD_BOTTOM, CompactRow, CompactTableHeader, compactBodyPieces } from './project-card-compact';
 import { DETAIL_HEADER_PAD, ProjectCardHeader } from './project-card-detail';
 

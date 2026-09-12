@@ -43,14 +43,43 @@ jobs:
         # ci.yml の test ジョブと同じ依存。ラスタ検査が PDF ページをビットマップ化する。
         run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
 
+      - name: Validate target sheet
+        env:
+          PDF_CHECK_DATABASE_URL: ${{ secrets.PDF_CHECK_DATABASE_URL }}
+          PDF_CHECK_SHEET_ID: ${{ vars.PDF_CHECK_SHEET_ID }}
+        run: |
+          if [[ -z "$PDF_CHECK_DATABASE_URL" ]]; then
+            echo '::error::PDF_CHECK_DATABASE_URL must be configured.'
+            exit 1
+          fi
+          if [[ ! "$PDF_CHECK_SHEET_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo '::error::PDF_CHECK_SHEET_ID must be configured with a sheet UUID.'
+            exit 1
+          fi
+
       - name: Dump blocks from database
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        # 書き出し先を RUNNER_TEMP に置く。実在の案件本文を含むので、
-        # 成果物としてアップロードしない（このリポジトリは public）。
-        run: pnpm exec tsx scripts/dump-blocks.ts --out "$RUNNER_TEMP/blocks.json"
+          DATABASE_URL: ${{ secrets.PDF_CHECK_DATABASE_URL }}
+          PDF_CHECK_SHEET_ID: ${{ vars.PDF_CHECK_SHEET_ID }}
+        # 本文やDBエラーは非公開の一時ファイルに限定する。成果物へはアップロードしない。
+        run: |
+          umask 077
+          status=0
+          pnpm exec tsx scripts/dump-blocks.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$PDF_CHECK_SHEET_ID" > "$RUNNER_TEMP/pdf-dump.log" 2>&1 || status=$?
+          echo "Database dump finished (exit $status)."
+          exit "$status"
 
       - name: PDF layout check against real data
         env:
           REAL_BLOCKS_JSON: ${{ runner.temp }}/blocks.json
-        run: pnpm exec vitest run --config vitest.config.pdf.ts
+        # assertion の失敗文には実経歴が含まれうるため、成功時も公開ログへ転送しない。
+        run: |
+          umask 077
+          status=0
+          pnpm exec vitest run --config vitest.config.pdf.ts > "$RUNNER_TEMP/pdf-layout.log" 2>&1 || status=$?
+          echo "PDF content and raster checks finished (exit $status)."
+          exit "$status"
+
+      - name: Remove private data and logs
+        if: always()
+        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/pdf-dump.log" "$RUNNER_TEMP/pdf-layout.log"
