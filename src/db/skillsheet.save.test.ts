@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 let dbHolder: unknown;
 vi.mock('./client', () => ({ getDb: () => dbHolder }));
 
-import { ConflictError, saveSkillSheetBlocks, UnreadableBlocksError } from './skillsheet';
+import { ConflictError, deleteSheet, saveSkillSheetBlocks, UnreadableBlocksError } from './skillsheet';
 
 // drizzle のクエリビルダは chainable かつ await 可能（thenable）。実 DB 無しで
 // その挙動を模すため、意図的に then を持つフェイクを返す（noThenProperty は許容する）。
@@ -21,12 +21,16 @@ function selectChain(result: unknown[]) {
   return chain;
 }
 
-function createFakeDb(opts: { selectResults: unknown[][]; updateReturning: unknown[] }) {
+function createFakeDb(opts: { selectResults: unknown[][]; updateReturning: unknown[]; deleteReturning?: unknown[] }) {
   const insertValues = vi.fn(() => thenable(undefined));
   let idx = 0;
   const tx = {
     select: vi.fn(() => selectChain(opts.selectResults[idx++] ?? [])),
-    delete: vi.fn(() => ({ where: () => thenable(undefined) })),
+    // where() の結果は await される（全置換削除）ことも、.returning() が続く
+    // （deleteSheet の is_default 取得）こともあるので両方を満たす形にする。
+    delete: vi.fn(() => ({
+      where: () => ({ ...thenable(undefined), returning: () => thenable(opts.deleteReturning ?? []) }),
+    })),
     insert: vi.fn(() => ({ values: insertValues })),
     update: vi.fn(() => ({
       set: () => ({ where: () => ({ returning: () => thenable(opts.updateReturning) }) }),
@@ -130,5 +134,43 @@ describe('saveSkillSheetBlocks', () => {
     const res = await saveSkillSheetBlocks('T', [MD], 'sheet-x');
     expect(res.updatedAt).toBeInstanceOf(Date);
     expect(res.updatedAt.getTime()).toBe(saved.getTime());
+  });
+});
+
+describe('deleteSheet', () => {
+  it('既定シートを削除したら同一トランザクション内で残りの最古シートを既定へ昇格する（S09）', async () => {
+    const f = createFakeDb({
+      selectResults: [[{ id: 'sheet-oldest' }]],
+      updateReturning: [],
+      deleteReturning: [{ isDefault: true }],
+    });
+    dbHolder = f.db;
+    await deleteSheet('sheet-default');
+    expect(f.tx.delete).toHaveBeenCalledTimes(1);
+    expect(f.tx.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('非既定シートの削除では昇格しない', async () => {
+    const f = createFakeDb({
+      selectResults: [],
+      updateReturning: [],
+      deleteReturning: [{ isDefault: false }],
+    });
+    dbHolder = f.db;
+    await deleteSheet('sheet-sub');
+    expect(f.tx.delete).toHaveBeenCalledTimes(1);
+    expect(f.tx.select).not.toHaveBeenCalled();
+    expect(f.tx.update).not.toHaveBeenCalled();
+  });
+
+  it('既定削除で残りシートが 0 枚なら昇格せず既定 0 枚のまま終わる', async () => {
+    const f = createFakeDb({
+      selectResults: [[]],
+      updateReturning: [],
+      deleteReturning: [{ isDefault: true }],
+    });
+    dbHolder = f.db;
+    await deleteSheet('sheet-default');
+    expect(f.tx.update).not.toHaveBeenCalled();
   });
 });

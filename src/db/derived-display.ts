@@ -63,43 +63,65 @@ export function resolveCompanyPeriod(company: CompanyInfo | undefined, items: Pr
 }
 
 function stripTrailingVersion(value: string): string {
-  return value.replace(/\s+v?\d+(?:\.\d+)*(?:[-.][a-z0-9]+)*$/i, '').trim();
+  return value
+    .replace(/\s+v?\d+(?:\.\d+)*(?:[-.][a-z0-9]+)*$/i, '')
+    .replace(/\s+\d+系$/, '')
+    .trim();
 }
 
 /**
  * 表記揺れを同一技術の正規キーへ寄せる承認済み別名辞書。
  * 正規化（NFKC・小文字化・版除去）の後でだけ適用し、キーは正規化済みの小文字形で持つ。
  * React / React Native のような関連技術の同一視は経験期間の水増しになるため禁止。
- * 追加する別名は「同一技術である」と確認できたものだけに絞る。
+ * 追加する別名は「同一技術である」と実データで確認できたものだけに絞る。
  */
 const TECHNOLOGY_ALIASES: Record<string, string> = {
   // NestJS / Nest.js は同一フレームワーク。表記揺れで経験月数が過小算出されていた（issue M01）。
   nestjs: 'nest.js',
+  // K8S は Kubernetes の略称（実データでは "K8S" 表記の案件のみ存在）。
+  k8s: 'kubernetes',
+  // Prisma ORM / Prisma、Sanity CMS / Sanity は同一プロダクト。
+  'prisma orm': 'prisma',
+  'sanity cms': 'sanity',
 };
 
 /**
  * 複合名・括弧注釈・バージョン付きの既存データを、完全一致用の候補へ分解する。
+ * 括弧内は技術の注釈（RDS・Hooks 等）であり本体名ではないため、
+ * 本体候補（primary）と注釈候補（annotation）を分けて返す。
  * 元データ自体は変更せず、表示時の導出にだけ用いる。
  */
-export function normalizeTechnologyCandidates(value: string): Set<string> {
+function normalizeTechnologyParts(value: string): { primary: Set<string>; annotation: Set<string> } {
   const normalized = value.normalize('NFKC').trim();
-  if (!normalized) return new Set();
+  const empty = { primary: new Set<string>(), annotation: new Set<string>() };
+  if (!normalized) return empty;
 
   const parenthetical = [...normalized.matchAll(/\(([^()]*)\)/g)].map((match) => match[1]);
   const base = normalized.replace(/\([^()]*\)/g, ' ');
-  const candidates = [base, ...parenthetical]
-    .flatMap((part) => [part, ...part.split(/\s*(?:\/|(?<!\+)\+(?!\+)|,|、|・|&)\s*/)])
-    .map(stripTrailingVersion)
-    .map((part) => part.replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US'))
-    .map((part) => TECHNOLOGY_ALIASES[part] ?? part)
-    .filter(Boolean);
-  return new Set(candidates);
+  const splitPart = (part: string) =>
+    [part, ...part.split(/\s*(?:\/|(?<!\+)\+(?!\+)|,|、|・|&)\s*/)]
+      .map(stripTrailingVersion)
+      .map((piece) => piece.replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US'))
+      .map((piece) => TECHNOLOGY_ALIASES[piece] ?? piece)
+      .filter(Boolean);
+  return { primary: new Set(splitPart(base)), annotation: new Set(parenthetical.flatMap(splitPart)) };
+}
+
+export function normalizeTechnologyCandidates(value: string): Set<string> {
+  const { primary, annotation } = normalizeTechnologyParts(value);
+  return new Set([...primary, ...annotation]);
 }
 
 export function technologyNamesMatch(skillName: string, projectTechnology: string): boolean {
-  const skillCandidates = normalizeTechnologyCandidates(skillName);
-  const projectCandidates = normalizeTechnologyCandidates(projectTechnology);
-  return [...skillCandidates].some((candidate) => projectCandidates.has(candidate));
+  const skill = normalizeTechnologyParts(skillName);
+  const project = normalizeTechnologyParts(projectTechnology);
+  // 注釈どうし（例: "PostgreSQL (RDS)" と "MySQL (RDS)" の rds）だけでは一致にしない。
+  // 本体名が絡む一致だけを同一技術とみなす。
+  return (
+    [...skill.primary].some((c) => project.primary.has(c)) ||
+    [...skill.primary].some((c) => project.annotation.has(c)) ||
+    [...skill.annotation].some((c) => project.primary.has(c))
+  );
 }
 
 export function deriveSkillExperienceMonths(

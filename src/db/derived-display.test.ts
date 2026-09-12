@@ -126,6 +126,33 @@ describe('技術名の完全一致', () => {
     expect(technologyNamesMatch('Next.js', 'Next.js 14')).toBe(true);
   });
 
+  it('括弧内注釈どうしでは一致させない（PostgreSQL (RDS) ≠ MySQL (RDS)）', () => {
+    // 本体名が違うのに注釈 (RDS) が同じだけで経験を統合すると水増しになる（再レビュー指摘）
+    expect(technologyNamesMatch('PostgreSQL (RDS)', 'MySQL (RDS)')).toBe(false);
+    // 本体名が絡む一致は従来どおり有効
+    expect(technologyNamesMatch('Vue.js (Nuxt)', 'Nuxt')).toBe(true);
+    expect(technologyNamesMatch('PostgreSQL (RDS)', 'PostgreSQL')).toBe(true);
+    // スキル名が注釈語そのもの（RDS 単体）なら、RDS を使う案件へ一致してよい
+    expect(technologyNamesMatch('RDS', 'MySQL (RDS)')).toBe(true);
+  });
+
+  it('末尾バージョンは除去して本体名で一致させる', () => {
+    expect(technologyNamesMatch('Next.js', 'Next.js 14')).toBe(true);
+    expect(technologyNamesMatch('Laravel', 'Laravel 8')).toBe(true);
+    // 「N系」はバージョン表記なので版除去側で処理する（実データ "Laravel 8系"）
+    expect(technologyNamesMatch('Laravel', 'Laravel 8系')).toBe(true);
+    expect(normalizeTechnologyCandidates('Next.js 14')).toContain('next.js');
+  });
+
+  it('実データで同一技術と確認できた別名だけを統合する', () => {
+    // K8S / Prisma ORM / Sanity CMS は実データの表記揺れ（M01 と同種の過小算出）
+    expect(technologyNamesMatch('Kubernetes', 'K8S')).toBe(true);
+    expect(technologyNamesMatch('Prisma', 'Prisma ORM')).toBe(true);
+    expect(technologyNamesMatch('Sanity CMS (GROQ)', 'Sanity v4')).toBe(true);
+    // 逆方向も一致する
+    expect(technologyNamesMatch('K8S', 'Kubernetes')).toBe(true);
+  });
+
   it('一致案件の月を重複なく集計する', () => {
     const items = [
       project('p1', '2020.01 — 2020.12', { lang: ['TypeScript'] }),
