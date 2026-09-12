@@ -27,6 +27,9 @@ export const skillSheets = pgTable(
     title: text('title').notNull(),
     theme: text('theme').notNull().default('light'),
     isDefault: boolean('is_default').notNull().default(false),
+    // created_at は「最古シート」の決定を完全に決定的にするための列。
+    // updated_at は編集で変わるため、昇格・実効既定の対象決定には使わない。
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
   },
   (table) => [
@@ -34,6 +37,17 @@ export const skillSheets = pgTable(
     uniqueIndex('skill_sheets_owner_default_unique').on(table.ownerId).where(sql`${table.isDefault}`),
   ],
 );
+
+/**
+ * owner 単位の初期化済みフラグ。シートとは別に永続化することで、
+ * 「まだ一度も初期化していない（初回導入）」と「全シートを削除した後」を
+ * 区別する（S09: 全削除後に初期データを復活させない）。
+ * 初回導入の一度だけ行が作られ、以降は消さない。
+ */
+export const skillsheetState = pgTable('skillsheet_state', {
+  ownerId: text('owner_id').primaryKey(),
+  initializedAt: timestamp('initialized_at', { withTimezone: true }).notNull().default(sql`now()`),
+});
 
 /**
  * スキルシートを構成する順序付きブロック。

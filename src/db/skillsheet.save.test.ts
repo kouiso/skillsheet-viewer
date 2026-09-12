@@ -35,6 +35,7 @@ function createFakeDb(opts: { selectResults: unknown[][]; updateReturning: unkno
     update: vi.fn(() => ({
       set: () => ({ where: () => ({ returning: () => thenable(opts.updateReturning) }) }),
     })),
+    execute: vi.fn().mockResolvedValue(undefined),
   };
   const db = { transaction: vi.fn(async (cb: (t: typeof tx) => unknown) => cb(tx)) };
   return { db, tx, insertValues };

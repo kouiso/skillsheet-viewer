@@ -50,6 +50,13 @@
       "when": 1789211903081,
       "tag": "0006_mute_warlock",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789222842544,
+      "tag": "0007_outstanding_sunfire",
+      "breakpoints": true
     }
   ]
 }
