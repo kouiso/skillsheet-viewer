@@ -7,6 +7,7 @@ import {
   listSheets as listDbSheets,
   SkillSheetNotFoundError,
   saveSkillSheetBlocks,
+  UnreadableBlocksError,
 } from '@/db';
 
 import {
@@ -94,6 +95,11 @@ export const sheetRouter = router({
     } catch (err) {
       if (err instanceof ConflictError) {
         throw new TRPCError({ code: 'CONFLICT', message: err.message });
+      }
+      if (err instanceof UnreadableBlocksError) {
+        // 見えていないブロックを巻き込む全置換の拒否。クライアントには
+        // 「消えるはずの元データが残っている」ことを別コードで返す（M08）。
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message });
       }
       throw err;
     }

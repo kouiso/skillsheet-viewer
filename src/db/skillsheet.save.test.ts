@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 let dbHolder: unknown;
 vi.mock('./client', () => ({ getDb: () => dbHolder }));
 
-import { ConflictError, saveSkillSheetBlocks } from './skillsheet';
+import { ConflictError, saveSkillSheetBlocks, UnreadableBlocksError } from './skillsheet';
 
 // drizzle のクエリビルダは chainable かつ await 可能（thenable）。実 DB 無しで
 // その挙動を模すため、意図的に then を持つフェイクを返す（noThenProperty は許容する）。
@@ -104,6 +104,20 @@ describe('saveSkillSheetBlocks', () => {
       updateReturning: [],
     }).db;
     await expect(saveSkillSheetBlocks('T', [MD], 'sheet-x', older)).rejects.toBeInstanceOf(ConflictError);
+  });
+
+  it('正本に読み取れないブロックが残っていると全置換を拒否する（M08: 見えない元データを消さない）', async () => {
+    const f = createFakeDb({
+      selectResults: [[{ id: 'sheet-x' }], [{ id: 'bad-1', type: 'markdown', data: { broken: true } }]],
+      updateReturning: [],
+    });
+    dbHolder = f.db;
+    const err = await saveSkillSheetBlocks('T', [MD], 'sheet-x').catch((e) => e);
+    expect(err).toBeInstanceOf(UnreadableBlocksError);
+    expect((err as UnreadableBlocksError).blockIds).toEqual(['bad-1']);
+    // delete→insert へ進まないので元行は温存される
+    expect(f.tx.delete).not.toHaveBeenCalled();
+    expect(f.insertValues).not.toHaveBeenCalled();
   });
 
   it('DB ドライバーが更新後の updatedAt を ISO 文字列で返しても Date として返す', async () => {

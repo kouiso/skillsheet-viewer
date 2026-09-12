@@ -104,6 +104,28 @@ describe('技術名の完全一致', () => {
     expect(technologyNamesMatch('C++', 'C++')).toBe(true);
   });
 
+  it('Nest.js / NestJS の表記揺れを同一技術として扱い経験月数を取りこぼさない', () => {
+    // 監査で確認された実データ7件（2026-09 基準）。現行は Nest.js だけの24か月に
+    // なっていた。原文の表記は保持し、照合だけを正規化する（issue M01）。
+    const items = [
+      project('p1', '2025.11 — 2026.07', { fw: ['Nest.js'] }),
+      project('p2', '2025.01 — 2025.02', { fw: ['NestJS'] }),
+      project('p3', '2024.04 — 2024.07', { fw: ['Nest.js'] }),
+      project('p4', '2023.08 — 2024.06', { fw: ['Nest.js'] }),
+      project('p5', '2023.11 — 2024.03', { fw: ['Nest.js'] }),
+      project('p6', '2023.05 — 2023.07', { fw: ['Nest.js'] }),
+      project('p7', '2025.09 — 2026.09', { fw: ['NestJS'] }),
+    ];
+    expect(technologyNamesMatch('Nest.js', 'NestJS')).toBe(true);
+    expect(deriveSkillExperienceMonths('Nest.js', items)).toBe(30);
+    expect(deriveSkillExperienceMonths('NestJS', items)).toBe(30);
+  });
+
+  it('別名辞書は React / React Native のような関連技術を同一視しない', () => {
+    expect(technologyNamesMatch('React', 'React Native')).toBe(false);
+    expect(technologyNamesMatch('Next.js', 'Next.js 14')).toBe(true);
+  });
+
   it('一致案件の月を重複なく集計する', () => {
     const items = [
       project('p1', '2020.01 — 2020.12', { lang: ['TypeScript'] }),

@@ -53,6 +53,20 @@ export class SkillSheetNotFoundError extends Error {
 }
 
 /**
+ * 正本 DB に読み取れないブロックが残ったまま全置換保存しようとしたことを示すエラー。
+ * 読込側は壊れた JSON / 未知 type を縮退して除外するため、見えていないブロックまで
+ * delete→insert で消してしまう経路を、サーバー側の保存ガードで止める（M08）。
+ */
+export class UnreadableBlocksError extends Error {
+  readonly blockIds: string[];
+  constructor(blockIds: string[]) {
+    super(`Sheet contains ${blockIds.length} unreadable block(s); save refused to avoid data loss`);
+    this.name = 'UnreadableBlocksError';
+    this.blockIds = blockIds;
+  }
+}
+
+/**
  * オーナー識別子。個人名のベタ書きを排し環境変数から取得する（引き継ぎ汚染防止）。
  * 単一オーナー運用では Better Auth のオーナーアカウントに対応する安定IDを設定する。
  * 書き込みは isEditor()（Better Auth セッション必須）でゲートされる。
@@ -76,26 +90,46 @@ export interface SheetSummary {
   updatedAt: Date;
 }
 
-/** オーナーの最初のシートを取得、なければ作成して ID を返す（シード用デフォルトシート）。 */
+/** オーナーの既定シート（is_default）を取得、なければ既存最古シートを昇格、さらに無ければ作成して ID を返す。 */
 async function getOrCreateDefaultSheetId(db: DbOrTx): Promise<string> {
   const ownerId = getOwnerId();
   const existing = await db
     .select({ id: skillSheets.id })
     .from(skillSheets)
-    .where(eq(skillSheets.ownerId, ownerId))
-    .orderBy(asc(skillSheets.updatedAt))
+    .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
     .limit(1);
   if (existing[0]?.id) return existing[0].id;
 
-  const inserted = await db.insert(skillSheets).values({ ownerId, title: TITLE }).returning({ id: skillSheets.id });
-  if (inserted[0]?.id) return inserted[0].id;
-
-  // 競合: 別リクエストが先に作成した場合
-  const retry = await db
+  // 既定だけが失われた状態（既定シートの削除・旧データ移行直後など）では、
+  // 空の既定シートを新規に増やすのではなく最古シートを既定へ昇格する。
+  // is_default 導入前は「最も古いシートが既定」だったので、その意味を維持する（S09）。
+  const [oldest] = await db
     .select({ id: skillSheets.id })
     .from(skillSheets)
     .where(eq(skillSheets.ownerId, ownerId))
-    .orderBy(asc(skillSheets.updatedAt))
+    .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
+    .limit(1);
+  if (oldest) {
+    // 同時実行では同じ行を同じ値で更新するだけなので冪等。別系統が先に既定を
+    // 作っていた場合は部分ユニーク索引が落とす（稀なレースで利用者には再試行させる）。
+    await db.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldest.id));
+    return oldest.id;
+  }
+
+  // 部分ユニーク索引により owner ごとの既定は高々 1 枚。同時作成は conflict で
+  // 片方だけが入り、負けた側は再 SELECT で勝者の ID を拾う（初回並行アクセスで
+  // 既定が 2 枚生まれない、S09）。
+  const inserted = await db
+    .insert(skillSheets)
+    .values({ ownerId, title: TITLE, isDefault: true })
+    .onConflictDoNothing()
+    .returning({ id: skillSheets.id });
+  if (inserted[0]?.id) return inserted[0].id;
+
+  const retry = await db
+    .select({ id: skillSheets.id })
+    .from(skillSheets)
+    .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
     .limit(1);
   const retryId = retry[0]?.id;
   if (!retryId) {
@@ -107,27 +141,31 @@ async function getOrCreateDefaultSheetId(db: DbOrTx): Promise<string> {
 }
 
 async function ensureSeeded(db: Database): Promise<string> {
-  const sheetId = await getOrCreateDefaultSheetId(db);
+  const ownerId = getOwnerId();
+  const existingDefault = await db
+    .select({ id: skillSheets.id })
+    .from(skillSheets)
+    .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
+    .limit(1);
+  if (existingDefault[0]?.id) return existingDefault[0].id;
 
-  const existingBlocks = await db.select({ id: blocks.id }).from(blocks).where(eq(blocks.sheetId, sheetId)).limit(1);
-  // ブロックが 0 個なのは新規オーナー / 全削除後の正常状態。GitHub seed は任意の副系統で
-  // 正本は DB のため、未設定なら seed をスキップして空のまま返す（throw して「エラー」に
-  // しない）。設定済みで取得に失敗した場合だけ本物の異常として throw が伝播する。
-  if (existingBlocks.length === 0) {
+  // GitHub seed は「オーナーにシートが 1 枚も無い初回導入」だけで実行する。
+  // ブロック 0 件を再取り込みの合図にすると、ユーザーが全削除した直後に
+  // 古い GitHub 本文が復活する（S09）。seed 取得に失敗した場合はシートも作らず
+  // throw が伝播し、次回アクセスで再試行できる。
+  const [anySheet] = await db
+    .select({ id: skillSheets.id })
+    .from(skillSheets)
+    .where(eq(skillSheets.ownerId, ownerId))
+    .limit(1);
+  let segments: ReturnType<typeof splitMarkdownIntoBlocks> = [];
+  if (!anySheet) {
     const config = getGitHubSeedConfig();
     if (config) {
       const markdown = await fetchMarkdownFromGitHub(config);
       // 分割で生じる空白のみのセグメントは「著者が置いた構造」ではなく分割ノイズなので、
       // ここは意図的に isBlockInputEmpty で除く（テンプレの空ブロックとは別物）。
-      const segments = splitMarkdownIntoBlocks(markdown).filter(
-        (data) => !isBlockInputEmpty({ type: 'markdown', data }),
-      );
-      if (segments.length > 0) {
-        await db
-          .insert(blocks)
-          .values(segments.map((data, order) => ({ sheetId, type: 'markdown', order, data })))
-          .onConflictDoNothing();
-      }
+      segments = splitMarkdownIntoBlocks(markdown).filter((data) => !isBlockInputEmpty({ type: 'markdown', data }));
     } else {
       // 未設定は正常系だが、意図せぬ設定漏れの調査ができるよう記録だけは残す。
       console.warn(
@@ -135,7 +173,47 @@ async function ensureSeeded(db: Database): Promise<string> {
       );
     }
   }
-  return sheetId;
+
+  return db.transaction(async (tx) => {
+    if (anySheet) {
+      // シートはあるが既定だけ失われた状態。空シートを新設する代わりに最古の
+      // シートを既定へ昇格する（getOrCreateDefaultSheetId と同じ意味付け）。
+      // 外側で読んだ anySheet が消えている可能性を考慮し、昇格対象はトランザクション内で取り直す。
+      const [oldest] = await tx
+        .select({ id: skillSheets.id })
+        .from(skillSheets)
+        .where(eq(skillSheets.ownerId, ownerId))
+        .orderBy(asc(skillSheets.updatedAt), asc(skillSheets.id))
+        .limit(1);
+      if (oldest) {
+        await tx.update(skillSheets).set({ isDefault: true }).where(eq(skillSheets.id, oldest.id));
+        return oldest.id;
+      }
+    }
+    const inserted = await tx
+      .insert(skillSheets)
+      .values({ ownerId, title: TITLE, isDefault: true })
+      .onConflictDoNothing()
+      .returning({ id: skillSheets.id });
+    const sheetId = inserted[0]?.id;
+    if (sheetId) {
+      // 既定を自分が作れた場合だけ seed ブロックを入れる。conflict 敗者は
+      // 勝者側のシートをそのまま使う（ブロックの二重投入を防ぐ）。
+      if (segments.length > 0) {
+        await tx.insert(blocks).values(segments.map((data, order) => ({ sheetId, type: 'markdown', order, data })));
+      }
+      return sheetId;
+    }
+    const [winner] = await tx
+      .select({ id: skillSheets.id })
+      .from(skillSheets)
+      .where(and(eq(skillSheets.ownerId, ownerId), eq(skillSheets.isDefault, true)))
+      .limit(1);
+    if (!winner) {
+      throw new Error('Failed to resolve default sheet id after insert conflict');
+    }
+    return winner.id;
+  });
 }
 
 /**
@@ -168,14 +246,23 @@ function rowToBlock(id: string, type: string, order: number, data: unknown): Blo
   return null;
 }
 
+/** rowToBlock と同じ判定だけを使いたい場所向けの、軽量な型ガード適用。 */
+function isReadableBlockRow(type: string, data: unknown): boolean {
+  return rowToBlock('probe', type, 0, data) !== null;
+}
+
 async function fetchSheetById(db: Database, sheetId: string, requireExists = false): Promise<SkillSheet> {
+  // S08: ID 指定の読取にもオーナー境界を掛ける。一覧・保存・削除と揃え、
+  // 別オーナーのシートと不存在を同じ「見つからない」にする（存在有無を漏らさない）。
   const [sheet] = await db
     .select({ title: skillSheets.title })
     .from(skillSheets)
-    .where(eq(skillSheets.id, sheetId))
+    .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, getOwnerId())))
     .limit(1);
-  if (requireExists && !sheet) {
-    throw new SkillSheetNotFoundError(sheetId);
+  if (!sheet) {
+    if (requireExists) throw new SkillSheetNotFoundError(sheetId);
+    // 親が自オーナーでない以上、その配下ブロックも読まない（孤児行の混入防止）。
+    return { title: TITLE, content: '', blocks: [] };
   }
   const rows = await db.select().from(blocks).where(eq(blocks.sheetId, sheetId)).orderBy(asc(blocks.order));
 
@@ -324,6 +411,18 @@ export async function saveSkillSheetBlocks(
       if (current && currentTime > expectedTime) {
         throw new ConflictError();
       }
+    }
+
+    // M08: 読み取れないブロックが残っているシートへの全置換を拒否する。
+    // 読込側（rowToBlock → filter）は壊れた行を縮退して捨てるため、画面に出なかった
+    // 元データまで delete→insert で失う経路をここで塞ぐ。修復は明示操作として分離する。
+    const currentRows = await tx
+      .select({ id: blocks.id, type: blocks.type, data: blocks.data })
+      .from(blocks)
+      .where(eq(blocks.sheetId, resolvedSheetId));
+    const unreadableIds = currentRows.filter((r) => !isReadableBlockRow(r.type, r.data)).map((r) => r.id);
+    if (unreadableIds.length > 0) {
+      throw new UnreadableBlocksError(unreadableIds);
     }
 
     await tx.delete(blocks).where(eq(blocks.sheetId, resolvedSheetId));

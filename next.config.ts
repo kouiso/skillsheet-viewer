@@ -13,8 +13,9 @@ const nextConfig: NextConfig = {
     root: import.meta.dirname,
   },
   // ws の任意依存の解決がバンドル時に壊れ、DB接続が切断される。
-  // PDF renderer と合わせてNodeの解決に任せる。
-  serverExternalPackages: ['@react-pdf/renderer', 'ws'],
+  // PDF renderer と合わせてNodeの解決に任せる。ドライバ本体も外部化しないと
+  // ローカルの wss プロキシ設定（neonConfig.wsProxy）がバンドル内の別インスタンスに届かない。
+  serverExternalPackages: ['@react-pdf/renderer', 'ws', '@neondatabase/serverless'],
   // pnpm dev -p 3210 で 127.0.0.1 からアクセスしたときに HMR WebSocket が
   // クロスオリジンでブロックされて画面が真っ白になるのを防ぐ
   allowedDevOrigins: ['127.0.0.1', 'localhost'],

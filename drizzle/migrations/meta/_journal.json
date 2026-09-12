@@ -43,6 +43,13 @@
       "when": 1787185996163,
       "tag": "0005_good_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789211903081,
+      "tag": "0006_mute_warlock",
+      "breakpoints": true
     }
   ]
 }
