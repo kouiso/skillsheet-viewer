@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '../src/db/client';
-import { parseArgs, resolveSheetId, writePrivateDump } from './dump-blocks';
+import { connectionIdentity, parseArgs, resolveSheetId, writeEvidence, writePrivateDump } from './dump-blocks';
 
 const id = '01234567-89ab-cdef-0123-456789abcdef';
 const dirs: string[] = [];
@@ -68,5 +68,42 @@ describe('dump-blocks CLI', () => {
     writePrivateDump(path, [{ data: 'synthetic' }]);
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual([{ data: 'synthetic' }]);
+  });
+
+  it('--evidence を受け付ける（M07 監査証跡）', () => {
+    expect(parseArgs(['--out', '/tmp/blocks.json', '--sheet-id', id, '--evidence', '/tmp/ev.txt'])).toEqual({
+      out: '/tmp/blocks.json',
+      sheetId: id,
+      evidence: '/tmp/ev.txt',
+    });
+  });
+
+  it('connectionIdentity は資格情報を含めずホスト名とDB名だけ返す（M07: 接続先識別）', () => {
+    const identity = connectionIdentity(
+      'postgresql://user:SECRET-PASSWORD@ep-example-a1b2-pooler.c-8.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    );
+    expect(identity).toEqual({ endpoint: 'ep-example-a1b2-pooler.c-8.us-east-1.aws.neon.tech', database: 'neondb' });
+    expect(identity.endpoint).not.toContain('SECRET');
+    expect(identity.endpoint).not.toContain('user');
+  });
+
+  it('writeEvidence は非秘密の識別子だけを書き、資格情報を含めない', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dump-ev-'));
+    dirs.push(dir);
+    const path = join(dir, 'blocks.evidence');
+    writeEvidence(path, {
+      endpoint: 'ep-example.neon.tech',
+      database: 'neondb',
+      sheetId: id,
+      ownerMatch: 'true',
+      blockCount: 12,
+      sha256: 'deadbeef',
+    });
+    const text = readFileSync(path, 'utf8');
+    expect(text).toContain('owner_match=true');
+    expect(text).toContain('blocks=12');
+    expect(text).toContain('sha256=deadbeef');
+    expect(text).not.toContain('password');
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });
