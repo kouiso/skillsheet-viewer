@@ -15,9 +15,15 @@ import 'server-only';
  * Server-only. Never import from Client Components.
  */
 
+import { cimd } from '@better-auth/cimd';
+import { fetchClientMetadataResource } from '@better-auth/cimd/node';
+import { mcp } from '@better-auth/mcp';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { account, createDb, session, user, verification } from '@/db';
+import { jwt } from 'better-auth/plugins';
+import { createDb } from '@/db';
+import * as schema from '@/db/schema';
+import { isMcpEnabled, MCP_SCOPES, resolveMcpResource } from '@/lib/mcp-config';
 
 // Lazy singleton — DATABASE_URL is only available at request time (Vercel runtime),
 // not during `next build` static analysis.
@@ -27,12 +33,20 @@ function createAuth() {
   if (!url) throw new Error('DATABASE_URL is not set');
   const secret = process.env.BETTER_AUTH_SECRET;
   if (!secret) throw new Error('BETTER_AUTH_SECRET is not set');
+
+  // Remote MCP（Issue #305）: MCP_ENABLED かつ resource が確定できる環境でのみ
+  // OAuth 2.1 Provider を構成する。resource が取れない環境でプラグインを載せると
+  // aud 不一致のトークンを発行しかねないため、構成自体を省略する。
+  const mcpResource = isMcpEnabled() ? resolveMcpResource() : undefined;
+
   return betterAuth({
     secret,
     baseURL: process.env.BETTER_AUTH_URL,
     database: drizzleAdapter(createDb(url), {
       provider: 'pg',
-      schema: { user, session, account, verification },
+      // スキーマ全件を渡す。OAuth 系テーブル（oauth_client 等）もモデル名=export 名で
+      // アダプタが解決する。
+      schema,
     }),
     emailAndPassword: {
       enabled: true,
@@ -48,6 +62,27 @@ function createAuth() {
         maxAge: 60 * 60 * 24 * 7,
       },
     },
+    plugins: mcpResource
+      ? [
+          // JWT アクセストークン署名用（mcp() の access token は JWKS 検証を前提とする）。
+          jwt(),
+          // OAuth 2.1 Provider 本体。oauthProvider() と併用不可のため mcp() が兼ねる。
+          // resource は発行トークンの aud に固定され、RFC 9728 metadata にも載る。
+          mcp({
+            loginPage: '/login',
+            consentPage: '/consent',
+            resource: mcpResource,
+            scopes: [...MCP_SCOPES],
+          }),
+          // MCP 2026-07-28 プロファイル: client_id = HTTPS URL の Client ID Metadata
+          // Document による動的クライアント登録（DCR は開けない）。
+          // fetch は DNS ピン留め・RFC6890 拒否・リダイレクト不追従の公式 Node transport。
+          cimd({
+            fetchClientMetadataResource,
+            metadataProfile: 'mcp-2026-07-28',
+          }),
+        ]
+      : [],
   });
 }
 
