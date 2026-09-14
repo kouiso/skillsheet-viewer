@@ -3,7 +3,7 @@
 import ExcelJS from 'exceljs';
 import { describe, expect, it } from 'vitest';
 
-import type { Block, ProjectItem } from '@/db/blocks';
+import type { Block, ProjectItem } from '@/db/block';
 
 import { buildSkillSheetXlsx } from './build-xlsx';
 

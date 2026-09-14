@@ -8,7 +8,7 @@ import { inflateSync } from 'node:zlib';
 
 import ExcelJS from 'exceljs';
 
-import { type Block, filterVisibleProjectData, type ProfileBlockData, type ProjectItem } from '@/db/blocks';
+import { type Block, filterVisibleProjectData, type ProfileBlockData, type ProjectItem } from '@/db/block';
 import { normalizeProcess, parsePeriodToRange, sortByStartDesc } from '@/db/process';
 
 import { XLSX_TEMPLATE_B64 } from './xlsx-template';
