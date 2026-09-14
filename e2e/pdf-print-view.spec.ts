@@ -356,14 +356,18 @@ test('12. the toggle and export button still work at a 320px viewport', async ({
   await skillToggleButton(page).click();
   await expect(skillMatrixSection(page)).toHaveCount(0);
 
-  const btn = exportButton(page);
+  // SP ではダウンロード系が「ダウンロード」メニューに畳まれる（戻るリンクの
+  // タップターゲット確保のため）。トリガーの hit target を測ってからメニュー経由で PDF を出す。
+  const btn = page.getByRole('button', { name: 'ダウンロード' });
   const box = await btn.boundingBox();
   expect(box, 'export button has no visible box at 320px').not.toBeNull();
   if (box) {
     expect(box.width, 'export button hit target width < 44px at 320px').toBeGreaterThanOrEqual(43.5);
     expect(box.height, 'export button hit target height < 44px at 320px').toBeGreaterThanOrEqual(43.5);
   }
-  await waitAndSaveDownload(page, () => btn.click(), 'narrow-viewport');
+  await btn.click();
+  const pdfItem = page.getByRole('button', { name: 'PDFダウンロード' });
+  await waitAndSaveDownload(page, () => pdfItem.click(), 'narrow-viewport');
 });
 
 // ---------------------------------------------------------------------------
