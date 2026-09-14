@@ -242,9 +242,17 @@ describe('buildSkillSheetXlsx', () => {
 
     // ブロック1の最終行（r12）下端: タイトル幅の J:AP にも細線が通る
     expect(ws.getCell(12, 10).border?.bottom?.style).toBe('thin');
-    // ブロック2の先頭行（r13）AQ:AS の上端は細線（黒）で、先頭ブロック用の double にはしない
-    expect(ws.getCell(13, 43).border?.top?.style).toBe('thin');
-    expect(ws.getCell(13, 43).border?.top?.color?.argb).toBe('FF000000');
+    // ブロック2の先頭行（r13）AQ:AS の上端は細線で、先頭ブロック用の double にはしない
+    // （旧スプシ多数派: AQ は濃緑、AR-AS は黒）
+    expect(ws.getCell(13, 44).border?.top?.style).toBe('thin');
+    expect(ws.getCell(13, 44).border?.top?.color?.argb).toBe('FF000000');
+    expect(ws.getCell(13, 45).border?.top?.style).toBe('thin');
+    expect(ws.getCell(13, 45).border?.top?.color?.argb).toBe('FF000000');
+    // ブロック2以降の先頭行 G 列（期間終了セル先頭）には上辺を引かない
+    // （旧スプシの定常ブロックの多数派はここが無罫線）
+    expect(ws.getCell(13, 7).border?.top?.style).toBeUndefined();
+    // 期間内側の仕切り hair は、ブロック2以降では黒ではなく濃緑
+    expect(ws.getCell(13, 9).border?.right?.color?.argb).toBe('FF003300');
     // 最終ブロック（r13-15）の下端は表の外枠（中線・黒）
     expect(ws.getCell(15, 10).border?.bottom?.style).toBe('medium');
   });
