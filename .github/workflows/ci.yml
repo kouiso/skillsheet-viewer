@@ -109,7 +109,7 @@ jobs:
           E2E_EMAIL: e2e-owner@example.test
           E2E_PASSWORD: E2e-test-pass-99
         run: |
-          OWNER_ID=$(pnpm exec tsx scripts/bootstrap-owner.ts --email="$E2E_EMAIL" --password="$E2E_PASSWORD" --name="E2E Owner" | tail -n 1 | tr -d '[:space:]')
+          OWNER_ID=$(pnpm exec tsx script/bootstrap-owner.ts --email="$E2E_EMAIL" --password="$E2E_PASSWORD" --name="E2E Owner" | tail -n 1 | tr -d '[:space:]')
           test -n "$OWNER_ID"
           {
             echo "SKILLSHEET_OWNER_ID=$OWNER_ID"
@@ -117,7 +117,7 @@ jobs:
             echo "E2E_PASSWORD=$E2E_PASSWORD"
           } >> "$GITHUB_ENV"
 
-      - name: Headless browser E2E
+      - name: Playwright E2E
         if: matrix.check-type == 'e2e'
         env:
           BETTER_AUTH_URL: http://127.0.0.1:3210
@@ -128,9 +128,19 @@ jobs:
           REVALIDATE_SECRET: ${{ vars.REVALIDATE_SECRET }}
         # playwright は起動時に test-results/ 全体を消去する。headless-e2e の証跡
         # （test-results/e2e）が先に書かれていると消されるため、playwright を先に流す。
-        run: |
-          pnpm run test:e2e:playwright
-          pnpm run test:e2e
+        run: pnpm run test:e2e:playwright
+
+      # Playwright が失敗しても headless E2E まで止めない（証跡 artifact を残すため）。
+      - name: Headless browser E2E
+        if: matrix.check-type == 'e2e' && always()
+        env:
+          BETTER_AUTH_URL: http://127.0.0.1:3210
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          REVALIDATE_SECRET: ${{ vars.REVALIDATE_SECRET }}
+        run: pnpm run test:e2e
 
       - name: Upload E2E evidence
         if: matrix.check-type == 'e2e' && always()
