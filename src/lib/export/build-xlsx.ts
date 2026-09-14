@@ -122,7 +122,6 @@ function captureBlockStyle(ws: ExcelJS.Worksheet, baseRow: number): BlockStyle {
 // 表の最終行下端だけはドナー（区切り線 = 細線・濃緑）と違い、外枠として中線（黒）を
 // 引く。A 列だけは旧スプシの実測どおり細線のまま残す。
 const BORDER_TABLE_END: ExcelJS.Border = { style: 'medium', color: { argb: 'FF000000' } };
-const BORDER_ROLE_TOP: ExcelJS.Border = { style: 'thin', color: { argb: 'FF000000' } };
 
 function writeBlock(
   ws: ExcelJS.Worksheet,
@@ -143,15 +142,12 @@ function writeBlock(
   // 罫線の修正は mergeCells より前に行う。結合後は被結合セルの style が
   // 左上セルへ委譲されるため、個別の辺に罫線を残せなくなる。
   if (!pos.first) {
-    // 定常ドナーは旧スプシ最多パターン（ブロック22）の複写だが、先頭行の3箇所だけ
-    // 多数派とずれているので多数派側に揃える:
-    //   G列（期間終了セル先頭）の上辺は無し、AS-AT 境の上辺2セルは黒の細線
+    // 定常ドナーは旧スプシ最多パターン（ブロック22）の複写だが、先頭行の G 列
+    // （期間終了セル先頭）の上辺だけ多数派とずれているので除去する。
+    // 役割列（AQ:AS）の上辺はドナー通り緑細線のまま — ブロック区切り線と同色で
+    // 一続きにするのが原本の見た目。黒に変えると区切り線の中に短い黒い棒が出る。
     const g = ws.getCell(r, COL.PERIOD_END);
     g.border = { ...g.border, top: undefined };
-    for (const c of [COL.ROLE_SCALE + 1, COL.ROLE_SCALE + 2]) {
-      const cell = ws.getCell(r, c);
-      cell.border = { ...cell.border, top: BORDER_ROLE_TOP };
-    }
   }
   if (pos.last) {
     const lastRow = r + BLOCK_ROWS - 1;

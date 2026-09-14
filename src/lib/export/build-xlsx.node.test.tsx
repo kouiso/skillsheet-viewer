@@ -242,12 +242,13 @@ describe('buildSkillSheetXlsx', () => {
 
     // ブロック1の最終行（r12）下端: タイトル幅の J:AP にも細線が通る
     expect(ws.getCell(12, 10).border?.bottom?.style).toBe('thin');
-    // ブロック2の先頭行（r13）AQ:AS の上端は細線で、先頭ブロック用の double にはしない
-    // （旧スプシ多数派: AQ は濃緑、AR-AS は黒）
-    expect(ws.getCell(13, 44).border?.top?.style).toBe('thin');
-    expect(ws.getCell(13, 44).border?.top?.color?.argb).toBe('FF000000');
-    expect(ws.getCell(13, 45).border?.top?.style).toBe('thin');
-    expect(ws.getCell(13, 45).border?.top?.color?.argb).toBe('FF000000');
+    // ブロック2の先頭行（r13）AQ:AS の上端はブロック区切り線と同色の緑細線で
+    // 一続き（ドナー通り）。先頭ブロック用の double や、区切り線と違う色の
+    // 短い棒（= ユーザー指摘の「変な横棒」）にはしない
+    for (const c of [43, 44, 45]) {
+      expect(ws.getCell(13, c).border?.top?.style).toBe('thin');
+      expect(ws.getCell(13, c).border?.top?.color?.argb).toBe('FF003300');
+    }
     // ブロック2以降の先頭行 G 列（期間終了セル先頭）には上辺を引かない
     // （旧スプシの定常ブロックの多数派はここが無罫線）
     expect(ws.getCell(13, 7).border?.top?.style).toBeUndefined();
