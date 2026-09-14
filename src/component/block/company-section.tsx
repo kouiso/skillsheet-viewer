@@ -89,7 +89,15 @@ export function CompanySection({
 
       <div className="flex min-w-0 flex-col gap-4">
         {items.map(({ item, no, tech }) => (
-          <ProjectCard key={item.id} item={item} no={no} tech={tech} activeTech={activeTech} queryTerms={queryTerms} />
+          <ProjectCard
+            key={item.id}
+            item={item}
+            no={no}
+            companyName={name}
+            tech={tech}
+            activeTech={activeTech}
+            queryTerms={queryTerms}
+          />
         ))}
       </div>
     </section>
