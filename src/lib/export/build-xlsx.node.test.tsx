@@ -204,6 +204,17 @@ describe('buildSkillSheetXlsx', () => {
     expect(ws.getCell('B12').value).toBeNull();
   });
 
+  it("終了月のない期間（'2024.1'）は終了セル・月数セルを空にし Invalid Date を書かない", async () => {
+    const noEnd = item({ id: 'i-noend', title: '終了月なしの案件', period: '2024.1' });
+    const buf = await buildSkillSheetXlsx([projectBlock([noEnd], [{ id: 'c1', name: 'C社' }])]);
+    const ws = (await reload(buf)).worksheets[0];
+
+    const start = ws.getCell('B10').value;
+    expect(start).toBeInstanceOf(Date);
+    expect(ws.getCell('G10').value).toBeNull();
+    expect(ws.getCell('B12').value).toBeNull();
+  });
+
   it('1 案件 = 3 行で、結合セル・行高を持ち、説明行は内容量に応じて高くなる', async () => {
     const long = item({
       id: 'i-long',

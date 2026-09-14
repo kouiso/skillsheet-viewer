@@ -21,11 +21,11 @@ import { GET } from './route';
 
 const req = (url: string) => new NextRequest(url, { headers: { host: 'localhost:3000' } });
 
-describe('GET /api/sheet/export.xlsx', () => {
+describe('GET /api/sheet/export-xlsx', () => {
   it('閲覧 cookie でも編集者でも無ければ 401', async () => {
     mocks.hasViewerSession.mockResolvedValue(false);
     mocks.isEditor.mockResolvedValue(false);
-    const res = await GET(req('http://localhost:3000/api/sheet/export.xlsx'));
+    const res = await GET(req('http://localhost:3000/api/sheet/export-xlsx'));
     expect(res.status).toBe(401);
     expect(mocks.getSkillSheet).not.toHaveBeenCalled();
   });
@@ -37,25 +37,26 @@ describe('GET /api/sheet/export.xlsx', () => {
     mocks.buildSkillSheetXlsx.mockResolvedValue(Buffer.from('PK-fake'));
 
     const id = '11111111-1111-4111-8111-111111111111';
-    const res = await GET(req(`http://localhost:3000/api/sheet/export.xlsx?id=${id}`));
+    const res = await GET(req(`http://localhost:3000/api/sheet/export-xlsx?id=${id}`));
 
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     expect(res.headers.get('Content-Disposition')).toContain('attachment');
     expect(res.headers.get('Content-Disposition')).toContain(encodeURIComponent('スキルシート.xlsx'));
     expect(mocks.getSkillSheetById).toHaveBeenCalledWith(id);
-    expect(await res.arrayBuffer()).toEqual(Buffer.from('PK-fake').buffer as ArrayBuffer);
+    // Buffer.from(...).buffer は Node のプール全体を指すことがあるため Uint8Array で比較する
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array(Buffer.from('PK-fake')));
   });
 
   it('id が UUID でなければ 400、存在しなければ 404', async () => {
     mocks.hasViewerSession.mockResolvedValue(true);
-    const bad = await GET(req('http://localhost:3000/api/sheet/export.xlsx?id=not-a-uuid'));
+    const bad = await GET(req('http://localhost:3000/api/sheet/export-xlsx?id=not-a-uuid'));
     expect(bad.status).toBe(400);
 
     const { SkillSheetNotFoundError } = await import('@/db');
     mocks.getSkillSheetById.mockRejectedValue(new SkillSheetNotFoundError('11111111-1111-4111-8111-111111111111'));
     const missing = await GET(
-      req('http://localhost:3000/api/sheet/export.xlsx?id=11111111-1111-4111-8111-111111111111'),
+      req('http://localhost:3000/api/sheet/export-xlsx?id=11111111-1111-4111-8111-111111111111'),
     );
     expect(missing.status).toBe(404);
   });

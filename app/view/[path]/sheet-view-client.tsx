@@ -27,7 +27,7 @@ interface SheetViewClientProps {
   stale?: boolean;
   /** SSRとHydrationで共有する、継続中案件の集計基準月。 */
   referenceMonth?: number;
-  /** DB シートの ID。あるときだけ Excel 出力ボタンを出す（GitHub シートは対象外）。 */
+  /** DB シートの ID。省略時は API 側がデフォルトシートを出力する（/view/db 用）。 */
   sheetId?: string;
 }
 
@@ -158,13 +158,17 @@ const SheetViewClient = ({
     }
   };
 
+  // Excel 出力は DB シートなら出す（GitHub シートは対象外）。
+  // id 無し（/view/db）は API 側がデフォルトシートへフォールバックする。
+  const canExportExcel = source === 'db';
+
   const handleDownloadExcel = async () => {
-    if (!sheetId) return;
     const toastId = toast.loading('Excelを生成中…');
     const startedAt = performance.now();
     try {
       setExcelLoading(true);
-      const res = await fetch(`/api/sheet/export.xlsx?id=${encodeURIComponent(sheetId)}`);
+      const query = sheetId ? `?id=${encodeURIComponent(sheetId)}` : '';
+      const res = await fetch(`/api/sheet/export-xlsx${query}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
 
@@ -218,15 +222,18 @@ const SheetViewClient = ({
           onToggleView={toggleView}
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
-          onDownloadExcel={sheetId ? handleDownloadExcel : undefined}
+          onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
           excelLoading={excelLoading}
           canEdit={canEdit}
           reserveEditSlot={reserveEditSlot}
         />
       ) : (
+        // project ブロックを持たない DB シート（Header 側）でも Excel 出力は出す
         <Header
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
+          onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
+          excelLoading={excelLoading}
           canEdit={canEdit}
           reserveEditSlot={reserveEditSlot}
           backHref="/view"

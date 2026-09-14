@@ -72,9 +72,11 @@ const PROFILE_CELLS: [string, (p: ProfileBlockData) => string | undefined][] = [
   ['AU4', (p) => p.meta.station],
 ];
 
-// 業務内容セルの見た目行数 → 行高の換算。結合幅 J:AP の全角換算 95 文字/行、
+// 業務内容セルの見た目行数 → 行高の換算。結合幅 J:AP は 33 列 × 4.43（半角単位）
+// で全角換算 130〜140 文字/行（実DB 33件を Google スプシ経由で PDF 化した実測より。
+// 95 だと行数を多めに数えて行高が文章量の倍近く出てしまう）。
 // 1 行あたりの高さは取り急ぎ版の既存ブロック群の中央値実測（≈15.4）。
-const CHARS_PER_LINE = 95;
+const CHARS_PER_LINE = 135;
 const HEIGHT_PER_LINE = 15.4;
 const DESC_MIN_HEIGHT = 120;
 
@@ -174,6 +176,11 @@ function periodCells(item: ProjectItem, r: number): { start: unknown; end: unkno
   if (range.ongoing) {
     return { start, end: '現在', duration: { formula: `DATEDIF(B${r},TODAY(),"M")+1` } };
   }
+  // 終了月なし（'2024.1' 等）は end が '' で返る。そのまま年月へ分解すると
+  // Invalid Date をセルへ書き込むので、終了セルと月数セルは空にする。
+  if (!range.end) {
+    return { start, end: null, duration: null };
+  }
   const [ey, em] = range.end.split('-').map(Number);
   const end = new Date(Date.UTC(ey, em, 0)); // 末日（月末）に揃える
   return { start, end, duration: { formula: `DATEDIF(B${r},G${r},"M")+1` } };
@@ -254,7 +261,10 @@ export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
 
   // 元スプシの Print_Area（A1:BX<最終行>）に倣う。テンプレ側の definedName は
   // 行を切り詰めた時点で範囲がずれるので、実際のブロック数で引き直す。
+  // あわせて 8-9 行目（案件表の列ヘッダ）を全ページで繰り返す — 6 ページに
+  // なるため、2 ページ目以降で列の意味を追えない問題への対応。
   ws.pageSetup.printArea = `A1:BX${FIRST_ROW - 1 + items.length * BLOCK_ROWS}`;
+  ws.pageSetup.printTitlesRow = '8:9';
 
   const now = new Date();
   ws.name = `latest-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
