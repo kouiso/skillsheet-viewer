@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/component/ui/tooltip';
@@ -82,6 +83,25 @@ describe('ViewerTopbar', () => {
       expect(slot).toHaveClass('size-11', 'shrink-0');
     }
     expect(screen.getAllByLabelText('編集／ビルダー')).toHaveLength(2);
+  });
+
+  describe('「稼働月数」トグル（#288）', () => {
+    it('ビュートグル列に「稼働月数」を出し、押すと onToggleView("duration") が呼ばれる', async () => {
+      const user = userEvent.setup();
+      const onToggleView = vi.fn();
+      renderTopbar({ onToggleView });
+
+      const pill = screen.getByRole('button', { name: '稼働月数' });
+      // views が全 ON なら押下状態。
+      expect(pill).toHaveAttribute('aria-pressed', 'true');
+      await user.click(pill);
+      expect(onToggleView).toHaveBeenCalledWith('duration');
+    });
+
+    it('views から「duration」を外すとトグルが OFF 表示になる', () => {
+      renderTopbar({ views: ['skills', 'process', 'projects', 'timeline'] });
+      expect(screen.getByRole('button', { name: '稼働月数' })).toHaveAttribute('aria-pressed', 'false');
+    });
   });
 
   describe('DOM順と視覚順の一致（レビュー指摘: キーボードのタブ順・読み上げ順の対策）', () => {
