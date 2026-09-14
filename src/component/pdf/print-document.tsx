@@ -23,7 +23,7 @@ import { DynamicView, PrintText, printStyles, RunningFooter } from './print-prim
 import { PRINT_SIZE } from './print-token';
 import type { PrintViewKey, PrintViewModel } from './print-view-model';
 import { buildPrintViewModel } from './print-view-model';
-import { SkillsPage } from './skills-page';
+import { SkillsPage } from './skill-page';
 import { SummaryPage } from './summary-page';
 
 /** 本文の高さ = ページ高 − 上余白 − （下余白 + フッター余白）。printStyles.page と同じ値。 */

@@ -83,3 +83,5 @@ playwright/.auth/
 .evidence/
 .omc/
 .omx/
+.playwright-mcp/
+.claude/settings.local.json

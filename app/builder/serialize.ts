@@ -4,7 +4,7 @@
 
 // tableBlockToMarkdown 等の純関数/型はサーバ専用モジュール（neon ドライバ等）を
 // client バンドルに巻き込まないため、root の @/db ではなく純粋サブエクスポート
-// @/db/blocks から import する。
+// @/db/block から import する。
 import {
   type Block,
   type BlockInput,

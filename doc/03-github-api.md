@@ -141,7 +141,7 @@ return db.transaction(async (tx) => {
 - **A2 所有者検証**: `sheetId` 指定時に `id + ownerId` を同一トランザクション内で照合し、他人のシートを破壊しない。
 - **A3 楽観ロック**: `expectedUpdatedAt` を渡すと、`for('update')` で行ロックを取り、現在の `updatedAt` がそれより新しい場合に `ConflictError`（`skillsheet.ts` で定義）を throw する。ロストアップデートを防ぐ。
 - **A4**: 保存後のサーバー時刻 `updatedAt` を返す。クライアントはこれを次回の `expectedUpdatedAt` に使い、時計ズレによる誤 Conflict を防ぐ。
-- 保存前に `normalizeBlockInput()`（markdown 末尾空白除去・table 行の列数正規化）だけを行う。**`isBlockInputEmpty()` は永続化フィルタとして使わない** — テンプレの空ブロック（入力用スカフォールド）やユーザーが「追加」したばかりの空ブロックも、中身が空のまま insert される。空判定は描画時（`blocksToMarkdown` / Web の `groupBlocks`）と「シート全体が空」ガード（自動保存スキップ・全消し保存の confirm）でのみ使う（issue #128 / `.gemini/styleguide.md` [K]）。
+- 保存前に `normalizeBlockInput()`（markdown 末尾空白除去・table 行の列数正規化）だけを行う。**`isBlockInputEmpty()` は永続化フィルタとして使わない** — テンプレの空ブロック（入力用スカフォールド）やユーザーが「追加」したばかりの空ブロックも、中身が空のまま insert される。空判定は描画時（`blocksToMarkdown` / Web の `groupBlocks`）と「シート全体が空」ガード（自動保存スキップ・全消し保存の confirm）でのみ使う（issue #128）。
 
 `createSheet()` / `deleteSheet()` も同様にオーナーを検証し、`createSheet` はシートとブロックの挿入を単一トランザクションで囲む。
 

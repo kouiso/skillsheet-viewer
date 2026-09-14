@@ -16,7 +16,7 @@ drizzle のマイグレーション管理を後付けで導入するための手
 - これらは drizzle-kit ではなく、**Better Auth CLI の migrate で先に作られた**ものです。
   そのため制約名が Postgres デフォルト（例: `session_token_key`）になっており、
   リポジトリのマイグレーションが生成する名前（例: `session_token_unique`）とは一致しません。
-- 本番 DB には drizzle の進捗管理テーブル `drizzle.__drizzle_migration` が**まだありません**。
+- 本番 DB には drizzle の進捗管理テーブル `drizzle.__drizzle_migrations` が**まだありません**。
 - 一方リポジトリには以下 2 本のマイグレーションが存在します。
   - `0000_init`（`blocks` / `skill_sheets`）
   - `0001_deep_switch`（Better Auth 系テーブル）
@@ -34,11 +34,11 @@ drizzle のマイグレーション管理を後付けで導入するための手
 
 ## drizzle の進捗管理の仕組み（baseline の前提知識）
 
-drizzle は `drizzle` スキーマの `__drizzle_migration` テーブルで適用済みマイグレーションを管理します。
+drizzle は `drizzle` スキーマの `__drizzle_migrations` テーブルで適用済みマイグレーションを管理します。
 テーブル定義は drizzle-orm が migrate 実行時に自動生成するもので、以下のとおりです。
 
 ```sql
-CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migration (
+CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
   id SERIAL PRIMARY KEY,
   hash text NOT NULL,
   created_at bigint
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migration (
 `hash` の一致は判定に使われません。したがって baseline で最も重要なのは、
 **各マイグレーションの `created_at` を `_journal.json` の `when` と正確に一致させる**ことです。
 
-## (a) `__drizzle_migration` が存在するかの確認
+## (a) `__drizzle_migrations` が存在するかの確認
 
 まず本番 DB の現状を確認します（参照のみ・破壊的ではありません）。
 
@@ -68,14 +68,14 @@ CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migration (
 SELECT 1 FROM information_schema.schemata WHERE schema_name = 'drizzle';
 
 -- 進捗管理テーブルがあるか
-SELECT to_regclass('drizzle.__drizzle_migration') AS migration_table;
+SELECT to_regclass('drizzle.__drizzle_migrations') AS migration_table;
 ```
 
 すでにテーブルがある場合は、適用済み行を確認します:
 
 ```sql
 SELECT id, hash, created_at
-FROM drizzle.__drizzle_migration
+FROM drizzle.__drizzle_migrations
 ORDER BY created_at;
 ```
 
@@ -103,7 +103,7 @@ ORDER BY created_at;
 -- 1) 進捗管理用スキーマ・テーブルを作る（drizzle が作るものと同一定義・冪等）
 CREATE SCHEMA IF NOT EXISTS drizzle;
 
-CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migration (
+CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
   id SERIAL PRIMARY KEY,
   hash text NOT NULL,
   created_at bigint
@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migration (
 
 -- 2) 既存の 2 本を「適用済み」として登録（baseline 本体）
 --    すでに同一行があると二重登録になるため、空であることを (a) で確認してから実行する
-INSERT INTO drizzle.__drizzle_migration (hash, created_at) VALUES
+INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES
   ('8c90ff4667980ccde354180fcd6b76ec5ceef24ca6568b027099fadd7c385b4b', 1780582832156),
   ('3ee2a39aad04835cf96181a4ae077ae49673125d13167a09ca1062e054337af0', 1782012365465);
 ```
@@ -119,7 +119,7 @@ INSERT INTO drizzle.__drizzle_migration (hash, created_at) VALUES
 実行後の確認:
 
 ```sql
-SELECT id, hash, created_at FROM drizzle.__drizzle_migration ORDER BY created_at;
+SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_at;
 -- 2 行（0000_init, 0001_deep_switch 相当）が返れば OK
 ```
 
@@ -145,7 +145,7 @@ hash の一致は drizzle の適用判定には使われません（判定は `c
 そのため hash 値の正確性に不安があるなら、次のいずれかが安全です。
 
 - **fresh（新規）DB を正本にする**: 何もテーブルがない新規 Neon DB に対して `pnpm db:migrate` を 1 回流せば、
-  drizzle がテーブル作成・`__drizzle_migration` への記録まで正規の手順で行ってくれます。
+  drizzle がテーブル作成・`__drizzle_migrations` への記録まで正規の手順で行ってくれます。
   baseline の手作業 SQL は不要です。本番をこの fresh DB に切り替えられるなら、これが最も確実です。
 - **created_at だけ正確にする**: 既存本番をそのまま使う場合でも、`created_at`（= `_journal.json` の `when`）さえ
   正しく入れれば、以降の `pnpm db:migrate` は期待どおり no-op／新規分のみ適用になります。
@@ -155,7 +155,7 @@ hash の一致は drizzle の適用判定には使われません（判定は `c
 
 | 対象 | 手順 |
 |------|------|
-| **fresh（新規）DB** | そのまま `pnpm db:migrate` を実行する。drizzle が全マイグレーションを正規手順で適用し、`__drizzle_migration` も自動作成される。baseline 不要。|
+| **fresh（新規）DB** | そのまま `pnpm db:migrate` を実行する。drizzle が全マイグレーションを正規手順で適用し、`__drizzle_migrations` も自動作成される。baseline 不要。|
 | **既存本番 DB（テーブルあり・管理テーブルなし）** | このドキュメント (a)→(b) を **1 回だけ** 実行して baseline する。以降は `pnpm db:migrate` が安全な no-op（新規マイグレーションがあればそれだけ適用）になる。|
 
 ポイント:
