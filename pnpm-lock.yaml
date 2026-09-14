@@ -17,7 +17,7 @@ overrides:
 patchedDependencies:
   '@react-pdf/textkit@6.3.0':
     hash: cf9d1b07e319496586e063cac807f88a809f71fe6aabad688480364b93a7df15
-    path: patches/@react-pdf__textkit@6.3.0.patch
+    path: patch/@react-pdf__textkit@6.3.0.patch
 
 importers:
 

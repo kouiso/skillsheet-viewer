@@ -25,8 +25,8 @@ const SERVER_ONLY_SPECIFIERS = [
   '@/db/viewer-rate-limit',
   '@/lib/auth',
   '@/server/session',
-  '@/server/github-sheets',
-  '@/server/sheets-cache',
+  '@/server/github-sheet',
+  '@/server/sheet-cache',
   '@/server/viewer-rate-limit',
 ];
 

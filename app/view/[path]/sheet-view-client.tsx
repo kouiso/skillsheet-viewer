@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import Header from '@/components/header';
-import SkillSheetViewer from '@/components/skill-sheet-viewer';
-import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
-import type { Block } from '@/db/blocks';
-import { useReadDepth } from '@/hooks/use-read-depth';
+import Header from '@/component/header';
+import SkillSheetViewer from '@/component/skill-sheet-viewer';
+import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
+import type { Block } from '@/db/block';
+import { useReadDepth } from '@/hook/use-read-depth';
 import { captureError, track } from '@/lib/observability/capture';
 import { type PdfFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
@@ -22,7 +22,7 @@ interface SheetViewClientProps {
   reserveEditSlot?: boolean;
   /**
    * true のとき、DB への再接続に失敗して古いキャッシュを表示している可能性があることを
-   * 画面上部に案内する（Issue #204）。sheets-cache.ts の isDbContentStale() で判定する。
+   * 画面上部に案内する（Issue #204）。sheet-cache.ts の isDbContentStale() で判定する。
    */
   stale?: boolean;
   /** SSRとHydrationで共有する、継続中案件の集計基準月。 */
@@ -106,7 +106,7 @@ const SheetViewClient = ({
 
       const [{ pdf }, { createSkillSheetPdf, resetPdfFontsAfterFailure }] = await Promise.all([
         import('@react-pdf/renderer'),
-        import('@/components/pdf-export'),
+        import('@/component/pdf-export'),
       ]);
       resetFontsOnFailure = resetPdfFontsAfterFailure;
 

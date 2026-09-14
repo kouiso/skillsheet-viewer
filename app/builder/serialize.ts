@@ -22,7 +22,7 @@ import {
   statsBlockToMarkdown,
   type TableColumn,
   tableBlockToMarkdown,
-} from '@/db/blocks';
+} from '@/db/block';
 import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。

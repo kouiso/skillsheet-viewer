@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { InlineMarkdown } from '@/components/inline-markdown';
-import type { CompanyInfo, ProjectItem } from '@/db/blocks';
+import { InlineMarkdown } from '@/component/inline-markdown';
+import type { CompanyInfo, ProjectItem } from '@/db/block';
 import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@/db/process';
 import { projectAreaText } from '@/db/tech-area';
 import { formatTeamSize } from '@/util/format-team-size';
@@ -169,7 +169,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
                 <div className="pv-scope">{scopePreview}</div>
               </div>
               {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。
-                  空白のみの値は blocks.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}
+                  空白のみの値は block.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}
               {company?.note?.trim() && <div className="pv-company-note">{company.note.trim()}</div>}
             </div>
             <div {...sync('meta')}>

@@ -1,4 +1,4 @@
-import type { ProjectBlockData } from '@/db/blocks';
+import type { ProjectBlockData } from '@/db/block';
 
 /**
  * 閲覧側で実際に見える案件だけに振る通し番号。

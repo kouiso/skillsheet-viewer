@@ -1,5 +1,5 @@
-// 検証・デモ用のフィクスチャはここに載せない（`@/db/fixtures` から読む）。
-export * from './blocks';
+// 検証・デモ用のフィクスチャはここに載せない（`@/db/fixture` から読む）。
+export * from './block';
 export * from './client';
 export * from './process';
 export * from './schema';

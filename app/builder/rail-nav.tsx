@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { ProjectBlockData } from '@/db/blocks';
+import type { ProjectBlockData } from '@/db/block';
 
 import { buildVisibleNoMap } from './visible-no';
 

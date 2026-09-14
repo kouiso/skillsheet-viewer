@@ -19,7 +19,7 @@ export const skillSheets = pgTable(
 
 /**
  * スキルシートを構成する順序付きブロック。
- * type='markdown' の data は { markdown: string }（src/lib/blocks.ts の Block と対応）。
+ * type='markdown' の data は { markdown: string }（src/lib/block.ts の Block と対応）。
  * (sheet_id, order) は一意（順序重複防止＋order順取得の高速化。ユニークインデックスが作られる）。
  */
 export const blocks = pgTable(
