@@ -113,7 +113,24 @@ function captureBlockStyle(ws: ExcelJS.Worksheet): BlockStyle {
   return { heights, styles };
 }
 
-function writeBlock(ws: ExcelJS.Worksheet, r: number, style: BlockStyle, no: number, vals: unknown[]): void {
+// ブロック境界の罫線（旧スプシの実測値）。テンプレのブロックは「ヘッダ直下の
+// 先頭ブロック」しか持たないため、ブロック間の区切り線はここで引き直す。
+//   - 各ブロック最終行の下端: A〜AP・AT〜BX を細線（濃緑）。AQ〜AS は次ブロック
+//     の上端が担うので下端には引かない
+//   - 最終ブロックの下端: 表の外枠として B〜BX を中線（黒）にする（A は細線のまま）
+//   - 2 個目以降の先頭行 AQ〜AS の上端: テンプレ由来の double（濃緑）を細線（黒）へ
+const BORDER_SEP: ExcelJS.Border = { style: 'thin', color: { argb: 'FF003300' } };
+const BORDER_ROLE_TOP: ExcelJS.Border = { style: 'thin', color: { argb: 'FF000000' } };
+const BORDER_TABLE_END: ExcelJS.Border = { style: 'medium', color: { argb: 'FF000000' } };
+
+function writeBlock(
+  ws: ExcelJS.Worksheet,
+  r: number,
+  style: BlockStyle,
+  no: number,
+  vals: unknown[],
+  pos: { first: boolean; last: boolean },
+): void {
   style.styles.forEach((row, o) => {
     row.forEach((st, c) => {
       ws.getCell(r + o, c + 1).style = clone(st);
@@ -122,8 +139,27 @@ function writeBlock(ws: ExcelJS.Worksheet, r: number, style: BlockStyle, no: num
   style.heights.forEach((h, o) => {
     ws.getRow(r + o).height = h;
   });
+  // 罫線の修正は mergeCells より前に行う。結合後は被結合セルの style が
+  // 左上セルへ委譲されるため、個別の辺に罫線を残せなくなる。
+  const lastRow = r + BLOCK_ROWS - 1;
+  for (let c = 1; c <= COLS; c++) {
+    const cell = ws.getCell(lastRow, c);
+    if (pos.last) {
+      cell.border = { ...cell.border, bottom: c === COL.NO ? BORDER_SEP : BORDER_TABLE_END };
+    } else if (c < COL.ROLE_SCALE || c > COL.ROLE_SCALE + 2) {
+      cell.border = { ...cell.border, bottom: BORDER_SEP };
+    }
+  }
+  if (!pos.first) {
+    for (let c = COL.ROLE_SCALE; c <= COL.ROLE_SCALE + 2; c++) {
+      const cell = ws.getCell(r, c);
+      cell.border = { ...cell.border, top: BORDER_ROLE_TOP };
+    }
+  }
+  // mergeCells ではなく mergeCellsWithoutStyle を使う。前者は被結合セルの style を
+  // 左上セルのもので上書きしてしまい、セルごとの罫線（ブロック間の区切り線など）が消える。
   BLOCK_MERGES.forEach(([ro, c, ro2, c2]) => {
-    ws.mergeCells(r + ro, c, r + ro2, c2);
+    ws.mergeCellsWithoutStyle(r + ro, c, r + ro2, c2);
   });
   // 値は各結合の左上セルにだけ入れる（BLOCK_MERGES の先頭 [ro, c] がアンカー）
   BLOCK_MERGES.forEach(([ro, c], i) => {
@@ -205,7 +241,10 @@ export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
     const desc = composeDesc(it);
     const heights = [...style.heights];
     heights[2] = Math.max(DESC_MIN_HEIGHT, Math.ceil(lineCount(desc) * HEIGHT_PER_LINE));
-    writeBlock(ws, r, { ...style, heights }, idx + 1, itemValues(it, r));
+    writeBlock(ws, r, { ...style, heights }, idx + 1, itemValues(it, r), {
+      first: idx === 0,
+      last: idx === items.length - 1,
+    });
   });
 
   const profile = blocks.find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile');

@@ -233,4 +233,19 @@ describe('buildSkillSheetXlsx', () => {
     // 19.5 以外（内容量に応じて引き伸ばされている）
     expect(ws.getRow(12).height).toBeGreaterThan(19.5);
   });
+
+  it('ブロック間に区切り線を引き、表の最下端は中線で閉じる（旧スプシの罫線構成）', async () => {
+    const a = item({ id: 'i-a', title: 'A案件', period: '2026.8 — 現在' });
+    const b = item({ id: 'i-b', title: 'B案件', period: '2025.1 — 2025.12' });
+    const buf = await buildSkillSheetXlsx([projectBlock([a, b], [{ id: 'c1', name: 'C社' }])]);
+    const ws = (await reload(buf)).worksheets[0];
+
+    // ブロック1の最終行（r12）下端: タイトル幅の J:AP にも細線が通る
+    expect(ws.getCell(12, 10).border?.bottom?.style).toBe('thin');
+    // ブロック2の先頭行（r13）AQ:AS の上端は細線（黒）で、先頭ブロック用の double にはしない
+    expect(ws.getCell(13, 43).border?.top?.style).toBe('thin');
+    expect(ws.getCell(13, 43).border?.top?.color?.argb).toBe('FF000000');
+    // 最終ブロック（r13-15）の下端は表の外枠（中線・黒）
+    expect(ws.getCell(15, 10).border?.bottom?.style).toBe('medium');
+  });
 });
