@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileDown, FileMinus, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
+import { ArrowLeft, Download, FileDown, FileMinus, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -111,6 +111,63 @@ function DigestDownloadMenu({
   );
 }
 
+/**
+ * SP 用のダウンロードメニュー。PDF / Excel / 要約版を1つの Popover に畳む。
+ * SP のアイコン行は「戻るリンク＋アイコン群」を320px に収める必要があり、
+ * ボタンを個別に並べるとリンクのタップターゲットが 44px を割る（#337 CI で実測）。
+ */
+function DownloadMenu({
+  onDownloadPdf,
+  onDownloadExcel,
+  onDownloadPdfDigest,
+  onDownloadExcelDigest,
+  loading,
+}: {
+  onDownloadPdf?: () => void | Promise<void>;
+  onDownloadExcel?: () => void | Promise<void>;
+  onDownloadPdfDigest?: () => void | Promise<void>;
+  onDownloadExcelDigest?: () => void | Promise<void>;
+  loading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const item = (label: string, action: () => void | Promise<void>, ariaLabel: string) => (
+    <Button
+      variant="ghost"
+      aria-label={ariaLabel}
+      onClick={() => {
+        setOpen(false);
+        void action();
+      }}
+    >
+      {label}
+    </Button>
+  );
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={loading}
+          aria-busy={loading}
+          aria-label={loading ? 'ダウンロードを生成中' : 'ダウンロード'}
+          className="min-h-11 min-w-11"
+        >
+          {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Download />}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent>
+        <div className="flex flex-col">
+          {onDownloadPdf && item('PDF', onDownloadPdf, 'PDFダウンロード')}
+          {onDownloadExcel && item('Excel', onDownloadExcel, 'Excelダウンロード')}
+          {onDownloadPdfDigest && item('PDF（要約版）', onDownloadPdfDigest, 'PDF（要約版）ダウンロード')}
+          {onDownloadExcelDigest && item('Excel（要約版）', onDownloadExcelDigest, 'Excel（要約版）ダウンロード')}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ダッシュボードシート用の Console トップバー（redesign2 の topbar 変種）。
 // アクセント正方形＋氏名＋会社名（mono）、ビュー表示ON/OFFピル、
 // ビルダーリンク・PDFダウンロード・テーマ切替を1列（狭幅では折返し）に収める。
@@ -179,7 +236,7 @@ export function ViewerTopbar({
   // デスクトップだけ並びが入れ替わって毎回レイアウトシフトが起きる。
   // display:none はフォーカス順からも a11y ツリーからも外れるので、CSS だけで
   // 両ブレークポイントの DOM順=視覚順を成立させられる出し分けを採る。
-  const renderActionIcons = (className: string) => (
+  const renderActionIcons = (className: string, compactDownloads = false) => (
     <div className={className}>
       {reserveEditSlot ? (
         <span data-testid="edit-slot" className="size-11 shrink-0">
@@ -189,50 +246,62 @@ export function ViewerTopbar({
         editButton
       )}
 
-      {onDownloadPdf && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => void onDownloadPdf()}
-              disabled={pdfLoading}
-              aria-busy={pdfLoading}
-              aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
-              className="min-h-11 min-w-11"
-            >
-              {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
-        </Tooltip>
-      )}
-
-      {onDownloadExcel && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => void onDownloadExcel()}
-              disabled={excelLoading}
-              aria-busy={excelLoading}
-              aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
-              className="min-h-11 min-w-11"
-            >
-              {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
-        </Tooltip>
-      )}
-
-      {onDownloadPdfDigest && (
-        <DigestDownloadMenu
+      {compactDownloads && (onDownloadPdf || onDownloadExcel || onDownloadPdfDigest || onDownloadExcelDigest) ? (
+        <DownloadMenu
+          onDownloadPdf={onDownloadPdf}
+          onDownloadExcel={onDownloadExcel}
           onDownloadPdfDigest={onDownloadPdfDigest}
           onDownloadExcelDigest={onDownloadExcelDigest}
-          digestLoading={digestLoading}
+          loading={pdfLoading || excelLoading || digestLoading}
         />
+      ) : (
+        <>
+          {onDownloadPdf && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void onDownloadPdf()}
+                  disabled={pdfLoading}
+                  aria-busy={pdfLoading}
+                  aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
+                  className="min-h-11 min-w-11"
+                >
+                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
+            </Tooltip>
+          )}
+
+          {onDownloadExcel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void onDownloadExcel()}
+                  disabled={excelLoading}
+                  aria-busy={excelLoading}
+                  aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
+                  className="min-h-11 min-w-11"
+                >
+                  {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
+            </Tooltip>
+          )}
+
+          {onDownloadPdfDigest && (
+            <DigestDownloadMenu
+              onDownloadPdfDigest={onDownloadPdfDigest}
+              onDownloadExcelDigest={onDownloadExcelDigest}
+              digestLoading={digestLoading}
+            />
+          )}
+        </>
       )}
 
       <Tooltip>
@@ -286,7 +355,7 @@ export function ViewerTopbar({
             {company && <span className="min-w-0 truncate font-mono text-[11.5px] text-faint">{company}</span>}
           </Link>
 
-          {renderActionIcons('flex shrink-0 items-center gap-2 sm:hidden')}
+          {renderActionIcons('flex shrink-0 items-center gap-2 sm:hidden', true)}
         </div>
 
         {viewToggleFieldset}
