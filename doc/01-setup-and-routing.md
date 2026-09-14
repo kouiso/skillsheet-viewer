@@ -53,7 +53,7 @@ pnpm --version # 10.33.0
 | `app/` | App Router のルーティング（画面・API） |
 | `src/` | コンポーネント・サーバー処理・ユーティリティ |
 | `src/db/` | Drizzle スキーマ、ブロックモデル、DB アクセス層 |
-| `scripts/` | CLI スクリプトと CI 用チェッカー |
+| `script/` | CLI スクリプトと CI 用チェッカー |
 | `drizzle/` | マイグレーション（`drizzle.config.ts` はルート） |
 | `e2e/` | Playwright の E2E |
 
@@ -108,7 +108,7 @@ Next.js App Router では `app/` 配下のディレクトリ構造がそのま�
 - `assertServerEnv()` を呼び、必須サーバー環境変数の存在をフェイルファストで検証。
 - `next/font/google` で IBM Plex Sans JP / IBM Plex Mono を読み込み CSS 変数化。
 - ハイドレーション前に `localStorage` のテーマ設定を `<html>` の `.dark` クラスへ反映するインラインスクリプトを注入（テーマの FOUC 防止）。
-- `Providers`（`app/providers.tsx`）で全体をラップ。
+- `Providers`（`app/provider.tsx`）で全体をラップ。
 
 ### RSC とデータ取得（tRPC server caller）
 
@@ -125,7 +125,7 @@ export default async function SheetsListPage() {
 }
 ```
 
-サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。ビルダーのような書き込み系クライアントコンポーネントは `@trpc/react-query` の `trpc.sheet.*.useMutation()` / `useQuery()`（`src/lib/trpc-client.ts`、`app/providers.tsx` の `TRPCReactProvider`）を使い、HTTP 経由で `/api/trpc/[trpc]` を叩く。認可・入力検証（zod）・エラーコード（`TRPCError`）は procedure 側（`src/server/trpc/router/*.ts`）に集約されており、ページ側やクライアントコンポーネント側での再検証は行わない。
+サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。ビルダーのような書き込み系クライアントコンポーネントは `@trpc/react-query` の `trpc.sheet.*.useMutation()` / `useQuery()`（`src/lib/trpc-client.ts`、`app/provider.tsx` の `TRPCReactProvider`）を使い、HTTP 経由で `/api/trpc/[trpc]` を叩く。認可・入力検証（zod）・エラーコード（`TRPCError`）は procedure 側（`src/server/trpc/router/*.ts`）に集約されており、ページ側やクライアントコンポーネント側での再検証は行わない。
 
 ### /view 配下の閲覧ゲート（レイアウトによる保護）
 

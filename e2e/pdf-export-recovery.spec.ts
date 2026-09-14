@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { type Browser, expect, type Page, test } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist';
 import { createSheet, deleteSheet, listSheets } from '@/db';
-import { buildConsoleDemoBlocks } from '@/db/fixtures';
+import { buildConsoleDemoBlocks } from '@/db/fixture';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const RUN_ID = randomUUID().slice(0, 8);
@@ -75,15 +75,15 @@ test.afterAll(async () => {
 });
 
 test('PDF 生成がフォント取得失敗のあとリロード無しで回復する', async ({ browser }: { browser: Browser }) => {
-  // フォント取得（/fonts/noto-sans-jp-*.ttf）だけを落とし、回線復旧後の再クリックで
+  // フォント取得（/font/noto-sans-jp-*.ttf）だけを落とし、回線復旧後の再クリックで
   // リロード無しに PDF が生成できることを確認する。
   //
-  // 赤くなることを確認済み: src/components/pdf/fonts.ts の resetPdfFontsAfterFailure
+  // 赤くなることを確認済み: src/component/pdf/font.ts の resetPdfFontsAfterFailure
   // 呼び出しを app/view/[path]/sheet-view-client.tsx の catch から外す（元の
   // `toast.error(...)` だけに戻す）と、2 回目のクリックが同じ失敗を即座に再現し
   // `page.waitForEvent('download')` が timeout する。@react-pdf/font の
   // FontSource.load() が reject 済みの loadResultPromise を永久にキャッシュし、
-  // fonts.ts の `registered` フラグだけでは新しい FontSource を作り直せないため。
+  // font.ts の `registered` フラグだけでは新しい FontSource を作り直せないため。
   test.setTimeout(120_000);
 
   // fresh context で実行する — 先に成功したフォント取得が HTTP キャッシュに残っていると
@@ -94,7 +94,7 @@ test('PDF 生成がフォント取得失敗のあとリロード無しで回復�
 
   await page.goto(`/view/db/${sheetId}`, { waitUntil: 'networkidle' });
 
-  const fontGlob = '**/fonts/noto-sans-jp-*.ttf';
+  const fontGlob = '**/font/noto-sans-jp-*.ttf';
 
   // 1 回目: フォント取得だけを落とす（回線不良・5xx の再現）。
   await page.route(fontGlob, (route) => route.abort());
@@ -136,7 +136,7 @@ test('「スキルマトリクス」を OFF にすると PDF 1 ページ目か�
 
   // 上部バーの「スキルマトリクス」ピルを OFF にする（既定は全 ON）。
   // 目次側にも同じ名前のボタンが出るので、上部バーの 1 つ目に絞る
-  // （pdf-print-views.spec.ts の skillToggleButton と同じ取り方）。
+  // （pdf-print-view.spec.ts の skillToggleButton と同じ取り方）。
   const skillsToggle = page.getByRole('button', { name: /スキルマトリクス/ }).first();
   await expect(skillsToggle).toHaveAttribute('aria-pressed', 'true');
   await skillsToggle.click();
@@ -154,7 +154,7 @@ test('「スキルマトリクス」を OFF にすると PDF 1 ページ目か�
     '主力スタック',
   );
   // 「TypeScript」単体では判定できない — プロフィールの得意分野にも入っており、
-  // そちらはスキル表とは別の情報なので OFF でも残る（pdf-print-views.spec.ts の 14 番）。
+  // そちらはスキル表とは別の情報なので OFF でも残る（pdf-print-view.spec.ts の 14 番）。
   // スキルブロック側にしか無い綴りで見る。
   expect(
     page1Text,
