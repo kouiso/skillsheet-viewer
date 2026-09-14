@@ -102,7 +102,8 @@ enum 以外の `string` プロパティを置かない（シート名等が書�
 | `sheet_viewed` | シート表示コンポーネントの mount | `layout`, `source`, `blockCount` |
 | `sheet_read_depth` | スクロールで 25/50/75/100% 到達 | `depthPercent`, `secondsBucket` |
 | `sheet_view_toggled` | ダッシュボードのビュー切替 | `view`, `enabled` |
-| `pdf_exported` | PDF ダウンロードの成功・失敗 | `result`, `durationBucket`, `reason?` |
+| `pdf_exported` | PDF ダウンロードの成功・失敗 | `edition`（`full` / `digest`）, `result`, `durationBucket`, `reason?` |
+| `excel_exported` | Excel（xlsx）ダウンロードの成功・失敗 | `edition`（`full` / `digest`）, `result`, `durationBucket`, `reason?` |
 | `viewer_auth_submitted` | `/viewer-auth` のログイン試行 | `outcome`（入力コードそのものは送らない） |
 
 ビルダー（`/builder`）にはイベントを入れていない。利用者が1人で、その1人が

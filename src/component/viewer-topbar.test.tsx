@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TooltipProvider } from '@/component/ui/tooltip';
@@ -193,6 +194,68 @@ describe('ViewerTopbar', () => {
       renderTopbar();
       expect(screen.queryByLabelText('Excelダウンロード')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Excelを生成中')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('要約版ダウンロード（Popover で PDF / Excel を選ぶ、#326）', () => {
+    it('onDownloadPdfDigest 指定でアイコン 1 個が出る（SP/PC の 2 コピー）', () => {
+      renderTopbar({ onDownloadPdfDigest: vi.fn() });
+      const buttons = getIconCopies('要約版をダウンロード');
+      expect(buttons).toHaveLength(2);
+      for (const button of buttons) {
+        expect(button).toBeEnabled();
+        expect(button).toHaveAttribute('aria-busy', 'false');
+      }
+    });
+
+    it('onDownloadPdfDigest 未指定なら要約版ボタン自体を出さない', () => {
+      renderTopbar();
+      expect(screen.queryByLabelText('要約版をダウンロード')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('要約版を生成中')).not.toBeInTheDocument();
+    });
+
+    it('Popover を開くと PDF と Excel（要約版）の選択肢が出て、押すと閉じてからコールバックされる', async () => {
+      const user = userEvent.setup();
+      const onPdf = vi.fn();
+      const onExcel = vi.fn();
+      renderTopbar({ onDownloadPdfDigest: onPdf, onDownloadExcelDigest: onExcel });
+
+      // SP 側のトリガーを開く。
+      await user.click(getIconCopies('要約版をダウンロード')[0]);
+      const pdfItem = await screen.findByRole('button', { name: 'PDF（要約版）ダウンロード' });
+      const excelItem = screen.getByRole('button', { name: 'Excel（要約版）ダウンロード' });
+
+      await user.click(pdfItem);
+      expect(onPdf).toHaveBeenCalledTimes(1);
+      expect(onExcel).not.toHaveBeenCalled();
+      // クリック後に Popover は閉じる（選択肢が DOM から外れる）。
+      expect(screen.queryByRole('button', { name: 'Excel（要約版）ダウンロード' })).not.toBeInTheDocument();
+
+      await user.click(getIconCopies('要約版をダウンロード')[0]);
+      await user.click(await screen.findByRole('button', { name: 'Excel（要約版）ダウンロード' }));
+      expect(onExcel).toHaveBeenCalledTimes(1);
+      expect(onPdf).toHaveBeenCalledTimes(1);
+      expect(excelItem).toBeDefined();
+    });
+
+    it('onDownloadExcelDigest 未指定なら Popover 内に Excel の選択肢が出ない', async () => {
+      const user = userEvent.setup();
+      renderTopbar({ onDownloadPdfDigest: vi.fn() });
+
+      await user.click(getIconCopies('要約版をダウンロード')[0]);
+      expect(await screen.findByRole('button', { name: 'PDF（要約版）ダウンロード' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Excel（要約版）ダウンロード' })).not.toBeInTheDocument();
+    });
+
+    it('digestLoading 中はトリガーが無効化され、aria-busy と「要約版を生成中」ラベルで状態を伝える', () => {
+      renderTopbar({ onDownloadPdfDigest: vi.fn(), digestLoading: true });
+      const buttons = getIconCopies('要約版を生成中');
+      expect(buttons).toHaveLength(2);
+      for (const button of buttons) {
+        expect(button).toBeDisabled();
+        expect(button).toHaveAttribute('aria-busy', 'true');
+      }
+      expect(screen.queryByLabelText('要約版をダウンロード')).not.toBeInTheDocument();
     });
   });
 });

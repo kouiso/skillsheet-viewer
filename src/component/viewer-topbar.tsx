@@ -1,10 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileDown, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, FileMinus, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
 
 import { Button } from '@/component/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
 
@@ -36,10 +38,77 @@ interface ViewerTopbarProps {
   /** Excel ダウンロード（DB シートのみ。未指定ならボタンを出さない）。 */
   onDownloadExcel?: () => void | Promise<void>;
   excelLoading?: boolean;
+  /** 要約版 PDF ダウンロード。未指定なら要約版ボタンを出さない。 */
+  onDownloadPdfDigest?: () => void | Promise<void>;
+  /** 要約版 Excel ダウンロード（DB シートのみ）。未指定なら Popover 内の選択肢を出さない。 */
+  onDownloadExcelDigest?: () => void | Promise<void>;
+  /** 要約版（PDF / Excel どちらか）の生成中。 */
+  digestLoading?: boolean;
   /** 編集者ログイン済みか。false のときは編集導線（ビルダーリンク）を出さない。 */
   canEdit?: boolean;
   /** 編集者判定の前後で編集ボタン分の幅を固定する。 */
   reserveEditSlot?: boolean;
+}
+
+/**
+ * 要約版ダウンロードの Popover メニュー。アイコン 1 個から PDF / Excel を選ぶ。
+ * SP 幅ではアイコン 1 個ぶんしか増やせない（44px 刻み）ので選択肢は Popover に畳む。
+ * 他のアイコンと違い Tooltip では包まない — Tooltip と Popover の asChild を
+ * 1 つの Button に重ねると ref の受け渡しが複雑になるため。名前は aria-label で伝える。
+ * 開閉状態は SP / PC で別インスタンスになるよう、このコンポーネントが持つ。
+ */
+function DigestDownloadMenu({
+  onDownloadPdfDigest,
+  onDownloadExcelDigest,
+  digestLoading,
+}: {
+  onDownloadPdfDigest: () => void | Promise<void>;
+  onDownloadExcelDigest?: () => void | Promise<void>;
+  digestLoading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          disabled={digestLoading}
+          aria-busy={digestLoading}
+          aria-label={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
+          className="min-h-11 min-w-11"
+        >
+          {digestLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileMinus />}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent>
+        <div className="flex flex-col">
+          <Button
+            variant="ghost"
+            aria-label="PDF（要約版）ダウンロード"
+            onClick={() => {
+              setOpen(false);
+              void onDownloadPdfDigest();
+            }}
+          >
+            PDF（要約版）
+          </Button>
+          {onDownloadExcelDigest && (
+            <Button
+              variant="ghost"
+              aria-label="Excel（要約版）ダウンロード"
+              onClick={() => {
+                setOpen(false);
+                void onDownloadExcelDigest();
+              }}
+            >
+              Excel（要約版）
+            </Button>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 // ダッシュボードシート用の Console トップバー（redesign2 の topbar 変種）。
@@ -54,6 +123,9 @@ export function ViewerTopbar({
   pdfLoading = false,
   onDownloadExcel,
   excelLoading = false,
+  onDownloadPdfDigest,
+  onDownloadExcelDigest,
+  digestLoading = false,
   canEdit = true,
   reserveEditSlot = false,
 }: ViewerTopbarProps) {
@@ -153,6 +225,14 @@ export function ViewerTopbar({
           </TooltipTrigger>
           <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
         </Tooltip>
+      )}
+
+      {onDownloadPdfDigest && (
+        <DigestDownloadMenu
+          onDownloadPdfDigest={onDownloadPdfDigest}
+          onDownloadExcelDigest={onDownloadExcelDigest}
+          digestLoading={digestLoading}
+        />
       )}
 
       <Tooltip>
