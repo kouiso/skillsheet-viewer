@@ -31,7 +31,9 @@ jobs:
   node:
     name: Node (${{ matrix.check-type }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # e2e はヘッドレス + playwright の2段構成で単体テストが最大 3 分あるため 15 分だと
+    # 途中で打ち切られ、失敗詳細と証跡（trace）が残らない。完了まで待てるよう脚だけ延長する。
+    timeout-minutes: ${{ matrix.check-type == 'e2e' && 30 || 15 }}
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
@@ -105,9 +107,11 @@ jobs:
           E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
           E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
           REVALIDATE_SECRET: ${{ vars.REVALIDATE_SECRET }}
+        # playwright は起動時に test-results/ 全体を消去する。headless-e2e の証跡
+        # （test-results/e2e）が先に書かれていると消されるため、playwright を先に流す。
         run: |
-          pnpm run test:e2e
           pnpm run test:e2e:playwright
+          pnpm run test:e2e
 
       - name: Upload E2E evidence
         if: matrix.check-type == 'e2e' && always()
