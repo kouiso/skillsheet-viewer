@@ -150,38 +150,44 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
         onKeyDown={handleToolbarKeyDown}
       >
         <div className={`pv-card${hidden ? ' opacity-60' : ''}`}>
-          <div className="pv-top">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="pv-no">{no > 0 ? String(no).padStart(2, '0') : '––'}</span>
-                <span {...sync('period')}>
-                  <span className="pv-period">{project.period || '期間未入力'}</span>
-                </span>
-              </div>
-              <div {...sync('title')}>
-                <h3 className="pv-title">{project.title || '（無題の案件）'}</h3>
-              </div>
-              <div {...sync('scope')}>
-                {/* 閲覧側と同じ導出を通す。編集画面のプレビューが閲覧結果と食い違うと、
-                    未入力のまま公開して初めて表示が変わることに気づく（WYSIWYG を崩さない）。
-                    ただし導出値には由来を添える。添えんと「入力欄は空やのに値が見える」状態になり、
-                    クリックして飛んだ先の空欄との対応が分からん。 */}
-                <div className="pv-scope">{scopePreview}</div>
-              </div>
-              {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。
-                  空白のみの値は block.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}
-              {company?.note?.trim() && <div className="pv-company-note">{company.note.trim()}</div>}
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="pv-no">{no > 0 ? String(no).padStart(2, '0') : '––'}</span>
+              <span {...sync('period')}>
+                <span className="pv-period">{project.period || '期間未入力'}</span>
+              </span>
+            </div>
+            <div {...sync('title')}>
+              <h3 className="pv-title">{project.title || '（無題の案件）'}</h3>
+            </div>
+            <div {...sync('scope')}>
+              {/* 閲覧側と同じ導出を通す。編集画面のプレビューが閲覧結果と食い違うと、
+                  未入力のまま公開して初めて表示が変わることに気づく（WYSIWYG を崩さない）。
+                  ただし導出値には由来を添える。添えんと「入力欄は空やのに値が見える」状態になり、
+                  クリックして飛んだ先の空欄との対応が分からん。 */}
+              <div className="pv-scope">{scopePreview}</div>
             </div>
             <div {...sync('meta')}>
+              {/* 閲覧側の案件カード（project-card.tsx）と同じく、役割を会社・人数・期間と
+                  同じ1行に畳む（#289/#290）。ここが旧レイアウト（見出し右枠の役割）のままだと
+                  編集者に閲覧結果と違う見え方を見せる。役割が空でも編集欄への飛び先を
+                  残すため「役割未設定」を表示し、「役割」ラベルは閲覧側と同じく値がある
+                  ときだけ出す。 */}
               <div className="pv-meta">
-                {project.role || '役割未設定'}
-                <div className="m2">
-                  {[company?.name, project.team && formatTeamSize(project.team), project.duration]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </div>
+                {project.role?.trim() ? <span className="kicker mr-1.5">役割</span> : null}
+                {[
+                  project.role?.trim() || '役割未設定',
+                  company?.name,
+                  project.team && formatTeamSize(project.team),
+                  project.duration,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </div>
             </div>
+            {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。
+                空白のみの値は block.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}
+            {company?.note?.trim() && <div className="pv-company-note">{company.note.trim()}</div>}
           </div>
 
           {/* 要約は summary 欄の値を優先し、空のときだけ担当業務で代替する。
