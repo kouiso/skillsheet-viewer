@@ -46,12 +46,18 @@ await browser.close();
 
 const on = await extractText(onPath);
 const off = await extractText(offPath);
-console.log(JSON.stringify({
-  on_has_kikan: on.includes('期間：'),
-  off_has_kikan: off.includes('期間：'),
-  on_kahi: (on.match(/ヶ/g) ?? []).length,
-  off_kahi: (off.match(/ヶ/g) ?? []).length,
-  on_len: on.length,
-  off_len: off.length,
-  errors,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      on_has_kikan: on.includes('期間：'),
+      off_has_kikan: off.includes('期間：'),
+      on_kahi: (on.match(/ヶ/g) ?? []).length,
+      off_kahi: (off.match(/ヶ/g) ?? []).length,
+      on_len: on.length,
+      off_len: off.length,
+      errors,
+    },
+    null,
+    2,
+  ),
+);
