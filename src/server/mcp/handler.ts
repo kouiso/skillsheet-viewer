@@ -21,7 +21,7 @@ import { createInsufficientScopeError } from 'better-auth/oauth2';
 import { getAuth } from '@/lib/auth';
 import { isMcpEnabled, MCP_READ_SCOPE, MCP_SCOPES, MCP_WRITE_SCOPE, resolveMcpResource } from '@/lib/mcp-config';
 
-import { READ_TOOLS, registerSkillsheetTools, WRITE_TOOLS } from './tools';
+import { READ_TOOLS, registerSkillsheetTools, WRITE_TOOLS } from './tool';
 
 /** 検証済みアクセストークンの claims（jose JWTPayload 相当の形で受け取る）。 */
 interface AccessTokenClaims {
