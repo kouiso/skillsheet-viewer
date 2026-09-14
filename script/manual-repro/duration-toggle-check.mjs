@@ -22,14 +22,19 @@ const countDuration = async () =>
   page.evaluate(() => (document.body.innerText.match(/（[^）]*ヶ月）|（継続中）/g) ?? []).length);
 
 const onCount = await countDuration();
-const onSample = await page.evaluate(() => (document.body.innerText.match(/（[^）]*ヶ月）|（継続中）/g) ?? []).slice(0, 8));
+const onSample = await page.evaluate(() =>
+  (document.body.innerText.match(/（[^）]*ヶ月）|（継続中）/g) ?? []).slice(0, 8),
+);
 
 const toggle = page.getByRole('button', { name: '稼働月数' });
 console.log('toggle aria-pressed (初期):', await toggle.getAttribute('aria-pressed'));
 await toggle.click();
 await page.waitForTimeout(800);
 const offCount = await countDuration();
-console.log('toggle aria-pressed (OFF後):', await page.getByRole('button', { name: '稼働月数' }).getAttribute('aria-pressed'));
+console.log(
+  'toggle aria-pressed (OFF後):',
+  await page.getByRole('button', { name: '稼働月数' }).getAttribute('aria-pressed'),
+);
 // OFF 中も期間表記自体は残ること（「〜」を含む行があること）
 const periodStillThere = await page.evaluate(() => (document.body.innerText.match(/〜/g) ?? []).length);
 
@@ -52,11 +57,15 @@ await page2.waitForTimeout(1200);
 const onMobile = await page2.evaluate(() => (document.body.innerText.match(/（[^）]*ヶ月）|（継続中）/g) ?? []).length);
 await page2.getByRole('button', { name: '稼働月数' }).click();
 await page2.waitForTimeout(800);
-const offMobile = await page2.evaluate(() => (document.body.innerText.match(/（[^）]*ヶ月）|（継続中）/g) ?? []).length);
+const offMobile = await page2.evaluate(
+  () => (document.body.innerText.match(/（[^）]*ヶ月）|（継続中）/g) ?? []).length,
+);
 await page2.screenshot({ path: '/tmp/shots-i288/toggle-off-mobile390.png', fullPage: true });
 await page2.getByRole('button', { name: '稼働月数' }).click();
 await page2.waitForTimeout(800);
 await page2.screenshot({ path: '/tmp/shots-i288/toggle-on-mobile390.png', fullPage: true });
 
-console.log(JSON.stringify({ onCount, offCount, onAgain, onMobile, offMobile, periodStillThere, onSample, errors }, null, 2));
+console.log(
+  JSON.stringify({ onCount, offCount, onAgain, onMobile, offMobile, periodStillThere, onSample, errors }, null, 2),
+);
 await browser.close();
