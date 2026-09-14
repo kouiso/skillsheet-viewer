@@ -1,0 +1,35 @@
+{
+  "date": "2026-09-14",
+  "path": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
+  "xlsx": {
+    "bytes": 299333,
+    "sheet": "latest-2026-09",
+    "rows": 108,
+    "cols": 76,
+    "merges": 724,
+    "projects": 33,
+    "profile": {
+      "D1": "I・K",
+      "D2": "28 歳",
+      "AU1": "株式会社 RITMO"
+    },
+    "first": {
+      "no": 1,
+      "row": 10,
+      "start": "2026-08",
+      "title": "動画配信サービスのプレミアム会員機能の開発（Web）"
+    },
+    "last": {
+      "no": 33,
+      "row": 106,
+      "start": "2017-08",
+      "title": "T's STABLE ～ Web ページ制作～"
+    },
+    "descending": true
+  },
+  "pdf": {
+    "bytes": 730466,
+    "head": "%PDF-1.3"
+  },
+  "video": "/tmp/xlsx-evidence/video/page@ee80ac77d06fe184ccb512ac2412b43c.webm (1659537 bytes, 未コミット: dogfooding-evidence readme の規約によりバイナリは含めない)"
+}

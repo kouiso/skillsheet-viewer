@@ -53,6 +53,7 @@ export default async function DbSheetByIdPage({ params }: Props) {
         canEdit={canEdit}
         stale={sheet.stale}
         referenceMonth={currentMonthKey()}
+        sheetId={id}
       />
     );
   } catch (err) {
