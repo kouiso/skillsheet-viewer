@@ -1,4 +1,4 @@
-import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/blocks';
+import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/block';
 
 /**
  * 案件エディタの変更履歴（claude.ai/design `editor/history.jsx` の移植）。

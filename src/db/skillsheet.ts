@@ -22,7 +22,7 @@ import {
   isTableBlockData,
   normalizeTableBlockData,
   splitMarkdownIntoBlocks,
-} from './blocks';
+} from './block';
 import { type Database, getDb } from './client';
 import { blocks, skillSheets } from './schema';
 

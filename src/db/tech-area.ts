@@ -13,7 +13,7 @@
  * 「この技術を使った」は書いてある事実だが「この領域を担当した」は書かれていないため。
  */
 
-import type { ProjectTech } from './blocks';
+import type { ProjectTech } from './block';
 
 interface AreaRule {
   area: string;

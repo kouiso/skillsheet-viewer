@@ -4,7 +4,7 @@
 
 // tableBlockToMarkdown 等の純関数/型はサーバ専用モジュール（neon ドライバ等）を
 // client バンドルに巻き込まないため、root の @/db ではなく純粋サブエクスポート
-// @/db/blocks から import する。
+// @/db/block から import する。
 import {
   type Block,
   type BlockInput,
@@ -22,7 +22,7 @@ import {
   statsBlockToMarkdown,
   type TableColumn,
   tableBlockToMarkdown,
-} from '@/db/blocks';
+} from '@/db/block';
 import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。

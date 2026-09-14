@@ -1,6 +1,6 @@
 ---
 name: skillsheet-narrative-update
-description: Use when rewriting the narrative fields of a skill sheet — a project's 担当業務 / 習得スキル / コメント / 役割 / 期間, a company note, or a skills-table row — and when reflecting those edits into the Neon database. Covers the verification pass that must precede any wording, the approval gate before writing, and the transaction shape that keeps the viewer's type guard satisfied. Triggers on scripts/apply-project-narrative.ts, block-write.ts, project blocks, skills blocks, and any request to "案件の文章を直す".
+description: Use when rewriting the narrative fields of a skill sheet — a project's 担当業務 / 習得スキル / コメント / 役割 / 期間, a company note, or a skills-table row — and when reflecting those edits into the Neon database. Covers the verification pass that must precede any wording, the approval gate before writing, and the transaction shape that keeps the viewer's type guard satisfied. Triggers on script/apply-project-narrative.ts, block-write.ts, project blocks, skills blocks, and any request to "案件の文章を直す".
 ---
 
 # 案件本文の書き換えと DB 反映
@@ -73,7 +73,7 @@ planning）。文書に無ければ、コードから読み取れる制約（ア
 
 ## 5. Neon への反映
 
-`DATABASE_URL` を使う経路（`scripts/apply-project-narrative.ts`）が通らない環境
+`DATABASE_URL` を使う経路（`script/apply-project-narrative.ts`）が通らない環境
 （WebSocket 不可のサンドボックス等）では Neon MCP の `run_sql_transaction` に寄せる。
 
 手順:
@@ -86,7 +86,7 @@ planning）。文書に無ければ、コードから読み取れる制約（ア
    0 行なら中止（`SELECT id FROM skill_sheets WHERE id = $1 AND owner_id = $2`）
 5. ブロックは **`sheet_id` + `type`** で解決する。id を決め打ちしない
 6. 案件タイトルは **DB から読んだ文字列をそのまま使う**（手打ちしない）
-6. 書き込む JSON は `src/db/blocks.ts` の型ガードを満たすこと。
+6. 書き込む JSON は `src/db/block.ts` の型ガードを満たすこと。
    不合格だと**そのブロック全体が画面から消える**。特に:
    - `tech` は 6 つの配列すべて（欠けは不可）
    - `process` は `string[]`

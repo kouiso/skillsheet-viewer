@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 
-import { isSheetFileName, isValidSheetPath, SheetNotFoundError } from '@/server/github-sheets';
-import { getCachedSheet, getCachedSheets } from '@/server/sheets-cache';
+import { isSheetFileName, isValidSheetPath, SheetNotFoundError } from '@/server/github-sheet';
+import { getCachedSheet, getCachedSheets } from '@/server/sheet-cache';
 
 import { router, viewerProcedure } from '../init';
 import { githubSheetPathInputSchema } from '../schema';

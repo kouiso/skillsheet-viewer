@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
-import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/github-sheets';
+import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/component/view-error';
+import { isSheetFileName, isValidSheetPath, type SheetContent } from '@/server/github-sheet';
 import { createServerCaller } from '@/server/trpc/caller';
 import { requireViewer } from '@/server/viewer-gate';
 

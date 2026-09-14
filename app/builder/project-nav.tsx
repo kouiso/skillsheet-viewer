@@ -18,7 +18,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Eye, EyeOff } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/blocks';
+import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/block';
 import { groupProjectsByCompany } from '@/db/group-by-company';
 
 // 案件エディタ 3 ペインの共通スタイル。CSS はモジュール単位で一度読み込めば全体へ効くため、
