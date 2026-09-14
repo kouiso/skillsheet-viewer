@@ -1,13 +1,5 @@
 import { TRPCError } from '@trpc/server';
-import { revalidateTag } from 'next/cache';
-import {
-  ConflictError,
-  createSheet,
-  deleteSheet,
-  listSheets as listDbSheets,
-  SkillSheetNotFoundError,
-  saveSkillSheetBlocks,
-} from '@/db';
+import { ConflictError, createSheet, deleteSheet, listSheets as listDbSheets, SkillSheetNotFoundError } from '@/db';
 
 import {
   getCachedDbSheet,
@@ -16,6 +8,7 @@ import {
   toStaleSheet,
   toStaleSheetList,
 } from '@/server/sheet-cache';
+import { invalidateDbSheetCache, saveOwnerSheet } from '@/server/sheet-service';
 
 import { getTemplate } from '../../../../app/builder/sheet-template';
 import { editorProcedure, router, viewerProcedure } from '../init';
@@ -26,15 +19,6 @@ import {
   saveSheetInputSchema,
   sheetIdInputSchema,
 } from '../schema';
-
-// Route Handler は Server Action ではないため next/cache の updateTag は使えない
-// （Next.js 16 公式: "It cannot be used in Route Handlers"）。tRPC mutation は必ず
-// Route Handler 経由で実行されるため、代わりに revalidateTag(tag, { expire: 0 }) で
-// 即時失効させる。同じ問題を maintenance.revalidate が解決しており、
-// { expire: 0 } を指定しないと即時失効が保証されない（本番で無効化されない不具合実績あり）。
-function invalidateDbSheetCache(): void {
-  revalidateTag('db-sheet', { expire: 0 });
-}
 
 export const sheetRouter = router({
   // fetchedAt は内部実装詳細のため公開レスポンスに出さず、stale 判定結果だけを返す
@@ -88,9 +72,8 @@ export const sheetRouter = router({
 
   save: editorProcedure.input(saveSheetInputSchema).mutation(async ({ input }) => {
     try {
-      const result = await saveSkillSheetBlocks(input.title, input.blocks, input.sheetId, input.expectedUpdatedAt);
-      invalidateDbSheetCache();
-      return result;
+      // 保存 + キャッシュ失効は MCP ツールと共有のサービス層へ（Issue #305）。
+      return await saveOwnerSheet(input);
     } catch (err) {
       if (err instanceof ConflictError) {
         throw new TRPCError({ code: 'CONFLICT', message: err.message });
