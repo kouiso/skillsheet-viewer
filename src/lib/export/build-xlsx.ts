@@ -141,14 +141,8 @@ function writeBlock(
   });
   // 罫線の修正は mergeCells より前に行う。結合後は被結合セルの style が
   // 左上セルへ委譲されるため、個別の辺に罫線を残せなくなる。
-  if (!pos.first) {
-    // 定常ドナーは旧スプシ最多パターン（ブロック22）の複写だが、先頭行の G 列
-    // （期間終了セル先頭）の上辺だけ多数派とずれているので除去する。
-    // 役割列（AQ:AS）の上辺はドナー通り緑細線のまま — ブロック区切り線と同色で
-    // 一続きにするのが原本の見た目。黒に変えると区切り線の中に短い黒い棒が出る。
-    const g = ws.getCell(r, COL.PERIOD_END);
-    g.border = { ...g.border, top: undefined };
-  }
+  // ドナーの書式は一切補正しない（原本厳守）。例外は表の最終行下端のみ —
+  // 原本の表外枠と同じく中線（黒）で閉じる。
   if (pos.last) {
     const lastRow = r + BLOCK_ROWS - 1;
     for (let c = 1; c <= COLS; c++) {
