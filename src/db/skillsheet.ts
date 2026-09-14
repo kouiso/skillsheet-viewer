@@ -299,6 +299,39 @@ export async function getSkillSheetById(sheetId: string): Promise<SkillSheet> {
   return fetchSheetById(db, sheetId, true);
 }
 
+/** getOwnerSkillSheetById の戻り値。updatedAt は楽観ロック（expectedUpdatedAt）の基準値。 */
+export interface OwnerSkillSheet {
+  id: string;
+  title: string;
+  updatedAt: Date;
+  blocks: Block[];
+}
+
+/**
+ * オーナー所有を確認できたシートだけを返す読み取り（Remote MCP 経路用、Issue #305）。
+ * getSkillSheetById は owner_id を照合しないため MCP/認可境界では使わない。
+ * 他人のシート ID を叩かれた場合も不存在と同じ SkillSheetNotFoundError に揃え、
+ * シートの存在有無を外部へ漏らさない。
+ */
+export async function getOwnerSkillSheetById(sheetId: string): Promise<OwnerSkillSheet> {
+  const db = getDb();
+  const ownerId = getOwnerId();
+  const [sheet] = await db
+    .select({ id: skillSheets.id, title: skillSheets.title, updatedAt: skillSheets.updatedAt })
+    .from(skillSheets)
+    .where(and(eq(skillSheets.id, sheetId), eq(skillSheets.ownerId, ownerId)))
+    .limit(1);
+  if (!sheet) {
+    throw new SkillSheetNotFoundError(sheetId);
+  }
+  const rows = await db.select().from(blocks).where(eq(blocks.sheetId, sheetId)).orderBy(asc(blocks.order));
+  const blockList: Block[] = rows
+    .map((r) => rowToBlock(r.id, r.type, r.order, r.data))
+    .filter((b): b is Block => b !== null);
+  const updatedAt = sheet.updatedAt instanceof Date ? sheet.updatedAt : new Date(sheet.updatedAt);
+  return { id: sheet.id, title: sheet.title.trim().length > 0 ? sheet.title : TITLE, updatedAt, blocks: blockList };
+}
+
 /** Read the skill sheet from the DB, seeding from GitHub on first access. */
 export async function getSkillSheet(): Promise<SkillSheet> {
   const db = getDb();
