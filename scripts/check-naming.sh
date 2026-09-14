@@ -44,6 +44,9 @@ is_exempt() {
     material/*) return 0 ;;
     .github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE*) return 0 ;;
     patches/*) return 0 ;;
+    # 拡張子つき URL を App Router で表すにはディレクトリ名にドットが要る。
+    # `export-xlsx` にすると `/api/sheet/export-xlsx` という別エンドポイントになるため免除。
+    app/api/sheet/export.xlsx/*) return 0 ;;
   esac
   return 1
 }

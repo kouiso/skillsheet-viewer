@@ -104,24 +104,25 @@ interface BlockStyle {
   styles: Partial<ExcelJS.Style>[][];
 }
 
-// テンプレ行10-12（書式ドナー）のセル書式と行高を取り出す
-function captureBlockStyle(ws: ExcelJS.Worksheet): BlockStyle {
-  const heights = [0, 1, 2].map((o) => ws.getRow(FIRST_ROW + o).height ?? 19.5);
+// 書式ドナーは2本ある。テンプレ行10-12 = ヘッダ直下の先頭ブロック専用
+// （上辺が表の外枠＝double 線などを含む）、行13-15 = 2個目以降の定常ブロック用。
+// 先頭ブロックの書式を全ブロックへ複写すると、ブロック間に本来ない上辺線や
+// 内側罫線の色違い（黒 hair が残る）が出るので分ける。
+const DONOR_FIRST = FIRST_ROW; // 10
+const DONOR_STEADY = FIRST_ROW + BLOCK_ROWS; // 13
+
+function captureBlockStyle(ws: ExcelJS.Worksheet, baseRow: number): BlockStyle {
+  const heights = [0, 1, 2].map((o) => ws.getRow(baseRow + o).height ?? 19.5);
   const styles = [0, 1, 2].map((o) =>
-    Array.from({ length: COLS }, (_, c) => clone(ws.getCell(FIRST_ROW + o, c + 1).style)),
+    Array.from({ length: COLS }, (_, c) => clone(ws.getCell(baseRow + o, c + 1).style)),
   );
   return { heights, styles };
 }
 
-// ブロック境界の罫線（旧スプシの実測値）。テンプレのブロックは「ヘッダ直下の
-// 先頭ブロック」しか持たないため、ブロック間の区切り線はここで引き直す。
-//   - 各ブロック最終行の下端: A〜AP・AT〜BX を細線（濃緑）。AQ〜AS は次ブロック
-//     の上端が担うので下端には引かない
-//   - 最終ブロックの下端: 表の外枠として B〜BX を中線（黒）にする（A は細線のまま）
-//   - 2 個目以降の先頭行 AQ〜AS の上端: テンプレ由来の double（濃緑）を細線（黒）へ
-const BORDER_SEP: ExcelJS.Border = { style: 'thin', color: { argb: 'FF003300' } };
-const BORDER_ROLE_TOP: ExcelJS.Border = { style: 'thin', color: { argb: 'FF000000' } };
+// 表の最終行下端だけはドナー（区切り線 = 細線・濃緑）と違い、外枠として中線（黒）を
+// 引く。A 列だけは旧スプシの実測どおり細線のまま残す。
 const BORDER_TABLE_END: ExcelJS.Border = { style: 'medium', color: { argb: 'FF000000' } };
+const BORDER_ROLE_TOP: ExcelJS.Border = { style: 'thin', color: { argb: 'FF000000' } };
 
 function writeBlock(
   ws: ExcelJS.Worksheet,
@@ -141,19 +142,23 @@ function writeBlock(
   });
   // 罫線の修正は mergeCells より前に行う。結合後は被結合セルの style が
   // 左上セルへ委譲されるため、個別の辺に罫線を残せなくなる。
-  const lastRow = r + BLOCK_ROWS - 1;
-  for (let c = 1; c <= COLS; c++) {
-    const cell = ws.getCell(lastRow, c);
-    if (pos.last) {
-      cell.border = { ...cell.border, bottom: c === COL.NO ? BORDER_SEP : BORDER_TABLE_END };
-    } else if (c < COL.ROLE_SCALE || c > COL.ROLE_SCALE + 2) {
-      cell.border = { ...cell.border, bottom: BORDER_SEP };
-    }
-  }
   if (!pos.first) {
-    for (let c = COL.ROLE_SCALE; c <= COL.ROLE_SCALE + 2; c++) {
+    // 定常ドナーは旧スプシ最多パターン（ブロック22）の複写だが、先頭行の3箇所だけ
+    // 多数派とずれているので多数派側に揃える:
+    //   G列（期間終了セル先頭）の上辺は無し、AS-AT 境の上辺2セルは黒の細線
+    const g = ws.getCell(r, COL.PERIOD_END);
+    g.border = { ...g.border, top: undefined };
+    for (const c of [COL.ROLE_SCALE + 1, COL.ROLE_SCALE + 2]) {
       const cell = ws.getCell(r, c);
       cell.border = { ...cell.border, top: BORDER_ROLE_TOP };
+    }
+  }
+  if (pos.last) {
+    const lastRow = r + BLOCK_ROWS - 1;
+    for (let c = 1; c <= COLS; c++) {
+      if (c === COL.NO) continue;
+      const cell = ws.getCell(lastRow, c);
+      cell.border = { ...cell.border, bottom: BORDER_TABLE_END };
     }
   }
   // mergeCells ではなく mergeCellsWithoutStyle を使う。前者は被結合セルの style を
@@ -225,9 +230,10 @@ export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(toArrayBuffer(inflateSync(Buffer.from(XLSX_TEMPLATE_B64, 'base64'))));
   const ws = wb.worksheets[0];
-  const style = captureBlockStyle(ws);
+  const styleFirst = captureBlockStyle(ws, DONOR_FIRST);
+  const styleSteady = captureBlockStyle(ws, DONOR_STEADY);
 
-  // テンプレのブロック結合（行10-12）を一度外し、全ブロックを同じ手順で書き直す
+  // テンプレのブロック結合（行10以降のドナー2本分）を一度外し、全ブロックを同じ手順で書き直す
   for (const key of mergeKeys(ws)) {
     const top = Number(key.match(/\d+/)?.[0] ?? 0);
     if (top >= FIRST_ROW) ws.unMergeCells(key);
@@ -238,6 +244,7 @@ export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
 
   items.forEach((it, idx) => {
     const r = FIRST_ROW + idx * BLOCK_ROWS;
+    const style = idx === 0 ? styleFirst : styleSteady;
     const desc = composeDesc(it);
     const heights = [...style.heights];
     heights[2] = Math.max(DESC_MIN_HEIGHT, Math.ceil(lineCount(desc) * HEIGHT_PER_LINE));
@@ -254,6 +261,10 @@ export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
       if (v) ws.getCell(addr).value = v;
     }
   }
+
+  // 元スプシの Print_Area（A1:BX<最終行>）に倣う。テンプレ側の definedName は
+  // 行を切り詰めた時点で範囲がずれるので、実際のブロック数で引き直す。
+  ws.pageSetup.printArea = `A1:BX${FIRST_ROW - 1 + items.length * BLOCK_ROWS}`;
 
   const now = new Date();
   ws.name = `latest-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
