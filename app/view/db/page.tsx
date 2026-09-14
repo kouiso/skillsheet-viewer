@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
-import { configErrorNoticeOrRethrow } from '@/components/view-error';
+import { configErrorNoticeOrRethrow } from '@/component/view-error';
 import { currentMonthKey } from '@/db/derived-display';
 import { createServerCaller } from '@/server/trpc/caller';
 import { requireViewer } from '@/server/viewer-gate';

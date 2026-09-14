@@ -13,7 +13,7 @@ vi.mock('next/server', () => ({ connection: async () => {} }));
 vi.mock('@/server/viewer-gate', () => ({ requireViewer: mocks.requireViewer }));
 vi.mock('@/server/trpc/caller', () => ({ createServerCaller: mocks.createServerCaller }));
 // 一覧本体はクライアント側で別途テスト済み。ここは page が「呼ぶ / 呼ばない」だけを見る。
-vi.mock('./db-sheets-list-client', () => ({ default: () => null }));
+vi.mock('./db-sheet-list-client', () => ({ default: () => null }));
 
 import SheetsListPage from './page';
 

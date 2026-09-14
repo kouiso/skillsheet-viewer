@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectItem, ProjectTech } from './blocks';
+import type { ProjectItem, ProjectTech } from './block';
 import {
   deriveSkillExperienceMonths,
   normalizeTechnologyCandidates,

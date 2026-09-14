@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
-import type { ViewKey } from '@/components/viewer-topbar';
+import type { ViewKey } from '@/component/viewer-topbar';
 
 import { toSecondsBucket, type ViewToggleKey } from './event';
 

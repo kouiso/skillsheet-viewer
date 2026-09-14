@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@/component/ui/button';
 
 // 存在しないシートID/パスや未定義ルートへのアクセス時に表示される。
 // app/layout.tsx にネストされるため ThemeModeProvider 配下でテーマに追従する。

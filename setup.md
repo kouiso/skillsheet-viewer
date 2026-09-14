@@ -155,14 +155,14 @@ pnpm dev
 
 ### オーナーアカウントのブートストラップ手順
 
-単一オーナー運用のため、UI からのサインアップは無効です（`emailAndPassword.disableSignUp: true`）。最初のオーナーアカウントは `scripts/bootstrap-owner.ts` で直接作成します。このスクリプトは Better Auth 自身の `/sign-up/email` と同じ手順（`auth.$context` → `ctx.password.hash()` でハッシュ生成 → `user` 行を作成 → `provider_id = 'credential'` の `account` 行を作成）を踏むため、パスワードハッシュの形式や `user.id` の生成規則を手で合わせる必要はありません。
+単一オーナー運用のため、UI からのサインアップは無効です（`emailAndPassword.disableSignUp: true`）。最初のオーナーアカウントは `script/bootstrap-owner.ts` で直接作成します。このスクリプトは Better Auth 自身の `/sign-up/email` と同じ手順（`auth.$context` → `ctx.password.hash()` でハッシュ生成 → `user` 行を作成 → `provider_id = 'credential'` の `account` 行を作成）を踏むため、パスワードハッシュの形式や `user.id` の生成規則を手で合わせる必要はありません。
 
 1. `.env` に `DATABASE_URL` / `BETTER_AUTH_SECRET` を設定済みであること（`SKILLSHEET_OWNER_ID` はこの時点ではまだ値が無くて構いません）
 2. マイグレーションを適用し、`user` / `account` テーブルを作成しておく（未実施なら `pnpm db:migrate`）
 3. オーナーアカウントを作成する（メールアドレスは任意の値に置き換えてください）
 
    ```bash
-   pnpm exec tsx scripts/bootstrap-owner.ts --email='owner@example.com'
+   pnpm exec tsx script/bootstrap-owner.ts --email='owner@example.com'
    ```
 
    `--password` を省略して対話端末（TTY）から実行すると、画面には表示されない対話プロンプトでパスワードの入力を求められます（8 文字以上を推奨）。シェル履歴や `ps` のプロセス引数一覧に平文で残らないため、この方法を推奨します。

@@ -1,79 +1,26 @@
 # ONBOARDING
 
-チームにジョインしてアプリケーションを立ち上げるところまで
+チームにジョインしてアプリケーションを立ち上げるところまで。
+手順の本体は各ドキュメント側に持たせ、ここは順序と入口だけを置く。
 
 ## prerequisite
 
-セットアップとその後の開発に必要な依存をインストールします。
-
 - Machine: macOS or Windows WSL2
-- Node.js: v22.x
-- パッケージマネージャ: pnpm
-- ランタイム管理: [mise](https://mise.jdx.dev/)（Node 22.x を固定）
+- Node.js: v22.x（[mise](https://mise.jdx.dev/) が `mise.toml` で固定）
+- パッケージマネージャ: pnpm（`corepack enable` で有効化）
 
-<details>
-<summary>mise を使った Node バージョン管理</summary>
+## 手順
 
-```bash
-# mise をインストール後（リンク先参照）、プロジェクトディレクトリ直下で実行
-mise install
-# プロジェクトの mise.toml に従って Node 22.x が入る
-
-# pnpm が未導入なら有効化
-corepack enable
-```
-
-</details>
-
-## 初回設定
-
-### 環境変数
-
-このアプリはスキルシートの正本を Neon Postgres に保存します。ローカル開発では以下のサーバー専用の値が必要です。`.env`（コミット禁止）または実行環境側に設定します。
-
-- `DATABASE_URL` — Neon Postgres 接続文字列
-- `VIEWER_CODE` — 閲覧コード（HMAC 閲覧用セッションの発行に使用）
-- Better Auth 用のシークレット（編集者ログインを使う場合）
-
-値が不明な場合はチームに確認してください。
-
-## セットアップ手順
-
-1. **依存パッケージのインストール**
-
-   ```bash
-   pnpm install
-   ```
-
-2. **DB マイグレーションの適用**
-
-   ```bash
-   pnpm db:migrate
-   ```
-
-3. **開発サーバーの起動**
-
-   ```bash
-   pnpm dev
-   ```
-
-   - 開発サーバーが起動します
-   - デフォルトでは `http://localhost:3000` でアクセス可能
-
-4. **本番ビルド**
-
-   ```bash
-   pnpm build
-   ```
-
-   - Next.js の本番ビルドを実行します
-
-## テスト・型チェック
-
-```bash
-pnpm type-check            # 全パッケージ型チェック
-pnpm test     # 全テスト（vitest）
-```
+1. 依存インストールと環境変数: [setup.md](../setup.md) の「セットアップ手順」
+   - このアプリはスキルシートの正本を Neon Postgres に保存する。`.env` はコミット禁止で、
+     値が不明な場合はチームに確認する
+   - 秘密値の共有は SOPS + age（setup.md 内の該当節を参照）
+2. 起動確認: [README](../README.md) の「クイックスタート」
+   - `pnpm dev` で `http://localhost:3000` が立ち上がる
+3. 開発に入る前に: [dev-guide.md](./dev-guide.md)
+   - コマンド一覧・プロジェクト構成・コーディング規約（命名規約は `script/check-naming.sh` が機械検査）
+4. 実装の中身を知るには: [01-setup-and-routing.md](./01-setup-and-routing.md) から
+   [05-toc-and-deploy.md](./05-toc-and-deploy.md) まで順に読む
 
 ## 技術スタック
 

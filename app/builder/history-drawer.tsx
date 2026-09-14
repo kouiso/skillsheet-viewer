@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { ProjectBlockData } from '@/db/blocks';
+import type { ProjectBlockData } from '@/db/block';
 
 import { formatHistoryTime, HISTORY_LIMIT, type HistoryEntry } from './history';
 

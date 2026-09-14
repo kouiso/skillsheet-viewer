@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectBlockData } from '@/db/blocks';
+import type { ProjectBlockData } from '@/db/block';
 
 import { ProjectEditor } from './project-editor';
 

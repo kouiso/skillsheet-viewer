@@ -17,14 +17,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "biome check . --error-on-warnings && node scripts/check-jsdom-pdf-assertions.mjs && node scripts/check-telemetry-imports.mjs && ./scripts/check-naming.sh",
+    "lint": "biome check . --error-on-warnings && node script/check-jsdom-pdf-assertion.mjs && node script/check-telemetry-import.mjs && ./script/check-naming.sh",
     "format": "biome format --write .",
     "type-check": "tsc --noEmit",
     "test": "vitest run && vitest run --config vitest.config.node.ts && vitest run --config vitest.config.pdf.ts",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:playwright": "NODE_OPTIONS=--conditions=react-server playwright test",
-    "test:e2e": "pnpm build && node scripts/headless-e2e.mjs",
+    "test:e2e": "pnpm build && node script/headless-e2e.mjs",
     "test:e2e:playwright": "pnpm build && pnpm test:playwright",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
@@ -127,7 +127,7 @@
       "browserslist": "^4.28.7"
     },
     "patchedDependencies": {
-      "@react-pdf/textkit@6.3.0": "patches/@react-pdf__textkit@6.3.0.patch"
+      "@react-pdf/textkit@6.3.0": "patch/@react-pdf__textkit@6.3.0.patch"
     }
   }
 }

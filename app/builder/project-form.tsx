@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@/db/blocks';
+import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@/db/block';
 import {
   durationFromRange,
   formatPeriodRange,
@@ -11,7 +11,7 @@ import {
   parsePeriodToRange,
 } from '@/db/process';
 
-import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constants';
+import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constant';
 import { GrowTextarea } from './grow-textarea';
 import { MonthDatePicker } from './month-date-picker';
 import { ScopePicker } from './scope-picker';
