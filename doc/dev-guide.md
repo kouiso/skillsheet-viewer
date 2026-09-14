@@ -1,6 +1,6 @@
 # 開発ガイド
 
-すべてのコマンドはリポジトリルートで実行します（pnpm workspaces モノレポ）。
+すべてのコマンドはリポジトリルートで実行します。
 
 ## コマンド
 
@@ -20,10 +20,10 @@
   | 設定 | 環境 | 対象 |
   | --- | --- | --- |
   | `vitest.config.ts` | jsdom | 画面（`app/` `src/` の `*.test.ts(x)`） |
-  | `vitest.config.node.ts` | node | `src/db/**` と `scripts/**` |
+  | `vitest.config.node.ts` | node | `src/db/**` と `script/**` |
   | `vitest.config.pdf.ts` | node | `*.node.test.tsx`（PDF の実バイト描画） |
 
-  `src/db` と `scripts` はサーバ／CLI で動くコードなので、jsdom に混ぜない。混ぜると
+  `src/db` と `script` はサーバ／CLI で動くコードなので、jsdom に混ぜない。混ぜると
   `window` / `document` が生えたうえブラウザ用 setup まで読み込まれ、本番と違う分岐を
   通っても緑のままになる。
 - `pnpm test:watch` - 監視モードでテスト実行
@@ -33,7 +33,7 @@
 
 - `pnpm lint` - Biome でコードをチェック（`biome check`）
 - `pnpm format` - Biome でフォーマット（`biome format --write`）
-- `pnpm type-check` - TypeScript 型チェック（全パッケージ）
+- `pnpm type-check` - TypeScript 型チェック
 
 ### DB（Drizzle）
 
@@ -48,18 +48,18 @@
 .
 ├── app/                 # ルーティング（App Router: page.tsx / layout.tsx / route.ts）
 ├── src/
-│   ├── components/      # コンポーネント（PDF 含む）
+│   ├── component/       # コンポーネント（PDF 含む）
 │   │   └── ui/          # shadcn/ui ベースの UI 部品
 │   ├── context/         # React Context
 │   ├── db/              # Drizzle ORM + Neon（スキルシートの正本）
-│   ├── hooks/           # カスタムフック
+│   ├── hook/            # カスタムフック
 │   ├── lib/             # 認証クライアント・tRPC クライアントなどの共通設定
 │   ├── server/          # サーバー専用ロジック（認証ゲート・セッション・tRPC router）
 │   │   └── trpc/        # tRPC: context / init / router / server caller
 │   └── util/            # ユーティリティ関数
 ├── drizzle/             # マイグレーション（drizzle.config.ts はルート）
 ├── e2e/                 # Playwright の E2E
-├── scripts/             # CLI スクリプトと CI 用チェッカー
+├── script/              # CLI スクリプトと CI 用チェッカー
 └── public/              # 静的ファイル（フォント等）
 ```
 
@@ -76,7 +76,10 @@
 - 例外はツール・フレームワークが名前を規定しているものだけ。現時点では
   Next.js の動的ルート（`[id]`）、drizzle の生成物、`README.md` 等の全大文字慣習、
   ドットファイル、配布フォント・素材の原名
-- **この規約は `scripts/check-naming.sh` が機械的に検査する。**
+- `app/` 配下では Next.js の予約ファイル名（`page` `layout` `template` `loading`
+  `error` `not-found` 等）をデータモジュールに使わない。default export が無いまま
+  セグメントファイルとして読み込まれ、build が落ちる
+- **この規約は `script/check-naming.sh` が機械的に検査する。**
   `task naming` でローカル確認でき、CI（`.github/workflows/ci.yml` の naming ジョブ）でも必ず走る。
   例外を増やすときは同スクリプトの `is_exempt()` に理由付きで追加する（無言で足さない）
 - サーバー専用モジュール（`src/server` や `src/db`）は Client Component から import しない
@@ -95,7 +98,7 @@
 ### スタイリング
 
 - Tailwind CSS v4 + shadcn/ui（Radix UI）を使用
-- 共通 UI 部品は `src/components/ui` に集約
+- 共通 UI 部品は `src/component/ui` に集約
 
 ## 監視・計測（Sentry / PostHog）
 
@@ -103,7 +106,7 @@
 
 - `@sentry/*` / `posthog-js` をアプリコードから直接 import しない。必ず
   `src/lib/observability/capture.ts`（`captureError` / `captureWarning` / `track`）を経由する
-  （`pnpm lint` が `scripts/check-telemetry-imports.mjs` で機械的に強制する）。
+  （`pnpm lint` が `script/check-telemetry-import.mjs` で機械的に強制する）。
 - 送信するイベントのプロパティに自由記述の `string` を書かない。enum・数値・真偽値のみ
   （`src/lib/observability/event.ts` の閉じた判別共用体を参照。シート名・ファイル名が
   「書けてしまう」余地を型から消すための制約）。

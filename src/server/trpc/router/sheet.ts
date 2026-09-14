@@ -15,9 +15,9 @@ import {
   getCachedDbSheets,
   toStaleSheet,
   toStaleSheetList,
-} from '@/server/sheets-cache';
+} from '@/server/sheet-cache';
 
-import { getTemplate } from '../../../../app/builder/templates';
+import { getTemplate } from '../../../../app/builder/sheet-template';
 import { editorProcedure, router, viewerProcedure } from '../init';
 import {
   builderStateInputSchema,

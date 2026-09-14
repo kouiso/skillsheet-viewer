@@ -48,7 +48,7 @@ body:
 
         **該当ファイルパス:**
         - `src/pages/compare.tsx` (新規作成)
-        - `src/components/CompareTable.tsx` (新規作成)
+        - `src/component/CompareTable.tsx` (新規作成)
 
         **画面URL:**
         - 参考サイト: https://example.com/compare

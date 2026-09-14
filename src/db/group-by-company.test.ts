@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { CompanyInfo, ProjectItem } from './blocks';
+import type { CompanyInfo, ProjectItem } from './block';
 import { companyDisplayName, groupProjectsByCompany, UNKNOWN_COMPANY_NAME } from './group-by-company';
 
 const EMPTY_TECH = { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] };

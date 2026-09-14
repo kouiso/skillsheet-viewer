@@ -21,7 +21,7 @@ import type { ObservabilityEvent } from '@/lib/observability/event';
 // 初期化が終わるまでの短い間（ダイナミック import が解決するまでの数msから数十ms）に
 // 発生した capture/track はキューに積み、初期化完了後にまとめて送る。ここで単純に
 // 「初期化完了後に registerObservabilityHandle する」実装にすると、ハイドレーション中の
-// ごく初期の例外（例: app/providers.tsx の同期 throw）を取りこぼす窓ができてしまうため、
+// ごく初期の例外（例: app/provider.tsx の同期 throw）を取りこぼす窓ができてしまうため、
 // ハンドル自体は同期的に登録し、送信先が無ければキューへ積む方式にした。
 //
 // 動的 import が失敗した場合（デプロイ直後に古い HTML が消えた chunk を参照する等）は
@@ -59,12 +59,12 @@ registerObservabilityHandle({
 
 async function initSentry(): Promise<void> {
   if (!isSentryEnabled()) return;
-  // integrations の組み立て（sentry-options.client.ts）も Sentry 型に依存するため、
+  // integrations の組み立て（sentry-option.client.ts）も Sentry 型に依存するため、
   // SDK 本体と合わせて動的 import する。
   const [Sentry, { SHARED_SENTRY_OPTIONS }, { buildClientIntegrations }] = await Promise.all([
     import('@sentry/nextjs'),
-    import('@/lib/observability/sentry-options'),
-    import('@/lib/observability/sentry-options.client'),
+    import('@/lib/observability/sentry-option'),
+    import('@/lib/observability/sentry-option.client'),
   ]);
   Sentry.init({
     dsn: getSentryDsn(),

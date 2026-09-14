@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ProjectBlockData, ProjectItem } from '@/db/blocks';
+import type { ProjectBlockData, ProjectItem } from '@/db/block';
 
 import {
   describeChange,

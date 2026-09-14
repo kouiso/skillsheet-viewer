@@ -25,12 +25,12 @@ tasks:
   naming:
     desc: "ファイル名・ディレクトリ名の規約チェック（英語・小文字・単数形・ケバブケース）"
     cmds:
-      - ./scripts/check-naming.sh
+      - ./script/check-naming.sh
 
   healthcheck:
     desc: "動作確認（命名規約・型チェック・テスト・ビルド）"
     cmds:
-      - ./scripts/check-naming.sh
+      - ./script/check-naming.sh
       - pnpm type-check
       - pnpm test
       - pnpm build

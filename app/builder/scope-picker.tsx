@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { SCOPE_OPTIONS, SCOPE_SEPARATOR } from './editor-constants';
+import { SCOPE_OPTIONS, SCOPE_SEPARATOR } from './editor-constant';
 
 interface ScopePickerProps {
   /** 保存形式のまま（" / " 連結の1本の文字列）受け取る。 */

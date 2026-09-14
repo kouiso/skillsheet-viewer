@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Block } from '@/db/blocks';
+import type { Block } from '@/db/block';
 
 import SheetViewClient from './sheet-view-client';
 
@@ -10,8 +10,8 @@ const toastSuccess = vi.hoisted(() => vi.fn());
 const toastError = vi.hoisted(() => vi.fn());
 const toBlob = vi.hoisted(() => vi.fn(async () => new Blob(['pdf'], { type: 'application/pdf' })));
 // フォント取得の失敗が永久化しないよう、失敗のたびに Font.clear() で登録をリセットする
-// （src/components/pdf/fonts.ts の resetPdfFontsAfterFailure）。handleDownloadPdf の catch が
-// 動的 import する src/components/pdf/fonts.ts も内部で `import { Font } from '@react-pdf/renderer'`
+// （src/component/pdf/font.ts の resetPdfFontsAfterFailure）。handleDownloadPdf の catch が
+// 動的 import する src/component/pdf/font.ts も内部で `import { Font } from '@react-pdf/renderer'`
 // しているため、このモックに Font を足さないと「モックに無い export」でテストが落ちる。
 // 後始末は「アプリが登録した family だけを消す」形。標準フォントを巻き込むと
 // 2 回目の生成が Helvetica 未登録で落ちるため（font-reset.node.test.tsx 参照）。
@@ -24,7 +24,7 @@ vi.mock('sonner', () => ({
 // @react-pdf/renderer は jsdom で動かない上に読み込みが重いので、
 // handleDownloadPdf の分岐（成功/失敗）だけを制御できるモックに置き換える。
 vi.mock('@react-pdf/renderer', () => ({ pdf: () => ({ toBlob }), Font: { fontFamilies, register: vi.fn() } }));
-vi.mock('@/components/pdf-export', () => ({
+vi.mock('@/component/pdf-export', () => ({
   createSkillSheetPdf: async () => null,
   // 後始末は pdf-export から同じ import で受け取る（catch 内で再度 await しないため）。
   resetPdfFontsAfterFailure: () => {
@@ -34,16 +34,16 @@ vi.mock('@/components/pdf-export', () => ({
 
 // 本体（ビューア）の描画は本テストの対象外。トップバーは
 // 「どちらが出たか」と「押したら onDownloadPdf が走るか」だけ見えれば十分。
-vi.mock('@/components/skill-sheet-viewer', () => ({ default: () => <div data-testid="viewer" /> }));
-vi.mock('@/components/header', () => ({
+vi.mock('@/component/skill-sheet-viewer', () => ({ default: () => <div data-testid="viewer" /> }));
+vi.mock('@/component/header', () => ({
   default: ({ onDownloadPdf, pdfLoading }: { onDownloadPdf?: () => void; pdfLoading?: boolean }) => (
     <button type="button" data-testid="legacy-header-pdf" data-loading={String(pdfLoading)} onClick={onDownloadPdf}>
       PDF
     </button>
   ),
 }));
-vi.mock('@/components/viewer-topbar', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/components/viewer-topbar')>();
+vi.mock('@/component/viewer-topbar', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/component/viewer-topbar')>();
   return {
     ...actual,
     ViewerTopbar: ({ onDownloadPdf, pdfLoading }: { onDownloadPdf?: () => void; pdfLoading?: boolean }) => (

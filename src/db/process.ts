@@ -6,7 +6,7 @@
  * とビューの集計軸（ここ）を分離するため、この変換結果は DB に保存しない。
  */
 
-import type { ProjectTech } from './blocks';
+import type { ProjectTech } from './block';
 
 /** 工程の俯瞰・ステッパーで使う表示専用の7段モデル。builderの選択肢とは語彙が異なる。 */
 export const PROCESS_LABELS = [

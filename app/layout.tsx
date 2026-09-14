@@ -3,7 +3,7 @@ import { IBM_Plex_Mono, IBM_Plex_Sans_JP } from 'next/font/google';
 
 import { assertServerEnv } from '@/lib/env';
 
-import { Providers } from './providers';
+import { Providers } from './provider';
 import './globals.css';
 import { THEME_INIT_SCRIPT } from '@/lib/theme-init-script';
 

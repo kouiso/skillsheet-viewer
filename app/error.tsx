@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-import { Button } from '@/components/ui/button';
+import { Button } from '@/component/ui/button';
 import { captureError } from '@/lib/observability/capture';
 
 // 動的ルート（/view/[path] 等）のサーバー側システムエラーを受け取るセグメント境界。

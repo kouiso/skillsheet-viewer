@@ -2,7 +2,7 @@ import type { ObservabilityEvent } from './event';
 
 /**
  * アプリコードから直接 `@sentry/*` / `posthog-js` を呼ばせないための唯一の窓口。
- * `scripts/check-telemetry-imports.mjs` がこのファイル以外からの直接 import を lint で禁止する。
+ * `script/check-telemetry-import.mjs` がこのファイル以外からの直接 import を lint で禁止する。
  *
  * SDK ハンドルはモジュールスコープの変数ではなく `globalThis` に置く。Next はクライアント
  * バンドルを複数レイヤ（RSC / route handler / client）に分けて処理するため、モジュール
