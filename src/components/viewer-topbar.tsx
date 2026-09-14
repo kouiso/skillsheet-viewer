@@ -148,7 +148,7 @@ export function ViewerTopbar({
               aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
               className="min-h-11 min-w-11"
             >
-              {excelLoading ? <Loader2 className="animate-spin" /> : <Sheet />}
+              {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
             </Button>
           </TooltipTrigger>
           <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>

@@ -2,7 +2,7 @@
   "date": "2026-09-14",
   "path": "/view/db/18a79e66-75e2-47e8-922e-d61342bb5233",
   "xlsx": {
-    "bytes": 299333,
+    "bytes": 63299,
     "sheet": "latest-2026-09",
     "rows": 108,
     "cols": 76,
@@ -10,8 +10,8 @@
     "projects": 33,
     "profile": {
       "D1": "I・K",
-      "D2": "28 歳",
-      "AU1": "株式会社 RITMO"
+      "D2": "非公開",
+      "AU1": "非公開"
     },
     "first": {
       "no": 1,

@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Not Found' }, { status: 404 });
     }
     // 失敗の内訳（DB不通・テンプレ破損等）は呼び出し元へ返さずサーバログだけに残す
-    console.error('GET /api/sheet/export.xlsx failed', err);
+    console.error('GET /api/sheet/export-xlsx failed', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
