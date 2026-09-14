@@ -134,6 +134,40 @@ describe('ProjectCard', () => {
     expect(screen.getByText('コラボレーションツール')).toBeInTheDocument();
   });
 
+  describe('稼働月数（ビュートグル「稼働月数」に従う）', () => {
+    it('期間に「（Nヶ月）」を添える（既定 ON）', () => {
+      render(<ProjectCard item={buildItem({ period: '2025.01 — 2025.09' })} no={1} activeTech={[]} tech={[]} />);
+      expect(screen.getByText('2025.01〜2025.09（9ヶ月）')).toBeInTheDocument();
+    });
+
+    it('終端が「現在」なら「（継続中）」を添える', () => {
+      render(<ProjectCard item={buildItem({ period: '2025.11 — 現在' })} no={1} activeTech={[]} tech={[]} />);
+      expect(screen.getByText('2025.11〜現在（継続中）')).toBeInTheDocument();
+    });
+
+    it('showDuration=false なら期間に月数を添えない', () => {
+      render(
+        <ProjectCard
+          item={buildItem({ period: '2025.01 — 2025.09' })}
+          no={1}
+          activeTech={[]}
+          tech={[]}
+          showDuration={false}
+        />,
+      );
+      // 期間の表示は期間バッジと「期間」行の 2 箇所にある（どちらにも月数を付けない）。
+      expect(screen.getAllByText('2025.01〜2025.09').length).toBeGreaterThanOrEqual(2);
+      expect(screen.queryByText(/9ヶ月/)).not.toBeInTheDocument();
+    });
+
+    it('月まで書かれていない期間は月数を添えない（書いていない精度を足さない）', () => {
+      render(<ProjectCard item={buildItem({ period: '2020 — 2021' })} no={1} activeTech={[]} tech={[]} />);
+      // 期間の表示は期間バッジと「期間」行の 2 箇所にある。
+      expect(screen.getAllByText('2020〜2021').length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText(/1年1ヶ月/)).not.toBeInTheDocument();
+    });
+  });
+
   it('クエリ一致の技術チップは activeTech が空でも強調する', () => {
     render(
       <ProjectCard

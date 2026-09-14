@@ -16,7 +16,7 @@ import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMeta
 import { resolveCompanyPeriod, resolveDisplayedSkillExperience, resolveDisplayedStats } from '@/db/derived-display';
 import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
 import {
-  deriveDuration,
+  displayDuration,
   flattenTech,
   formatMonthToken,
   formatPeriodDisplay,
@@ -39,8 +39,11 @@ import {
   PRINT_YEAR_VISIBLE_CATEGORIES,
 } from './print-token';
 
-/** 画面側のビュートグルと同じキー。PDF もこの ON/OFF に従う。 */
-export type PrintViewKey = 'skills' | 'process' | 'projects' | 'timeline';
+/**
+ * 画面側のビュートグル（viewer-topbar.tsx の ViewKey）と同じキー。PDF もこの ON/OFF に従う。
+ * 'duration' はセクションではなく稼働月数の表示項目を制御する（durationText が空になる）。
+ */
+export type PrintViewKey = 'skills' | 'process' | 'projects' | 'timeline' | 'duration';
 
 /** チップ 1 個。塗り（その分類の主役）と枠線（それ以外）の 2 種だけ。 */
 export interface PrintChip {
@@ -93,7 +96,11 @@ export interface PrintProject {
    * `periodText` をそのまま入れると 11pt で約 94pt になって列から溢れる（実測）。
    */
   compactPeriodText: string;
-  /** 例: 9ヶ月。導出できなければ空文字。 */
+  /**
+   * 例: 9ヶ月。導出できなければ空文字。
+   * ビュートグル「稼働月数」（'duration'）が OFF のときは組み立て時に空文字になる
+   * （詳細版ヘッダー・簡約版メタ行・継続見出しのどれも空文字なら描画しない）。
+   */
   durationText: string;
   team: string;
   /** 詳細版カードのメタ表。役割・技術領域・チーム・担当工程のうち、値があるものだけ。 */
@@ -209,7 +216,7 @@ export interface PrintViewModel {
   skillEmphasisMode: 'featured' | 'level';
 }
 
-const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline'];
+const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline', 'duration'];
 
 // --- 小さなヘルパー -------------------------------------------------------
 
@@ -493,6 +500,7 @@ function buildProject(
   company: CompanyInfo | undefined,
   level: DetailLevel,
   index: number,
+  showDuration: boolean,
 ): PrintProject {
   const area = resolveProjectArea(item.scope, item.tech);
   const processText = formatProcessForPrint(item.process ?? []);
@@ -523,7 +531,9 @@ function buildProject(
     companyLabel,
     periodText: formatPeriodDisplay(item.period),
     compactPeriodText: compactPeriod(item.period),
-    durationText: trimmed(item.duration) || deriveDuration(item.period),
+    // 画面の案件カード（project-card.tsx）と同じ判定（displayDuration: 手入力 duration 優先、
+    // 月精度の無い期間では出さない）。ビュートグル OFF なら空文字 — 描画側は空文字を出さない。
+    durationText: showDuration ? trimmed(displayDuration(item)) : '',
     team: trimmed(item.team),
     metaRows,
     techGroups,
@@ -570,6 +580,8 @@ function buildCompany(
   isLatest: boolean,
   /** この会社の先頭案件に振る通し番号。会社をまたいで連番になるよう呼び出し側が積み上げる。 */
   startIndex: number,
+  /** 稼働月数（durationText）を出すか（ビュートグル 'duration'）。 */
+  showDuration: boolean,
 ): PrintCompany {
   const roles = dedupeRoles(...items.map((i) => i.role));
   const sizes = items.flatMap((i) => parseTeamSizes(i.team));
@@ -588,7 +600,9 @@ function buildCompany(
     roles,
     teamRange,
     isLatest,
-    projects: items.map((item, i) => buildProject(item, company, levelById.get(item.id) ?? 'compact', startIndex + i)),
+    projects: items.map((item, i) =>
+      buildProject(item, company, levelById.get(item.id) ?? 'compact', startIndex + i, showDuration),
+    ),
   };
 }
 
@@ -718,7 +732,15 @@ export function buildPrintViewModel(
   // 案件の通し番号は会社をまたいで連番にする（会社ごとに 1 に戻さない）。
   let nextProjectIndex = 1;
   const companies = groups.map((g, index) => {
-    const company = buildCompany(g.company, g.companyId, g.items, levelById, index === latestIndex, nextProjectIndex);
+    const company = buildCompany(
+      g.company,
+      g.companyId,
+      g.items,
+      levelById,
+      index === latestIndex,
+      nextProjectIndex,
+      on('duration'),
+    );
     nextProjectIndex += company.projects.length;
     return company;
   });

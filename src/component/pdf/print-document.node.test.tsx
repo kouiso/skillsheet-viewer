@@ -227,3 +227,62 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     expect(normalized).toContain('塗り=主に使う技術／枠線=その他。カッコ内は経験年数。');
   }, 60_000);
 });
+
+describe('印刷経路: 稼働月数はビュートグル「稼働月数」に従う（#288）', () => {
+  beforeAll(() => {
+    Font.register({
+      family: PDF_FONT_FAMILY,
+      fonts: [
+        { src: REGULAR_TTF, fontWeight: 400 },
+        { src: BOLD_TTF, fontWeight: 700 },
+      ],
+    });
+    if (typeof Font.registerHyphenationCallback === 'function') {
+      Font.registerHyphenationCallback(splitForHyphenation);
+    }
+  });
+
+  const title = PDF_QUALITY_FIXTURE_TITLE;
+  const blocks: Block[] = buildPdfQualityFixtureBlocks();
+  const ALL: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline', 'duration'];
+
+  async function renderItemTexts(views: PrintViewKey[] | undefined): Promise<string[]> {
+    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views }));
+    const pages = await extractQualityPages(buffer);
+    return pages.flatMap((page) => page.map((item) => item.text.replaceAll(/\s/g, '')));
+  }
+
+  // pdfjs のテキスト抽出は「ヶ」を別 item に切り離す（このグリフの ToUnicode 対応の都合）。
+  // そのため item 単位ではなく、空白を除いて連結した文字列で判定する。
+  const countOccurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+
+  it('ON（既定）: 詳細版ヘッダーと簡約版メタ行の両方に稼働月数が出る', async () => {
+    const on = (await renderItemTexts(ALL)).join('');
+    const off = (await renderItemTexts(ALL.filter((v) => v !== 'duration'))).join('');
+
+    // 簡約版はメタ行の「期間：Nヶ月」（fixture の「社内ツールの保守」2017.01〜2017.02）。
+    // 「期間：」は稼働月数のためだけにある節なので OFF ではゼロになる。
+    expect(on).toContain('期間：2ヶ月');
+    expect(off).not.toContain('期間：');
+
+    // 詳細版は期間バッジ直下に単独 Text で出る（fixture の V社案件 2025.11〜2026.06 → 8ヶ月）。
+    // スキルの経験年数ラベルにも「N年8ヶ月」があり得るので、ON/OFF で出現回数が 1 増える
+    // ことで「案件の稼働月数として出た」ことを確認する。
+    expect(countOccurrences(on, '8ヶ月')).toBe(countOccurrences(off, '8ヶ月') + 1);
+  }, 60_000);
+
+  it('OFF: 詳細版・簡約版のどちらにも出さない', async () => {
+    const onItems = await renderItemTexts(ALL);
+    const offItems = await renderItemTexts(ALL.filter((v) => v !== 'duration'));
+    // durationText が空になるので、簡約版メタ行の「期間：」節はまるごと消える。
+    expect(offItems.join('')).not.toContain('期間：');
+    // 詳細版の単独テキストは pdfjs で「8」「ヶ」「月」と別 item に分かれ、
+    // スキル年数ラベル「N 年 M ヶ月」と紛れる — そのため「ヶ」グリフの総数で検証し、
+    // 稼働月数を持つ案件の件数分だけ OFF で減っていることを確認する。
+    const durationCount = buildPrintViewModel(title, blocks)
+      .companies.flatMap((c) => c.projects)
+      .filter((p) => p.durationText.length > 0).length;
+    const countKahi = (xs: string[]) => xs.filter((t) => t === 'ヶ').length;
+    expect(countKahi(offItems) + durationCount).toBe(countKahi(onItems));
+  }, 60_000);
+});

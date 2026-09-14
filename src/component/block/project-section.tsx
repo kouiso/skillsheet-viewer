@@ -27,6 +27,8 @@ interface ProjectSectionProps {
   showProjects?: boolean;
   /** タイムラインセクションを表示するか（ビュートグル）。 */
   showTimeline?: boolean;
+  /** 稼働月数を表示するか（ビュートグル）。セクションの出し分けではなく表示項目の制御。 */
+  showDuration?: boolean;
 }
 
 function FadeUpSection({ children }: { children: ReactNode }) {
@@ -69,6 +71,7 @@ export function ProjectSection({
   showProcess = true,
   showProjects = true,
   showTimeline = true,
+  showDuration = true,
 }: ProjectSectionProps) {
   const [query, setQuery] = useState('');
   const [activeTech, setActiveTech] = useState<string[]>([]);
@@ -179,6 +182,7 @@ export function ProjectSection({
                 isSearching={isSearching}
                 activeTech={activeTech}
                 queryTerms={parsedQuery.terms}
+                showDuration={showDuration}
               />
             ))}
             {filtered.length === 0 && (
@@ -200,7 +204,12 @@ export function ProjectSection({
               条件に一致する案件がありません
             </p>
           ) : (
-            <Timeline items={timelineItems} companyMap={companyMap} activeTech={timelineActiveTech} />
+            <Timeline
+              items={timelineItems}
+              companyMap={companyMap}
+              activeTech={timelineActiveTech}
+              showDuration={showDuration}
+            />
           )}
         </FadeUpSection>
       )}
