@@ -50,9 +50,8 @@
 すべてのコマンドはリポジトリルートで実行します。
 
 ```bash
-# 1. ランタイムの用意（mise で Node 22.x を固定 / pnpm を有効化）
+# 1. ランタイムの用意（mise で Node 22.x と pnpm を固定）
 mise install
-corepack enable
 
 # 2. 依存インストール
 pnpm install

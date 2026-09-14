@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import { Button } from '@/component/ui/button';
 import { useThemeMode } from '@/context/theme-context';
 // 型・純関数はサーバ専用モジュール（neon ドライバ等）を client バンドルに巻き込まないため、
-// root の @/db ではなく純粋サブエクスポート @/db/blocks から import する
+// root の @/db ではなく純粋サブエクスポート @/db/block から import する
 // （詳細は serialize.ts の同趣旨コメント）。
 import {
   type Block,

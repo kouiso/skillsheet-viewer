@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { SkillsBlockEditor } from './skills-block-editor';
+import { SkillsBlockEditor } from './skill-block-editor';
 
 describe('SkillsBlockEditor', () => {
   it('推しを解除すると featured を未設定へ戻す', () => {

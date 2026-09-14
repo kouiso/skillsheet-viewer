@@ -7,7 +7,7 @@
 
 - Machine: macOS or Windows WSL2
 - Node.js: v22.x（[mise](https://mise.jdx.dev/) が `mise.toml` で固定）
-- パッケージマネージャ: pnpm（`corepack enable` で有効化）
+- パッケージマネージャ: pnpm（mise が導入）
 
 ## 手順
 

@@ -305,7 +305,7 @@ export function enumerateCompletenessFacts(blocks: Block[], views: PrintViewKey[
   pushFact(facts, 'profile', 'page1', '肩書き', profile?.title);
 
   // 所属 + meta の各項目。buildSummary と同じ並びで集め、30 文字を超える値は
-  // 1 ページ目ではなくスキル一覧ページ（skills-page.tsx の expertiseRows）に回る。
+  // 1 ページ目ではなくスキル一覧ページ（skill-page.tsx の expertiseRows）に回る。
   // 'skills' ビューが OFF だとその印刷経路自体が無い＝意図的な不在（欠落として数えない）。
   const metaEntries: [string, string][] = [];
   if (trimmed(profile?.company)) metaEntries.push(['所属', trimmed(profile?.company)]);
