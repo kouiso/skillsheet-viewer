@@ -8,7 +8,7 @@ import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-t
 import type { Block } from '@/db/blocks';
 import { useReadDepth } from '@/hooks/use-read-depth';
 import { captureError, track } from '@/lib/observability/capture';
-import { type PdfFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
+import { type ExportFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
 interface SheetViewClientProps {
   title: string;
@@ -27,6 +27,8 @@ interface SheetViewClientProps {
   stale?: boolean;
   /** SSRとHydrationで共有する、継続中案件の集計基準月。 */
   referenceMonth?: number;
+  /** DB シートの ID。あるときだけ Excel 出力ボタンを出す（GitHub シートは対象外）。 */
+  sheetId?: string;
 }
 
 // ブラウザの fetch はネットワーク失敗を `TypeError` で投げ、message はブラウザごとに違う
@@ -35,7 +37,7 @@ interface SheetViewClientProps {
 // message はここで分類にだけ使い、イベントには enum しか乗せない（URL 等が混ざっても送らない）。
 const BROWSER_FETCH_FAILURE_MESSAGE = /fetch|network|load failed/iu;
 
-function pdfFailureReason(err: unknown): PdfFailureReason {
+function exportFailureReason(err: unknown): ExportFailureReason {
   if (err instanceof TypeError) return BROWSER_FETCH_FAILURE_MESSAGE.test(err.message) ? 'FetchError' : 'TypeError';
   if (err instanceof RangeError) return 'RangeError';
   if (err instanceof Error && err.name === 'FetchError') return 'FetchError';
@@ -54,8 +56,10 @@ const SheetViewClient = ({
   reserveEditSlot = false,
   stale = false,
   referenceMonth,
+  sheetId,
 }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
   // 意図的に raw blocks（中身が空でも）で判定する — skill-sheet-viewer.tsx の isDashboard と
   // 必ず揃えること（片方だけ直すとヘッダー/レイアウトがページ間で食い違う）。
@@ -140,7 +144,7 @@ const SheetViewClient = ({
         name: 'pdf_exported',
         result: 'failure',
         durationBucket: toSecondsBucket(performance.now() - startedAt),
-        reason: pdfFailureReason(err),
+        reason: exportFailureReason(err),
       });
       captureError(err, { feature: 'pdf-export' });
       // フォント取得の失敗（オフライン・5xx 等）は @react-pdf/font 内で reject 済みの
@@ -151,6 +155,48 @@ const SheetViewClient = ({
       resetFontsOnFailure?.();
     } finally {
       setPdfLoading(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!sheetId) return;
+    const toastId = toast.loading('Excelを生成中…');
+    const startedAt = performance.now();
+    try {
+      setExcelLoading(true);
+      const res = await fetch(`/api/sheet/export.xlsx?id=${encodeURIComponent(sheetId)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${title}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, REVOKE_OBJECT_URL_DELAY_MS);
+
+      toast.success('Excelをダウンロードしました', { id: toastId });
+      track({
+        name: 'excel_exported',
+        result: 'success',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+      });
+    } catch (err) {
+      console.error('Error generating Excel:', err);
+      toast.error('Excelの生成に失敗しました', { id: toastId });
+      track({
+        name: 'excel_exported',
+        result: 'failure',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+        reason: exportFailureReason(err),
+      });
+      captureError(err, { feature: 'excel-export' });
+    } finally {
+      setExcelLoading(false);
     }
   };
 
@@ -172,6 +218,8 @@ const SheetViewClient = ({
           onToggleView={toggleView}
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
+          onDownloadExcel={sheetId ? handleDownloadExcel : undefined}
+          excelLoading={excelLoading}
           canEdit={canEdit}
           reserveEditSlot={reserveEditSlot}
         />
