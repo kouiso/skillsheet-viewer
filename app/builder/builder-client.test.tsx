@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TRPCClientError } from '@trpc/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Block } from '@/db/blocks';
+import type { Block } from '@/db/block';
 
 import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
 

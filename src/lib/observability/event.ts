@@ -7,8 +7,8 @@
  */
 export type ViewKind = 'markdown' | 'dashboard';
 export type SheetSource = 'db' | 'github';
-// src/components/viewer-topbar.tsx の ViewKey と同じ値。型を直接 import すると
-// components → lib/observability の依存方向が逆転するので、値の集合だけを複製する
+// src/component/viewer-topbar.tsx の ViewKey と同じ値。型を直接 import すると
+// component → lib/observability の依存方向が逆転するので、値の集合だけを複製する
 // （viewer-topbar.tsx 側を変えたらここも変えること。両者が一致するかは event.test.ts の
 // 型テストが検査する）。
 export type ViewToggleKey = 'skills' | 'process' | 'projects' | 'timeline';

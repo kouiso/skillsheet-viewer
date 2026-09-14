@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
 import { createSheet, deleteSheet, listSheets } from '@/db';
-import { buildConsoleDemoBlocks } from '@/db/fixtures';
+import { buildConsoleDemoBlocks } from '@/db/fixture';
 import { authFile, login } from './auth';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';

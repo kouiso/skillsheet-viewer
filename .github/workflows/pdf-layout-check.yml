@@ -48,7 +48,7 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         # 書き出し先を RUNNER_TEMP に置く。実在の案件本文を含むので、
         # 成果物としてアップロードしない（このリポジトリは public）。
-        run: pnpm exec tsx scripts/dump-blocks.ts --out "$RUNNER_TEMP/blocks.json"
+        run: pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/blocks.json"
 
       - name: PDF layout check against real data
         env:
