@@ -95,6 +95,28 @@ jobs:
         if: matrix.check-type == 'e2e'
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
+      # 編集者系テストは /builder のオーナーゲート（session.user.id === SKILLSHEET_OWNER_ID）
+      # を通る必要がある。シークレットの E2E ユーザーと SKILLSHEET_OWNER_ID が食い違うと
+      # /builder が /login へリダイレクトし、ボタン待ちのテストが全てタイムアウトまで
+      # ハングする（実際に 2026-09-14 に e2e 全体が赤化した）。対処として、CI 実行ごとに
+      # e2e 専用ユーザーを provision し、その user.id を SKILLSHEET_OWNER_ID として
+      # GITHUB_ENV 経由で後続ステップに渡す。シークレットの値には依存しない。
+      - name: Provision E2E owner
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          E2E_EMAIL: e2e-owner@example.test
+          E2E_PASSWORD: E2e-test-pass-99
+        run: |
+          OWNER_ID=$(pnpm exec tsx scripts/bootstrap-owner.ts --email="$E2E_EMAIL" --password="$E2E_PASSWORD" --name="E2E Owner" | tail -n 1 | tr -d '[:space:]')
+          test -n "$OWNER_ID"
+          {
+            echo "SKILLSHEET_OWNER_ID=$OWNER_ID"
+            echo "E2E_EMAIL=$E2E_EMAIL"
+            echo "E2E_PASSWORD=$E2E_PASSWORD"
+          } >> "$GITHUB_ENV"
+
       - name: Headless browser E2E
         if: matrix.check-type == 'e2e'
         env:
@@ -103,9 +125,6 @@ jobs:
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
           REVALIDATE_SECRET: ${{ vars.REVALIDATE_SECRET }}
         # playwright は起動時に test-results/ 全体を消去する。headless-e2e の証跡
         # （test-results/e2e）が先に書かれていると消されるため、playwright を先に流す。
