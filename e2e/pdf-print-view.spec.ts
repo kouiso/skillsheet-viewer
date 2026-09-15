@@ -32,7 +32,10 @@ const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
 const tmpDir = path.join(process.cwd(), 'test-results', 'pdf-print-view', 'tmp');
 
-const EXPERTISE_FALLBACK_TITLE = 'Expertise Fallback Fixture';
+// 共有DBで複数 run が並走するためタイトルを run ごとに一意化する。
+// 固定タイトルだと他 run の cleanupSheetsByTitle(afterAll) がこのシートを消し、
+// /view/db/<id> が 404 になってトグルの待機がタイムアウトする（実害が出た）。
+const EXPERTISE_FALLBACK_TITLE = `Expertise Fallback Fixture ${process.env.GITHUB_RUN_ID ?? `${process.pid}-${Date.now()}`}`;
 const LONG_SPECIALTIES = '経験年数が長い順に列挙すると次のとおりで三十文字を超える得意分野の説明文になる';
 const LONG_EXPERTISE = 'これも三十文字を超える長さになるよう調整した得意業務の説明文をここに入れておく';
 
