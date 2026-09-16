@@ -25,6 +25,8 @@ vi.mock('@/server/sheet-service', async (importOriginal) => {
   };
 });
 
+import { isMcpEnabled } from '@/lib/mcp-config';
+
 import { createMcpDispatch, createMcpRequestHandler, createSkillsheetMcpHandler } from './handler';
 
 const OWNER_ID = 'owner-user-1';
@@ -144,6 +146,24 @@ describe('createMcpRequestHandler（MCP 公開制御）', () => {
     vi.stubEnv('MCP_ENABLED', '');
     vi.stubEnv('MCP_RESOURCE_URL', RESOURCE);
     expect(createMcpRequestHandler()).toBeNull();
+  });
+
+  it('MCP_ENABLED 未設定でも Vercel 本番では有効になる（Issue #331）', () => {
+    vi.stubEnv('MCP_ENABLED', undefined as unknown as string);
+    vi.stubEnv('VERCEL_ENV', 'production');
+    expect(isMcpEnabled()).toBe(true);
+  });
+
+  it('Vercel 本番でも MCP_ENABLED=false なら無効のまま', () => {
+    vi.stubEnv('MCP_ENABLED', 'false');
+    vi.stubEnv('VERCEL_ENV', 'production');
+    expect(isMcpEnabled()).toBe(false);
+  });
+
+  it('MCP_ENABLED 未設定の preview では無効のまま', () => {
+    vi.stubEnv('MCP_ENABLED', undefined as unknown as string);
+    vi.stubEnv('VERCEL_ENV', 'preview');
+    expect(isMcpEnabled()).toBe(false);
   });
 
   it('MCP_ENABLED=true でも resource が解決できなければ null を返す', () => {

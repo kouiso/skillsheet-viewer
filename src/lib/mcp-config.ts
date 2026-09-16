@@ -3,9 +3,11 @@ import 'server-only';
 /**
  * Remote MCP サーバー（Issue #305）の公開設定。
  *
- * `MCP_ENABLED` が `'true'` の環境だけ `POST /api/mcp` と Better Auth の
+ * `MCP_ENABLED` が `'true'` の環境、または未設定の Vercel 本番デプロイ
+ * （`VERCEL_ENV === 'production'`）で `POST /api/mcp` と Better Auth の
  * OAuth 2.1 Provider エンドポイント（`/api/auth/oauth2/*`、`.well-known`）を公開する。
- * 未設定・それ以外の値では MCP 関連の入口を一切作らない（閲覧面・tRPC には影響しない）。
+ * `'false'` は常に無効化する逃げ道として残す。preview・開発環境は明示設定のみ有効
+ * （閲覧面・tRPC には影響しない）。
  */
 
 /** リソース上で意味を持つスコープはこの 2 つだけに限定する（設計: Issue #305）。 */
@@ -14,7 +16,11 @@ export const MCP_WRITE_SCOPE = 'skillsheet:write';
 export const MCP_SCOPES = [MCP_READ_SCOPE, MCP_WRITE_SCOPE] as const;
 
 export function isMcpEnabled(): boolean {
-  return process.env.MCP_ENABLED === 'true';
+  const flag = process.env.MCP_ENABLED;
+  if (flag === 'true') return true;
+  if (flag === 'false') return false;
+  // Issue #331: Vercel 本番はダッシュボード未設定でも既定で有効にする。
+  return process.env.VERCEL_ENV === 'production';
 }
 
 /**
