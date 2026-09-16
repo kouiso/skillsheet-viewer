@@ -95,6 +95,41 @@ describe('CompanySection', () => {
   });
 });
 
+describe('稼働月数（ビュートグル「稼働月数」に従う）', () => {
+  const twoItems = () => [
+    { item: item({ id: 'p1', period: '2018.02 — 2019.03' }), no: 1, tech: [] },
+    { item: item({ id: 'p2', period: '2020.01 — 2021.02' }), no: 2, tech: [] },
+  ];
+  const renderSection = (showDuration?: boolean) =>
+    render(
+      <CompanySection
+        companyId="c1"
+        company={company({ id: 'c1', name: '個人開発', period: '' })}
+        items={twoItems()}
+        totalCount={2}
+        isSearching={false}
+        activeTech={[]}
+        queryTerms={[]}
+        showDuration={showDuration}
+      />,
+    );
+
+  it('既定（ON）は在籍月数・レーン・カードの括弧書きを出す', () => {
+    renderSection();
+    expect(screen.getByText('在籍 2018.02〜2021.02（37ヶ月）')).toBeInTheDocument();
+    // レーン右端の月数欄（2 案件とも 1年2ヶ月）。
+    expect(screen.getAllByText('1年2ヶ月')).toHaveLength(2);
+    // カードのメタ行（役割・会社・人数・月数の1行、#289/#290 由来）にも月数が出る。
+    expect(screen.getAllByText(/エンジニア · 個人開発 · 5名 · 1年2ヶ月/)).toHaveLength(2);
+  });
+
+  it('OFF なら在籍月数・レーン・カードの括弧書きを全部消す（月数系の注記が半端に残らない）', () => {
+    renderSection(false);
+    expect(screen.getByText('在籍 2018.02〜2021.02')).toBeInTheDocument();
+    expect(screen.queryByText(/ヶ月/)).not.toBeInTheDocument();
+  });
+});
+
 describe('レビュー指摘の回帰: 書いていない精度を足さない', () => {
   it('年だけの在籍期間に月数を付けない', () => {
     expect(companyTenureLabel('2020')).toBe('在籍 2020');
