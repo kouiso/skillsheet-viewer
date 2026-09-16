@@ -39,18 +39,17 @@ src/db（Neon Postgres）
 
 | 変数 | 必須 | 説明 |
 |------|------|------|
-| `MCP_ENABLED` | いいえ | `'true'` で MCP 経路を公開。未設定でも Vercel 本番（`VERCEL_ENV=production`）では有効。`'false'` は常に無効化する逃げ道 |
+| `MCP_ENABLED` | いいえ | `'true'` のときだけ MCP 経路を公開。未設定・それ以外では `/api/mcp` は 404 |
 | `MCP_RESOURCE_URL` | 本番は推奨 | 発行トークンの `aud` となる MCP URL（例: `https://<host>/api/mcp`）。未設定時は `BETTER_AUTH_URL + /api/mcp` |
 
 本番で `MCP_RESOURCE_URL` を固定しないと、デプロイ URL が変わったとき既存トークンの `aud` と一致しなくなり全滅する。
 
-> **有効化の順序（重要）**: `MCP_ENABLED=true`（または未設定での本番自動有効化）は
-> **`0006` マイグレーション適用後**であることが前提。OAuth プラグインは init 時に
+> **有効化の順序（重要）**: `MCP_ENABLED=true` は **その環境の `DATABASE_URL` へ
+> `0006` マイグレーションを適用した後**に設定すること。OAuth プラグインは init 時に
 > `oauth_resource` テーブルへ seed を試みる。テーブル未作成のまま有効化すると seed が
 > 例外となり `auth.$context` の初期化自体が失敗し、`/api/mcp` だけでなく
-> `/api/auth/*` 全般（ログイン含む）が 500 になる。本番 DB 側に `0006` が未適用の
-> 環境へこのコードを出す場合は、先にその DB へ `pnpm db:migrate` を実行すること。
-> 順序を誤った場合は `MCP_ENABLED=false` を設定して再デプロイするか、
+> `/api/auth/*` 全般（ログイン含む）が 500 になる（2026-09-16 に本番で実測）。
+> 順序を誤った場合は `MCP_ENABLED` を外して再デプロイするか、
 > マイグレーション適用後に再デプロイして復旧する。
 
 ## スコープ
