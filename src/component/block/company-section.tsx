@@ -100,6 +100,7 @@ export function CompanySection({
             key={item.id}
             item={item}
             no={no}
+            companyName={name}
             tech={tech}
             activeTech={activeTech}
             queryTerms={queryTerms}
