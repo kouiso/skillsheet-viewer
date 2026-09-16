@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveCompanyPeriod,
   deriveDuration,
+  displayDuration,
   durationFromRange,
   flattenTech,
   flattenTechEntries,
@@ -103,6 +104,37 @@ describe('deriveDuration', () => {
     // 「継続中」と誤表示しない。「継続中」は "現在" 終端の明示があるときだけ。
     expect(deriveDuration('2020.06')).toBe('');
     expect(deriveDuration('2020')).toBe('');
+  });
+});
+
+describe('displayDuration', () => {
+  // カード・年表・会社レーン・PDF が共有する「表示用」判定。deriveDuration と違って
+  // 精度（月まで書かれているか）も考慮し、書かれていない精度を足さない。
+  it('月まで書かれた閉じた期間は月数を算出する', () => {
+    expect(displayDuration({ period: '2025.01 — 2025.09' })).toBe('9ヶ月');
+  });
+
+  it('「現在」終端は継続中', () => {
+    expect(displayDuration({ period: '2025.11 — 現在' })).toBe('継続中');
+  });
+
+  it('年のみの期間は月数を足さない（精度を捏造しない）', () => {
+    expect(displayDuration({ period: '2020 — 2021' })).toBe('');
+  });
+
+  it('終了未記載（開始のみ）は空文字', () => {
+    expect(displayDuration({ period: '2020.06' })).toBe('');
+    expect(displayDuration({ period: '2020' })).toBe('');
+  });
+
+  it('手入力の duration がある場合はそちらを優先する', () => {
+    expect(displayDuration({ period: '2025.01 — 2025.09', duration: '約1年' })).toBe('約1年');
+  });
+
+  it('period が空・無効なら手入力 duration も出さない', () => {
+    // period 自体を表示しない案件に稼働月数だけ出すと「いつの数字か」が伝わらないので畳む。
+    expect(displayDuration({ period: '', duration: '9ヶ月' })).toBe('');
+    expect(displayDuration({ period: 'たぶん去年くらい', duration: '9ヶ月' })).toBe('');
   });
 });
 

@@ -3,7 +3,7 @@
 import type { CompanyInfo, ProjectItem } from '@/db/block';
 import { resolveCompanyPeriod } from '@/db/derived-display';
 import { companyDisplayName } from '@/db/group-by-company';
-import { deriveDuration, formatPeriodDisplay, parsePeriodBounds } from '@/db/process';
+import { displayDuration, formatPeriodDisplay, parsePeriodBounds } from '@/db/process';
 import { sanitizeHtml } from '@/util/sanitize-html';
 import { CompanyLane } from './company-lane';
 import { ProjectCard } from './project-card';
@@ -14,14 +14,16 @@ export interface NumberedProject {
   tech: string[];
 }
 
-export function companyTenureLabel(period: string): string {
+export function companyTenureLabel(period: string, showDuration = true): string {
   const trimmed = period.trim();
   if (!trimmed) return '';
   const bounds = parsePeriodBounds(trimmed);
   const display = formatPeriodDisplay(trimmed);
   // 年だけの表記・終了未記載・終端「現在」は月数を数えない。数えると `2020` が
   // 「在籍 2020（1ヶ月）」になり、書いていない精度を勝手に足すことになる。
-  if (!bounds?.precise || bounds.openEnded) return `在籍 ${display}`;
+  // 「稼働月数」トグル OFF のときはこの（Nヶ月）も同じ判定で隠す — 月数系の注記が
+  // カードだけ消えて会社見出しには残る、という半端な状態を避けるため。
+  if (!bounds?.precise || bounds.openEnded || !showDuration) return `在籍 ${display}`;
   const months = Math.round((bounds.end - bounds.start) * 12) + 1;
   return months > 0 ? `在籍 ${display}（${months}ヶ月）` : `在籍 ${display}`;
 }
@@ -42,6 +44,8 @@ interface CompanySectionProps {
   isSearching: boolean;
   activeTech: string[];
   queryTerms: string[];
+  /** 稼働月数（在籍月数・レーンの月数・カードの期間括弧）を出すか。既定 true。 */
+  showDuration?: boolean;
 }
 
 export function CompanySection({
@@ -54,18 +58,21 @@ export function CompanySection({
   isSearching,
   activeTech,
   queryTerms,
+  showDuration = true,
 }: CompanySectionProps) {
   const name = companyDisplayName(company);
   const periodItems = allCompanyItems ?? items.map(({ item }) => item);
   const effectivePeriod = resolveCompanyPeriod(company, periodItems);
-  const tenure = companyTenureLabel(effectivePeriod);
+  const tenure = companyTenureLabel(effectivePeriod, showDuration);
   const note = company?.note?.trim() ?? '';
   const kind = company?.kind?.trim() ?? '';
   const countLabel = companyCountLabel(items.length, totalCount, isSearching);
   const laneItems = items.map(({ item, no }) => ({
     no: String(no).padStart(2, '0'),
     period: item.period,
-    duration: item.duration?.trim() || deriveDuration(item.period),
+    // カード・タイムライン・PDF と同じ判定（displayDuration）。トグル OFF なら空にして
+    // レーン右端の月数欄ごと出さない。
+    duration: showDuration ? displayDuration(item) : '',
   }));
 
   return (
@@ -89,7 +96,15 @@ export function CompanySection({
 
       <div className="flex min-w-0 flex-col gap-4">
         {items.map(({ item, no, tech }) => (
-          <ProjectCard key={item.id} item={item} no={no} tech={tech} activeTech={activeTech} queryTerms={queryTerms} />
+          <ProjectCard
+            key={item.id}
+            item={item}
+            no={no}
+            tech={tech}
+            activeTech={activeTech}
+            queryTerms={queryTerms}
+            showDuration={showDuration}
+          />
         ))}
       </div>
     </section>
