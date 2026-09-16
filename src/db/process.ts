@@ -6,7 +6,7 @@
  * とビューの集計軸（ここ）を分離するため、この変換結果は DB に保存しない。
  */
 
-import type { ProjectTech } from './block';
+import type { ProjectItem, ProjectTech } from './block';
 
 /** 工程の俯瞰・ステッパーで使う表示専用の7段モデル。builderの選択肢とは語彙が異なる。 */
 export const PROCESS_LABELS = [
@@ -243,6 +243,27 @@ export function deriveDuration(period: string): string {
   return remMonths === 0 ? `${years}年` : `${years}年${remMonths}ヶ月`;
 }
 
+/**
+ * 案件の稼働月数の表示値（案件カード・タイムライン・会社レーン・PDF が共有する唯一の判定）。
+ *
+ * 手入力の `duration` を優先し、空なら `period` から導出する。月まで書かれていない
+ * 期間（`2020` や `2020〜2021`）では出さない — `deriveDuration` は年だけの両端も数えて
+ * `1年1ヶ月` のような値を返すが、書いていない精度の月数を表示すると期間データの
+ * 表記ズレを表示側で新たに作ることになる（`companyTenureLabel` が在籍月数に掛ける
+ * `precise` 判定と同じ考え方）。終端「現在」は月数ではなく「継続中」を返す。
+ */
+export function displayDuration(item: Pick<ProjectItem, 'period' | 'duration'>): string {
+  // period が解釈できない案件に稼働月数だけ出すと「いつの数字か」が伝わらないので畳む
+  // （期間自体の表示も空になる前提と揃える）。
+  const bounds = parsePeriodBounds(item.period);
+  if (!bounds) return '';
+  const manual = typeof item.duration === 'string' ? item.duration.trim() : '';
+  if (manual) return manual;
+  // 閉じた期間は両端とも月精度が要る。openEnded（〜現在）は「継続中」を返すだけなので数えない。
+  if (!bounds.precise && !bounds.openEnded) return '';
+  return deriveDuration(item.period);
+}
+
 // --- 月入力（YYYY-MM）ベースの期間ユーティリティ（エディタ用） -----------------
 
 /** `YYYY-MM` を表示用 `YYYY.MM` に変換する（不正値は空文字）。 */
@@ -363,24 +384,39 @@ function isEmptyTechValue(value: unknown): boolean {
   return trimmed === '' || EMPTY_TECH_PLACEHOLDERS.has(trimmed);
 }
 
+/** flattenTechEntries の1要素。技術名と、それが属するバケット。 */
+export interface TechEntry {
+  name: string;
+  bucket: keyof ProjectTech;
+}
+
 /**
- * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * 6バケットの技術スタックを、初出順を保った重複なしのエントリ配列にする。
  * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ * 同名が複数バケットにまたがる場合は TECH_BUCKET_ORDER で先に来るバケットを採用する。
  */
-export function flattenTech(tech: ProjectTech): string[] {
+export function flattenTechEntries(tech: ProjectTech): TechEntry[] {
   if (!tech) return [];
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: TechEntry[] = [];
   for (const key of TECH_BUCKET_ORDER) {
     for (const value of tech[key] ?? []) {
       if (isEmptyTechValue(value)) continue;
       if (!seen.has(value)) {
         seen.add(value);
-        out.push(value);
+        out.push({ name: value, bucket: key });
       }
     }
   }
   return out;
+}
+
+/**
+ * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ */
+export function flattenTech(tech: ProjectTech): string[] {
+  return flattenTechEntries(tech).map((entry) => entry.name);
 }
 
 /**

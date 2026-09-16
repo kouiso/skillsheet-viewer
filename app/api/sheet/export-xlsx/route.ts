@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import { getSkillSheet, getSkillSheetById, SkillSheetNotFoundError } from '@/db';
 import { buildSkillSheetXlsx } from '@/lib/export/build-xlsx';
+import { buildSkillSheetXlsxDigest } from '@/lib/export/build-xlsx-digest';
+import { digestTitle, EXPORT_EDITIONS } from '@/lib/export/edition';
 import { isEditor } from '@/server/auth-gate';
 import { hasViewerSession } from '@/server/viewer-gate';
 
@@ -24,10 +26,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
   }
 
+  const edition = z
+    .enum(EXPORT_EDITIONS)
+    .default('full')
+    .safeParse(req.nextUrl.searchParams.get('edition') ?? undefined);
+  if (!edition.success) {
+    return NextResponse.json({ error: 'Bad Request' }, { status: 400 });
+  }
+
   try {
     const sheet = id ? await getSkillSheetById(id) : await getSkillSheet();
-    const buf = await buildSkillSheetXlsx(sheet.blocks);
-    const filename = encodeURIComponent(`${sheet.title}.xlsx`);
+    const buf =
+      edition.data === 'digest'
+        ? await buildSkillSheetXlsxDigest(sheet.blocks, sheet.title)
+        : await buildSkillSheetXlsx(sheet.blocks);
+    const filename = encodeURIComponent(
+      edition.data === 'digest' ? `${digestTitle(sheet.title)}.xlsx` : `${sheet.title}.xlsx`,
+    );
     return new NextResponse(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

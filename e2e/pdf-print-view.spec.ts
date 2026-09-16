@@ -32,7 +32,10 @@ const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
 const tmpDir = path.join(process.cwd(), 'test-results', 'pdf-print-view', 'tmp');
 
-const EXPERTISE_FALLBACK_TITLE = 'Expertise Fallback Fixture';
+// 共有DBで複数 run が並走するためタイトルを run ごとに一意化する。
+// 固定タイトルだと他 run の cleanupSheetsByTitle(afterAll) がこのシートを消し、
+// /view/db/<id> が 404 になってトグルの待機がタイムアウトする（実害が出た）。
+const EXPERTISE_FALLBACK_TITLE = `Expertise Fallback Fixture ${process.env.GITHUB_RUN_ID ?? `${process.pid}-${Date.now()}`}`;
 const LONG_SPECIALTIES = '経験年数が長い順に列挙すると次のとおりで三十文字を超える得意分野の説明文になる';
 const LONG_EXPERTISE = 'これも三十文字を超える長さになるよう調整した得意業務の説明文をここに入れておく';
 
@@ -356,14 +359,18 @@ test('12. the toggle and export button still work at a 320px viewport', async ({
   await skillToggleButton(page).click();
   await expect(skillMatrixSection(page)).toHaveCount(0);
 
-  const btn = exportButton(page);
+  // SP ではダウンロード系が「ダウンロード」メニューに畳まれる（戻るリンクの
+  // タップターゲット確保のため）。トリガーの hit target を測ってからメニュー経由で PDF を出す。
+  const btn = page.getByRole('button', { name: 'ダウンロード' });
   const box = await btn.boundingBox();
   expect(box, 'export button has no visible box at 320px').not.toBeNull();
   if (box) {
     expect(box.width, 'export button hit target width < 44px at 320px').toBeGreaterThanOrEqual(43.5);
     expect(box.height, 'export button hit target height < 44px at 320px').toBeGreaterThanOrEqual(43.5);
   }
-  await waitAndSaveDownload(page, () => btn.click(), 'narrow-viewport');
+  await btn.click();
+  const pdfItem = page.getByRole('button', { name: 'PDFダウンロード' });
+  await waitAndSaveDownload(page, () => pdfItem.click(), 'narrow-viewport');
 });
 
 // ---------------------------------------------------------------------------

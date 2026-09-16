@@ -70,7 +70,7 @@ describe('ProjectCard', () => {
     expect(wrapper?.className).not.toContain('italic');
   });
 
-  it('5ラベルと欠損 — を出し、会社名は出さない', () => {
+  it('5ラベルを出し、役割・人数・期間の欠損はメタ行ごと出さない', () => {
     render(
       <ProjectCard
         item={buildItem({
@@ -93,8 +93,53 @@ describe('ProjectCard', () => {
     expect(screen.getByText('コメント')).toBeInTheDocument();
     expect(screen.getByText('担当工程')).toBeInTheDocument();
     expect(screen.getByText('技術スタック')).toBeInTheDocument();
-    expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
+    // #289: 役割が空の案件では「役割」ラベルを出さない。メタ行は全項目が空なら行ごと
+    // 出ないため、欠損の — が残るのは期間バッジの1箇所だけになる。
+    expect(screen.getAllByText('—')).toHaveLength(1);
+    expect(screen.queryByText('役割')).not.toBeInTheDocument();
     expect(screen.queryByText('Q 社（自社サービス事業会社）')).not.toBeInTheDocument();
+  });
+
+  it('役割は会社・人数・期間と同じメタ行に1行で出る（#289/#290）', () => {
+    // SBI の完成の定義どおり「役割 SE · D社 · 9名 · 9ヶ月」の並びを固定する。
+    render(
+      <ProjectCard
+        item={buildItem({ role: 'SE', team: '9', period: '2025.01 — 2025.09' })}
+        no={1}
+        companyName="D社"
+        activeTech={[]}
+        tech={[]}
+      />,
+    );
+
+    const metaLine = screen.getByText('役割').parentElement;
+    expect(metaLine?.tagName).toBe('P');
+    expect(metaLine).toHaveTextContent('SE · D社 · 9名 · 9ヶ月');
+  });
+
+  it('タイトルが長くても役割は独立要素にならない（位置が案件ごとに変わる回帰の防止）', () => {
+    // 見出しの右枠・dl の別列など「役割だけを持つ要素」があると、タイトルや期間の
+    // 長さで役割の位置がずれる。メタ行の1要素内に畳まれていることを構造で見る。
+    const longTitle = '散らばったスキルシートを一枚に束ねる管理基盤の設計と実装、および配信経路の整理';
+    render(
+      <ProjectCard
+        item={buildItem({ title: longTitle, role: 'SE' })}
+        no={1}
+        companyName="D社"
+        activeTech={[]}
+        tech={[]}
+      />,
+    );
+
+    expect(screen.queryByText('SE')).not.toBeInTheDocument();
+    expect(screen.getByText('役割').parentElement).toHaveTextContent('SE · D社 · 13 名 · 継続中');
+  });
+
+  it('役割が空なら「役割」ラベルを出さず、会社・人数・期間だけのメタ行にする', () => {
+    render(<ProjectCard item={buildItem({ role: '' })} no={1} companyName="D社" activeTech={[]} tech={[]} />);
+
+    expect(screen.queryByText('役割')).not.toBeInTheDocument();
+    expect(screen.getByText(/D社 · 13 名 · 継続中/)).toBeInTheDocument();
   });
 
   it('コメント3段落なら既定は2段落＋続きを読む（残り 1）、展開後に3段落全部', async () => {
@@ -132,6 +177,42 @@ describe('ProjectCard', () => {
     expect(screen.getByText('インフラ')).toBeInTheDocument();
     expect(screen.getByText('ツール')).toBeInTheDocument();
     expect(screen.getByText('コラボレーションツール')).toBeInTheDocument();
+  });
+
+  describe('稼働月数（ビュートグル「稼働月数」に従う）', () => {
+    it('メタ行に稼働月数を出す（既定 ON）', () => {
+      render(<ProjectCard item={buildItem({ period: '2025.01 — 2025.09' })} no={1} activeTech={[]} tech={[]} />);
+      // メタ行は役割・会社・人数・月数を ` · ` で繋いだ1行（#289/#290）。
+      expect(screen.getByText(/9ヶ月/)).toBeInTheDocument();
+      // 期間バッジは月数を括弧へ付けず素の表示のまま。
+      expect(screen.getByText('2025.01〜2025.09')).toBeInTheDocument();
+    });
+
+    it('終端が「現在」ならメタ行に「継続中」を出す', () => {
+      render(<ProjectCard item={buildItem({ period: '2025.11 — 現在' })} no={1} activeTech={[]} tech={[]} />);
+      expect(screen.getByText(/継続中/)).toBeInTheDocument();
+    });
+
+    it('showDuration=false ならメタ行に月数を出さない', () => {
+      render(
+        <ProjectCard
+          item={buildItem({ period: '2025.01 — 2025.09' })}
+          no={1}
+          activeTech={[]}
+          tech={[]}
+          showDuration={false}
+        />,
+      );
+      // 期間バッジ自体は残り、月数だけがメタ行から落ちる。
+      expect(screen.getByText('2025.01〜2025.09')).toBeInTheDocument();
+      expect(screen.queryByText(/9ヶ月/)).not.toBeInTheDocument();
+    });
+
+    it('月まで書かれていない期間は月数を添えない（書いていない精度を足さない）', () => {
+      render(<ProjectCard item={buildItem({ period: '2020 — 2021' })} no={1} activeTech={[]} tech={[]} />);
+      expect(screen.getByText('2020〜2021')).toBeInTheDocument();
+      expect(screen.queryByText(/1年1ヶ月/)).not.toBeInTheDocument();
+    });
   });
 
   it('クエリ一致の技術チップは activeTech が空でも強調する', () => {

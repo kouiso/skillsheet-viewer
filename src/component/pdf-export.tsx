@@ -1,7 +1,9 @@
 import type { DocumentProps } from '@react-pdf/renderer';
 import type { ReactElement } from 'react';
 import type { Block, BlockType } from '@/db/block';
+import type { ExportEdition } from '@/lib/export/edition';
 
+import { buildPrintDigestDocument } from './pdf/digest-document';
 import registerPdfFonts from './pdf/font';
 import { buildPrintSkillSheetDocument } from './pdf/print-document';
 import type { PrintViewKey } from './pdf/print-view-model';
@@ -14,6 +16,8 @@ export interface SkillSheetPDFProps extends SkillSheetDocumentProps {
   views?: PrintViewKey[];
   /** 継続中案件の経験月数に使う固定月キー。 */
   referenceMonth?: number;
+  /** 全文版か要約版か。省略は 'full'。 */
+  edition?: ExportEdition;
 }
 
 /**
@@ -51,8 +55,18 @@ export async function createSkillSheetPdf({
   blocks,
   views,
   referenceMonth,
+  edition,
 }: SkillSheetPDFProps): Promise<ReactElement<DocumentProps>> {
   registerPdfFonts();
+  // 要約版は構造化ブロックが必須。markdown を含むシートには会社一覧自体が作れないので、
+  // 黙ってレガシー経路へ落とさず失敗として呼び出し側のトーストへ返す。
+  if (edition === 'digest') {
+    if (!canRenderStructured(blocks)) {
+      throw new Error('digest edition requires structured blocks');
+    }
+    // ビュートグルは要約版に効かせない（一覧は全文版と同じ並びで全件出す仕様）。
+    return await buildPrintDigestDocument({ title, blocks, referenceMonth });
+  }
   if (canRenderStructured(blocks)) {
     return buildPrintSkillSheetDocument({ title, blocks, views, referenceMonth });
   }
