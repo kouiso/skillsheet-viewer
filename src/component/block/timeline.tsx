@@ -1,7 +1,7 @@
 'use client';
 
 import type { CompanyInfo, ProjectItem } from '@/db/block';
-import { flattenTech, formatPeriodDisplay, sortByStartDesc } from '@/db/process';
+import { displayDuration, flattenTech, formatPeriodDisplay, sortByStartDesc } from '@/db/process';
 import { resolveProjectArea } from '@/db/tech-area';
 import { sanitizeHtml } from '@/util/sanitize-html';
 
@@ -9,6 +9,8 @@ interface TimelineProps {
   items: ProjectItem[];
   companyMap: Map<string, CompanyInfo>;
   activeTech: string[];
+  /** 稼働月数（期間の右の括弧書き）を出すか。ビュートグル「稼働月数」に従う。既定 true。 */
+  showDuration?: boolean;
 }
 
 function timelineArea(item: ProjectItem): string {
@@ -19,7 +21,7 @@ function timelineArea(item: ProjectItem): string {
 
 // 案件タイムライン。start（period から導出）降順の縦レール表示。
 // activeTech に該当する技術を含む案件はノード・ラベルをハイライトする。
-export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
+export function Timeline({ items, companyMap, activeTech, showDuration = true }: TimelineProps) {
   if (items.length === 0) return null;
   const sorted = sortByStartDesc(items, (item) => item.period);
 
@@ -32,6 +34,10 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
           const tech = flattenTech(item.tech);
           const hit = activeTech.length > 0 && tech.some((t) => activeTech.includes(t));
           const company = companyMap.get(item.companyId);
+          const periodDisplay = formatPeriodDisplay(item.period);
+          // 案件カード（project-card.tsx）と同じ「期間（稼働月数）」の表記に揃える。
+          // 期間が空・解釈不能なら稼働月数も出さない（カード側と同じ条件分岐）。
+          const duration = showDuration && periodDisplay ? sanitizeHtml(displayDuration(item)) : '';
           return (
             <div key={item.id} className="relative">
               <span
@@ -43,7 +49,8 @@ export function Timeline({ items, companyMap, activeTech }: TimelineProps) {
                   狭幅は日付を独立行に落とし、sm 以上でのみ従来どおり横並びにする。 */}
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
                 <span className="font-mono text-[11.5px] text-accent-text sm:min-w-[132px]">
-                  {formatPeriodDisplay(item.period) || '(期間未入力)'}
+                  {periodDisplay || '(期間未入力)'}
+                  {duration && <span className="text-faint">（{duration}）</span>}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[14.5px] font-semibold text-foreground">

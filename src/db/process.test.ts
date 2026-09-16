@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   deriveCompanyPeriod,
   deriveDuration,
+  displayDuration,
   durationFromRange,
   flattenTech,
+  flattenTechEntries,
   formatMonthToken,
   formatPeriodDisplay,
   formatPeriodRange,
@@ -105,6 +107,37 @@ describe('deriveDuration', () => {
   });
 });
 
+describe('displayDuration', () => {
+  // カード・年表・会社レーン・PDF が共有する「表示用」判定。deriveDuration と違って
+  // 精度（月まで書かれているか）も考慮し、書かれていない精度を足さない。
+  it('月まで書かれた閉じた期間は月数を算出する', () => {
+    expect(displayDuration({ period: '2025.01 — 2025.09' })).toBe('9ヶ月');
+  });
+
+  it('「現在」終端は継続中', () => {
+    expect(displayDuration({ period: '2025.11 — 現在' })).toBe('継続中');
+  });
+
+  it('年のみの期間は月数を足さない（精度を捏造しない）', () => {
+    expect(displayDuration({ period: '2020 — 2021' })).toBe('');
+  });
+
+  it('終了未記載（開始のみ）は空文字', () => {
+    expect(displayDuration({ period: '2020.06' })).toBe('');
+    expect(displayDuration({ period: '2020' })).toBe('');
+  });
+
+  it('手入力の duration がある場合はそちらを優先する', () => {
+    expect(displayDuration({ period: '2025.01 — 2025.09', duration: '約1年' })).toBe('約1年');
+  });
+
+  it('period が空・無効なら手入力 duration も出さない', () => {
+    // period 自体を表示しない案件に稼働月数だけ出すと「いつの数字か」が伝わらないので畳む。
+    expect(displayDuration({ period: '', duration: '9ヶ月' })).toBe('');
+    expect(displayDuration({ period: 'たぶん去年くらい', duration: '9ヶ月' })).toBe('');
+  });
+});
+
 describe('parseStart', () => {
   it('YYYY.MM 形式を解釈できる', () => {
     expect(parseStart('2025.11 — 現在')).toBeCloseTo(2025 + 10 / 12);
@@ -177,6 +210,34 @@ describe('flattenTech', () => {
       collab: [''],
     };
     expect(flattenTech(tech)).toEqual(['TS', 'Next.js']);
+  });
+});
+
+describe('flattenTechEntries', () => {
+  it('各技術名が属するバケットを返す', () => {
+    const tech = { lang: ['TS'], fw: ['Next.js'], db: [], infra: ['AWS'], tools: ['VSCode'], collab: ['Slack'] };
+    expect(flattenTechEntries(tech)).toEqual([
+      { name: 'TS', bucket: 'lang' },
+      { name: 'Next.js', bucket: 'fw' },
+      { name: 'AWS', bucket: 'infra' },
+      { name: 'VSCode', bucket: 'tools' },
+      { name: 'Slack', bucket: 'collab' },
+    ]);
+  });
+
+  it('同名が複数バケットにまたがるときは TECH_BUCKET_ORDER で先のバケットを採用する', () => {
+    const tech = { lang: [], fw: [], db: [], infra: ['Docker'], tools: ['Docker'], collab: [] };
+    expect(flattenTechEntries(tech)).toEqual([{ name: 'Docker', bucket: 'infra' }]);
+  });
+
+  it('「該当なし」プレースホルダと非文字列は除外する', () => {
+    const tech = { lang: ['TS', '-', '  '], fw: [], db: [], infra: [], tools: [], collab: [] };
+    expect(flattenTechEntries(tech)).toEqual([{ name: 'TS', bucket: 'lang' }]);
+  });
+
+  it('tech が undefined でも例外にならない', () => {
+    // @ts-expect-error レガシーデータ由来の欠損を想定する。
+    expect(flattenTechEntries(undefined)).toEqual([]);
   });
 });
 

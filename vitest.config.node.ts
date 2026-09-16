@@ -16,7 +16,9 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'node',
-      include: ['src/db/**/*.test.ts', 'script/**/*.test.ts'],
+      // `*.node.test.ts` は node 環境専用テストの明示サフィックス（jsdom 側では除外）。
+      // MCP ルート・サービス層など window/document の無い実行経路をここで検証する。
+      include: ['src/db/**/*.test.ts', 'script/**/*.test.ts', '**/*.node.test.ts'],
     },
   }),
 );

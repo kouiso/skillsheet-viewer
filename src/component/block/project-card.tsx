@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from 'react';
 import type { ProjectItem } from '@/db/block';
 import {
-  deriveDuration,
+  displayDuration,
   flattenTech,
   formatPeriodDisplay,
   normalizeProcess,
@@ -31,12 +31,16 @@ interface ProjectCardProps {
   item: ProjectItem;
   /** フィルタ前の全件配列基準の通し番号。絞り込んでも変わらない。 */
   no: number;
+  /** メタ行に出す会社名。CompanySection の見出しと同じ表示名を渡す。 */
+  companyName?: string;
   /** ハイライト対象の技術（TechFilterで選択中のチップ）。 */
   activeTech: string[];
   /** flattenTech 済みの技術一覧。 */
   tech: string[];
   /** 検索クエリ語。一致チップ強調に使う（activeTech が空でも効く）。 */
   queryTerms?: string[];
+  /** 稼働月数（メタ行の末尾要素）を出すか。ビュートグル「稼働月数」に従う。既定 true。 */
+  showDuration?: boolean;
 }
 
 function CardBlock({ label, children }: { label: string; children: ReactNode }) {
@@ -48,16 +52,33 @@ function CardBlock({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-export const ProjectCard = ({ item, no, activeTech, tech, queryTerms = [] }: ProjectCardProps) => {
+export const ProjectCard = ({
+  item,
+  no,
+  companyName,
+  activeTech,
+  tech,
+  queryTerms = [],
+  showDuration = true,
+}: ProjectCardProps) => {
   const [commentOpen, setCommentOpen] = useState(false);
   const normalized = normalizeProcess(item.process);
-  const duration = sanitizeHtml(item.duration?.trim() || deriveDuration(item.period));
+  // タイムライン・会社レーン・PDF と同じ判定（displayDuration）。トグル OFF では出さない。
+  const duration = showDuration ? sanitizeHtml(displayDuration(item)) : '';
   const summary = item.summary?.trim() || item.duties;
   const area = resolveProjectArea(item.scope, item.tech);
   const periodDisplay = formatPeriodDisplay(item.period);
-  const periodValue = periodDisplay ? (duration ? `${periodDisplay}（${duration}）` : periodDisplay) : '—';
-  const roleValue = item.role?.trim() ? sanitizeHtml(item.role) : '—';
-  const teamValue = item.team?.trim() ? formatTeamSize(item.team) : '—';
+  const roleText = item.role?.trim() ? sanitizeHtml(item.role) : '';
+  // 役割・会社・人数・期間は1行のメタ行に畳む（#289/#290）。以前は見出しを左右2枠にして
+  // 役割だけを右枠へ置いていた頃は、タイトルが長い案件で右枠が折り返されて役割の位置が
+  // ずれた。その後のラベル列（dl）でも役割列の左端は期間列の幅に依存し、同じく案件ごとに
+  // ずれていた。行頭がカード左端で固定される1行なら位置が構造的に揃う。
+  const metaParts = [
+    roleText,
+    companyName?.trim() ? sanitizeHtml(companyName) : '',
+    item.team?.trim() ? formatTeamSize(item.team) : '',
+    duration,
+  ].filter(Boolean);
   const commentParas = splitCommentParagraphs(item.comment);
   const hasMoreComment = commentParas.length > COMMENT_PREVIEW_PARAS;
   const commentBody =
@@ -93,20 +114,14 @@ export const ProjectCard = ({ item, no, activeTech, tech, queryTerms = [] }: Pro
             </p>
           )}
         </div>
-        <dl className="m-0 flex flex-wrap gap-x-7 gap-y-3">
-          {[
-            { label: '期間', value: periodValue },
-            { label: '役割', value: roleValue },
-            { label: 'チーム規模', value: teamValue },
-          ].map((fact) => (
-            <div key={fact.label} className="flex min-w-0 flex-col gap-0.5">
-              <dt className="text-[12px] leading-normal text-muted-foreground">{fact.label}</dt>
-              <dd className="m-0 text-[13.5px] leading-normal text-foreground [overflow-wrap:anywhere]">
-                {fact.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        {/* 役割が空の案件では「役割」ラベル自体を出さない（#289 完了条件）。
+            他の項目が空ならその部分だけを落とし、全部空なら行ごと出さない。 */}
+        {metaParts.length > 0 && (
+          <p className="m-0 font-mono text-[12px] leading-normal text-muted-foreground [overflow-wrap:anywhere]">
+            {roleText && <span className="kicker mr-1.5">役割</span>}
+            {metaParts.join(' · ')}
+          </p>
+        )}
       </div>
 
       {summary ? (
