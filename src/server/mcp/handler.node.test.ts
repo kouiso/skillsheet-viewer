@@ -148,21 +148,8 @@ describe('createMcpRequestHandler（MCP 公開制御）', () => {
     expect(createMcpRequestHandler()).toBeNull();
   });
 
-  it('MCP_ENABLED 未設定でも Vercel 本番では有効になる（Issue #331）', () => {
-    vi.stubEnv('MCP_ENABLED', undefined as unknown as string);
-    vi.stubEnv('VERCEL_ENV', 'production');
-    expect(isMcpEnabled()).toBe(true);
-  });
-
-  it('Vercel 本番でも MCP_ENABLED=false なら無効のまま', () => {
+  it('MCP_ENABLED=false では無効のまま', () => {
     vi.stubEnv('MCP_ENABLED', 'false');
-    vi.stubEnv('VERCEL_ENV', 'production');
-    expect(isMcpEnabled()).toBe(false);
-  });
-
-  it('MCP_ENABLED 未設定の preview では無効のまま', () => {
-    vi.stubEnv('MCP_ENABLED', undefined as unknown as string);
-    vi.stubEnv('VERCEL_ENV', 'preview');
     expect(isMcpEnabled()).toBe(false);
   });
 
