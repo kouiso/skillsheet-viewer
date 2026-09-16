@@ -18,7 +18,7 @@ import { requireMcpAuth } from '@better-auth/mcp';
 import { type AuthInfo, createMcpHandler, type McpHttpHandler, McpServer } from '@modelcontextprotocol/server';
 import { createInsufficientScopeError } from 'better-auth/oauth2';
 
-import { getAuth } from '@/lib/auth';
+import { getAuth, isMcpOauthReady } from '@/lib/auth';
 import { isMcpEnabled, MCP_READ_SCOPE, MCP_SCOPES, MCP_WRITE_SCOPE, resolveMcpResource } from '@/lib/mcp-config';
 
 import { READ_TOOLS, registerSkillsheetTools, WRITE_TOOLS } from './tool';
@@ -121,11 +121,15 @@ export function createSkillsheetMcpHandler(): McpHttpHandler {
  * MCP リクエストハンドラを組み立てる。MCP 無効環境・resource 未解決の場合は
  * null を返し、呼び出し側（route.ts）で 404 を返す。
  */
-export function createMcpRequestHandler(): ((request: Request) => Promise<Response>) | null {
+export async function createMcpRequestHandler(): Promise<((request: Request) => Promise<Response>) | null> {
   if (!isMcpEnabled()) return null;
   const resource = resolveMcpResource();
   if (!resource) return null;
 
+  const auth = await getAuth();
+  // OAuth init に失敗してフォールバックした環境では MCP 経路を立てない。
+  if (!isMcpOauthReady()) return null;
+
   const dispatch = createMcpDispatch(createSkillsheetMcpHandler(), resource);
-  return requireMcpAuth(getAuth(), dispatch, { resource, challengeScopes: [...MCP_SCOPES] });
+  return requireMcpAuth(auth, dispatch, { resource, challengeScopes: [...MCP_SCOPES] });
 }

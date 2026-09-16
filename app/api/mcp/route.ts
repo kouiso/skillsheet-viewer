@@ -9,17 +9,15 @@ export const runtime = 'nodejs';
  * MCP_ENABLED が有効でない環境、または resource URL を解決できない環境では
  * ハンドラを組み立てず 404 を返す — MCP を無効化しても通常画面・tRPC は影響を受けない。
  */
-let handler: ((request: Request) => Promise<Response>) | null | undefined;
+let handler: Promise<((request: Request) => Promise<Response>) | null> | undefined;
 
-function getHandler(): ((request: Request) => Promise<Response>) | null {
-  if (handler === undefined) {
-    handler = createMcpRequestHandler();
-  }
+function getHandler(): Promise<((request: Request) => Promise<Response>) | null> {
+  handler ??= createMcpRequestHandler();
   return handler;
 }
 
 export async function POST(request: Request): Promise<Response> {
-  const h = getHandler();
+  const h = await getHandler();
   if (!h) {
     return new Response('Not Found', { status: 404 });
   }
