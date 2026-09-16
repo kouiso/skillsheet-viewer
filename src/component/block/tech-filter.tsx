@@ -2,12 +2,16 @@
 
 import { Search } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
+import type { ProjectTech } from '@/db/block';
+import { TECH_BUCKET_LABELS, TECH_BUCKET_ORDER } from '@/db/process';
 import { parseProjectQuery, SEARCH_HINT_AND, SEARCH_HINT_OR } from './project-search';
 
 export interface TechCount {
   name: string;
   /** その技術を使った案件数。 */
   count: number;
+  /** 候補リストでグルーピング見出しに使う分類バケット。 */
+  bucket: keyof ProjectTech;
 }
 
 interface TechFilterProps {
@@ -43,6 +47,29 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
       all.filter((t) => !activeSet.has(t.name) && (!q || t.name.toLowerCase().includes(q))).slice(0, SUGGESTION_LIMIT),
     [all, activeSet, q],
   );
+
+  // 言語・インフラ・ツールが無分類で並ぶと「何が技術扱いか」が読み取れないため、
+  // 案件カードと同じバケットラベルの見出しで候補をグルーピングする（#314）。
+  // index はフラットな matches 上の位置のまま保持し、aria-activedescendant と
+  // 矢印キー移動がグループをまたいで崩れないようにする。
+  const groups = useMemo(() => {
+    const byBucket = new Map<keyof ProjectTech, { tech: TechCount; index: number }[]>();
+    matches.forEach((tech, index) => {
+      const list = byBucket.get(tech.bucket);
+      if (list) {
+        list.push({ tech, index });
+      } else {
+        byBucket.set(tech.bucket, [{ tech, index }]);
+      }
+    });
+    // グループの並びは TECH_BUCKET_ORDER 固定。件数順にすると絞り込みのたびに
+    // 見出しの位置が入れ替わり、目印として使えない。
+    return TECH_BUCKET_ORDER.filter((bucket) => byBucket.has(bucket)).map((bucket) => ({
+      bucket,
+      label: TECH_BUCKET_LABELS[bucket],
+      items: byBucket.get(bucket) ?? [],
+    }));
+  }, [matches]);
 
   const pick = (name: string) => {
     onToggle(name);
@@ -136,25 +163,34 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
             aria-label="技術の候補"
             className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-[var(--radius)] border border-border bg-card py-1 shadow-md"
           >
-            {matches.map((tech, i) => (
-              <button
-                key={tech.name}
-                id={optionId(i)}
-                type="button"
-                role="option"
-                aria-selected={i === hi}
-                className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[13px] ${
-                  i === hi ? 'bg-accent-soft text-accent-text' : 'text-foreground'
-                }`}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  pick(tech.name);
-                }}
-                onMouseEnter={() => setHi(i)}
-              >
-                <span>{tech.name}</span>
-                <span className="font-mono text-[11px] text-faint">{tech.count}</span>
-              </button>
+            {groups.map((group) => (
+              // biome-ignore lint/a11y/useSemanticElements: listbox 内の optgroup 相当の分類には role="group" が正しい。fieldset はフォーム部品で option のコンテナとして不適切
+              <div key={group.bucket} role="group" aria-label={group.label}>
+                {/* 見出しは視覚用。スクリーンリーダーには group の aria-label で伝え、二重読み上げを避ける。 */}
+                <div aria-hidden="true" className="px-3 pb-0.5 pt-2 text-[11px] font-medium text-faint">
+                  {group.label}
+                </div>
+                {group.items.map(({ tech, index }) => (
+                  <button
+                    key={tech.name}
+                    id={optionId(index)}
+                    type="button"
+                    role="option"
+                    aria-selected={index === hi}
+                    className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-[13px] ${
+                      index === hi ? 'bg-accent-soft text-accent-text' : 'text-foreground'
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      pick(tech.name);
+                    }}
+                    onMouseEnter={() => setHi(index)}
+                  >
+                    <span>{tech.name}</span>
+                    <span className="font-mono text-[11px] text-faint">{tech.count}</span>
+                  </button>
+                ))}
+              </div>
             ))}
           </div>
         )}
