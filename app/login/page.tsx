@@ -30,6 +30,14 @@ function LoginForm() {
         setError('メールアドレスまたはパスワードが正しくありません');
         return;
       }
+      // OAuth 認可フロー（Remote MCP クライアント接続、Issue #305）経由のサインインでは、
+      // セッション発行と同時に認可の続き（同意画面、またはクライアントへの code
+      // リダイレクト）が { redirect: true, url } として返る。通常遷移より先にそちらへ進む。
+      const oauthRedirect = (result.data as { url?: string } | null)?.url;
+      if (typeof oauthRedirect === 'string' && oauthRedirect.length > 0) {
+        window.location.assign(oauthRedirect);
+        return;
+      }
       const dest = resolveNextPath(searchParams.get('next'), '/builder', window.location.origin);
       router.push(dest);
     } catch {
