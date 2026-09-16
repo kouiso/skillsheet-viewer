@@ -347,6 +347,26 @@ describe('buildPrintViewModel', () => {
     expect([vm.showProjects, vm.showSkills, vm.showProcess]).toEqual([true, true, true]);
   });
 
+  it('稼働月数は period から導出する（画面の案件カードと同じ判定）', () => {
+    const vm = buildPrintViewModel('シート', blocksFixture());
+    expect(vm.companies[0].projects[0].durationText).toBe('9ヶ月');
+    expect(vm.companies[1].projects[0].durationText).toBe('6ヶ月');
+  });
+
+  it('ビュートグル「duration」を OFF にすると durationText が空になる', () => {
+    const vm = buildPrintViewModel('シート', blocksFixture(), ['skills', 'process', 'projects', 'timeline']);
+    expect(vm.companies.flatMap((c) => c.projects).map((p) => p.durationText)).toEqual(['', '']);
+  });
+
+  it('年だけの期間は稼働月数を出さない（書いていない精度を足さない）', () => {
+    const blocks = blocksFixture();
+    const project = blocks.find((b) => b.type === 'project');
+    if (project?.type === 'project') project.data.items[0].period = '2020 — 2021';
+    // deriveDuration 素通しだと年だけの両端を数えて「1年1ヶ月」が出る。
+    const vm = buildPrintViewModel('シート', blocks);
+    expect(vm.companies[0].projects[0].durationText).toBe('');
+  });
+
   it('スキルのビュートグルを OFF にすると 1 ページ目の主力スタックも空にする', () => {
     // 実測で出た欠陥: 以前は topSkills が showSkills を一切見ずに組み立てられており、
     // スキル一覧「ページ」は OFF で消えても 1 ページ目の「主力スタック（経験年数）」

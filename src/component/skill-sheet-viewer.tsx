@@ -433,6 +433,7 @@ const SkillSheetViewer = ({
                       showProcess={showView('process')}
                       showProjects={showView('projects')}
                       showTimeline={showView('timeline')}
+                      showDuration={showView('duration')}
                     />
                   );
                 }
