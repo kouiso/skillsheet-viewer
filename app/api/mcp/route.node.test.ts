@@ -24,7 +24,7 @@ describe('POST /api/mcp', () => {
   });
 
   it('MCP ハンドラが無い環境（MCP_ENABLED 無効など）では 404', async () => {
-    vi.mocked(createMcpRequestHandler).mockReturnValue(null);
+    vi.mocked(createMcpRequestHandler).mockResolvedValue(null);
     const { POST } = await import('./route');
     const res = await POST(post());
     expect(res.status).toBe(404);
@@ -32,7 +32,7 @@ describe('POST /api/mcp', () => {
 
   it('MCP ハンドラがある環境ではリクエストを委譲する', async () => {
     const inner = vi.fn(async () => new Response('mcp-ok', { status: 200 }));
-    vi.mocked(createMcpRequestHandler).mockReturnValue(inner);
+    vi.mocked(createMcpRequestHandler).mockResolvedValue(inner);
     const { POST } = await import('./route');
     const res = await POST(post());
     expect(res.status).toBe(200);
