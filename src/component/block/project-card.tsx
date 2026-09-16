@@ -52,7 +52,15 @@ function CardBlock({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-export const ProjectCard = ({ item, no, companyName, activeTech, tech, queryTerms = [], showDuration = true }: ProjectCardProps) => {
+export const ProjectCard = ({
+  item,
+  no,
+  companyName,
+  activeTech,
+  tech,
+  queryTerms = [],
+  showDuration = true,
+}: ProjectCardProps) => {
   const [commentOpen, setCommentOpen] = useState(false);
   const normalized = normalizeProcess(item.process);
   // タイムライン・会社レーン・PDF と同じ判定（displayDuration）。トグル OFF では出さない。
