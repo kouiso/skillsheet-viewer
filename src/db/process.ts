@@ -6,7 +6,7 @@
  * とビューの集計軸（ここ）を分離するため、この変換結果は DB に保存しない。
  */
 
-import type { ProjectTech } from './block';
+import type { ProjectItem, ProjectTech } from './block';
 
 /** 工程の俯瞰・ステッパーで使う表示専用の7段モデル。builderの選択肢とは語彙が異なる。 */
 export const PROCESS_LABELS = [
@@ -241,6 +241,27 @@ export function deriveDuration(period: string): string {
   const years = Math.floor(months / 12);
   const remMonths = months % 12;
   return remMonths === 0 ? `${years}年` : `${years}年${remMonths}ヶ月`;
+}
+
+/**
+ * 案件の稼働月数の表示値（案件カード・タイムライン・会社レーン・PDF が共有する唯一の判定）。
+ *
+ * 手入力の `duration` を優先し、空なら `period` から導出する。月まで書かれていない
+ * 期間（`2020` や `2020〜2021`）では出さない — `deriveDuration` は年だけの両端も数えて
+ * `1年1ヶ月` のような値を返すが、書いていない精度の月数を表示すると期間データの
+ * 表記ズレを表示側で新たに作ることになる（`companyTenureLabel` が在籍月数に掛ける
+ * `precise` 判定と同じ考え方）。終端「現在」は月数ではなく「継続中」を返す。
+ */
+export function displayDuration(item: Pick<ProjectItem, 'period' | 'duration'>): string {
+  // period が解釈できない案件に稼働月数だけ出すと「いつの数字か」が伝わらないので畳む
+  // （期間自体の表示も空になる前提と揃える）。
+  const bounds = parsePeriodBounds(item.period);
+  if (!bounds) return '';
+  const manual = typeof item.duration === 'string' ? item.duration.trim() : '';
+  if (manual) return manual;
+  // 閉じた期間は両端とも月精度が要る。openEnded（〜現在）は「継続中」を返すだけなので数えない。
+  if (!bounds.precise && !bounds.openEnded) return '';
+  return deriveDuration(item.period);
 }
 
 // --- 月入力（YYYY-MM）ベースの期間ユーティリティ（エディタ用） -----------------

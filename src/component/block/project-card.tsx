@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from 'react';
 import type { ProjectItem } from '@/db/block';
 import {
-  deriveDuration,
+  displayDuration,
   flattenTech,
   formatPeriodDisplay,
   normalizeProcess,
@@ -37,6 +37,8 @@ interface ProjectCardProps {
   tech: string[];
   /** 検索クエリ語。一致チップ強調に使う（activeTech が空でも効く）。 */
   queryTerms?: string[];
+  /** 稼働月数（期間の右の括弧書き）を出すか。ビュートグル「稼働月数」に従う。既定 true。 */
+  showDuration?: boolean;
 }
 
 function CardBlock({ label, children }: { label: string; children: ReactNode }) {
@@ -48,10 +50,11 @@ function CardBlock({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-export const ProjectCard = ({ item, no, activeTech, tech, queryTerms = [] }: ProjectCardProps) => {
+export const ProjectCard = ({ item, no, activeTech, tech, queryTerms = [], showDuration = true }: ProjectCardProps) => {
   const [commentOpen, setCommentOpen] = useState(false);
   const normalized = normalizeProcess(item.process);
-  const duration = sanitizeHtml(item.duration?.trim() || deriveDuration(item.period));
+  // タイムライン・会社レーン・PDF と同じ判定（displayDuration）。トグル OFF では出さない。
+  const duration = showDuration ? sanitizeHtml(displayDuration(item)) : '';
   const summary = item.summary?.trim() || item.duties;
   const area = resolveProjectArea(item.scope, item.tech);
   const periodDisplay = formatPeriodDisplay(item.period);

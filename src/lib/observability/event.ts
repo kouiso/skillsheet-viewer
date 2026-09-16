@@ -11,7 +11,7 @@ export type SheetSource = 'db' | 'github';
 // component → lib/observability の依存方向が逆転するので、値の集合だけを複製する
 // （viewer-topbar.tsx 側を変えたらここも変えること。両者が一致するかは event.test.ts の
 // 型テストが検査する）。
-export type ViewToggleKey = 'skills' | 'process' | 'projects' | 'timeline';
+export type ViewToggleKey = 'skills' | 'process' | 'projects' | 'timeline' | 'duration';
 export type ExportResult = 'success' | 'failure';
 export type ExportFailureReason = 'TypeError' | 'RangeError' | 'FetchError' | 'Error' | 'unknown';
 export type SecondsBucket = '0-5' | '5-15' | '15-30' | '30-60' | '60+';
