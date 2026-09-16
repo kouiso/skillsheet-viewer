@@ -10,15 +10,23 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
 
-/** ビューアで表示ON/OFFを切り替えられるセクションのキー。 */
-export type ViewKey = 'skills' | 'process' | 'projects' | 'timeline';
+/**
+ * ビューアで表示ON/OFFを切り替えられるキー。
+ *
+ * 'duration' だけはセクションの出し分けではなく、案件カード・会社レーン・タイムライン・
+ * PDF に出る稼働月数（「9ヶ月」等）という表示項目を制御する。トグル機構・初期値（全ON）・
+ * PDF への伝搬は他のキーと同じ列に乗せる — 別軸の設定を生やすと画面と PDF で
+ * 食い違う経路が増えるため。
+ */
+export type ViewKey = 'skills' | 'process' | 'projects' | 'timeline' | 'duration';
 
-/** ビュートグルの定義（デザインプロトタイプ redesign2 の ALL_VIEWS と同順）。 */
+/** ビュートグルの定義（デザインプロトタイプ redesign2 の ALL_VIEWS と同順 + 末尾に表示項目トグル）。 */
 export const ALL_VIEWS: { id: ViewKey; label: string }[] = [
   { id: 'skills', label: 'スキルマトリクス' },
   { id: 'process', label: '工程の俯瞰' },
   { id: 'projects', label: '案件詳細' },
   { id: 'timeline', label: 'タイムライン' },
+  { id: 'duration', label: '稼働月数' },
 ];
 
 /** 全ビューONの初期値。 */
