@@ -41,6 +41,8 @@ const renderTopbar = (props = {}) =>
  * アイコン群は SP 用（sm:hidden）とデスクトップ用（hidden sm:flex）を DOM に両方出し、
  * 表示側を CSS で切り替えている。jsdom は CSS を適用しないため両方が取得できる。
  * 添字 0 が SP 用、1 が デスクトップ用。
+ * ただしダウンロード系は SP では「ダウンロード」メニュー1個に畳まれる（320px 幅で
+ * 戻るリンクのタップターゲットを確保するため）ため、個別ラベルはデスクトップ側だけに出る。
  */
 const getIconCopies = (label: string) => screen.getAllByLabelText(label);
 
@@ -163,19 +165,25 @@ describe('ViewerTopbar', () => {
   });
 
   describe('PDF ダウンロードの生成中フィードバック（#191）', () => {
-    it('通常時は「PDFダウンロード」ラベルで押せる', () => {
+    it('通常時は「PDFダウンロード」ラベルで押せる（デスクトップ側）', () => {
       renderTopbar({ onDownloadPdf: vi.fn() });
-      for (const button of getIconCopies('PDFダウンロード')) {
+      const buttons = getIconCopies('PDFダウンロード');
+      expect(buttons).toHaveLength(1);
+      for (const button of buttons) {
         expect(button).toBeEnabled();
         expect(button).toHaveAttribute('aria-busy', 'false');
       }
+      // SP 側は「ダウンロード」メニューに畳まれている。
+      expect(getIconCopies('ダウンロード')).toHaveLength(1);
     });
 
-    it('pdfLoading 中は無効化され、aria-busy と「PDFを生成中」ラベルで状態を伝える', () => {
+    it('pdfLoading 中は無効化され、aria-busy と生成中ラベルで状態を伝える', () => {
       renderTopbar({ onDownloadPdf: vi.fn(), pdfLoading: true });
-      const buttons = getIconCopies('PDFを生成中');
-      expect(buttons).toHaveLength(2);
-      for (const button of buttons) {
+      const desktop = getIconCopies('PDFを生成中');
+      expect(desktop).toHaveLength(1);
+      const sp = getIconCopies('ダウンロードを生成中');
+      expect(sp).toHaveLength(1);
+      for (const button of [...desktop, ...sp]) {
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('aria-busy', 'true');
       }
@@ -190,19 +198,24 @@ describe('ViewerTopbar', () => {
   });
 
   describe('Excel ダウンロードの生成中フィードバック', () => {
-    it('通常時は「Excelダウンロード」ラベルで押せる', () => {
+    it('通常時は「Excelダウンロード」ラベルで押せる（デスクトップ側）', () => {
       renderTopbar({ onDownloadExcel: vi.fn() });
-      for (const button of getIconCopies('Excelダウンロード')) {
+      const buttons = getIconCopies('Excelダウンロード');
+      expect(buttons).toHaveLength(1);
+      for (const button of buttons) {
         expect(button).toBeEnabled();
         expect(button).toHaveAttribute('aria-busy', 'false');
       }
+      expect(getIconCopies('ダウンロード')).toHaveLength(1);
     });
 
-    it('excelLoading 中は無効化され、aria-busy と「Excelを生成中」ラベルで状態を伝える', () => {
+    it('excelLoading 中は無効化され、aria-busy と生成中ラベルで状態を伝える', () => {
       renderTopbar({ onDownloadExcel: vi.fn(), excelLoading: true });
-      const buttons = getIconCopies('Excelを生成中');
-      expect(buttons).toHaveLength(2);
-      for (const button of buttons) {
+      const desktop = getIconCopies('Excelを生成中');
+      expect(desktop).toHaveLength(1);
+      const sp = getIconCopies('ダウンロードを生成中');
+      expect(sp).toHaveLength(1);
+      for (const button of [...desktop, ...sp]) {
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('aria-busy', 'true');
       }
@@ -213,6 +226,107 @@ describe('ViewerTopbar', () => {
       renderTopbar();
       expect(screen.queryByLabelText('Excelダウンロード')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Excelを生成中')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('要約版ダウンロード（Popover で PDF / Excel を選ぶ、#326）', () => {
+    it('onDownloadPdfDigest 指定でアイコンが出る（デスクトップは専用、SP はダウンロードメニュー内）', () => {
+      renderTopbar({ onDownloadPdfDigest: vi.fn() });
+      const buttons = getIconCopies('要約版をダウンロード');
+      expect(buttons).toHaveLength(1);
+      for (const button of buttons) {
+        expect(button).toBeEnabled();
+        expect(button).toHaveAttribute('aria-busy', 'false');
+      }
+      expect(getIconCopies('ダウンロード')).toHaveLength(1);
+    });
+
+    it('onDownloadPdfDigest 未指定なら要約版ボタン自体を出さない', () => {
+      renderTopbar();
+      expect(screen.queryByLabelText('要約版をダウンロード')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('要約版を生成中')).not.toBeInTheDocument();
+    });
+
+    it('Popover を開くと PDF と Excel（要約版）の選択肢が出て、押すと閉じてからコールバックされる', async () => {
+      const user = userEvent.setup();
+      const onPdf = vi.fn();
+      const onExcel = vi.fn();
+      renderTopbar({ onDownloadPdfDigest: onPdf, onDownloadExcelDigest: onExcel });
+
+      // デスクトップ側のトリガーを開く。
+      await user.click(getIconCopies('要約版をダウンロード')[0]);
+      const pdfItem = await screen.findByRole('button', { name: 'PDF（要約版）ダウンロード' });
+      const excelItem = screen.getByRole('button', { name: 'Excel（要約版）ダウンロード' });
+
+      await user.click(pdfItem);
+      expect(onPdf).toHaveBeenCalledTimes(1);
+      expect(onExcel).not.toHaveBeenCalled();
+      // クリック後に Popover は閉じる（選択肢が DOM から外れる）。
+      expect(screen.queryByRole('button', { name: 'Excel（要約版）ダウンロード' })).not.toBeInTheDocument();
+
+      await user.click(getIconCopies('要約版をダウンロード')[0]);
+      await user.click(await screen.findByRole('button', { name: 'Excel（要約版）ダウンロード' }));
+      expect(onExcel).toHaveBeenCalledTimes(1);
+      expect(onPdf).toHaveBeenCalledTimes(1);
+      expect(excelItem).toBeDefined();
+    });
+
+    it('onDownloadExcelDigest 未指定なら Popover 内に Excel の選択肢が出ない', async () => {
+      const user = userEvent.setup();
+      renderTopbar({ onDownloadPdfDigest: vi.fn() });
+
+      await user.click(getIconCopies('要約版をダウンロード')[0]);
+      expect(await screen.findByRole('button', { name: 'PDF（要約版）ダウンロード' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Excel（要約版）ダウンロード' })).not.toBeInTheDocument();
+    });
+
+    it('digestLoading 中はトリガーが無効化され、aria-busy と生成中ラベルで状態を伝える', () => {
+      renderTopbar({ onDownloadPdfDigest: vi.fn(), digestLoading: true });
+      const desktop = getIconCopies('要約版を生成中');
+      expect(desktop).toHaveLength(1);
+      const sp = getIconCopies('ダウンロードを生成中');
+      expect(sp).toHaveLength(1);
+      for (const button of [...desktop, ...sp]) {
+        expect(button).toBeDisabled();
+        expect(button).toHaveAttribute('aria-busy', 'true');
+      }
+      expect(screen.queryByLabelText('要約版をダウンロード')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('SP 用ダウンロードメニュー（320px 幅でも戻るリンクのタップターゲットを確保）', () => {
+    it('開くと PDF / Excel / 要約版の選択肢が出て、押すと閉じてからコールバックされる', async () => {
+      const user = userEvent.setup();
+      const onPdf = vi.fn();
+      const onExcel = vi.fn();
+      const onPdfDigest = vi.fn();
+      const onExcelDigest = vi.fn();
+      renderTopbar({
+        onDownloadPdf: onPdf,
+        onDownloadExcel: onExcel,
+        onDownloadPdfDigest: onPdfDigest,
+        onDownloadExcelDigest: onExcelDigest,
+      });
+
+      await user.click(getIconCopies('ダウンロード')[0]);
+      // メニュー項目はデスクトップ側の同名ボタンと区別するためポップオーバー内を探す。
+      const inPopover = (el: HTMLElement) => el.closest('[data-radix-popper-content-wrapper]') !== null;
+      const findPopoverItem = async (name: string) => (await screen.findAllByRole('button', { name })).find(inPopover);
+      const queryPopoverItem = (name: string) => screen.queryAllByRole('button', { name }).find(inPopover);
+      expect(await findPopoverItem('PDFダウンロード')).toBeDefined();
+      expect(await findPopoverItem('Excelダウンロード')).toBeDefined();
+      expect(await findPopoverItem('PDF（要約版）ダウンロード')).toBeDefined();
+      const excelDigest = await findPopoverItem('Excel（要約版）ダウンロード');
+
+      await user.click(excelDigest as HTMLElement);
+      expect(onExcelDigest).toHaveBeenCalledTimes(1);
+      // クリック後に Popover は閉じて項目が DOM から外れる（デスクトップ側の常設ボタンは残る）。
+      expect(queryPopoverItem('Excel（要約版）ダウンロード')).toBeUndefined();
+    });
+
+    it('ダウンロード系ハンドラが無ければメニューを出さない', () => {
+      renderTopbar();
+      expect(screen.queryByLabelText('ダウンロード')).not.toBeInTheDocument();
     });
   });
 });
