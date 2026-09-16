@@ -1,8 +1,8 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
-import { TechFilter } from './tech-filter';
+import { type TechCount, TechFilter } from './tech-filter';
 
 const noop = {
   query: '',
@@ -11,10 +11,10 @@ const noop = {
   onClear: vi.fn(),
 };
 
-const ALL = [
-  { name: 'TypeScript', count: 3 },
-  { name: 'React', count: 2 },
-  { name: 'OnlyOnce', count: 1 },
+const ALL: TechCount[] = [
+  { name: 'TypeScript', count: 3, bucket: 'lang' },
+  { name: 'React', count: 2, bucket: 'fw' },
+  { name: 'OnlyOnce', count: 1, bucket: 'tools' },
 ];
 
 describe('TechFilter', () => {
@@ -40,6 +40,43 @@ describe('TechFilter', () => {
     await user.type(screen.getByLabelText('技術を選ぶ'), 'Only');
 
     expect(screen.getByRole('option', { name: /OnlyOnce/ })).toBeTruthy();
+  });
+
+  // 言語・インフラ・ツールが無分類で並ぶと何が「技術」扱いか読み取れないため、
+  // 案件カードと同じバケットラベルの見出しで候補をグルーピングする（#314）。
+  it('候補はバケットラベルの見出しでグルーピングされる', async () => {
+    const user = userEvent.setup();
+    const all: TechCount[] = [
+      { name: 'JavaScript', count: 2, bucket: 'lang' },
+      { name: 'AWS', count: 2, bucket: 'infra' },
+      { name: 'VSCode', count: 1, bucket: 'tools' },
+    ];
+    render(<TechFilter all={all} active={[]} count={3} total={3} {...noop} />);
+
+    await user.click(screen.getByLabelText('技術を選ぶ'));
+
+    // ツールの VSCode は「ツール」見出しのグループに入り、「技術」として無説明に並ばない。
+    const toolsGroup = screen.getByRole('group', { name: 'ツール' });
+    expect(within(toolsGroup).getByRole('option', { name: /VSCode/ })).toBeTruthy();
+    expect(within(screen.getByRole('group', { name: 'インフラ' })).getByRole('option', { name: /AWS/ })).toBeTruthy();
+    expect(
+      within(screen.getByRole('group', { name: '言語' })).getByRole('option', { name: /JavaScript/ }),
+    ).toBeTruthy();
+    // 候補の無いバケットの見出しは出さない。
+    expect(screen.queryByRole('group', { name: 'DB' })).toBeNull();
+  });
+
+  it('グループをまたいで矢印キー移動と Enter 選択ができる', async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn();
+    render(<TechFilter all={ALL} active={[]} count={3} total={3} {...noop} onToggle={onToggle} />);
+
+    const input = screen.getByLabelText('技術を選ぶ');
+    await user.click(input);
+    // 3件目の OnlyOnce は tools グループ。見出しを option に数えず、フラットな候補順で移動する。
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}');
+
+    expect(onToggle).toHaveBeenCalledWith('OnlyOnce');
   });
 
   it('候補パネルは固定会社見出しより前面に表示する', async () => {

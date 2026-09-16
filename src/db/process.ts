@@ -384,24 +384,39 @@ function isEmptyTechValue(value: unknown): boolean {
   return trimmed === '' || EMPTY_TECH_PLACEHOLDERS.has(trimmed);
 }
 
+/** flattenTechEntries の1要素。技術名と、それが属するバケット。 */
+export interface TechEntry {
+  name: string;
+  bucket: keyof ProjectTech;
+}
+
 /**
- * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * 6バケットの技術スタックを、初出順を保った重複なしのエントリ配列にする。
  * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ * 同名が複数バケットにまたがる場合は TECH_BUCKET_ORDER で先に来るバケットを採用する。
  */
-export function flattenTech(tech: ProjectTech): string[] {
+export function flattenTechEntries(tech: ProjectTech): TechEntry[] {
   if (!tech) return [];
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: TechEntry[] = [];
   for (const key of TECH_BUCKET_ORDER) {
     for (const value of tech[key] ?? []) {
       if (isEmptyTechValue(value)) continue;
       if (!seen.has(value)) {
         seen.add(value);
-        out.push(value);
+        out.push({ name: value, bucket: key });
       }
     }
   }
   return out;
+}
+
+/**
+ * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ */
+export function flattenTech(tech: ProjectTech): string[] {
+  return flattenTechEntries(tech).map((entry) => entry.name);
 }
 
 /**
