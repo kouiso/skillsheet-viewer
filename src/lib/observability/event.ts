@@ -5,6 +5,8 @@
  * 「書けてしまう」自由文字列を型から締め出す。新しいイベントを足すときも、
  * プロパティ型に `string` を書きたくなったら enum に変換できないか先に考えること。
  */
+import type { ExportEdition } from '@/lib/export/edition';
+
 export type ViewKind = 'markdown' | 'dashboard';
 export type SheetSource = 'db' | 'github';
 // src/component/viewer-topbar.tsx の ViewKey と同じ値。型を直接 import すると
@@ -34,6 +36,18 @@ export type ObservabilityEvent =
   | { name: 'sheet_viewed'; layout: ViewKind; source: SheetSource; blockCount: number }
   | { name: 'sheet_read_depth'; depthPercent: 25 | 50 | 75 | 100; secondsBucket: SecondsBucket }
   | { name: 'sheet_view_toggled'; view: ViewToggleKey; enabled: boolean }
-  | { name: 'pdf_exported'; result: ExportResult; durationBucket: SecondsBucket; reason?: ExportFailureReason }
-  | { name: 'excel_exported'; result: ExportResult; durationBucket: SecondsBucket; reason?: ExportFailureReason }
+  | {
+      name: 'pdf_exported';
+      edition: ExportEdition;
+      result: ExportResult;
+      durationBucket: SecondsBucket;
+      reason?: ExportFailureReason;
+    }
+  | {
+      name: 'excel_exported';
+      edition: ExportEdition;
+      result: ExportResult;
+      durationBucket: SecondsBucket;
+      reason?: ExportFailureReason;
+    }
   | { name: 'viewer_auth_submitted'; outcome: ViewerAuthOutcome };
