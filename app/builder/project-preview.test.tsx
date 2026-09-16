@@ -24,6 +24,31 @@ const project = (over: Partial<ProjectItem> = {}): ProjectItem => ({
 const slotsOf = (container: HTMLElement) =>
   Array.from(container.querySelectorAll<HTMLElement>('[data-pv-slot]')).map((el) => el.dataset.pvSlot);
 
+describe('ProjectPreview のメタ行', () => {
+  it('役割は会社・人数・期間と同じ1行に出る（閲覧側 #289/#290 と同じ構成）', () => {
+    const { container } = render(
+      <ProjectPreview
+        project={project({ role: 'SE', team: '9', duration: '9ヶ月' })}
+        company={{ id: 'c1', name: 'D社', kind: '', period: '', note: '' }}
+        no={1}
+      />,
+    );
+
+    const meta = container.querySelector('.pv-meta');
+    expect(meta?.textContent).toContain('SE · D社 · 9名 · 9ヶ月');
+    expect(meta?.textContent).toContain('役割');
+    // 見出しの左右2枠（.pv-top）が残っていると役割の位置が案件ごとにずれる（#289）。
+    expect(container.querySelector('.pv-top')).toBeNull();
+  });
+
+  it('役割が空でも編集欄への飛び先として「役割未設定」を残し、「役割」ラベルは出さない', () => {
+    const { container } = render(<ProjectPreview project={project({ role: '' })} company={undefined} no={1} />);
+    const meta = container.querySelector('[data-pv-slot="meta"]');
+    expect(meta?.textContent).toContain('役割未設定');
+    expect(container.querySelector('.pv-meta .kicker')).toBeNull();
+  });
+});
+
 const tabbable = (container: HTMLElement) =>
   Array.from(container.querySelectorAll<HTMLElement>('[data-pv-slot]')).filter((el) => el.tabIndex === 0);
 

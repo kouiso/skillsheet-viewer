@@ -119,9 +119,8 @@ describe('稼働月数（ビュートグル「稼働月数」に従う）', () =
     expect(screen.getByText('在籍 2018.02〜2021.02（37ヶ月）')).toBeInTheDocument();
     // レーン右端の月数欄（2 案件とも 1年2ヶ月）。
     expect(screen.getAllByText('1年2ヶ月')).toHaveLength(2);
-    // カードの「期間（稼働月数）」。
-    expect(screen.getByText('2018.02〜2019.03（1年2ヶ月）')).toBeInTheDocument();
-    expect(screen.getByText('2020.01〜2021.02（1年2ヶ月）')).toBeInTheDocument();
+    // カードのメタ行（役割・会社・人数・月数の1行、#289/#290 由来）にも月数が出る。
+    expect(screen.getAllByText(/エンジニア · 個人開発 · 5名 · 1年2ヶ月/)).toHaveLength(2);
   });
 
   it('OFF なら在籍月数・レーン・カードの括弧書きを全部消す（月数系の注記が半端に残らない）', () => {
