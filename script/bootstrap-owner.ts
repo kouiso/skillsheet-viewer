@@ -176,13 +176,19 @@ export async function provisionOwner(
   // ロールバックが効かない（linkAccount が失敗すると user 行だけ残る）。
   // runWithTransaction は als.run でトランザクション用アダプタを積んでから fn を走らせる。
   const userId = await runWithTransaction(ctx.adapter, async () => {
-    const createdUser = await ctx.internalAdapter.createUser({
-      email: normalizedEmail,
-      name,
-      image: null,
-      // 単一オーナー運用でありメール確認フローが存在しないため、最初から検証済みにする。
-      emailVerified: true,
-    });
+    // better-auth 1.7 から createUser はプロビジョニング由来（UserProvisioningSource）を
+    // 第 2 引数に必須化した。ブートストラップは email/password のオーナー作成なので
+    // 'email-password' を渡す（validateUserInfo フックの method 判定用）。
+    const createdUser = await ctx.internalAdapter.createUser(
+      {
+        email: normalizedEmail,
+        name,
+        image: null,
+        // 単一オーナー運用でありメール確認フローが存在しないため、最初から検証済みにする。
+        emailVerified: true,
+      },
+      { method: 'email-password' },
+    );
     await ctx.internalAdapter.linkAccount({
       userId: createdUser.id,
       providerId: 'credential',

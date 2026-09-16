@@ -156,6 +156,20 @@ export async function requireViewer(): Promise<void> {
 
 ---
 
+### Remote MCP（Issue #305、MCP_ENABLED 環境のみ）
+
+`POST /api/mcp` に Remote MCP サーバーを載せている。認証は Better Auth の OAuth 2.1
+Provider（`jwt()` + `mcp()` + `cimd()` プラグイン）による Bearer token で、
+閲覧 cookie・Better Auth セッション cookie は使わない。
+
+- トークンの `sub` が `SKILLSHEET_OWNER_ID` と一致する場合のみ許可（他者は 403）。
+- スコープは `skillsheet:read` / `skillsheet:write` の 2 種で権限分離する。
+- 詳細は [06 Remote MCP](06-remote-mcp.md) を参照。
+
+---
+
+---
+
 ## 権限分離のまとめ
 
 - 閲覧できても編集はできない: 閲覧 cookie は `requireViewer()` を通すだけで、`isEditor()` は Better Auth セッション必須なので書き込みは通らない。
