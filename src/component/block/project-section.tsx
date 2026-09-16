@@ -2,9 +2,9 @@
 
 import { motion, useReducedMotion } from 'framer-motion';
 import { type ReactNode, useMemo, useState } from 'react';
-import { filterVisibleProjectData, type ProjectBlockData, type ProjectItem } from '@/db/block';
+import { filterVisibleProjectData, type ProjectBlockData, type ProjectItem, type ProjectTech } from '@/db/block';
 import { groupProjectsByCompany } from '@/db/group-by-company';
-import { flattenTech } from '@/db/process';
+import { flattenTechEntries, TECH_BUCKET_ORDER } from '@/db/process';
 import { projectAreaText } from '@/db/tech-area';
 import { CompanyJumpNav } from './company-jump-nav';
 import { CompanySection } from './company-section';
@@ -77,18 +77,34 @@ export function ProjectSection({
   const companyMap = useMemo(() => new Map(visible.companies.map((c) => [c.id, c])), [visible.companies]);
 
   const itemsWithNo = useMemo(
-    () => visible.items.map((item, index) => ({ item, no: index + 1, tech: flattenTech(item.tech) })),
+    () =>
+      visible.items.map((item, index) => {
+        const entries = flattenTechEntries(item.tech);
+        return { item, no: index + 1, entries, tech: entries.map((e) => e.name) };
+      }),
     [visible.items],
   );
 
   const allTech = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const { tech } of itemsWithNo) {
-      for (const t of tech) counts.set(t, (counts.get(t) ?? 0) + 1);
+    const counts = new Map<string, { count: number; bucket: keyof ProjectTech }>();
+    for (const { entries } of itemsWithNo) {
+      for (const e of entries) {
+        const prev = counts.get(e.name);
+        if (!prev) {
+          counts.set(e.name, { count: 1, bucket: e.bucket });
+        } else {
+          prev.count += 1;
+          // 同名が案件ごとに別バケットへ入っていると、候補の属するグループがデータの
+          // 並び順で揺れる。TECH_BUCKET_ORDER で先のバケットに統一して固定する。
+          if (TECH_BUCKET_ORDER.indexOf(e.bucket) < TECH_BUCKET_ORDER.indexOf(prev.bucket)) {
+            prev.bucket = e.bucket;
+          }
+        }
+      }
     }
     return [...counts.entries()]
-      .sort(([aName, aCount], [bName, bCount]) => bCount - aCount || aName.localeCompare(bName))
-      .map(([name, count]) => ({ name, count }));
+      .sort(([aName, a], [bName, b]) => b.count - a.count || aName.localeCompare(bName))
+      .map(([name, v]) => ({ name, count: v.count, bucket: v.bucket }));
   }, [itemsWithNo]);
 
   const parsedQuery = useMemo(() => parseProjectQuery(query), [query]);
