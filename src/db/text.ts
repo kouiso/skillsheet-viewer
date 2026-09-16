@@ -24,9 +24,22 @@ export function collapseSoftBreaks(text: string): string {
     .join('\n\n');
 }
 
-/** インライン強調 `**…**` を外す。対にならない `**` は残さない。 */
+/** インライン強調 `**…**` を外す。独立段落の小見出し行は残す。対にならない `**` は残さない。 */
 export function unwrapEmphasis(text: string): string {
-  // 対になった強調を外したあと、閉じ忘れた `**` が本文に残ると
-  // 画面にも PDF にも `**` がそのまま出てしまうため、残余も取り除く。
-  return text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*\*/g, '');
+  const lines = text.split('\n');
+  const isBoundary = (line?: string) => line === undefined || line.trim().length === 0;
+  return lines
+    .map((line, i) => {
+      // 行全体が `**…**` だけで、前後が空行か本文の端にある行は、案件コメント内で
+      // 話題を分ける小見出し（「**バックエンド**」等）なので残す。外すと本文と同じ
+      // 見た目になり切れ目が読めなくなる（#292）。
+      // 段落の途中に置かれた太字行は、描画側の collapseSoftBreaks で本文に連結されて
+      // 段落先頭の文中太字になるため、小見出しとはみなさず外す。
+      const boldOnly = line.replace(/\*\*[^*]+\*\*/g, '').trim().length === 0;
+      if (boldOnly && isBoundary(lines[i - 1]) && isBoundary(lines[i + 1])) return line;
+      // 対になった強調を外したあと、閉じ忘れた `**` が本文に残ると
+      // 画面にも PDF にも `**` がそのまま出てしまうため、残余も取り除く。
+      return line.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*\*/g, '');
+    })
+    .join('\n');
 }
