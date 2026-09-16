@@ -179,6 +179,42 @@ describe('ProjectCard', () => {
     expect(screen.getByText('コラボレーションツール')).toBeInTheDocument();
   });
 
+  describe('稼働月数（ビュートグル「稼働月数」に従う）', () => {
+    it('メタ行に稼働月数を出す（既定 ON）', () => {
+      render(<ProjectCard item={buildItem({ period: '2025.01 — 2025.09' })} no={1} activeTech={[]} tech={[]} />);
+      // メタ行は役割・会社・人数・月数を ` · ` で繋いだ1行（#289/#290）。
+      expect(screen.getByText(/9ヶ月/)).toBeInTheDocument();
+      // 期間バッジは月数を括弧へ付けず素の表示のまま。
+      expect(screen.getByText('2025.01〜2025.09')).toBeInTheDocument();
+    });
+
+    it('終端が「現在」ならメタ行に「継続中」を出す', () => {
+      render(<ProjectCard item={buildItem({ period: '2025.11 — 現在' })} no={1} activeTech={[]} tech={[]} />);
+      expect(screen.getByText(/継続中/)).toBeInTheDocument();
+    });
+
+    it('showDuration=false ならメタ行に月数を出さない', () => {
+      render(
+        <ProjectCard
+          item={buildItem({ period: '2025.01 — 2025.09' })}
+          no={1}
+          activeTech={[]}
+          tech={[]}
+          showDuration={false}
+        />,
+      );
+      // 期間バッジ自体は残り、月数だけがメタ行から落ちる。
+      expect(screen.getByText('2025.01〜2025.09')).toBeInTheDocument();
+      expect(screen.queryByText(/9ヶ月/)).not.toBeInTheDocument();
+    });
+
+    it('月まで書かれていない期間は月数を添えない（書いていない精度を足さない）', () => {
+      render(<ProjectCard item={buildItem({ period: '2020 — 2021' })} no={1} activeTech={[]} tech={[]} />);
+      expect(screen.getByText('2020〜2021')).toBeInTheDocument();
+      expect(screen.queryByText(/1年1ヶ月/)).not.toBeInTheDocument();
+    });
+  });
+
   it('クエリ一致の技術チップは activeTech が空でも強調する', () => {
     render(
       <ProjectCard
