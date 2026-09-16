@@ -27,14 +27,20 @@ export function isMcpEnabled(): boolean {
  * アクセストークンの `aud` となる protected resource identifier（RFC 8707/9728）。
  *
  * デプロイごとに URL が変わると既存トークンの aud と一致しなくなり全滅するため、
- * 本番では `MCP_RESOURCE_URL` で固定する。未設定時は `BETTER_AUTH_URL` + `/api/mcp`
- * にフォールバック（ローカル開発向け）。どちらも無い場合は MCP を構成できないので
- * `undefined` を返し、呼び出し側はプラグインを載せない判断をする。
+ * 安定した URL の順で解決する: `MCP_RESOURCE_URL`（明示）→ Vercel 本番の固定ドメイン
+ * `VERCEL_PROJECT_PRODUCTION_URL` → `BETTER_AUTH_URL`（ローカル開発向け）。
+ * デプロイ固有の `VERCEL_URL` は aud が毎回変わるため使わない。
+ * どれも無い場合は MCP を構成できないので `undefined` を返し、
+ * 呼び出し側はプラグインを載せない判断をする。
  */
 export function resolveMcpResource(): string | undefined {
   const explicit = process.env.MCP_RESOURCE_URL;
   if (explicit) {
     return explicit;
+  }
+  const prodHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (prodHost) {
+    return new URL('/api/mcp', `https://${prodHost}`).toString();
   }
   const base = process.env.BETTER_AUTH_URL;
   if (!base) {
