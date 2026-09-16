@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, FileDown, Loader2, Moon, PencilLine, Sun } from 'lucide-react';
+import { ArrowLeft, FileDown, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
 import Link from 'next/link';
 
 import { Button } from '@/component/ui/button';
@@ -33,6 +33,9 @@ interface ViewerTopbarProps {
   onToggleView: (view: ViewKey) => void;
   onDownloadPdf?: () => void | Promise<void>;
   pdfLoading?: boolean;
+  /** Excel ダウンロード（DB シートのみ。未指定ならボタンを出さない）。 */
+  onDownloadExcel?: () => void | Promise<void>;
+  excelLoading?: boolean;
   /** 編集者ログイン済みか。false のときは編集導線（ビルダーリンク）を出さない。 */
   canEdit?: boolean;
   /** 編集者判定の前後で編集ボタン分の幅を固定する。 */
@@ -49,6 +52,8 @@ export function ViewerTopbar({
   onToggleView,
   onDownloadPdf,
   pdfLoading = false,
+  onDownloadExcel,
+  excelLoading = false,
   canEdit = true,
   reserveEditSlot = false,
 }: ViewerTopbarProps) {
@@ -128,6 +133,25 @@ export function ViewerTopbar({
             </Button>
           </TooltipTrigger>
           <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
+        </Tooltip>
+      )}
+
+      {onDownloadExcel && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void onDownloadExcel()}
+              disabled={excelLoading}
+              aria-busy={excelLoading}
+              aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
+              className="min-h-11 min-w-11"
+            >
+              {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
         </Tooltip>
       )}
 
