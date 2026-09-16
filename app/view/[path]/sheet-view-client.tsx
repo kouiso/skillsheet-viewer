@@ -7,6 +7,7 @@ import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
 import type { Block } from '@/db/block';
 import { useReadDepth } from '@/hook/use-read-depth';
+import { digestTitle, type ExportEdition } from '@/lib/export/edition';
 import { captureError, track } from '@/lib/observability/capture';
 import { type ExportFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
@@ -60,6 +61,8 @@ const SheetViewClient = ({
 }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
+  // 要約版（PDF / Excel）のどちらかを生成中のあいだ真。全文版の busy とは別系統にする。
+  const [digestLoading, setDigestLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
   // 意図的に raw blocks（中身が空でも）で判定する — skill-sheet-viewer.tsx の isDashboard と
   // 必ず揃えること（片方だけ直すとヘッダー/レイアウトがページ間で食い違う）。
@@ -99,14 +102,17 @@ const SheetViewClient = ({
     setViews((prev) => (enabled ? [...prev, view] : prev.filter((v) => v !== view)));
   };
 
-  const handleDownloadPdf = async () => {
-    const toastId = toast.loading('PDFを生成中…');
+  const downloadPdf = async (edition: ExportEdition) => {
+    const label = edition === 'digest' ? '要約版PDF' : 'PDF';
+    const toastId = toast.loading(`${label}を生成中…`);
     const startedAt = performance.now();
+    // 要約版は digestLoading、全文版は pdfLoading。どちらも「生成中」の busy 表示。
+    const setLoading = edition === 'digest' ? setDigestLoading : setPdfLoading;
     // 生成に失敗したときの後始末。import が済んだ時点で掴んでおく — catch の中で
     // 改めて動的 import すると、その await の分だけ finally が遅れてボタンが busy のまま残る。
     let resetFontsOnFailure: (() => void) | undefined;
     try {
-      setPdfLoading(true);
+      setLoading(true);
 
       const [{ pdf }, { createSkillSheetPdf, resetPdfFontsAfterFailure }] = await Promise.all([
         import('@react-pdf/renderer'),
@@ -117,13 +123,14 @@ const SheetViewClient = ({
       // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
       // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
       // 印刷デザイン経路は描く前に案件セクションの高さを測る（非同期）ので、要素を先に作ってから渡す。
-      const pdfDocument = await createSkillSheetPdf({ title, content, blocks, views, referenceMonth });
+      // 要約版でも views そのものは渡す — createSkillSheetPdf 側が edition を見て解釈を決める。
+      const pdfDocument = await createSkillSheetPdf({ title, content, blocks, views, referenceMonth, edition });
       const blob = await pdf(pdfDocument).toBlob();
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${title}.pdf`;
+      link.download = `${edition === 'digest' ? digestTitle(title) : title}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -131,17 +138,19 @@ const SheetViewClient = ({
         URL.revokeObjectURL(url);
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
-      toast.success('PDFをダウンロードしました', { id: toastId });
+      toast.success(`${label}をダウンロードしました`, { id: toastId });
       track({
         name: 'pdf_exported',
+        edition,
         result: 'success',
         durationBucket: toSecondsBucket(performance.now() - startedAt),
       });
     } catch (err) {
       console.error('Error generating PDF:', err);
-      toast.error('PDFの生成に失敗しました', { id: toastId });
+      toast.error(`${label}の生成に失敗しました`, { id: toastId });
       track({
         name: 'pdf_exported',
+        edition,
         result: 'failure',
         durationBucket: toSecondsBucket(performance.now() - startedAt),
         reason: exportFailureReason(err),
@@ -154,20 +163,30 @@ const SheetViewClient = ({
       // でも安全 — 単に次回また登録し直すだけで副作用は無い）。
       resetFontsOnFailure?.();
     } finally {
-      setPdfLoading(false);
+      setLoading(false);
     }
   };
+
+  // ハンドラは引数を取らない形に分ける — モックが onClick={onDownloadPdf} と書くため、
+  // クリックイベントが第 1 引数に入り既定値が効かない。
+  const handleDownloadPdf = () => downloadPdf('full');
+  const handleDownloadPdfDigest = () => downloadPdf('digest');
 
   // Excel 出力は DB シートなら出す（GitHub シートは対象外）。
   // id 無し（/view/db）は API 側がデフォルトシートへフォールバックする。
   const canExportExcel = source === 'db';
 
-  const handleDownloadExcel = async () => {
-    const toastId = toast.loading('Excelを生成中…');
+  const downloadExcel = async (edition: ExportEdition) => {
+    const label = edition === 'digest' ? '要約版Excel' : 'Excel';
+    const toastId = toast.loading(`${label}を生成中…`);
     const startedAt = performance.now();
+    const setLoading = edition === 'digest' ? setDigestLoading : setExcelLoading;
     try {
-      setExcelLoading(true);
-      const query = sheetId ? `?id=${encodeURIComponent(sheetId)}` : '';
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (sheetId) params.set('id', sheetId);
+      if (edition === 'digest') params.set('edition', 'digest');
+      const query = params.size > 0 ? `?${params}` : '';
       const res = await fetch(`/api/sheet/export-xlsx${query}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
@@ -175,7 +194,7 @@ const SheetViewClient = ({
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${title}.xlsx`;
+      link.download = `${edition === 'digest' ? digestTitle(title) : title}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -183,26 +202,31 @@ const SheetViewClient = ({
         URL.revokeObjectURL(url);
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
-      toast.success('Excelをダウンロードしました', { id: toastId });
+      toast.success(`${label}をダウンロードしました`, { id: toastId });
       track({
         name: 'excel_exported',
+        edition,
         result: 'success',
         durationBucket: toSecondsBucket(performance.now() - startedAt),
       });
     } catch (err) {
       console.error('Error generating Excel:', err);
-      toast.error('Excelの生成に失敗しました', { id: toastId });
+      toast.error(`${label}の生成に失敗しました`, { id: toastId });
       track({
         name: 'excel_exported',
+        edition,
         result: 'failure',
         durationBucket: toSecondsBucket(performance.now() - startedAt),
         reason: exportFailureReason(err),
       });
       captureError(err, { feature: 'excel-export' });
     } finally {
-      setExcelLoading(false);
+      setLoading(false);
     }
   };
+
+  const handleDownloadExcel = () => downloadExcel('full');
+  const handleDownloadExcelDigest = () => downloadExcel('digest');
 
   return (
     <div>
@@ -224,6 +248,9 @@ const SheetViewClient = ({
           pdfLoading={pdfLoading}
           onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
           excelLoading={excelLoading}
+          onDownloadPdfDigest={handleDownloadPdfDigest}
+          onDownloadExcelDigest={canExportExcel ? handleDownloadExcelDigest : undefined}
+          digestLoading={digestLoading}
           canEdit={canEdit}
           reserveEditSlot={reserveEditSlot}
         />
