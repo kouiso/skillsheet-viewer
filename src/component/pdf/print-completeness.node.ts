@@ -33,7 +33,7 @@ import { PRINT_SIZE } from './print-token';
 import type { PrintViewKey } from './print-view-model';
 import { buildPrintViewModel } from './print-view-model';
 
-const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline'];
+const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline', 'duration'];
 
 /**
  * プロフィール帯（1 行 3 列）に収まらず、スキル一覧ページの `expertiseRows` へ回る値の
@@ -360,6 +360,11 @@ export function enumerateCompletenessFacts(blocks: Block[], views: PrintViewKey[
         // ここでは「省略＝欠落」として扱わず、実際に描画される側の文字列だけを事実にする。
         const periodText = project.level === 'detail' ? project.periodText : project.compactPeriodText;
         pushFact(facts, 'project', projectScope, '期間', periodText);
+
+        // 稼働月数。詳細版は期間バッジ直下に単独で、簡約版はメタ行の「期間：Nヶ月」に出る
+        // （どちらも durationText が substring として残る）。ビュートグル 'duration' が OFF の
+        // とき durationText は空で、この fact は pushFact が捨てる（意図的な不在）。
+        pushFact(facts, 'project', projectScope, '稼働月数', project.durationText);
 
         pushFact(facts, 'project', projectScope, 'チーム規模', project.team);
 

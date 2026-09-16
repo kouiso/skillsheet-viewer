@@ -106,6 +106,7 @@ const SIMULATED_PAGES: QualityPage[] = [
     txt('2018.01〜2020.06'), // 会社の在籍期間（3 案件の period から導出される表示値）
     txt('案件アルファ'),
     txt('2020.01〜2020.06'), // 案件アルファの期間（detail レベルなので periodText そのまま）
+    txt('6ヶ月'), // 稼働月数（detail 版は期間バッジ直下に単独で出る）
     txt('エンジニア'),
     txt('5名'),
     // 技術領域はスタック（Swift→iOS, Kotlin→Android, PHP→バックエンド）からの導出値。
@@ -121,9 +122,15 @@ const SIMULATED_PAGES: QualityPage[] = [
     txt('他 2 件'),
   ],
   // page 1 = ベータの見出し。本文はまだ乗らない（次ページへ溢れる）。
-  [txt('案件ベータ'), txt('2019.01〜2019.06'), txt('TypeScript')],
+  [txt('案件ベータ'), txt('2019.01〜2019.06'), txt('6ヶ月'), txt('TypeScript')],
   // page 2 = ベータの溢れた本文 ＋ ガンマの見出しと罠の本文（同じページに同居する）。
-  [txt('スコープ境界をまたぐ本文'), txt('案件ガンマ'), txt('2018.01〜2018.06'), txt('PHPは使っていない案件')],
+  [
+    txt('スコープ境界をまたぐ本文'),
+    txt('案件ガンマ'),
+    txt('2018.01〜2018.06'),
+    txt('6ヶ月'),
+    txt('PHPは使っていない案件'),
+  ],
 ];
 
 describe('normalizeForMatch', () => {
@@ -150,6 +157,14 @@ describe('enumerateCompletenessFacts', () => {
   it("views で 'projects' を OFF にすると案件・会社の事実を列挙しない", () => {
     const facts = enumerateCompletenessFacts(PROJECT_BLOCKS, ['skills', 'process', 'timeline']);
     expect(facts.some((f) => f.category === 'project' || f.category === 'company')).toBe(false);
+  });
+
+  it("views で 'duration' を OFF にすると稼働月数の事実を列挙しない（意図的な不在）", () => {
+    const withDuration = enumerateCompletenessFacts(PROJECT_BLOCKS);
+    expect(withDuration.filter((f) => f.label === '稼働月数').map((f) => f.text)).toEqual(['6ヶ月', '6ヶ月', '6ヶ月']);
+
+    const withoutDuration = enumerateCompletenessFacts(PROJECT_BLOCKS, ['skills', 'process', 'projects', 'timeline']);
+    expect(withoutDuration.some((f) => f.label === '稼働月数')).toBe(false);
   });
 
   it('技術名を分類ごと・切り捨て前の件数で列挙する（PRINT_CHIP_LIMIT を無視する）', () => {
@@ -267,8 +282,16 @@ const PROSE_MENTION_BLOCKS: Block[] = [
 // page 1 / page 2 = それぞれの本物のカード（案件名だけが単独の item ＝見出し）。
 const PROSE_MENTION_PAGES: QualityPage[] = [
   [txt('プローズ社'), txt('業務委託にて、案件イプシロンと案件ゼータを担当。')],
-  [txt('案件イプシロン'), txt('2021.01〜2021.06'), txt('PM'), txt('3名'), txt('TypeScript'), txt('要件定義')],
-  [txt('案件ゼータ'), txt('2022.01〜2022.06'), txt('PM'), txt('4名'), txt('Go'), txt('運用')],
+  [
+    txt('案件イプシロン'),
+    txt('2021.01〜2021.06'),
+    txt('6ヶ月'),
+    txt('PM'),
+    txt('3名'),
+    txt('TypeScript'),
+    txt('要件定義'),
+  ],
+  [txt('案件ゼータ'), txt('2022.01〜2022.06'), txt('6ヶ月'), txt('PM'), txt('4名'), txt('Go'), txt('運用')],
 ];
 
 describe('見出しの地の文言及を開始ページと誤認しない', () => {
