@@ -168,4 +168,31 @@ describe('ViewerTopbar', () => {
       expect(screen.queryByLabelText('PDFを生成中')).not.toBeInTheDocument();
     });
   });
+
+  describe('Excel ダウンロードの生成中フィードバック', () => {
+    it('通常時は「Excelダウンロード」ラベルで押せる', () => {
+      renderTopbar({ onDownloadExcel: vi.fn() });
+      for (const button of getIconCopies('Excelダウンロード')) {
+        expect(button).toBeEnabled();
+        expect(button).toHaveAttribute('aria-busy', 'false');
+      }
+    });
+
+    it('excelLoading 中は無効化され、aria-busy と「Excelを生成中」ラベルで状態を伝える', () => {
+      renderTopbar({ onDownloadExcel: vi.fn(), excelLoading: true });
+      const buttons = getIconCopies('Excelを生成中');
+      expect(buttons).toHaveLength(2);
+      for (const button of buttons) {
+        expect(button).toBeDisabled();
+        expect(button).toHaveAttribute('aria-busy', 'true');
+      }
+      expect(screen.queryByLabelText('Excelダウンロード')).not.toBeInTheDocument();
+    });
+
+    it('onDownloadExcel 未指定なら Excel ボタン自体を出さない', () => {
+      renderTopbar();
+      expect(screen.queryByLabelText('Excelダウンロード')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Excelを生成中')).not.toBeInTheDocument();
+    });
+  });
 });
