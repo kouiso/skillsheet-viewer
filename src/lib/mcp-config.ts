@@ -3,12 +3,13 @@ import 'server-only';
 /**
  * Remote MCP サーバー（Issue #305）の公開設定。
  *
- * `MCP_ENABLED` が `'true'` の環境だけ `POST /api/mcp` と Better Auth の
+ * `MCP_ENABLED` が `'true'` の環境、または未設定の Vercel 本番デプロイ
+ * （`VERCEL_ENV === 'production'`）で `POST /api/mcp` と Better Auth の
  * OAuth 2.1 Provider エンドポイント（`/api/auth/oauth2/*`、`.well-known`）を公開する。
- * 未設定・それ以外の値では MCP 関連の入口を一切作らない（閲覧面・tRPC には影響しない）。
- * 本番で自動有効化しない理由: OAuth プラグインの init は `oauth_resource` テーブルへの
- * seed を伴い、対象 DB に `0006` 未適用だと `/api/auth/*` 全般が 500 になるため、
- * 有効化は「その DB へのマイグレーション適用を確認した環境」でのみ明示する。
+ * `'false'` は常に無効化する逃げ道として残す。preview・開発環境は明示設定のみ有効。
+ * OAuth プラグインの init 失敗（対象 DB に `0006` 未適用など）は getAuth が
+ * プラグイン無しへフォールバックするため `/api/auth/*` は壊れず、`/api/mcp` は
+ * 404 に留まる（Issue #331）。
  */
 
 /** リソース上で意味を持つスコープはこの 2 つだけに限定する（設計: Issue #305）。 */
@@ -17,7 +18,12 @@ export const MCP_WRITE_SCOPE = 'skillsheet:write';
 export const MCP_SCOPES = [MCP_READ_SCOPE, MCP_WRITE_SCOPE] as const;
 
 export function isMcpEnabled(): boolean {
-  return process.env.MCP_ENABLED === 'true';
+  const flag = process.env.MCP_ENABLED;
+  if (flag === 'true') return true;
+  if (flag === 'false') return false;
+  // Issue #331: Vercel 本番はダッシュボード未設定でも既定で有効にする。
+  // init 失敗時のフォールバックは getAuth 側が担う。
+  return process.env.VERCEL_ENV === 'production';
 }
 
 /**

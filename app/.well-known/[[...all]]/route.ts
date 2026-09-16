@@ -19,7 +19,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!isMcpEnabled()) {
     return new Response('Not Found', { status: 404 });
   }
-  return getAuth().handler(request);
+  return (await getAuth()).handler(request);
 }
 
 export async function HEAD(request: Request): Promise<Response> {

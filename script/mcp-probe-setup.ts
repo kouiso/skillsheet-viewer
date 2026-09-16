@@ -9,7 +9,7 @@ const databaseUrl = process.env.DATABASE_URL;
 const ownerId = process.env.SKILLSHEET_OWNER_ID;
 if (!databaseUrl || !ownerId) throw new Error('DATABASE_URL / SKILLSHEET_OWNER_ID が未設定');
 const sql = neon(databaseUrl);
-const resource = 'http://localhost:3005/api/mcp';
+const resource = 'http://localhost:3000/api/mcp';
 const rnd = () => randomBytes(12).toString('hex');
 
 // 非オーナーのダミーユーザー（検証後に消す）

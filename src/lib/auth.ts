@@ -28,7 +28,7 @@ import { isMcpEnabled, MCP_SCOPES, resolveMcpResource } from '@/lib/mcp-config';
 // Lazy singleton — DATABASE_URL is only available at request time (Vercel runtime),
 // not during `next build` static analysis.
 // Use a helper function so TypeScript infers the concrete return type correctly.
-function createAuth() {
+function createAuth(withMcpOauth: boolean) {
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set');
   const secret = process.env.BETTER_AUTH_SECRET;
@@ -37,7 +37,7 @@ function createAuth() {
   // Remote MCP（Issue #305）: MCP_ENABLED かつ resource が確定できる環境でのみ
   // OAuth 2.1 Provider を構成する。resource が取れない環境でプラグインを載せると
   // aud 不一致のトークンを発行しかねないため、構成自体を省略する。
-  const mcpResource = isMcpEnabled() ? resolveMcpResource() : undefined;
+  const mcpResource = withMcpOauth ? resolveMcpResource() : undefined;
 
   return betterAuth({
     secret,
@@ -86,11 +86,39 @@ function createAuth() {
   });
 }
 
-let _instance: ReturnType<typeof createAuth> | undefined;
+type Auth = ReturnType<typeof createAuth>;
 
-export function getAuth(): ReturnType<typeof createAuth> {
-  if (!_instance) {
-    _instance = createAuth();
-  }
-  return _instance;
+let _init: Promise<Auth> | undefined;
+let _mcpOauthReady = false;
+
+/**
+ * Better Auth の遅延シングルトン。
+ *
+ * OAuth プラグインは init 時に `oauth_resource` へ seed を書き込む（doc/06）。
+ * 対象 DB に `0006` が未適用だと init が例外となり `/api/auth/*` 全般が 500 化する
+ * ため、init 失敗時は OAuth プラグイン無しで再構成してログイン等を生かす。
+ * その場合 MCP 側は `isMcpOauthReady()` が false になり `/api/mcp` は 404 を返す。
+ */
+export function getAuth(): Promise<Auth> {
+  _init ??= (async () => {
+    const wantMcp = isMcpEnabled() && resolveMcpResource() !== undefined;
+    if (!wantMcp) return createAuth(false);
+    try {
+      const auth = createAuth(true);
+      await auth.$context;
+      _mcpOauthReady = true;
+      return auth;
+    } catch (e) {
+      console.error('[auth] OAuth provider の初期化に失敗。MCP 無しで再構成する', e);
+      const auth = createAuth(false);
+      await auth.$context;
+      return auth;
+    }
+  })();
+  return _init;
+}
+
+/** OAuth Provider の init が完了しているか。MCP route は false なら 404 を返す。 */
+export function isMcpOauthReady(): boolean {
+  return _mcpOauthReady;
 }

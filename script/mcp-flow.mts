@@ -5,7 +5,7 @@ import { loadScriptEnv } from './env';
 
 loadScriptEnv({ required: true });
 
-const BASE = 'http://localhost:3005';
+const BASE = 'http://localhost:3000';
 const RESOURCE = `${BASE}/api/mcp`;
 const token = process.argv[2];
 if (!token) throw new Error('usage: tsx script/mcp-flow.mts <sessionToken> [scope...] [--decline]');
