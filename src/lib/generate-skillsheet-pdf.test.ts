@@ -41,3 +41,56 @@ describe('generateSkillSheetPdfBlob', () => {
     expect(resetFonts).toHaveBeenCalledTimes(1);
   });
 });
+
+it('終了済みの期間矛盾では描画・フォント取得へ進まず、原文を保持する', async () => {
+  const input: import('@/components/pdf-export').SkillSheetPDFProps = {
+    title: '合成',
+    content: '',
+    referenceMonth: 24320,
+    blocks: [
+      {
+        id: 'block',
+        order: 0,
+        type: 'project',
+        data: {
+          companies: [],
+          items: [
+            {
+              id: 'project',
+              companyId: 'company',
+              title: '案件',
+              scope: '',
+              period: '2026.01 — 2026.03',
+              duration: '9ヶ月',
+              role: '',
+              team: '',
+              process: [],
+              duties: '',
+              acquired: '',
+              comment: '',
+              tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+            },
+          ],
+        },
+      },
+    ],
+  };
+  const original = JSON.stringify(input);
+  await expect(generateSkillSheetPdfBlob(input)).rejects.toMatchObject({ name: 'PdfDurationConflictError' });
+  expect(createDocument).not.toHaveBeenCalled();
+  expect(renderPdf).not.toHaveBeenCalled();
+  expect(JSON.stringify(input)).toBe(original);
+  // 非表示の案件は提出物の矛盾ゲートに含めない。
+  await expect(generateSkillSheetPdfBlob({ ...input, views: ['skills'] })).resolves.toBeInstanceOf(Blob);
+  const block = input.blocks?.[0];
+  if (block?.type !== 'project') throw new Error('fixture');
+  block.data.items[0].period = '2026.01 — 現在';
+  await expect(generateSkillSheetPdfBlob(input)).resolves.toBeInstanceOf(Blob);
+});
+
+it('構造化案件の出力は固定月がないまま開始しない', async () => {
+  await expect(generateSkillSheetPdfBlob({ title: '合成', content: '', blocks: [] })).rejects.toThrow(
+    'INVALID_REFERENCE_MONTH',
+  );
+  expect(createDocument).not.toHaveBeenCalled();
+});

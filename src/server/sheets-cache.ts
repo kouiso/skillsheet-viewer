@@ -1,3 +1,4 @@
+import { currentMonthKey } from '@/db/derived-display';
 // クライアントバンドルに巻き込まれた瞬間にビルドを失敗させる。
 // これまでは「Client Component から import しないこと」というコメントだけが頼りで、
 // 誤って読み込んでも誰も気づけなかった（秘密情報の露出・巨大ドライバの同梱に直結する）。
@@ -5,9 +6,11 @@
 import 'server-only';
 
 import { unstable_cache } from 'next/cache';
-import { listSheets as dbListSheets, getSkillSheet, getSkillSheetById, SkillSheetNotFoundError } from '@/db';
-
+import { getDb } from '@/db/client';
+import { DocumentError } from '@/db/document-service';
+import { getOwnerId, SkillSheetNotFoundError } from '@/db/skillsheet';
 import { fetchSheetFile, listSheets as githubListSheets } from '@/server/github-sheets';
+import { readViewerDocument, readViewerList } from './document-view';
 
 // DB 正本経路（getCachedDbSheetById / getCachedDbSheet）の revalidate 間隔（秒）。
 const DB_REVALIDATE_SECONDS = 60;
@@ -75,7 +78,7 @@ export async function withDbHealthCheck<C extends { fetchedAt: number }>(
     const fresh = await withTimeout(liveFetch(), LIVE_RECHECK_TIMEOUT_MS);
     return { ...fresh, fetchedAt: Date.now() } as C;
   } catch (err) {
-    if (err instanceof SkillSheetNotFoundError) throw err;
+    if (err instanceof SkillSheetNotFoundError || err instanceof DocumentError) throw err;
     console.error('sheets-cache: live re-check failed; serving cached (aged) value with stale=true', err);
     return cached;
   }
@@ -115,36 +118,53 @@ export const getCachedSheet = unstable_cache((path: string) => fetchSheetFile(pa
 // Neon DB のシート一覧（標準導線 /view が使う）。ビルダー保存後は 'db-sheet' タグで無効化。
 // fetchedAt を同梱する（Issue #204 の一覧版。chatgpt-codex-connector レビュー指摘）。
 const getCachedDbSheetsRaw = unstable_cache(
-  async () => ({ sheets: await dbListSheets(), fetchedAt: Date.now() }),
-  ['db-sheets-list'],
+  async (owner: string) => ({ sheets: await readViewerList(getDb(), owner), fetchedAt: Date.now() }),
+  ['db-sheets-list-v12'],
   { tags: ['db-sheet'], revalidate: DB_REVALIDATE_SECONDS },
 );
 
 /** getCachedDbSheetsRaw の結果を、古そうなときだけ直接問い合わせで健全性確認してから返す。 */
 export async function getCachedDbSheets(): ReturnType<typeof getCachedDbSheetsRaw> {
-  return withDbHealthCheck(await getCachedDbSheetsRaw(), async () => ({ sheets: await dbListSheets() }));
+  const owner = getOwnerId();
+  return withDbHealthCheck(await getCachedDbSheetsRaw(owner), async () => ({
+    sheets: await readViewerList(getDb(), owner),
+  }));
 }
 
 // 指定 ID のシートを読む（/view/db/[id] が使う）。fetchedAt を同梱する（Issue #204）。
 const getCachedDbSheetByIdRaw = unstable_cache(
-  async (id: string) => ({ ...(await getSkillSheetById(id)), fetchedAt: Date.now() }),
-  ['db-sheet-by-id'],
+  async (owner: string, id: string, referenceMonth: number) => ({
+    ...(await readViewerDocument(getDb(), owner, id, referenceMonth)),
+    fetchedAt: Date.now(),
+  }),
+  ['db-sheet-by-id-v13-month'],
   { tags: ['db-sheet'], revalidate: DB_REVALIDATE_SECONDS },
 );
 
 /** getCachedDbSheetByIdRaw の結果を、古そうなときだけ直接問い合わせで健全性確認してから返す。 */
 export async function getCachedDbSheetById(id: string): ReturnType<typeof getCachedDbSheetByIdRaw> {
-  return withDbHealthCheck(await getCachedDbSheetByIdRaw(id), () => getSkillSheetById(id));
+  const owner = getOwnerId();
+  const referenceMonth = currentMonthKey();
+  return withDbHealthCheck(await getCachedDbSheetByIdRaw(owner, id, referenceMonth), () =>
+    readViewerDocument(getDb(), owner, id, referenceMonth),
+  );
 }
 
 // デフォルトシート（後方互換 /view/db 単体表示）。fetchedAt を同梱する（Issue #204）。
 const getCachedDbSheetRaw = unstable_cache(
-  async () => ({ ...(await getSkillSheet()), fetchedAt: Date.now() }),
-  ['db-sheet'],
+  async (owner: string, referenceMonth: number) => ({
+    ...(await readViewerDocument(getDb(), owner, null, referenceMonth)),
+    fetchedAt: Date.now(),
+  }),
+  ['db-sheet-v13-month'],
   { tags: ['db-sheet'], revalidate: DB_REVALIDATE_SECONDS },
 );
 
 /** getCachedDbSheetRaw の結果を、古そうなときだけ直接問い合わせで健全性確認してから返す。 */
 export async function getCachedDbSheet(): ReturnType<typeof getCachedDbSheetRaw> {
-  return withDbHealthCheck(await getCachedDbSheetRaw(), () => getSkillSheet());
+  const owner = getOwnerId();
+  const referenceMonth = currentMonthKey();
+  return withDbHealthCheck(await getCachedDbSheetRaw(owner, referenceMonth), () =>
+    readViewerDocument(getDb(), owner, null, referenceMonth),
+  );
 }
