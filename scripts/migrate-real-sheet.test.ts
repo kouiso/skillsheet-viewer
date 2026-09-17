@@ -6,6 +6,7 @@ import {
   parseCareerMarkdown,
   parseProfileMarkdown,
   parseSkillsMarkdown,
+  readLegacyMarkdown,
 } from './migrate-real-sheet';
 
 /**
@@ -604,5 +605,29 @@ describe('parseSkillsMarkdown', () => {
     expect(skills[0].skills.map((s) => s.name)).toEqual(['TypeScript']);
     expect(dropped.map((d) => d.line)).not.toContain('ここは経歴セクションなのでスキル側の警告対象外です。');
     expect(dropped).toEqual([]);
+  });
+});
+
+describe('移行原文の対象境界', () => {
+  it('snapshot内のMarkdownを順序・空行・文字を変えずに連結する', () => {
+    expect(
+      readLegacyMarkdown([
+        { type: 'markdown', data: { markdown: '  原文\n' } },
+        { type: 'project', data: {} },
+        { type: 'markdown', data: { markdown: '\n次の原文 ' } },
+      ]),
+    ).toBe('  原文\n\n\n次の原文 ');
+  });
+
+  it('原文のない移行済み文書や空原文は拒否する', () => {
+    for (const rows of [[], [{ type: 'project', data: {} }], [{ type: 'markdown', data: { markdown: ' \n' } }]]) {
+      expect(() => readLegacyMarkdown(rows)).toThrow('MISSING_LEGACY_MARKDOWN');
+    }
+  });
+
+  it('壊れた原文を空文字にして続行しない', () => {
+    for (const data of [null, {}, { markdown: 123 }, { markdown: null }]) {
+      expect(() => readLegacyMarkdown([{ type: 'markdown', data }])).toThrow('INVALID_LEGACY_MARKDOWN');
+    }
   });
 });

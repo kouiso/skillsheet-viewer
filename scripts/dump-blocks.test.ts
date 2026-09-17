@@ -1,9 +1,19 @@
 import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Database } from '../src/db/client';
-import { connectionIdentity, parseArgs, resolveSheetId, writeEvidence, writePrivateDump } from './dump-blocks';
+import { connectionIdentity, parseArgs, readDumpSnapshot, writeEvidence, writePrivateDump } from './dump-blocks';
+
+vi.mock('../src/db/document-service', () => ({ createDocumentService: vi.fn() }));
+
+import { createDocumentService } from '../src/db/document-service';
+
+const service = { list: vi.fn(), read: vi.fn() };
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(createDocumentService).mockReturnValue(service as never);
+});
 
 const id = '01234567-89ab-cdef-0123-456789abcdef';
 const dirs: string[] = [];
@@ -34,31 +44,41 @@ describe('dump-blocks CLI', () => {
     expect(() => parseArgs(args as string[])).toThrow();
   });
   it('複数シートの名前やIDをエラーへ載せない', async () => {
-    const from = vi.fn().mockResolvedValue([
-      { id, title: 'PRIVATE NAME' },
-      { id: 'other', title: 'SECRET' },
+    service.list.mockResolvedValue([
+      { sheetId: id, title: 'PRIVATE NAME' },
+      { sheetId: 'other', title: 'SECRET' },
     ]);
-    const db = { select: vi.fn(() => ({ from })) } as unknown as Database;
-    await expect(resolveSheetId(db, undefined)).rejects.toThrow('シートが 2 枚あります。--sheet-id で指定してください');
-    await expect(resolveSheetId(db, undefined)).rejects.not.toThrow(/PRIVATE|SECRET|01234567/);
+    await expect(readDumpSnapshot({} as Database, undefined, 'owner')).rejects.toThrow(
+      'シートが 2 枚あります。--sheet-id で指定してください',
+    );
+    expect(service.read).not.toHaveBeenCalled();
   });
-  it('シートが1枚の場合だけ省略で解決する', async () => {
-    const db = { select: () => ({ from: async () => [{ id }] }) } as unknown as Database;
-    await expect(resolveSheetId(db, undefined)).resolves.toBe(id);
+  it('シートが1枚の場合だけ省略で解決し本文と版を同時取得する', async () => {
+    service.list.mockResolvedValue([{ sheetId: id }]);
+    service.read.mockResolvedValue({
+      status: 'OK',
+      snapshot: { sheetId: id, revision: '9007199254740993', blocks: [] },
+    });
+    expect(await readDumpSnapshot({} as Database, undefined, 'owner')).toMatchObject({
+      sheetId: id,
+      revision: '9007199254740993',
+    });
+    expect(service.read).toHaveBeenCalledWith(id);
+    expect(service.read).toHaveBeenCalledTimes(1);
   });
   it('シートが存在しない場合は空データを正常出力しない', async () => {
-    const db = { select: () => ({ from: async () => [] }) } as unknown as Database;
-    await expect(resolveSheetId(db, undefined)).rejects.toThrow('シートが 1 枚もありません');
-    const explicitDb = {
-      select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
-    } as unknown as Database;
-    await expect(resolveSheetId(explicitDb, id)).rejects.toThrow('指定したシートが存在しません');
+    service.list.mockResolvedValue([]);
+    await expect(readDumpSnapshot({} as Database, undefined, 'owner')).rejects.toThrow('シートが 1 枚もありません');
+    service.read.mockResolvedValue({ status: 'NOT_FOUND' });
+    await expect(readDumpSnapshot({} as Database, id, 'owner')).rejects.toThrow('指定したシートが存在しない');
   });
-  it('明示指定したシートを解決する', async () => {
-    const db = {
-      select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ id }] }) }) }),
-    } as unknown as Database;
-    await expect(resolveSheetId(db, id)).resolves.toBe(id);
+  it('明示IDでは一覧や基表を読まず、期待owner付きsnapshotだけを取得する', async () => {
+    const snapshot = { sheetId: id, revision: '0', blocks: [{ type: 'future', data: { keep: null } }] };
+    service.read.mockResolvedValue({ status: 'OK', snapshot });
+    expect(await readDumpSnapshot({} as Database, id, 'owner')).toBe(snapshot);
+    expect(createDocumentService).toHaveBeenCalledWith({}, 'owner');
+    expect(service.list).not.toHaveBeenCalled();
+    expect(service.read).toHaveBeenCalledTimes(1);
   });
   it('既存ファイルも0600にしてデータを保存する', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dump-test-'));
@@ -96,12 +116,14 @@ describe('dump-blocks CLI', () => {
       database: 'neondb',
       sheetId: id,
       ownerMatch: 'true',
+      revision: '9007199254740993',
       blockCount: 12,
       sha256: 'deadbeef',
     });
     const text = readFileSync(path, 'utf8');
     expect(text).toContain('owner_match=true');
     expect(text).toContain('blocks=12');
+    expect(text).toContain('revision=9007199254740993');
     expect(text).toContain('sha256=deadbeef');
     expect(text).not.toContain('password');
     expect(statSync(path).mode & 0o777).toBe(0o600);

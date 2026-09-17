@@ -17,7 +17,9 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import React from 'react';
-import { getSkillSheetById } from '@/db';
+import { getDb } from '../../src/db/client';
+import { getOwnerId } from '../../src/db/skillsheet';
+import { readReproDocument } from './read-document';
 
 (globalThis as unknown as { React: typeof React }).React = React;
 
@@ -49,7 +51,12 @@ async function main() {
   if (!sheetId) throw new Error('usage: repro-194-card-split.tsx <sheetId>');
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-  const sheet = await getSkillSheetById(sheetId);
+  const sheet = await readReproDocument(
+    getDb(),
+    getOwnerId(),
+    sheetId,
+    Number(process.env.PRINT_REFERENCE_MONTH?.trim() || NaN),
+  );
   console.log(`[repro-194] sheet="${sheet.title}" blocks=${sheet.blocks.length}`);
 
   const FONTS_DIR = path.resolve(process.cwd(), 'public', 'fonts');

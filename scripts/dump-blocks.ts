@@ -3,9 +3,9 @@ import { closeSync, fchmodSync, openSync, readFileSync, writeFileSync } from 'no
 import { resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-import { asc, eq } from 'drizzle-orm';
 import { type Database, getDb } from '../src/db/client';
-import { blocks, skillSheets } from '../src/db/schema';
+import { createDocumentService } from '../src/db/document-service';
+import { getOwnerId } from '../src/db/skillsheet';
 import { loadScriptEnv } from './env';
 
 /**
@@ -63,8 +63,9 @@ export interface DumpEvidence {
   endpoint: string;
   database: string;
   sheetId: string;
-  /** 期待 owner との一致。SKILLSHEET_OWNER_ID 未設定なら 'not-configured'。 */
-  ownerMatch: 'true' | 'false' | 'not-configured';
+  /** 限定APIが期待ownerを照合できたdumpだけを作成する。 */
+  ownerMatch: 'true';
+  revision: string;
   blockCount: number;
   /** dump JSON の内容ハッシュ（実行ごとのスナップショット記録）。 */
   sha256: string;
@@ -86,65 +87,34 @@ export function writeEvidence(path: string, evidence: DumpEvidence): void {
     `database=${evidence.database}`,
     `sheet_id=${evidence.sheetId}`,
     `owner_match=${evidence.ownerMatch}`,
+    `revision=${evidence.revision}`,
     `blocks=${evidence.blockCount}`,
     `sha256=${evidence.sha256}`,
   ];
   writeFileSync(path, `${lines.join('\n')}\n`, { mode: 0o600 });
 }
 
-/** 省略時に黙って 1 枚を選ぶと、シートが増えた日から別のシートを検査し続けることになる。 */
-export async function resolveSheetId(db: Database, explicit: string | undefined): Promise<string> {
-  if (explicit) {
-    // 存在しない id をそのまま通すと blocks が空配列で書き出され、下流の検査が
-    // 「実データ 0 件」を正常として通してしまう。
-    const [sheet] = await db
-      .select({ id: skillSheets.id })
-      .from(skillSheets)
-      .where(eq(skillSheets.id, explicit))
-      .limit(1);
-    if (!sheet) {
-      throw new Error('指定したシートが存在しません');
-    }
-    return sheet.id;
+/** 対象決定後の本文・ID・版は一回の限定snapshotから取得する。 */
+export async function readDumpSnapshot(db: Database, explicit: string | undefined, expectedOwner: string) {
+  const service = createDocumentService(db, expectedOwner);
+  let sheetId = explicit;
+  if (!sheetId) {
+    const sheets = await service.list();
+    if (sheets.length === 0) throw new Error('シートが 1 枚もありません');
+    if (sheets.length > 1) throw new Error(`シートが ${sheets.length} 枚あります。--sheet-id で指定してください`);
+    sheetId = sheets[0].sheetId;
   }
-
-  const sheets = await db.select({ id: skillSheets.id }).from(skillSheets);
-  if (sheets.length === 0) {
-    throw new Error('シートが 1 枚もありません');
-  }
-  if (sheets.length > 1) {
-    throw new Error(`シートが ${sheets.length} 枚あります。--sheet-id で指定してください`);
-  }
-  return sheets[0].id;
+  const result = await service.read(sheetId);
+  if (result.status !== 'OK') throw new Error('指定したシートが存在しないか、読取できない状態です');
+  return result.snapshot;
 }
 
 async function main(): Promise<void> {
   const { out, sheetId: explicit, evidence: evidencePath } = parseArgs(process.argv.slice(2));
   loadScriptEnv();
-  const db = getDb();
-  const sheetId = await resolveSheetId(db, explicit);
-
-  // owner 照合はブロック本文を読む前に済ませる。別 owner のシートなら
-  // 本文を一度も読まずに失敗させる（least privilege）。
-  let ownerMatch: DumpEvidence['ownerMatch'] = 'not-configured';
-  if (evidencePath) {
-    const [sheet] = await db
-      .select({ ownerId: skillSheets.ownerId })
-      .from(skillSheets)
-      .where(eq(skillSheets.id, sheetId))
-      .limit(1);
-    const expectedOwner = process.env.SKILLSHEET_OWNER_ID;
-    ownerMatch = expectedOwner ? (sheet?.ownerId === expectedOwner ? 'true' : 'false') : 'not-configured';
-    if (ownerMatch === 'false') {
-      throw new Error('対象シートの owner が期待値と一致しません');
-    }
-  }
-
-  const rows = await db
-    .select({ id: blocks.id, type: blocks.type, order: blocks.order, data: blocks.data })
-    .from(blocks)
-    .where(eq(blocks.sheetId, sheetId))
-    .orderBy(asc(blocks.order));
+  const expectedOwner = getOwnerId();
+  const snapshot = await readDumpSnapshot(getDb(), explicit, expectedOwner);
+  const { sheetId, revision, blocks: rows } = snapshot;
 
   writePrivateDump(out, rows);
 
@@ -153,7 +123,8 @@ async function main(): Promise<void> {
     writeEvidence(evidencePath, {
       ...identity,
       sheetId,
-      ownerMatch,
+      ownerMatch: 'true',
+      revision,
       blockCount: rows.length,
       sha256: createHash('sha256').update(readFileSync(out)).digest('hex'),
     });

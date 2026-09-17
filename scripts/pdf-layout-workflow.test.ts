@@ -47,10 +47,12 @@ it.each([
   writeFileSync(join(dir, 'pnpm'), '#!/bin/bash\necho PRIVATE_RESUME_TEXT\necho PRIVATE_ERROR >&2\nexit 7\n', {
     mode: 0o700,
   });
-  const result = spawnSync('bash', ['-e', '-c', stepScript(step)], {
+  const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-c', stepScript(step)], {
     env: {
-      ...process.env,
-      PATH: `${dir}:${process.env.PATH}`,
+      // 開発者のshell設定・資格情報・ツールshimを子プロセスへ引き継がない。
+      // この試験で起動を許すpnpmは上記の合成stubだけ。
+      PATH: `${dir}:/usr/bin:/bin`,
+      NODE_ENV: 'test',
       RUNNER_TEMP: dir,
       PDF_CHECK_SHEET_ID: '01234567-89ab-cdef-0123-456789abcdef',
     },

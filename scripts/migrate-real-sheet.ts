@@ -1,13 +1,15 @@
 /**
- * 本番の実シート「エンジニアスキルシート」(sheetId固定)の 180個の legacy markdown ブロックを
+ * 明示したシートの legacy markdown ブロックを
  * パースし、既存の profile/stats/skills ブロックはそのまま維持しつつ project ブロック1つを
- * 新規に組み立てて、saveSkillSheetBlocks で置き換える（--write 時のみ）。
+ * 新規に組み立て、私有領域へ未承認の候補として保存する。DBには反映しない。
  *
  * 実行:
- *   ドライラン(DB書き込みなし。/tmp/migrated_project_block.json に出力): pnpm exec tsx scripts/migrate-real-sheet.ts
- *   本番書き込み: pnpm exec tsx scripts/migrate-real-sheet.ts --write
+ *   SHEET_IDを明示して pnpm exec tsx scripts/migrate-real-sheet.ts を実行する。
+ *   旧--writeは拒否する。反映には承認journalへの移行が必要。
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import type {
@@ -21,15 +23,6 @@ import type {
   SkillsBlockData,
 } from '../src/db/blocks';
 import { loadScriptEnv } from './env';
-
-const SHEET_TITLE = 'エンジニアスキルシート';
-
-loadScriptEnv();
-
-// loadScriptEnv() より後に評価する。SHEET_ID を先に定数化していると
-// .env.local 側の SHEET_ID 上書きが process.env へ反映される前に
-// 読まれてしまい、無視される（レビュー指摘。--write時に誤ったシートを更新しうる）。
-const SHEET_ID = process.env.SHEET_ID ?? '18a79e66-75e2-47e8-922e-d61342bb5233';
 
 const newId = () => crypto.randomUUID();
 // 各行を「まだ読まれていない」状態で保持し、パーサーが処理した行を消費済みにする。
@@ -836,8 +829,30 @@ export function parseRealSheetMarkdown(markdown: string): {
   return { profile, skills, companies, items, dropped };
 }
 
+/** 対象snapshot内の原文だけを使い、他文書のローカル原稿を混ぜない。 */
+export function readLegacyMarkdown(rows: readonly { type: string; data: unknown }[]): string {
+  const parts: string[] = [];
+  for (const row of rows) {
+    if (row.type !== 'markdown') continue;
+    const data = row.data;
+    if (!data || typeof data !== 'object' || !('markdown' in data) || typeof data.markdown !== 'string') {
+      throw new Error('INVALID_LEGACY_MARKDOWN: 原文ブロックが不正です');
+    }
+    parts.push(data.markdown);
+  }
+  if (!parts.length || !parts.some((part) => part.trim())) {
+    throw new Error('MISSING_LEGACY_MARKDOWN: 対象snapshotに原文がありません');
+  }
+  return parts.join('\n');
+}
+
 async function main() {
-  const write = process.argv.includes('--write');
+  if (process.argv.includes('--write')) throw new Error('LEGACY_WRITER_DISABLED: 承認journalによる反映が必要です');
+  loadScriptEnv();
+  const sheetId = process.env.SHEET_ID;
+  if (!sheetId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sheetId)) {
+    throw new Error('SHEET_IDを明示してください');
+  }
   const allowDropped = process.argv.includes('--allow-dropped');
 
   if (!process.env.DATABASE_URL) {
@@ -845,42 +860,26 @@ async function main() {
   }
 
   const { getDb } = await import('../src/db/client');
-  const { blocks: blocksTable } = await import('../src/db/schema');
-  const { eq, asc } = await import('drizzle-orm');
+  const { createDocumentService } = await import('../src/db/document-service');
+  const { getOwnerId } = await import('../src/db/skillsheet');
   const { isStatsBlockData } = await import('../src/db/blocks');
-
-  const db = getDb();
-  const rows = await db
-    .select()
-    .from(blocksTable)
-    .where(eq(blocksTable.sheetId, SHEET_ID))
-    .orderBy(asc(blocksTable.order));
+  const result = await createDocumentService(getDb(), getOwnerId()).read(sheetId);
+  if (result.status !== 'OK') throw new Error(result.status);
+  const rows = result.snapshot.blocks;
 
   const statsBlocks: BlockInput[] = [];
-  const markdownParts: string[] = [];
+  const fullMarkdown = readLegacyMarkdown(rows);
   let skippedExistingProject = false;
   for (const r of rows) {
     if (r.type === 'stats' && isStatsBlockData(r.data)) statsBlocks.push({ type: 'stats', data: r.data });
-    else if (r.type === 'markdown') markdownParts.push((r.data as { markdown: string }).markdown);
+    else if (r.type === 'markdown') continue;
     else if (r.type === 'project') {
       skippedExistingProject = true;
     } else if (r.type === 'profile' || r.type === 'skills') {
     } else throw new Error(`未対応の既存ブロック type=${r.type} order=${r.order}（データ消失防止のため中断）`);
   }
   if (skippedExistingProject)
-    console.log(
-      'NOTE: 既存の project ブロックは無視し、legacy markdown（無ければ /tmp/real_markdown.md）から再構築します',
-    );
-
-  const fallbackMarkdownPath = '/tmp/real_markdown.md';
-  const fullMarkdown =
-    markdownParts.length > 0
-      ? markdownParts.join('\n')
-      : existsSync(fallbackMarkdownPath)
-        ? readFileSync(fallbackMarkdownPath, 'utf-8')
-        : (() => {
-            throw new Error('legacy markdown が DB にも /tmp/real_markdown.md にも見つかりません');
-          })();
+    console.log('NOTE: 既存projectとの差分確認が必要です。対象snapshotのlegacy markdownから未承認候補を作成します');
 
   const { profile, skills, companies, items, dropped } = parseRealSheetMarkdown(fullMarkdown);
 
@@ -896,12 +895,11 @@ async function main() {
 
   console.log('DROPPED_LINES:', dropped.length);
   if (dropped.length > 0) {
-    console.warn('WARN: 以下の行はどのフィールドにも取り込まれていません。元データかパーサの見直しが必要です:');
-    for (const d of dropped) console.warn(`  - [${d.where}] ${d.line}`);
-    if (write && !allowDropped) {
+    console.warn('WARN: 未対応行があります。本文は公開ログへ出しません。');
+    if (!allowDropped) {
       throw new Error(
         `取りこぼしが ${dropped.length} 行あります。このまま上書きすると元データが失われます。` +
-          '元データかパーサを修正するか、承知の上で続行する場合は --allow-dropped を付けてください。',
+          '元データかパーサを修正してください。未対応行を含む未承認候補だけ保存する場合は --allow-dropped を指定してください。',
       );
     }
   }
@@ -913,23 +911,20 @@ async function main() {
     (b): b is BlockInput => b !== null,
   );
 
-  writeFileSync('/tmp/migrated_profile_block.json', JSON.stringify(profile, null, 2));
-  writeFileSync('/tmp/migrated_skills_blocks.json', JSON.stringify(skills, null, 2));
-  writeFileSync('/tmp/migrated_project_block.json', JSON.stringify({ companies, items }, null, 2));
-  console.log(
-    'written /tmp/migrated_profile_block.json, /tmp/migrated_skills_blocks.json, /tmp/migrated_project_block.json',
+  const directory = join(
+    process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
+    'skillsheet-viewer',
+    'proposals',
+    'migrate',
   );
-
-  if (!write) {
-    console.log('DRY RUN — DB へは書き込んでいません（--write で実行すると保存します）');
-    return;
-  }
-
-  const { getSkillSheetById, saveSkillSheetBlocks } = await import('../src/db/skillsheet');
-  // R01: 既存シートの更新は期待版必須。直前に同一スナップショットで版を取得して渡す。
-  const { revision } = await getSkillSheetById(SHEET_ID);
-  await saveSkillSheetBlocks(SHEET_TITLE, finalBlocks, SHEET_ID, revision);
-  console.log('SAVED to sheetId', SHEET_ID);
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const path = join(directory, `${sheetId}-${result.snapshot.revision}-${newId()}.json`);
+  writeFileSync(path, JSON.stringify({ before: result.snapshot, proposed: finalBlocks, dropped, approved: false }), {
+    flag: 'wx',
+    mode: 0o600,
+  });
+  console.log('DRY RUN — 未承認の候補のみ保存しました。DBは変更していません。');
+  console.log(path);
 }
 
 // import.meta.url を直接実行チェックに使う。テストからこのモジュールを import した

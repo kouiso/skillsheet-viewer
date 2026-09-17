@@ -1,18 +1,26 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { isBlockInputEmpty, splitMarkdownIntoBlocks } from '../src/db/blocks';
-import {
-  createSheet,
-  deleteSheet,
-  fetchMarkdownFromGitHub,
-  getGitHubSeedConfig,
-  listSheets,
-} from '../src/db/skillsheet';
+import { getDb } from '../src/db/client';
+import { createDocumentService } from '../src/db/document-service';
+import { fetchMarkdownFromGitHub, getGitHubSeedConfig, getOwnerId } from '../src/db/skillsheet';
+import { prepareCreateOperation } from './create-operation';
 import { loadScriptEnv } from './env';
-
-loadScriptEnv({ required: true });
 
 const SHEET_TITLE = 'エンジニアスキルシート';
 
 async function main() {
+  const args = process.argv.slice(2);
+  if (
+    args.length !== 2 ||
+    args[0] !== '--operation-id' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(args[1])
+  ) {
+    throw new Error('--operation-id UUID が必要です。同じ操作の再試行では同じIDを使ってください');
+  }
+  loadScriptEnv({ required: true });
+  const owner = getOwnerId();
   const config = getGitHubSeedConfig();
   if (!config) {
     throw new Error('GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO が未設定です');
@@ -29,19 +37,27 @@ async function main() {
 
   const blockInputs = segments.map((data) => ({ type: 'markdown' as const, data }));
 
-  // 既存の同タイトルシートを削除して重複を防ぐ
-  const existing = (await listSheets()).find((s) => s.title === SHEET_TITLE);
-  if (existing) {
-    console.log(`Deleting existing sheet ${existing.id}`);
-    await deleteSheet(existing.id);
-  }
-
-  const sheetId = await createSheet(SHEET_TITLE, blockInputs);
+  // 同名の既存文書は削除しない。再importは明示的な新規操作とする。
+  const operationPath = join(
+    process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
+    'skillsheet-viewer',
+    'operations',
+    `${args[1].toLowerCase()}.json`,
+  );
+  const operation = prepareCreateOperation(operationPath, owner, SHEET_TITLE, blockInputs);
+  const snapshot = await createDocumentService(getDb(), owner).create(
+    operation.sheetId,
+    operation.title,
+    operation.blocks,
+  );
+  const sheetId = snapshot.sheetId;
   console.log(`Created sheet: ${sheetId}`);
   console.log(`View URL: /view/db/${sheetId}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch(() => {
+    console.error('import failed; 作成操作と接続設定を確認してください');
+    process.exitCode = 1;
+  });
+}
