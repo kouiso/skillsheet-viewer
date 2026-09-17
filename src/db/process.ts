@@ -99,13 +99,15 @@ export function hasPeriodRangeSeparator(period: string): boolean {
 function parseYearMonth(token: string): number | null {
   if (!token) return null;
   // 月は 1〜12 のみ受理する。「2020.13」のような壊れた値が 1 ヶ月として
-  // 経験月数へ混入するのを防ぐ（R02）。日付部は厳密な暦日判定までは行わず
-  // 1〜31 の範囲だけを見る（月またぎの暦差は期間集計の精度に影響しない）。
+  // 経験月数へ混入するのを防ぐ。日付は閏年を含めた実在日だけを受理する。
   let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) {
     const month = Number(m[2]);
     const day = Number(m[3]);
-    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const year = Number(m[1]);
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    if (month < 1 || month > 12 || day < 1 || day > days[month - 1]) return null;
     return Number(m[1]) + (month - 1) / 12;
   }
   m =
@@ -182,7 +184,7 @@ export function serializeDateToken(date: Date): string {
  * 月精度トークンは 1 日を補う。解釈不能なら undefined。
  */
 export function parseTokenToDate(token: string): Date | undefined {
-  if (!token || /現在/.test(token)) return undefined;
+  if (!token || parseYearMonth(token) === null) return undefined;
   let m = token.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
   m =
@@ -230,7 +232,7 @@ export function parsePeriodBounds(period: string): PeriodBounds | null {
   const start = parseYearMonth(startToken);
   if (start === null) return null;
   const startPrecise = hasMonthPrecision(startToken);
-  if (/現在/.test(endToken)) {
+  if (endToken === '現在') {
     // 終端「現在」は実行時点。描画に使う側は openEnded を見て、時計に依存しない値へ
     // 置き換えること（サーバとブラウザで月をまたぐと違う結果になり、hydration がずれる）。
     const now = new Date();
@@ -289,8 +291,9 @@ export function classifyPeriod(period: string, referenceMonth?: number): Classif
     return { status, bounds: null, reason: status === 'invalid' ? '開始日の値が範囲外' : '開始を解釈できない' };
   }
   const startPrecise = hasMonthPrecision(startToken);
-  if (/現在/.test(endToken)) {
+  if (endToken === '現在') {
     const bounds: PeriodBounds = { start, end: Math.max(refScale, start), precise: startPrecise, openEnded: true };
+    if (!startPrecise) return { status: 'unknown', bounds, reason: '開始が月単位で書かれていない' };
     if (start > refScale) return { status: 'planned', bounds, reason: '開始が基準月より未来' };
     return { status: 'valid', bounds };
   }
@@ -308,7 +311,9 @@ export function classifyPeriod(period: string, referenceMonth?: number): Classif
     const status = looksLikeYearMonth(endToken) ? 'invalid' : 'unknown';
     return { status, bounds: null, reason: status === 'invalid' ? '終了日の値が範囲外' : '終了を解釈できない' };
   }
-  if (end < start) {
+  const startDay = startToken.match(/^\d{4}-\d{1,2}-(\d{1,2})$/)?.[1];
+  const endDay = endToken.match(/^\d{4}-\d{1,2}-(\d{1,2})$/)?.[1];
+  if (end < start || (end === start && startDay && endDay && Number(startDay) > Number(endDay))) {
     return { status: 'invalid', bounds: null, reason: '開始と終了が逆転' };
   }
   const bounds: PeriodBounds = { start, end, precise: startPrecise && hasMonthPrecision(endToken), openEnded: false };
@@ -384,7 +389,7 @@ export function parsePeriodToRange(period: string): PeriodRange | null {
   const [startToken, endToken] = splitPeriodRange(period);
   const start = yearMonthToInputValue(startToken);
   if (!start) return null;
-  if (!endToken || /現在/.test(endToken)) return { start, end: '', ongoing: !!endToken };
+  if (!endToken || endToken === '現在') return { start, end: '', ongoing: !!endToken };
   const end = yearMonthToInputValue(endToken);
   if (!end) return null;
   return { start, end, ongoing: false };
@@ -394,7 +399,7 @@ export function parsePeriodToRange(period: string): PeriodRange | null {
 // 旧日付ピッカー時代の ISO 日単位（YYYY-MM-DD）は日を切り捨てて月精度に変換する。
 // 単年（YYYY）は月不明なので null。
 function yearMonthToInputValue(token: string): string | null {
-  if (!token) return null;
+  if (!token || parseYearMonth(token) === null) return null;
   const m = token.match(/^(\d{4})[.\-年](\d{1,2})月?(?:-\d{1,2})?$/);
   if (!m) return null;
   const month = Number(m[2]);
@@ -419,7 +424,7 @@ export function deriveCompanyPeriod(periods: string[]): string {
       minStart = start;
       minStartToken = startToken;
     }
-    if (/現在/.test(endToken)) {
+    if (endToken === '現在') {
       if (start !== null) ongoing = true;
       continue;
     }

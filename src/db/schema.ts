@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -31,12 +33,11 @@ export const skillSheets = pgTable(
     // updated_at は編集で変わるため、昇格・実効既定の対象決定には使わない。
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
-    // 楽観ロック用の版番号。内容を変える全ての書込経路（saveSkillSheetBlocks /
-    // writeBlockUpdates）が +1 する。updated_at は PostgreSQL の now()=tx開始時刻で
-    // 更新順を表す単調な版にはならないため、CAS はこの整数で行う（R01）。
-    revision: integer('revision').notNull().default(1),
+    // DB内は64bit整数。限定APIは10進文字列で返し、JS Numberへ変換しない。
+    revision: bigint('revision', { mode: 'bigint' }).notNull().default(0n),
   },
   (table) => [
+    check('skill_sheets_revision_nonnegative', sql`${table.revision} >= 0`),
     index('skill_sheets_owner_id_idx').on(table.ownerId),
     uniqueIndex('skill_sheets_owner_default_unique').on(table.ownerId).where(sql`${table.isDefault}`),
   ],
@@ -46,10 +47,11 @@ export const skillSheets = pgTable(
  * owner 単位の初期化済みフラグ。シートとは別に永続化することで、
  * 「まだ一度も初期化していない（初回導入）」と「全シートを削除した後」を
  * 区別する（S09: 全削除後に初期データを復活させない）。
- * 初回導入の一度だけ行が作られ、以降は消さない。
+ * 明示作成・削除で行を確保する。削除済みIDは古いcreate再送による復活を防ぎ、復旧対象に含める。
  */
 export const skillsheetState = pgTable('skillsheet_state', {
   ownerId: text('owner_id').primaryKey(),
+  deletedSheetIds: uuid('deleted_sheet_ids').array().notNull().default(sql`'{}'::uuid[]`),
   initializedAt: timestamp('initialized_at', { withTimezone: true }).notNull().default(sql`now()`),
 });
 

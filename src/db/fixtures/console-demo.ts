@@ -8,9 +8,10 @@
  */
 
 import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from '../blocks';
-import { createSheet, listSheets } from '../skillsheet';
 
-const newId = () => crypto.randomUUID();
+// 再起動後の同じ作成操作でも、合成データ内の会社・案件IDを同一に保つ。
+let fixtureId = 0;
+const newId = () => `c0000000-0000-4000-8000-${(++fixtureId).toString(16).padStart(12, '0')}`;
 
 // --- ハンドオフ redesign2/data.js を土台にした検証用フィクスチャ -----------------------------
 // このリポジトリは public なので、実在の会社名・サービス名・個人が特定できる属性は置かない。
@@ -437,11 +438,4 @@ export const CONSOLE_DEMO_TITLE = 'Console デザイン検証シート';
 
 export function buildConsoleDemoBlocks(): BlockInput[] {
   return blockInputs;
-}
-
-export async function createConsoleDemoSheet(): Promise<string> {
-  const sheets = await listSheets();
-  const existing = sheets.find((s) => s.title === CONSOLE_DEMO_TITLE);
-  if (existing) return existing.id;
-  return createSheet(CONSOLE_DEMO_TITLE, blockInputs);
 }
