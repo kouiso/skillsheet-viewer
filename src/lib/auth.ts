@@ -25,6 +25,17 @@ import { createDb } from '@/db';
 import * as schema from '@/db/schema';
 import { isMcpEnabled, MCP_SCOPES, resolveMcpResource } from '@/lib/mcp-config';
 
+// BETTER_AUTH_URL が未設定でも Vercel 本番では VERCEL_PROJECT_PRODUCTION_URL から
+// baseURL を導出する。baseURL が空だと oauth-provider プラグイン init の
+// `new URL(issuer)` が投げ、MCP OAuth 経路が立ち上がらない（Issue #331）。
+function resolveAuthBaseURL(): string | undefined {
+  if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL;
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  return undefined;
+}
+
 // Lazy singleton — DATABASE_URL is only available at request time (Vercel runtime),
 // not during `next build` static analysis.
 // Use a helper function so TypeScript infers the concrete return type correctly.
@@ -41,7 +52,7 @@ function createAuth(withMcpOauth: boolean) {
 
   return betterAuth({
     secret,
-    baseURL: process.env.BETTER_AUTH_URL,
+    baseURL: resolveAuthBaseURL(),
     database: drizzleAdapter(createDb(url), {
       provider: 'pg',
       // スキーマ全件を渡す。OAuth 系テーブル（oauth_client 等）もモデル名=export 名で
