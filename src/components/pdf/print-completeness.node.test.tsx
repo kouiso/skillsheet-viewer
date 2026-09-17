@@ -106,6 +106,7 @@ const SIMULATED_PAGES: QualityPage[] = [
     txt('テスト社'),
     txt('2018.01〜2020.06'), // 会社の在籍期間（3 案件の period から導出される表示値）
     txt('案件アルファ'),
+    txt('未確定'),
     txt('2020.01〜2020.06'), // 案件アルファの期間（detail レベルなので periodText そのまま）
     txt('エンジニア'),
     txt('5名'),
@@ -122,9 +123,15 @@ const SIMULATED_PAGES: QualityPage[] = [
     txt('他 2 件'),
   ],
   // page 1 = ベータの見出し。本文はまだ乗らない（次ページへ溢れる）。
-  [txt('案件ベータ'), txt('2019.01〜2019.06'), txt('TypeScript')],
+  [txt('案件ベータ'), txt('未確定'), txt('2019.01〜2019.06'), txt('TypeScript')],
   // page 2 = ベータの溢れた本文 ＋ ガンマの見出しと罠の本文（同じページに同居する）。
-  [txt('スコープ境界をまたぐ本文'), txt('案件ガンマ'), txt('2018.01〜2018.06'), txt('PHPは使っていない案件')],
+  [
+    txt('スコープ境界をまたぐ本文'),
+    txt('案件ガンマ'),
+    txt('未確定'),
+    txt('2018.01〜2018.06'),
+    txt('PHPは使っていない案件'),
+  ],
 ];
 
 describe('normalizeForMatch', () => {
@@ -139,6 +146,44 @@ describe('normalizeForMatch', () => {
 });
 
 describe('enumerateCompletenessFacts', () => {
+  it.each([undefined, NaN, Infinity, -1, 2026.5])('基準月%sの提出検証を成功扱いにしない', (month) => {
+    expect(() => buildCompletenessReport(PROJECT_BLOCKS, SIMULATED_PAGES, undefined, month as number)).toThrow(
+      'INVALID_REFERENCE_MONTH',
+    );
+  });
+
+  it('換算可能な終了確定durationの矛盾を欠落とは別に報告する', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture');
+    const item = project.data.items[0];
+    item.period = '2020.01 — 2020.12';
+    item.duration = '半年';
+    const report = () => buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, 2026 * 12 + 8);
+    expect(report().durationConflicts).toEqual([{ blockId: project.id, projectId: item.id }]);
+    expect(item.duration).toBe('半年');
+    item.duration = '約半年';
+    expect(report().durationConflicts).toEqual([]);
+    item.duration = '半年';
+    item.period = '2020.01 — 現在';
+    expect(report().durationConflicts).toEqual([]);
+  });
+
+  it('継続durationを元ブロックから照合し、欠落を検出する', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture');
+    project.data.items[0].period = '2026.01 — 現在';
+    project.data.items[0].duration = '半年';
+    const facts = enumerateCompletenessFacts(blocks, undefined, 2026 * 12 + 8);
+    const fact = facts.find((item) => item.scope === '案件アルファ' && item.label === '参画期間');
+    expect(fact?.text).toBe('本人入力 半年／2026-09基準 9か月');
+    expect(checkCompleteness(facts, SIMULATED_PAGES).missing.some((item) => item.fact === fact)).toBe(true);
+    const completePages = structuredClone(SIMULATED_PAGES);
+    completePages[0].push(txt('本人入力 半年／2026-09基準 9か月'));
+    expect(checkCompleteness(facts, completePages).missing.some((item) => item.fact === fact)).toBe(false);
+  });
+
   it('hidden な案件は事実として列挙しない', () => {
     const hidden = structuredClone(PROJECT_BLOCKS);
     const block = hidden[0];
@@ -268,8 +313,16 @@ const PROSE_MENTION_BLOCKS: Block[] = [
 // page 1 / page 2 = それぞれの本物のカード（案件名だけが単独の item ＝見出し）。
 const PROSE_MENTION_PAGES: QualityPage[] = [
   [txt('プローズ社'), txt('業務委託にて、案件イプシロンと案件ゼータを担当。')],
-  [txt('案件イプシロン'), txt('2021.01〜2021.06'), txt('PM'), txt('3名'), txt('TypeScript'), txt('要件定義')],
-  [txt('案件ゼータ'), txt('2022.01〜2022.06'), txt('PM'), txt('4名'), txt('Go'), txt('運用')],
+  [
+    txt('案件イプシロン'),
+    txt('未確定'),
+    txt('2021.01〜2021.06'),
+    txt('PM'),
+    txt('3名'),
+    txt('TypeScript'),
+    txt('要件定義'),
+  ],
+  [txt('案件ゼータ'), txt('未確定'), txt('2022.01〜2022.06'), txt('PM'), txt('4名'), txt('Go'), txt('運用')],
 ];
 
 describe('見出しの地の文言及を開始ページと誤認しない', () => {
@@ -445,6 +498,7 @@ describe('全件全文ゲート（実データ + 既存 PDF）', () => {
       }
 
       expect(report.missing).toEqual([]);
+      expect(report.durationConflicts.length).toBe(0);
     },
     300_000,
   );
@@ -463,8 +517,8 @@ describe('元ブロック由来のスキルと強みの完全性', () => {
     const facts = enumerateCompletenessFacts(blocks, ['skills']);
     expect(facts).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ label: 'スキル: 独自言語', text: '独自言語（2.5年）' }),
-        expect.objectContaining({ label: '主力スタック: 独自言語', text: '独自言語 2.5年' }),
+        expect.objectContaining({ label: 'スキル: 独自言語', text: '独自言語（2.5年 本人入力）' }),
+        expect.objectContaining({ label: '主力スタック: 独自言語', text: '独自言語 2.5年 本人入力' }),
         expect.objectContaining({ label: '強み 1', text: '障害分析を主導' }),
       ]),
     );
@@ -516,8 +570,8 @@ describe('元ブロック由来のスキルと強みの完全性', () => {
       },
     ];
     const facts = enumerateCompletenessFacts([...blocks, project], ['skills'], 24320);
-    expect(facts.find((f) => f.label === 'スキル: 独自言語')?.text).toBe('独自言語（0 年 3 ヶ月）');
-    expect(facts.find((f) => f.label === '主力スタック: 独自言語')?.text).toBe('独自言語 0 年 3 ヶ月');
+    expect(facts.find((f) => f.label === 'スキル: 独自言語')?.text).toBe('独自言語（0 年 3 ヶ月 案件算出）');
+    expect(facts.find((f) => f.label === '主力スタック: 独自言語')?.text).toBe('独自言語 0 年 3 ヶ月 案件算出');
   });
   it('主力スタックは推し優先で10件だがスキル一覧は全件を検査する', () => {
     const source: Block[] = [
@@ -547,4 +601,20 @@ describe('元ブロック由来のスキルと強みの完全性', () => {
     expect(facts.some((f) => f.label.startsWith('スキル:') || f.label.startsWith('主力スタック:'))).toBe(false);
     expect(facts.some((f) => f.label === '強み 1')).toBe(true);
   });
+});
+
+it('2つ目の案件ブロックの技術名も完全性検査の期待値に含む', () => {
+  const second = structuredClone(PROJECT_BLOCKS[0]);
+  if (second.type !== 'project') throw new Error('fixture project missing');
+  second.id = 'second-block';
+  second.data.companies = second.data.companies.map((company) => ({ ...company, id: `second-${company.id}` }));
+  second.data.items = second.data.items.map((item) => ({
+    ...item,
+    id: `second-${item.id}`,
+    companyId: `second-${item.companyId}`,
+    title: `追加-${item.title}`,
+    tech: { ...item.tech, lang: ['UniqueSecondTechnology'] },
+  }));
+  const facts = enumerateCompletenessFacts([...PROJECT_BLOCKS, second]);
+  expect(facts.some((fact) => fact.text.includes('UniqueSecondTechnology'))).toBe(true);
 });

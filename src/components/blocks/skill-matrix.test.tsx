@@ -4,6 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { SkillMatrix } from './skill-matrix';
 
 describe('SkillMatrix', () => {
+  it('経験0のバーを習熟度で埋めない', () => {
+    render(<SkillMatrix data={{ category: '合成', skills: [{ name: 'Example', years: 0, level: '★★★' }] }} />);
+    expect(screen.getByText('★★★')).toBeInTheDocument();
+    expect(screen.getByText('Example').parentElement?.querySelector('.barFill')).toHaveStyle({ width: '0%' });
+  });
+
   it('習熟度（★）をホバー無しで画面テキストとして表示する（issue #142）', () => {
     render(
       <SkillMatrix

@@ -31,6 +31,9 @@ import {
   type SkillEntry,
   type TableColumn,
 } from '@/db/blocks';
+import { currentMonthKey } from '@/db/derived-display';
+import { isRevision, validateDocumentBlocks } from '@/db/document-contract';
+import type { DocumentSnapshot } from '@/db/document-service';
 import { trpc } from '@/lib/trpc-client';
 
 import type { CustomMetaRow } from './block-editors/profile-block-editor';
@@ -40,7 +43,16 @@ import { SortableBlock } from './canvas/sortable-block';
 import { type HistoryEntry, loadHistory, pushHistory } from './history';
 import { HistoryDrawer } from './history-drawer';
 import { ProjectEditor, type ProjectEditorSelection } from './project-editor';
-import { assembleMarkdown, blockToItem, type EditorItem, itemToBlockInput, newId, snapshot } from './serialize';
+import { saveWithReadback } from './save-readback';
+import {
+  assembleMarkdown,
+  blockToItem,
+  type EditorItem,
+  itemsToDocumentBlocks,
+  itemToBlockInput,
+  newId,
+  snapshot,
+} from './serialize';
 import { TEMPLATES } from './templates';
 
 // 分割前（builder-client.tsx 1 枚だった頃）と同じ import 元を保つための再エクスポート。
@@ -80,9 +92,10 @@ interface BuilderClientProps {
   /**
    * 本文と同一スナップショットから取った初期版（R01）。一覧（sheets）の別取得値を
    * 使うと版と本文の読取時点がずれ、保存 CAS が誤作動/すり抜けるため分離した。
-   * 0 は「版未取得（古いキャッシュ形・シート未作成）」を表す。
+   * 文字列の0も有効な初期版。シート未作成はactiveSheetIdの欠落で区別する。
    */
-  initialRevision: number;
+  initialRevision: string;
+  rawSnapshot?: DocumentSnapshot;
   sheets: SheetSummary[];
   activeSheetId: string;
   /**
@@ -91,7 +104,7 @@ interface BuilderClientProps {
    * 以前はここを渡しておらず、読み込み失敗でも空の編集画面が出るだけだったため、
    * 利用者は「保存したものが消えた」と誤解した。
    */
-  loadFailure?: 'config' | 'unknown' | null;
+  loadFailure?: 'config' | 'unknown' | 'uneditable' | 'invalid-state' | 'not-found' | null;
 }
 
 const BuilderClient = ({
@@ -101,6 +114,7 @@ const BuilderClient = ({
   sheets: initialSheets,
   activeSheetId,
   loadFailure = null,
+  rawSnapshot,
 }: BuilderClientProps) => {
   const router = useRouter();
   const { mode, toggleTheme } = useThemeMode();
@@ -143,11 +157,16 @@ const BuilderClient = ({
   // R01 並行保存ガード: 編集開始時の版番号を保持し、保存成功時にサーバが返す
   // 新版で更新して次回保存の基準にする。版は本文と同一スナップショットから渡される
   // initialRevision で初期化する（以前は別取得の一覧 updatedAt を使っており、
-  // 本文と版の読取時点がずれ得た）。新規作成直後・版未取得は 0 で、
-  // サーバ側は既存シートへの版なし更新を拒否する（MissingRevisionError）。
-  const savedRevisionRef = useRef<number>(initialRevision);
+  // 本文と版の読取時点がずれ得た）。文字列0も有効で、文書未作成はIDの欠落で区別する。
+  const savedRevisionRef = useRef<string>(initialRevision);
   const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
   const savedRef = useRef(false);
+  const createOperationRef = useRef<{
+    key: string;
+    sheetId: string;
+    title: string;
+    blocks: ReturnType<typeof itemsToDocumentBlocks>;
+  } | null>(null);
   // サイドバーの sheet.list は staleTime: 60s の間 initialData を再利用し続けるため、
   // タイトルを変更して保存しても react-query 側は自動では気づかない。保存成功時に
   // タイトルが変わっていた場合だけ invalidate してサイドバー表示を追従させる
@@ -173,11 +192,19 @@ const BuilderClient = ({
   // 読み込みに失敗したまま保存すると、sheetId が空のまま既定シートへ書き込まれ、
   // 読めなかっただけの既存内容を「いま画面にある空同然の内容」で上書きしてしまう。
   // 失敗が出ている間は自動保存も手動保存も行わない（再読み込みで復帰させる）。
-  const autosaveStoppedRef = useRef(loadFailure !== null);
+  const autosaveStoppedRef = useRef(loadFailure !== null || !activeSheetId);
   // 保存実行中フラグ（自動/手動で共有）。実行中に再度 dirty になった場合は
   // followUpRef を立て、完了後にちょうど 1 回だけ追撃保存する。
   const saveInFlightRef = useRef(false);
   const followUpRef = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      followUpRef.current = false;
+    };
+  }, []);
   // 直近の自動保存が失敗した時点のスナップショット。デバウンス効果はこれと同一内容の間は
   // タイマーを再armしない（status 遷移だけで 1.5 秒ごとの無限リトライになるのを防ぐ）。
   const failedSnapshotRef = useRef<string | null>(null);
@@ -234,21 +261,22 @@ const BuilderClient = ({
 
   // プレビューは重い（Markdown パース＋ハイライト）ため、入力のたびではなく
   // デバウンスして更新し、タイピングのラグを防ぐ。初期値・初回レンダリングは即時反映。
-  const [previewContent, setPreviewContent] = useState(() => assembleMarkdown(items));
+  const [referenceMonth] = useState(() => currentMonthKey(new Date()));
+  const [previewContent, setPreviewContent] = useState(() => assembleMarkdown(items, { referenceMonth }));
   const isFirstPreviewRender = useRef(true);
 
   useEffect(() => {
-    // useState の初期値で既に assembleMarkdown(items) 評価済みのため、
+    // useState の初期値で既に assembleMarkdown(items, { referenceMonth }) 評価済みのため、
     // マウント直後の再計算は不要（重い Markdown パース処理の二重実行を避ける）。
     if (isFirstPreviewRender.current) {
       isFirstPreviewRender.current = false;
       return;
     }
     const timer = setTimeout(() => {
-      setPreviewContent(assembleMarkdown(items));
+      setPreviewContent(assembleMarkdown(items, { referenceMonth }));
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [items]);
+  }, [items, referenceMonth]);
 
   // 別ウィンドウプレビューへ変更をリアルタイム反映する BroadcastChannel。
   // 別窓が開いていなくても postMessage は無害なので購読側の有無は気にしない。
@@ -328,7 +356,7 @@ const BuilderClient = ({
   // 自動保存の本体。デバウンス満了時と追撃保存時に呼ばれる。
   // 保存が既に実行中なら追撃を予約して戻り、完了後にちょうど 1 回だけ再実行する。
   const runAutosave = useCallback(async () => {
-    if (autosaveStoppedRef.current) return;
+    if (!mountedRef.current || autosaveStoppedRef.current) return;
     // プロフィールの自由項目にラベル重複がある間は、除外後の meta を自動保存しない。
     if (blockedItemIdsRef.current.size > 0) return;
     if (saveInFlightRef.current) {
@@ -347,22 +375,29 @@ const BuilderClient = ({
     saveInFlightRef.current = true;
     setAutosaveStatus('saving');
     try {
-      const result = await saveMutation.mutateAsync({
+      const payload = {
         title: currentTitle,
-        blocks: currentItems.map(itemToBlockInput),
-        sheetId: activeSheetId || undefined,
-        expectedRevision: savedRevisionRef.current > 0 ? savedRevisionRef.current : undefined,
-      });
+        blocks: itemsToDocumentBlocks(currentItems),
+        sheetId: activeSheetId,
+        expectedRevision: savedRevisionRef.current,
+      };
+      if (validateDocumentBlocks(payload.blocks).some((issue) => issue.code === 'PERIOD_PROJECTION_MISMATCH'))
+        throw new Error('文書の入力内容を確認してください');
+      const result = await saveWithReadback(payload, saveMutation.mutateAsync, (sheetId) =>
+        utils.sheet.builderState.fetch({ sheetId }, { staleTime: 0 }),
+      );
+      if (!mountedRef.current) return;
       savedRef.current = true;
       // 応答がネットワーク上で逆順到着しても版を後退させない（古い応答で最新版を
       // 上書きすると次回保存が誤 Conflict する）。版はサーバ採番で単調増加。
       // 版が欠けた応答（古いサーバ等）では現在値を維持する（NaN化防止）。
-      if (typeof result.revision === 'number') {
-        savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
+      if (isRevision(result.revision)) {
+        savedRevisionRef.current =
+          BigInt(result.revision) > BigInt(savedRevisionRef.current) ? result.revision : savedRevisionRef.current;
       }
       if (savedTitleRef.current !== currentTitle) {
         savedTitleRef.current = currentTitle;
-        void utils.sheet.list.invalidate();
+        void utils.sheet.list.invalidate().catch(() => undefined);
       }
       lastSavedSnapshotRef.current = savedSnapshot;
       failedSnapshotRef.current = null;
@@ -370,6 +405,7 @@ const BuilderClient = ({
       setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
       setAutosaveStatus('saved');
     } catch (err) {
+      if (!mountedRef.current) return;
       if (err instanceof TRPCClientError && err.data?.code === 'CONFLICT') {
         // 競合は最初の 1 回で自動保存を恒久停止する（ダイアログは出さず、
         // トップバーのインジケータ＋再読み込みボタンで通知する）。
@@ -394,7 +430,7 @@ const BuilderClient = ({
     // 安定参照として返すため、依存配列に加えても再レンダーごとの再生成は起きない
     // （utils オブジェクト自体ではなく末端の関数を指定する — utils は毎レンダー新しい
     // オブジェクトを返す実装があり得るが、内部の関数参照は安定している）。
-  }, [activeSheetId, saveMutation.mutateAsync, utils.sheet.list.invalidate]);
+  }, [activeSheetId, saveMutation.mutateAsync, utils.sheet.list.invalidate, utils.sheet.builderState.fetch]);
 
   // dirty になってから AUTOSAVE_DEBOUNCE_MS 編集が止んだら自動保存する
   // （items/title が変わるたびにタイマーを引き直す＝デバウンス）。
@@ -538,36 +574,59 @@ const BuilderClient = ({
     setShowCreateDialog(false);
     startSheetOp(async () => {
       try {
-        const res = await createMutation.mutateAsync({ title, templateId: newSheetTemplateId });
-        await utils.sheet.list.invalidate();
+        const key = JSON.stringify([title, newSheetTemplateId]);
+        if (createOperationRef.current?.key !== key) {
+          const template = TEMPLATES.find((t) => t.id === newSheetTemplateId);
+          createOperationRef.current = {
+            key,
+            sheetId: newId(),
+            title,
+            blocks: (template?.blocks ?? []).map((block, order) => ({ ...block, id: newId(), order })),
+          };
+        }
+        const { key: _key, ...operation } = createOperationRef.current;
+        const res = await createMutation.mutateAsync(operation);
+        if (!mountedRef.current) return;
+        await utils.sheet.list.invalidate().catch(() => undefined);
+        if (!mountedRef.current) return;
+        createOperationRef.current = null;
         router.push(`/builder?sheet=${res.sheetId}`);
       } catch {
+        if (!mountedRef.current) return;
         toast.error('シートの作成に失敗しました');
       }
     });
   };
 
   const handleDeleteSheet = (sheetId: string, sheetTitle: string) => {
-    if (sheets.length <= 1) {
-      toast.error('最後のシートは削除できません');
-      return;
-    }
-    if (!window.confirm(`「${sheetTitle}」を削除しますか？この操作は元に戻せません。`)) return;
     startSheetOp(async () => {
       try {
-        await deleteMutation.mutateAsync({ sheetId });
+        let expectedRevision = savedRevisionRef.current;
+        let confirmedTitle = sheetTitle;
+        if (sheetId !== activeSheetId) {
+          const state = await utils.sheet.builderState.fetch({ sheetId });
+          if (state.status !== 'OK') throw new Error('Document unavailable');
+          expectedRevision = state.snapshot.revision;
+          confirmedTitle = state.snapshot.title;
+        }
+        if (!mountedRef.current) return;
+        if (!window.confirm(`「${confirmedTitle}」を削除しますか？この操作は元に戻せません。`)) return;
+        await deleteMutation.mutateAsync({ sheetId, expectedRevision });
+        if (!mountedRef.current) return;
         // 遷移先の決定は削除直前の一覧から即座に算出する（invalidate の再取得完了を待たない）。
         // 一覧の表示自体は invalidate() が引き起こす再取得で追従する。
         const remaining = sheets.filter((s) => s.id !== sheetId);
-        await utils.sheet.list.invalidate();
+        await utils.sheet.list.invalidate().catch(() => undefined);
+        if (!mountedRef.current) return;
         if (sheetId === activeSheetId) {
-          router.push(`/builder?sheet=${remaining[0]?.id ?? ''}`);
+          router.push(remaining[0] ? `/builder?sheet=${remaining[0].id}` : '/builder');
         } else {
           router.refresh();
         }
         toast.success('シートを削除しました');
       } catch {
-        toast.error('シートの削除に失敗しました');
+        if (!mountedRef.current) return;
+        toast.error('シートの削除に失敗しました。更新競合の場合は内容を確認してから再操作してください。');
       }
     });
   };
@@ -578,7 +637,7 @@ const BuilderClient = ({
     // 一方で中身が空のブロック（未入力のテンプレスカフォールド等）は assembleMarkdown が
     // 描画時と同じ基準でスキップする。DB 側は空ブロックも保持するので、データそのものは
     // 失われない（このバックアップは markdown 文字列であり、空スカフォールドの復元は保証しない）。
-    const content = assembleMarkdown(items, { includeHidden: true });
+    const content = assembleMarkdown(items, { includeHidden: true, referenceMonth });
     const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -596,7 +655,7 @@ const BuilderClient = ({
   };
 
   const handleSave = () => {
-    if (loadFailure !== null) {
+    if (loadFailure !== null || !activeSheetId) {
       toast.error('読み込みに失敗したままなので保存できません。ページを再読み込みしてください。');
       return;
     }
@@ -628,10 +687,14 @@ const BuilderClient = ({
 
     const payload = {
       title,
-      blocks: items.map(itemToBlockInput),
-      sheetId: activeSheetId || undefined,
-      expectedRevision: savedRevisionRef.current > 0 ? savedRevisionRef.current : undefined,
+      blocks: itemsToDocumentBlocks(items),
+      sheetId: activeSheetId,
+      expectedRevision: savedRevisionRef.current,
     };
+    if (validateDocumentBlocks(payload.blocks).some((issue) => issue.code === 'PERIOD_PROJECTION_MISMATCH')) {
+      toast.error('保存できない入力があります。期間の日付などの診断を確認してください。');
+      return;
+    }
     const savedSnapshot = snapshot(items, title);
 
     startSaving(async () => {
@@ -639,16 +702,20 @@ const BuilderClient = ({
       // 取り違えによる誤 Conflict）を防ぐ。実行中の編集分は追撃自動保存が拾う。
       saveInFlightRef.current = true;
       try {
-        const result = await saveMutation.mutateAsync(payload);
+        const result = await saveWithReadback(payload, saveMutation.mutateAsync, (sheetId) =>
+          utils.sheet.builderState.fetch({ sheetId }, { staleTime: 0 }),
+        );
+        if (!mountedRef.current) return;
         savedRef.current = true;
         // R01: 次回の競合判定基準にはサーバーが返した版を使う。応答の逆順到着で
         // 版を後退させないよう単調増加を守る（版が欠けた応答では現状維持）。
-        if (typeof result.revision === 'number') {
-          savedRevisionRef.current = Math.max(savedRevisionRef.current, result.revision);
+        if (isRevision(result.revision)) {
+          savedRevisionRef.current =
+            BigInt(result.revision) > BigInt(savedRevisionRef.current) ? result.revision : savedRevisionRef.current;
         }
         if (savedTitleRef.current !== payload.title) {
           savedTitleRef.current = payload.title;
-          void utils.sheet.list.invalidate();
+          void utils.sheet.list.invalidate().catch(() => undefined);
         }
         // 保存成功した内容をスナップショットとして記録し、dirty を解除する
         // （保存中に編集が入っていた場合は dirty のままにする）。
@@ -657,6 +724,7 @@ const BuilderClient = ({
         setAutosaveStatus('idle');
         toast.success('保存しました');
       } catch (err) {
+        if (!mountedRef.current) return;
         if (err instanceof TRPCClientError && err.data?.code === 'UNAUTHORIZED') {
           toast.error('セッションが切れました。再度認証してください。');
         } else if (err instanceof TRPCClientError && err.data?.code === 'CONFLICT') {
@@ -715,6 +783,47 @@ const BuilderClient = ({
 
   return (
     <div className="min-h-screen">
+      {!activeSheetId && !loadFailure && (
+        <p role="status" className="p-4">
+          シートはまだありません。「新規作成」から作成できます。
+        </p>
+      )}
+      {rawSnapshot && loadFailure === 'uneditable' && (
+        <div className="p-4">
+          <p>未対応の項目があるため編集を停止しています。原文は保持されています。</p>
+          <ul>
+            {rawSnapshot.validation.issues.map((issue) => (
+              <li key={`${issue.blockId}-${issue.path}-${issue.code}`}>
+                {issue.blockId}: {issue.path} ({issue.code})
+              </li>
+            ))}
+          </ul>
+          <Button
+            onClick={() => {
+              const url = URL.createObjectURL(
+                new Blob([JSON.stringify(rawSnapshot, null, 2)], { type: 'application/json' }),
+              );
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = 'skillsheet-original.json';
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS);
+            }}
+          >
+            原文JSONを退避
+          </Button>
+        </div>
+      )}
+      {loadFailure === 'invalid-state' && (
+        <p role="alert" className="p-4">
+          既定シートの状態が不整合です。復旧が完了するまで編集できません。
+        </p>
+      )}
+      {loadFailure === 'not-found' && (
+        <p role="alert" className="p-4">
+          指定したシートが見つかりません。一覧から対象を選び直してください。
+        </p>
+      )}
       {loadFailure && (
         <div
           role="alert"
@@ -824,6 +933,7 @@ const BuilderClient = ({
               size="default"
               className="h-11"
               onClick={handleOpenPreview}
+              disabled={loadFailure !== null}
               aria-label="プレビューを別ウィンドウで開く"
             >
               <Eye className="size-4 sm:mr-1.5" />
@@ -853,7 +963,13 @@ const BuilderClient = ({
             <Button variant="ghost" size="icon" onClick={toggleTheme} aria-label="テーマ切り替え">
               {mode === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
-            <Button variant="outline" size="default" className="hidden h-11 sm:inline-flex" onClick={handleExport}>
+            <Button
+              variant="outline"
+              size="default"
+              className="hidden h-11 sm:inline-flex"
+              onClick={handleExport}
+              disabled={loadFailure !== null}
+            >
               <Download className="mr-1.5 size-4" />
               バックアップ
             </Button>
@@ -872,7 +988,7 @@ const BuilderClient = ({
             {/* 自動保存の実行中も無効化し、同時保存（expectedRevision 取り違えの誤 Conflict）を防ぐ */}
             <Button
               onClick={handleSave}
-              disabled={isSaving || autosaveStatus === 'saving'}
+              disabled={loadFailure !== null || !activeSheetId || isSaving || autosaveStatus === 'saving'}
               aria-label={isSaving ? '保存中' : '保存'}
               className="h-11"
             >
@@ -930,7 +1046,7 @@ const BuilderClient = ({
                       variant="ghost"
                       size="icon"
                       onClick={() => handleDeleteSheet(sheet.id, sheet.title)}
-                      disabled={isSheetOp || sheets.length <= 1}
+                      disabled={isSheetOp}
                       aria-label={`「${sheet.title}」を削除`}
                       className="text-muted-foreground hover:text-destructive disabled:opacity-30"
                     >
@@ -947,6 +1063,7 @@ const BuilderClient = ({
               </label>
               <input
                 id="sheet-title"
+                disabled={loadFailure !== null}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="スキルシートのタイトル"
@@ -981,7 +1098,8 @@ const BuilderClient = ({
             </div>
           </div>
 
-          {activeTab === 'project' &&
+          {loadFailure === null &&
+            activeTab === 'project' &&
             (() => {
               const projectItem = items.find((i) => i.type === 'project') as
                 | { id: string; type: 'project'; data: ProjectBlockData }
@@ -1000,7 +1118,7 @@ const BuilderClient = ({
             <HistoryDrawer entries={history} onClose={() => setHistoryOpen(false)} onRestore={restoreProjectData} />
           )}
 
-          {activeTab === 'blocks' && (
+          {loadFailure === null && activeTab === 'blocks' && (
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -1049,7 +1167,7 @@ const BuilderClient = ({
             </DndContext>
           )}
 
-          {activeTab === 'blocks' && (
+          {loadFailure === null && activeTab === 'blocks' && (
             // flex-wrap: 4ボタンが flex-1 均等割りだと 375px 幅でラベルの最小幅を
             // 確保しきれず横スクロールの原因になっていた（実機確認）。折り返し可能にする。
             <div className="flex flex-wrap gap-2">

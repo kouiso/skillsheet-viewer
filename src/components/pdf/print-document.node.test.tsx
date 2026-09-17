@@ -15,6 +15,7 @@ import path from 'node:path';
 import { Font, renderToBuffer } from '@react-pdf/renderer';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Block } from '@/db/blocks';
+import { currentMonthKey } from '@/db/derived-display';
 
 import PDF_FONT_FAMILY from './constants';
 import { buildPdfQualityFixtureBlocks, PDF_QUALITY_FIXTURE_TITLE } from './fixtures/print-quality-fixture';
@@ -38,8 +39,7 @@ const monthInput = process.env.PRINT_REFERENCE_MONTH;
 if (monthInput !== undefined && (!/^\d+$/.test(monthInput) || !Number.isSafeInteger(Number(monthInput)))) {
   throw new Error('PRINT_REFERENCE_MONTH は年*12+月(0始まり)の整数で指定してください');
 }
-const referenceMonth =
-  monthInput === undefined ? generatedAt.getFullYear() * 12 + generatedAt.getMonth() : Number(monthInput);
+const referenceMonth = monthInput === undefined ? currentMonthKey(generatedAt) : Number(monthInput);
 
 if (REAL_BLOCKS_JSON === undefined) {
   // スキップは vitest の一覧上では見えるが、大量のテストに埋もれて「実データでの確認が
@@ -91,6 +91,7 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
 function assertComplete(blocks: Block[], pages: Awaited<ReturnType<typeof extractQualityPages>>) {
   const report = buildCompletenessReport(blocks, pages, undefined, referenceMonth);
   expect(report.missing.length, 'PDF完全性: 元データの事実が欠落しています').toBe(0);
+  expect(report.durationConflicts.length, '参画期間の矛盾は本人の差分確認が必要です').toBe(0);
 }
 
 describe('新しい印刷経路の品質', () => {
@@ -244,6 +245,36 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     return new Set(fullText.includes('スキル一覧') ? ['スキル一覧'] : []);
   }
 
+  it('100案件を末尾まで欠落なく出力する', async () => {
+    const volumeBlocks = buildPdfQualityFixtureBlocks();
+    const projectBlock = volumeBlocks.find((block) => block.type === 'project');
+    if (projectBlock?.type !== 'project' || !projectBlock.data.items.length) throw new Error('fixture');
+    const templates = projectBlock.data.items.filter((item) => !item.hidden);
+    projectBlock.data.companies = projectBlock.data.companies.map((company) => ({ ...company, hidden: false }));
+    projectBlock.data.items = Array.from({ length: 100 }, (_, index) => ({
+      ...structuredClone(templates[index % templates.length]),
+      id: `volume-project-${index}`,
+      title: `大量案件検証 ${String(index + 1).padStart(3, '0')}`,
+      hidden: false,
+    }));
+    const vm = buildPrintViewModel(title, volumeBlocks, undefined, referenceMonth);
+    expect(vm.companies.flatMap((company) => company.projects)).toHaveLength(100);
+    const document = await buildPrintSkillSheetDocument({ title, blocks: volumeBlocks, referenceMonth });
+    const buffer = await renderToBuffer(document);
+    const pages = await extractQualityPages(buffer);
+    expect(pages.length).toBeGreaterThan(20);
+    assertComplete(volumeBlocks, pages);
+    const inputs = buildTextQualityInputs(title, vm);
+    expect(runQualityChecks({ pages, ...inputs }, DEFAULT_QUALITY_OPTIONS)).toEqual([]);
+    expect(await runRasterQualityChecks(buffer, pages)).toEqual([]);
+    expect(
+      runDuplicateHeadingChecks(
+        pages,
+        vm.companies.flatMap((company) => company.projects.map((project) => project.title)),
+      ),
+    ).toEqual([]);
+  }, 300_000);
+
   it('views が skills を含まない場合、スキル一覧セクションを出さない', async () => {
     const headings = await renderHeadingSet(['process', 'projects', 'timeline']);
     expect(headings.has('スキル一覧')).toBe(false);
@@ -259,6 +290,25 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     expect(headings.has('スキル一覧')).toBe(true);
   }, 60_000);
 
+  it('継続案件の本人入力と固定月の算出期間を実PDFに残す', async () => {
+    const durationBlocks = buildPdfQualityFixtureBlocks();
+    const projects = durationBlocks.find((block) => block.type === 'project');
+    if (projects?.type !== 'project' || !projects.data.items[0]) throw new Error('fixture');
+    projects.data.items[0].period = '2026.01 — 現在';
+    projects.data.items[0].duration = '半年';
+    const before = JSON.stringify(durationBlocks);
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title, blocks: durationBlocks, referenceMonth: 2026 * 12 + 8 }),
+    );
+    const pages = await extractQualityPages(buffer);
+    const normalized = pages
+      .flatMap((page) => page.map((item) => item.text))
+      .join('')
+      .replaceAll(/\s/g, '');
+    expect(normalized).toContain('本人入力半年／2026-09基準9か月');
+    expect(JSON.stringify(durationBlocks)).toBe(before);
+  }, 60_000);
+
   it('推しモードの凡例を実PDFのテキスト層へ出す', async () => {
     const featuredBlocks = buildPdfQualityFixtureBlocks();
     const skills = featuredBlocks.find((block) => block.type === 'skills');
@@ -271,5 +321,9 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     const fullText = pages.flatMap((page) => page.map((item) => item.text)).join('');
     const normalized = fullText.replaceAll(/\s/g, '');
     expect(normalized).toContain('塗り=主に使う技術／枠線=その他。カッコ内は経験年数。');
+    expect(normalized).toContain(
+      `${Math.floor(referenceMonth / 12)}-${String((referenceMonth % 12) + 1).padStart(2, '0')}基準`,
+    );
+    expect(normalized).toContain('重複月は1回だけ集計');
   }, 60_000);
 });

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { TRPCClientError } from '@trpc/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Block } from '@/db/blocks';
+import type { DocumentSnapshot } from '@/db/document-service';
 
 import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
 
@@ -11,9 +12,12 @@ function trpcClientError(code: string): TRPCClientError<never> {
   return new TRPCClientError(code, { result: { error: { data: { code } } } } as never);
 }
 
-const mockSave = vi.fn().mockResolvedValue({ updatedAt: new Date(), revision: 6 });
+const mockSave = vi.fn().mockResolvedValue({ updatedAt: new Date(), revision: '6' });
 const mockCreate = vi.fn().mockResolvedValue({ sheetId: 'new-id' });
+const mockRouterPush = vi.fn();
+const mockRouterRefresh = vi.fn();
 const mockDelete = vi.fn().mockResolvedValue({ ok: true });
+const mockBuilderFetch = vi.fn().mockResolvedValue({ status: 'OK', snapshot: { revision: '5' } });
 const mockInvalidate = vi.fn().mockResolvedValue(undefined);
 // builder-client.tsx は trpc.sheet.*.useMutation().mutateAsync(...) と
 // trpc.sheet.list.useQuery(undefined, { initialData }) / trpc.useUtils() を呼ぶため、
@@ -27,12 +31,17 @@ vi.mock('@/lib/trpc-client', () => ({
       delete: { useMutation: () => ({ mutateAsync: mockDelete }) },
       list: { useQuery: (_input: unknown, opts: { initialData: unknown }) => ({ data: opts.initialData }) },
     },
-    useUtils: () => ({ sheet: { list: { invalidate: mockInvalidate } } }),
+    useUtils: () => ({
+      sheet: {
+        list: { invalidate: mockInvalidate },
+        builderState: { fetch: mockBuilderFetch },
+      },
+    }),
   },
 }));
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mockRouterPush, refresh: mockRouterRefresh }) }));
 // テーマ Provider なしで BuilderClient 単体を描画できるようにモック（ダークトグルが useThemeMode を使う）
 vi.mock('@/context/theme-context', () => ({ useThemeMode: () => ({ mode: 'light', toggleTheme: vi.fn() }) }));
 
@@ -41,10 +50,141 @@ const mdBlocks = (markdowns: string[]): Block[] =>
   markdowns.map((markdown, order) => ({ id: `block-${order}`, type: 'markdown', order, data: { markdown } }));
 
 const defaultSheet = { id: 'sheet-1', title: 'テストシート', updatedAt: new Date() };
-const defaultProps = { sheets: [defaultSheet], activeSheetId: 'sheet-1', initialRevision: 5 };
+const defaultProps = { sheets: [defaultSheet], activeSheetId: 'sheet-1', initialRevision: '5' };
 
 describe('BuilderClient', () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it('編集不能rawの退避Blobは未知field・配列順・巨大版・空行を保持する', async () => {
+    const raw: DocumentSnapshot = {
+      sheetId: '00000000-0000-4000-8000-000000000001',
+      title: '原文',
+      revision: '9007199254740993',
+      blocks: [
+        {
+          id: '00000000-0000-4000-8000-000000000002',
+          type: 'future',
+          order: 0,
+          data: { unknown: [null, '  原文\n\n', { nested: false }], blank: '' },
+        },
+      ],
+      validation: { editable: false, issues: [{ blockId: 'block', path: 'data.unknown', code: 'UNKNOWN_FIELD' }] },
+    };
+    let downloaded!: Blob;
+    const createObjectURL = vi.fn((blob: Blob) => {
+      downloaded = blob;
+      return 'blob:private-test';
+    });
+    const NativeURL = URL;
+    vi.stubGlobal(
+      'URL',
+      class extends NativeURL {
+        static createObjectURL = createObjectURL;
+        static revokeObjectURL = vi.fn();
+      },
+    );
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      render(
+        <BuilderClient
+          initialBlocks={[]}
+          initialTitle={raw.title}
+          {...defaultProps}
+          activeSheetId={raw.sheetId}
+          initialRevision={raw.revision}
+          loadFailure="uneditable"
+          rawSnapshot={raw}
+        />,
+      );
+      expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: 'テキスト' })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '原文JSONを退避' }));
+      expect(downloaded.type).toBe('application/json');
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = reject;
+        reader.readAsText(downloaded);
+      });
+      expect(JSON.parse(text)).toEqual(raw);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:private-test');
+      expect(click).toHaveBeenCalledOnce();
+      expect(mockSave).not.toHaveBeenCalled();
+    } finally {
+      click.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('作成の応答喪失後も同じ操作UUIDとブロックUUIDで再試行する', async () => {
+    const user = userEvent.setup();
+    mockCreate.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({ sheetId: 'new-id' });
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    await user.click(screen.getByRole('button', { name: '作成' }));
+    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    await user.click(screen.getByRole('button', { name: '作成' }));
+    expect(mockCreate).toHaveBeenCalledTimes(2);
+    expect(mockCreate.mock.calls[1][0]).toEqual(mockCreate.mock.calls[0][0]);
+    expect(mockCreate.mock.calls[0][0].sheetId).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it.each(['create', 'delete'] as const)('離脱後の%s応答で遷移しない', async (operation) => {
+    const user = userEvent.setup();
+    let finish!: (value: { sheetId: string }) => void;
+    const mutation = operation === 'create' ? mockCreate : mockDelete;
+    mutation.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      const view = render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+      if (operation === 'create') {
+        await user.click(screen.getByRole('button', { name: '新規シート' }));
+        await user.click(screen.getByRole('button', { name: '作成' }));
+      } else {
+        await user.click(screen.getByRole('button', { name: '「テストシート」を削除' }));
+      }
+      expect(mutation).toHaveBeenCalledOnce();
+      view.unmount();
+      await act(async () => {
+        finish({ sheetId: 'new-id' });
+      });
+      expect(mockRouterPush).not.toHaveBeenCalled();
+      expect(mockRouterRefresh).not.toHaveBeenCalled();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it('最後のシートも画面が保持する版で削除する', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} initialRevision="0" />);
+    const remove = screen.getByRole('button', { name: /テストシート.*削除|削除.*テストシート/ });
+    await user.click(remove);
+    expect(mockDelete).toHaveBeenCalledWith({ sheetId: defaultProps.activeSheetId, expectedRevision: '0' });
+    confirm.mockRestore();
+  });
+
+  it('安全整数範囲を超える版を数値変換せず保存する', async () => {
+    const user = userEvent.setup();
+    mockSave.mockResolvedValueOnce({ revision: '9007199254740994' });
+    render(
+      <BuilderClient
+        initialBlocks={mdBlocks(['原文'])}
+        initialTitle="t"
+        {...defaultProps}
+        initialRevision="9007199254740993"
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: '9007199254740993' }));
+  });
 
   it('初期 markdown ブロックがテキストエリアとして表示される', () => {
     render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
@@ -79,13 +219,80 @@ describe('BuilderClient', () => {
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'マイシート',
-        blocks: [{ type: 'markdown', data: { markdown: '## A' } }],
+        blocks: [{ id: expect.any(String), order: expect.any(Number), type: 'markdown', data: { markdown: '## A' } }],
         sheetId: 'sheet-1',
       }),
     );
   });
 
-  it('DB 取得失敗後の空ビルダーは sheetId を省略して新規保存する', async () => {
+  it('期間投影が不一致の下書きを保存APIへ送信しない', async () => {
+    const user = userEvent.setup();
+    render(
+      <BuilderClient
+        initialTitle="期間検証"
+        {...defaultProps}
+        initialBlocks={[
+          {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            type: 'project',
+            order: 0,
+            data: {
+              companies: [{ id: 'c1', name: '検証会社', kind: '', period: '', note: '' }],
+              items: [
+                {
+                  id: 'p1',
+                  companyId: 'c1',
+                  title: '案件',
+                  scope: '',
+                  period: '2026.08 — ',
+                  ongoing: true,
+                  role: '',
+                  team: '',
+                  tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+                  process: [],
+                  duties: '',
+                  acquired: '',
+                  comment: '',
+                },
+              ],
+            },
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    expect(mockSave).not.toHaveBeenCalled();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '下書きの新タイトル' } });
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(mockSave).not.toHaveBeenCalled();
+      expect(screen.getByLabelText('タイトル')).toHaveValue('下書きの新タイトル');
+      await act(async () => {
+        vi.advanceTimersByTime(10000);
+      });
+      expect(mockSave).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: '案件エディタ' }));
+      fireEvent.click(screen.getByRole('checkbox', { name: '継続中' }));
+      fireEvent.change(screen.getByLabelText('終了月', { selector: 'input' }), { target: { value: '2026-09' } });
+      await act(async () => {
+        vi.advanceTimersByTime(1500);
+      });
+      expect(mockSave).toHaveBeenCalledTimes(1);
+      expect(mockSave.mock.calls[0][0].blocks[0].data.items[0]).toMatchObject({
+        period: '2026.08 — 2026.09',
+        periodStart: '2026-08',
+        periodEnd: '2026-09',
+        ongoing: false,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('文書IDがないビルダーは保存から暗黙作成しない', async () => {
     const user = userEvent.setup();
     render(
       <BuilderClient
@@ -93,11 +300,11 @@ describe('BuilderClient', () => {
         initialTitle="マイシート"
         sheets={[]}
         activeSheetId=""
-        initialRevision={0}
+        initialRevision="0"
       />,
     );
     await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ sheetId: undefined }));
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
   // R01: 版は本文と同じスナップショット（initialRevision）から取り、保存の期待版として送る。
@@ -106,16 +313,16 @@ describe('BuilderClient', () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 5 }));
+    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: '5' }));
   });
 
   it('保存応答の新版で次の保存の期待版が更新される（遅延した古い応答で版が戻らない、R01）', async () => {
     const user = userEvent.setup();
-    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: 6 });
+    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: '6' });
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="マイシート" {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /保存/ }));
     await user.click(screen.getByRole('button', { name: /保存/ }));
-    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 6 }));
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: '6' }));
   });
 
   // 「新規シート」経由の router.push は key={activeSheetId} の再マウントで編集中 state を
@@ -234,6 +441,8 @@ describe('BuilderClient', () => {
         sheetId: 'sheet-1',
         blocks: [
           {
+            id: expect.any(String),
+            order: 0,
             type: 'table',
             data: {
               columns: [
@@ -262,7 +471,7 @@ describe('BuilderClient', () => {
         initialTitle="シートA"
         sheets={[sheetA, sheetB]}
         activeSheetId="sheet-a"
-        initialRevision={1}
+        initialRevision="1"
       />,
     );
     expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Aの内容');
@@ -275,7 +484,7 @@ describe('BuilderClient', () => {
         initialTitle="シートB"
         sheets={[sheetA, sheetB]}
         activeSheetId="sheet-b"
-        initialRevision={1}
+        initialRevision="1"
       />,
     );
     expect((screen.getByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement).value).toBe('## Bの内容');
@@ -308,7 +517,7 @@ describe('BuilderClient', () => {
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({
         title: '新タイトル',
-        blocks: [{ type: 'markdown', data: { markdown: '## A' } }],
+        blocks: [{ id: expect.any(String), order: expect.any(Number), type: 'markdown', data: { markdown: '## A' } }],
         sheetId: 'sheet-1',
       }),
     );
@@ -472,8 +681,10 @@ describe('BuilderClient 自動保存', () => {
       expect.objectContaining({
         title: 't',
         sheetId: 'sheet-1',
-        blocks: [{ type: 'markdown', data: { markdown: '## A 追記' } }],
-        expectedRevision: 5,
+        blocks: [
+          { id: expect.any(String), order: expect.any(Number), type: 'markdown', data: { markdown: '## A 追記' } },
+        ],
+        expectedRevision: '5',
       }),
     );
     expect(screen.getByText('保存済み（自動）')).toBeInTheDocument();
@@ -487,38 +698,38 @@ describe('BuilderClient 自動保存', () => {
   // R01: 応答の逆順到着。サーバ採番の版は単調増加なので、古い版の応答が後着しても
   // クライアントの版を戻してはいけない（戻すと次回保存が誤 Conflict する）。
   it('古い版の応答が後着しても版を戻さない（R01: 逆順到着対策）', async () => {
-    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: 6 });
+    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: '6' });
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     typeMarkdown('## A1');
     await act(async () => {
       vi.advanceTimersByTime(600);
     });
-    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 5 }));
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: '5' }));
 
     // 直前より古い版 3 を返す応答（逆順到着の縮約モデル）
-    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: 3 });
+    mockSave.mockResolvedValueOnce({ updatedAt: new Date(), revision: '3' });
     typeMarkdown('## A12');
     await act(async () => {
       vi.advanceTimersByTime(600);
     });
-    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 6 }));
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: '6' }));
 
     // 古い応答で版が 3 へ戻っていないことを、次の保存の期待版で確認する
-    mockSave.mockResolvedValue({ updatedAt: new Date(), revision: 7 });
+    mockSave.mockResolvedValue({ updatedAt: new Date(), revision: '7' });
     typeMarkdown('## A123');
     await act(async () => {
       vi.advanceTimersByTime(600);
     });
-    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 6 }));
+    expect(mockSave).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: '6' }));
   });
 
   // R01: 保存の飛行中に入った編集を、応答ハンドラが誤って「保存済み」へ戻さない。
   // 応答時の dirty 判定は自分のスナップショットではなくライブの items/title と比較する。
   it('保存中に入った編集は応答で dirty が解消されず、追撃保存が最新内容を送る', async () => {
-    let resolveSave: (value: { updatedAt: Date; revision: number }) => void = () => {};
+    let resolveSave: (value: { updatedAt: Date; revision: string }) => void = () => {};
     mockSave.mockImplementationOnce(
       () =>
-        new Promise<{ updatedAt: Date; revision: number }>((resolve) => {
+        new Promise<{ updatedAt: Date; revision: string }>((resolve) => {
           resolveSave = resolve;
         }),
     );
@@ -532,18 +743,18 @@ describe('BuilderClient 自動保存', () => {
     // 飛行中の編集 — 古い応答がこの内容を消したり dirty を誤解消してはいけない
     typeMarkdown('## A12');
     await act(async () => {
-      resolveSave({ updatedAt: new Date(), revision: 6 });
+      resolveSave({ updatedAt: new Date(), revision: '6' });
     });
 
-    mockSave.mockResolvedValue({ updatedAt: new Date(), revision: 7 });
+    mockSave.mockResolvedValue({ updatedAt: new Date(), revision: '7' });
     await act(async () => {
       vi.advanceTimersByTime(600);
     });
     // 追撃保存は「飛行中に編集した最新内容」と「応答で得た新版」を送る
     expect(mockSave).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        expectedRevision: 6,
-        blocks: [{ type: 'markdown', data: { markdown: '## A12' } }],
+        expectedRevision: '6',
+        blocks: [{ id: expect.any(String), order: expect.any(Number), type: 'markdown', data: { markdown: '## A12' } }],
       }),
     );
   });
@@ -557,10 +768,12 @@ describe('BuilderClient 自動保存', () => {
         sheets={[]}
         activeSheetId=""
         loadFailure="unknown"
-        initialRevision={0}
+        initialRevision="0"
       />,
     );
-    typeMarkdown('## 事故で入力してしまった1行');
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
+    expect(screen.getByLabelText('タイトル')).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'テキスト' })).not.toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(5000);
     });
@@ -573,21 +786,21 @@ describe('BuilderClient 自動保存', () => {
     expect(mockSave).not.toHaveBeenCalled();
   });
 
-  it('空ビルダーの自動保存は sheetId を省略して新規保存する', async () => {
+  it('文書IDがないビルダーは自動保存から暗黙作成しない', async () => {
     render(
       <BuilderClient
         initialBlocks={mdBlocks(['## A'])}
         initialTitle="t"
         sheets={[]}
         activeSheetId=""
-        initialRevision={0}
+        initialRevision="0"
       />,
     );
     typeMarkdown('## B');
     await act(async () => {
       vi.advanceTimersByTime(600);
     });
-    expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ sheetId: undefined }));
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
   // Codex 指摘の回帰テスト（手動保存側と同じ理由）。自動保存でタイトルが変わった場合も
@@ -610,6 +823,34 @@ describe('BuilderClient 自動保存', () => {
     });
     expect(mockSave).toHaveBeenCalledTimes(1);
     expect(mockInvalidate).not.toHaveBeenCalled();
+  });
+
+  it('シート切替でunmountした後の保存応答から追撃保存を送らない', async () => {
+    let resolveFirst!: (value: { revision: string }) => void;
+    mockSave.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveFirst = resolve;
+        }),
+    );
+    const view = render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    typeMarkdown('## Aa');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    typeMarkdown('## Aab');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    view.unmount();
+    await act(async () => {
+      resolveFirst({ revision: '6' });
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
   });
 
   it('保存の実行中に編集が入ると、完了後にちょうど 1 回だけ追撃保存する', async () => {
@@ -641,7 +882,7 @@ describe('BuilderClient 自動保存', () => {
     expect(mockSave).toHaveBeenCalledTimes(2);
     expect(mockSave).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        blocks: [{ type: 'markdown', data: { markdown: '## Aab' } }],
+        blocks: [{ id: expect.any(String), order: expect.any(Number), type: 'markdown', data: { markdown: '## Aab' } }],
       }),
     );
     // 追撃は 1 回きり（それ以上の再保存は走らない）
@@ -717,7 +958,14 @@ describe('BuilderClient 自動保存', () => {
     expect(mockSave).toHaveBeenCalledTimes(1);
     expect(mockSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        blocks: [{ type: 'profile', data: expect.objectContaining({ company: '株式会社 RITMO' }) }],
+        blocks: [
+          {
+            id: expect.any(String),
+            order: expect.any(Number),
+            type: 'profile',
+            data: expect.objectContaining({ company: '株式会社 RITMO' }),
+          },
+        ],
       }),
     );
   });

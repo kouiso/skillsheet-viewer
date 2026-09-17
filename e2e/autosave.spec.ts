@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type Page, test } from '@playwright/test';
-import { createSheet, deleteSheet, listSheets } from '@/db';
 import { authFile, login } from './auth';
+import { createSheet, deleteSheet, listSheets } from './document-fixture';
 
 test.use({ storageState: authFile });
 

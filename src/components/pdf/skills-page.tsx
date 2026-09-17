@@ -1,3 +1,4 @@
+import { experienceLegend } from '@/db/derived-display';
 /**
  * スキル一覧ページ（デザイン artboard 1g の p2）。
  *
@@ -25,8 +26,8 @@ import { chipEmphasis } from './print-view-model';
  */
 const CATEGORY_COL_WIDTH = PRINT_SIZE.labelColTech;
 
-/** このページのチップ間隔だけデザインは 4pt（カード内の 3pt より広い。1 ページ全面に並ぶため）。 */
-const SKILL_CHIP_GAP = 4;
+/** 出典を併記するチップの間隔。文字サイズを保ちながら一覧の余白を揃える。 */
+const SKILL_CHIP_GAP = 2;
 
 const styles = StyleSheet.create({
   heading: {
@@ -44,7 +45,7 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
-  groups: { flexDirection: 'column', gap: 11 },
+  groups: { flexDirection: 'column', gap: 7 },
 
   expertise: { flexDirection: 'column', gap: 2, paddingTop: 8, paddingBottom: 4 },
   expertiseRow: { flexDirection: 'row', gap: 8 },
@@ -81,10 +82,12 @@ export function SkillsPage({
   groups,
   expertiseRows,
   skillEmphasisMode,
+  referenceMonth,
 }: {
   groups: PrintSkillGroup[];
   expertiseRows: PrintMetaRow[];
   skillEmphasisMode: 'featured' | 'level';
+  referenceMonth?: number;
 }) {
   const filled = groups.filter((group) => group.skills.length > 0);
   return (
@@ -104,7 +107,9 @@ export function SkillsPage({
       )}
       {filled.length > 0 && (
         <>
-          <PrintText style={styles.legend}>{LEGEND[skillEmphasisMode]}</PrintText>
+          <PrintText
+            style={styles.legend}
+          >{`${LEGEND[skillEmphasisMode]} ${experienceLegend(referenceMonth)}`}</PrintText>
           <View style={styles.groups}>
             {filled.map((group, groupIndex) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: 分類名はブロックごとの自由入力で、未入力（空文字）や重複があり得るので index を混ぜる

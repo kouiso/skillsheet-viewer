@@ -150,7 +150,7 @@ function detailCardDrafts(project: PrintProject): LeafDraft[] {
       el: <SectionLabel>{label}</SectionLabel>,
       keepWithNext: true,
       frame: cardFrame({
-        padTop: BLOCK_PAD.vertical,
+        padTop: BLOCK_PAD.vertical - 3,
         padBottom: pieces.length === 0 ? BLOCK_PAD.vertical : 0,
         padHorizontal: BLOCK_PAD.horizontal,
         surface,

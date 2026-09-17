@@ -17,6 +17,8 @@ import {
   isBlockInputEmpty,
   tableBlockToMarkdown,
 } from '@/db/blocks';
+import { experienceLegend } from '@/db/derived-display';
+import { flattenTech } from '@/db/process';
 import { useActiveHeading } from '@/hooks/use-active-heading';
 import { isSafeImageSrc, MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from '@/lib/markdown-config';
 import { sanitizeHtml } from '@/util/sanitize-html';
@@ -246,9 +248,19 @@ const SkillSheetViewer = ({
   );
   // 統計・スキル・案件表示が同じ「表示対象案件」を使う。各子コンポーネントで
   // hidden 判定を繰り返すと、画面とPDFで集計母数がずれるためここで一度だけ解決する。
+  const recordedTechnologies = useMemo(
+    () => [
+      ...new Set(
+        (blocks ?? []).flatMap((block) =>
+          block.type === 'project' ? block.data.items.flatMap((item) => flattenTech(item.tech)) : [],
+        ),
+      ),
+    ],
+    [blocks],
+  );
   const visibleProjectItems = useMemo(() => {
-    const project = blocks?.find((block): block is Extract<Block, { type: 'project' }> => block.type === 'project');
-    return project ? filterVisibleProjectData(project.data).items : undefined;
+    const projects = blocks?.filter((block): block is Extract<Block, { type: 'project' }> => block.type === 'project');
+    return projects?.length ? projects.flatMap((project) => filterVisibleProjectData(project.data).items) : undefined;
   }, [blocks]);
   // 1枚のシートに project ブロックが複数あると、案件詳細・タイムラインの見出し id が
   // 重複して目次のスクロール先が壊れる。複数あるときだけブロック id で分ける
@@ -379,6 +391,7 @@ const SkillSheetViewer = ({
                   return (
                     <FadeUpSection key={key}>
                       <SectionHead kicker="Skill Matrix" title="スキルマトリクス" />
+                      <p className="mb-3 text-xs text-muted-foreground">{experienceLegend(referenceMonth)}</p>
                       {/* design: gap 28px(縦) 40px(横) の auto-fit グリッド。
                           横 gap は 40px から 24px へ詰めた — 3 列に割ったときの 1 列が
                           283px しかなく、スキル名の列が 1 語を語中で折るほど狭かったため
@@ -391,6 +404,7 @@ const SkillSheetViewer = ({
                             data={block.data}
                             hasFeatured={hasFeaturedSkills}
                             projectItems={visibleProjectItems}
+                            recordedTechnologies={recordedTechnologies}
                             referenceMonth={referenceMonth}
                             className="mb-0"
                           />
@@ -427,6 +441,7 @@ const SkillSheetViewer = ({
                 if (block.type === 'project') {
                   return (
                     <ProjectSection
+                      referenceMonth={referenceMonth}
                       key={block.id}
                       data={block.data}
                       headingIdSuffix={multipleProjectBlocks ? block.id : undefined}
