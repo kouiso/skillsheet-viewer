@@ -1,74 +1,97 @@
-/**
- * 実シートの project 本文から対になった **強調** を外す。
- * 生成ラベル（**業務内容** 等）はコード側で出すので、保存フィールドだけ対象。
- *
- *   ドライラン: pnpm exec tsx scripts/unwrap-emphasis.ts
- *   書き込み:   pnpm exec tsx scripts/unwrap-emphasis.ts --write
- */
-import { mkdirSync, writeFileSync } from 'node:fs';
-
-import { type BlockInput, isProjectBlockData, type ProjectItem } from '../src/db/blocks';
+/** 強調記法の変更案を作る。DB適用は承認journal経路への移行後に行う。 */
+import { createHash } from 'node:crypto';
+import { closeSync, fsyncSync, mkdirSync, openSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { isProjectBlockData } from '../src/db/blocks';
+import { getDb } from '../src/db/client';
+import { canonicalJson, type RawDocumentBlock } from '../src/db/document-contract';
+import { createDocumentService } from '../src/db/document-service';
+import { getOwnerId } from '../src/db/skillsheet';
 import { unwrapEmphasis } from '../src/db/text';
 import { loadScriptEnv } from './env';
 
-const SHEET_ID = '18a79e66-75e2-47e8-922e-d61342bb5233';
-const FIELDS = ['summary', 'duties', 'acquired', 'comment'] as const;
-
-loadScriptEnv();
-
-function unwrapItem(item: ProjectItem): { item: ProjectItem; hits: string[] } {
-  const hits: string[] = [];
-  const next = { ...item };
-  for (const field of FIELDS) {
-    const raw = next[field];
-    if (typeof raw !== 'string' || raw.length === 0) continue;
-    const cleaned = unwrapEmphasis(raw);
-    if (cleaned !== raw) {
-      hits.push(field);
-      next[field] = cleaned;
-    }
-  }
-  return { item: next, hits };
+const fields = ['summary', 'duties', 'acquired', 'comment'] as const;
+export interface UnwrapChange {
+  blockId: string;
+  projectId: string;
+  field: (typeof fields)[number];
+  beforeHash: string;
+  afterHash: string;
 }
+const hash = (value: string) => createHash('sha256').update(canonicalJson(value)).digest('hex');
 
-async function main(): Promise<void> {
-  const write = process.argv.includes('--write');
-  const { getSkillSheetById, saveSkillSheetBlocks } = await import('../src/db/skillsheet');
-
-  const sheet = await getSkillSheetById(SHEET_ID);
-  const backupDir = '/tmp/skillsheet-unwrap';
-  mkdirSync(backupDir, { recursive: true });
-  const backupPath = `${backupDir}/${SHEET_ID}.json`;
-  writeFileSync(backupPath, JSON.stringify(sheet.blocks, null, 2));
-  console.log('BACKUP', backupPath);
-
-  let changedItems = 0;
-  const nextBlocks = sheet.blocks.map((block): BlockInput => {
-    // project 以外はそのまま通す。`{ type, data }` に分解すると判別共用体の相関が
-    // 切れて BlockInput に代入できないため、Block からそのまま取り出す。
+/** UUIDと未対象fieldを保持し、同タイトル案件を混同しない。 */
+export function proposeUnwrap(blocks: readonly RawDocumentBlock[]) {
+  const changes: UnwrapChange[] = [];
+  const proposed = blocks.map((block): RawDocumentBlock => {
     if (block.type !== 'project' || !isProjectBlockData(block.data)) return block;
     const items = block.data.items.map((item) => {
-      const { item: next, hits } = unwrapItem(item);
-      if (hits.length > 0) {
-        changedItems += 1;
-        console.log('UNWRAP', item.title, hits.join(','));
+      const next = { ...item };
+      for (const field of fields) {
+        const before = item[field];
+        if (typeof before !== 'string') continue;
+        const after = unwrapEmphasis(before);
+        if (after === before) continue;
+        next[field] = after;
+        changes.push({
+          blockId: block.id,
+          projectId: item.id,
+          field,
+          beforeHash: hash(before),
+          afterHash: hash(after),
+        });
       }
       return next;
     });
-    return { type: 'project', data: { ...block.data, items } };
+    return { ...block, data: { ...block.data, items } };
   });
-
-  console.log('CHANGED_ITEMS', changedItems);
-  if (!write) {
-    console.log('DRY RUN — DB へは書き込んでいません（--write で実行すると保存します）');
-    return;
-  }
-  // R01: 既存シートの更新は本文と同一スナップショットの版を必須にする。
-  await saveSkillSheetBlocks(sheet.title, nextBlocks, SHEET_ID, sheet.revision);
-  console.log('SAVED', SHEET_ID);
+  return { blocks: proposed, changes };
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+export function parseUnwrapArgs(args: string[]): string {
+  if (args.includes('--write')) throw new Error('LEGACY_WRITER_DISABLED: 承認journalによる反映が必要です');
+  if (
+    args.length !== 2 ||
+    args[0] !== '--sheet-id' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(args[1])
+  ) {
+    throw new Error('--sheet-id UUID が必要です');
+  }
+  return args[1];
+}
+
+async function main() {
+  const sheetId = parseUnwrapArgs(process.argv.slice(2));
+  loadScriptEnv();
+  const owner = getOwnerId();
+  const result = await createDocumentService(getDb(), owner).read(sheetId);
+  if (result.status !== 'OK') throw new Error(result.status);
+  const before = result.snapshot;
+  const proposal = proposeUnwrap(before.blocks);
+  const directory = join(
+    process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
+    'skillsheet-viewer',
+    'proposals',
+    'unwrap',
+  );
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const path = join(directory, `${sheetId}-${before.revision}-${Date.now()}.json`);
+  const fd = openSync(path, 'wx', 0o600);
+  try {
+    writeFileSync(fd, canonicalJson({ owner, before, proposal, approved: false }));
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  console.log(`proposal saved: ${proposal.changes.length} fields; DB unchanged`);
+  console.log(path);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  main().catch(() => {
+    console.error('unwrap proposal failed');
+    process.exitCode = 1;
+  });
+}

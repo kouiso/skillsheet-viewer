@@ -1,16 +1,16 @@
 /**
  * 指定シートの推しを React / TypeScript / Nest.js / Next.js の4件へそろえる。
  *
- * 既存の一括更新スクリプトと同じく、既定は dry-run。--apply を付けるまで DB は変更しない。
- * `--sheet-id` または SKILLSHEET_OWNER_ID で対象を絞り、必ず1シートだけを更新する。
+ * 既定は dry-run。--apply を付けるまで DB は変更しない。
+ * `--sheet-id <uuid>` と SKILLSHEET_OWNER_ID・明示DATABASE_URLで対象を絞り、
+ * document-service の read/replace（owner照合+版CAS）だけを使う。
  */
-import { inArray } from 'drizzle-orm';
 
 import { isSkillsBlockData } from '../src/db/blocks';
-import { getDb } from '../src/db/client';
-import { blocks, skillSheets } from '../src/db/schema';
-import { type BlockUpdate, loadWebEnvLocal, resolveTargetSheetIds, writeBlockUpdates } from './block-write';
+import { createDb } from '../src/db/client';
+import { createDocumentService, DocumentError } from '../src/db/document-service';
 
+// NUL区切りはカテゴリ名・スキル名中の空白との衝突を避けるため（継承した形式）。
 const FEATURED_SKILLS = new Map([
   ['言語\u0000TypeScript/JavaScript', true],
   ['フロントエンド\u0000React', true],
@@ -22,29 +22,35 @@ function targetKey(category: string, name: string): string {
   return `${category}\u0000${name}`;
 }
 
+function argValue(args: string[], key: string): string | undefined {
+  const index = args.indexOf(key);
+  const value = args[index + 1];
+  return index >= 0 && value && !value.startsWith('--') ? value : undefined;
+}
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function main(): Promise<void> {
-  loadWebEnvLocal();
   const apply = process.argv.includes('--apply');
-  const db = getDb();
-  const sheetIds = await resolveTargetSheetIds(db, process.argv.slice(2));
-  if (sheetIds.length !== 1) {
-    throw new Error(
-      `対象シートは1件だけ指定してください（現在: ${sheetIds.length} 件）。--sheet-id を指定してください。`,
-    );
+  const sheetId = argValue(process.argv.slice(2), '--sheet-id');
+  if (!sheetId || !uuid.test(sheetId)) {
+    throw new Error('対象シートを --sheet-id <uuid> で1件だけ明示してください。');
   }
-  const sheets = await db
-    .select({ id: skillSheets.id, revision: skillSheets.revision })
-    .from(skillSheets)
-    .where(inArray(skillSheets.id, sheetIds));
-  const expectedRevisionBySheet = new Map(sheets.map((sheet) => [sheet.id, sheet.revision]));
-  const rows = await db.select().from(blocks).where(inArray(blocks.sheetId, sheetIds));
+  const owner = process.env.SKILLSHEET_OWNER_ID;
+  if (!owner) throw new Error('SKILLSHEET_OWNER_ID が必要です');
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL_REQUIRED');
+
+  const db = createDb(process.env.DATABASE_URL);
+  const service = createDocumentService(db, owner);
+  const result = await service.read(sheetId);
+  if (result.status !== 'OK') throw new DocumentError(result.status);
+  const snapshot = result.snapshot;
   const found = new Set<string>();
   let matched = 0;
-  const updates: BlockUpdate[] = [];
+  let changed = false;
 
-  for (const row of rows) {
-    const previous = row.data;
-    if (row.type !== 'skills' || !isSkillsBlockData(previous)) continue;
+  const blocks = snapshot.blocks.map((block) => {
+    if (block.type !== 'skills' || !isSkillsBlockData(block.data)) return block;
+    const previous = block.data;
     const data = {
       ...previous,
       skills: previous.skills.map((skill) => {
@@ -52,21 +58,17 @@ async function main(): Promise<void> {
         if (FEATURED_SKILLS.has(key)) {
           found.add(key);
           matched += 1;
+          if (!skill.featured) changed = true;
           return { ...skill, featured: true };
         }
         // 「推し」は true のときだけ保持する。false を残すと全行が不要な差分になる。
         const { featured: _featured, ...unfeatured } = skill;
+        if (skill.featured) changed = true;
         return unfeatured;
       }),
     };
-    updates.push({
-      id: row.id,
-      sheetId: row.sheetId,
-      expectedRevision: expectedRevisionBySheet.get(row.sheetId),
-      data,
-      previous,
-    });
-  }
+    return { ...block, data };
+  });
 
   const missing = [...FEATURED_SKILLS.keys()].filter((key) => !found.has(key));
   if (missing.length > 0) {
@@ -76,16 +78,21 @@ async function main(): Promise<void> {
     throw new Error(`推しの対象数が4件と一致しません（現在: ${matched} 件）。対象スキルの重複を解消してください。`);
   }
 
-  const changed = updates.filter((update) => JSON.stringify(update.data) !== JSON.stringify(update.previous));
-  console.log(`対象シート: ${sheetIds.length} 件 / 推し: ${matched} 件 / 変更ブロック: ${changed.length} 件`);
-  for (const update of changed) console.log(`  block ${update.id}: featured を更新`);
+  console.log(`対象シート: ${snapshot.sheetId} / 推し: ${matched} 件 / 変更: ${changed ? 'あり' : 'なし'}`);
   if (!apply) {
     console.log('→ 確認のみ（反映するには --apply を付ける）。');
+    await db.$client.end();
+    return;
+  }
+  if (!changed) {
+    console.log('→ 変更がないため書き込みません。');
+    await db.$client.end();
     return;
   }
 
-  const result = await writeBlockUpdates(db, updates);
-  console.log(`→ DB へ反映しました（ブロック ${result.written} 件を更新 / ${result.skipped} 件は変更なし）。`);
+  const after = await service.replace(snapshot.sheetId, snapshot.revision, snapshot.title, blocks);
+  console.log(`→ DB へ反映しました（revision ${snapshot.revision} → ${after.revision}）。`);
+  await db.$client.end();
 }
 
 void main();

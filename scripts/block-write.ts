@@ -1,13 +1,13 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { Database } from '../src/db/client';
-import { blocks, skillSheets } from '../src/db/schema';
+import { createDocumentService, DocumentError } from '../src/db/document-service';
+import { getOwnerId } from '../src/db/skillsheet';
 import { loadScriptEnv } from './env';
 
 export interface BlockUpdate {
   id: string;
   sheetId: string;
   /** 読み取り時点のシート版。別編集が先行したら書き込まず中断する（R01: 時刻ではなく版で照合）。 */
-  expectedRevision?: number;
+  expectedRevision?: string;
   /** 更新後の data。ロック後のDB値と同値なら書き込みをスキップする。 */
   data: unknown;
   /** 読み取り時点の data。ロック後に変更前値として照合する。 */
@@ -20,115 +20,46 @@ export interface WriteResult {
   sheets: number;
 }
 
-/** JSON として同値かを見る。jsonb 側もキー順は保持されないため、順序差は差分に数えない。 */
-function isSameJson(a: unknown, b: unknown): boolean {
-  return JSON.stringify(sortKeys(a)) === JSON.stringify(sortKeys(b));
-}
-
-function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(sortKeys);
-  if (value === null || typeof value !== 'object') return value;
-  const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return Object.fromEntries(entries.map(([k, v]) => [k, sortKeys(v)]));
-}
-
-export async function writeBlockUpdates(db: Database, updates: BlockUpdate[]): Promise<WriteResult> {
-  if (updates.length === 0) return { written: 0, skipped: 0, sheets: 0 };
-  if (new Set(updates.map((update) => update.id)).size !== updates.length) {
-    throw new Error('Duplicate block update');
-  }
-  const sheetIds = [...new Set(updates.map((update) => update.sheetId))].sort();
-  return db.transaction(async (tx) => {
-    // アプリ側の保存と同じシート行を、安定した順序でロックする。
-    const lockedSheets = await tx
-      .select({ id: skillSheets.id, revision: skillSheets.revision })
-      .from(skillSheets)
-      .where(inArray(skillSheets.id, sheetIds))
-      .orderBy(skillSheets.id)
-      .for('update');
-    const currentRevision = new Map(lockedSheets.map((sheet) => [sheet.id, sheet.revision]));
-    for (const sheetId of sheetIds) {
-      if (!currentRevision.has(sheetId)) throw new Error(`Sheet not found: ${sheetId}`);
-    }
-    const currentBlocks = await tx
-      .select({ id: blocks.id, sheetId: blocks.sheetId, data: blocks.data })
-      .from(blocks)
-      .where(
-        inArray(
-          blocks.id,
-          updates.map((update) => update.id),
-        ),
-      );
-    const byId = new Map(currentBlocks.map((block) => [block.id, block]));
-    const changed: BlockUpdate[] = [];
-    for (const update of updates) {
-      const current = byId.get(update.id);
-      if (!current || current.sheetId !== update.sheetId) {
-        throw new Error(`Block missing or moved: ${update.id}`);
-      }
-      // 成功済みの再実行では、古い更新時刻でも書き込みを発生させない。
-      if (isSameJson(current.data, update.data)) continue;
-      if (!isSameJson(current.data, update.previous)) {
-        throw new Error(`Concurrent update detected for block: ${update.id}`);
-      }
-      if (update.expectedRevision !== undefined) {
-        const current = currentRevision.get(update.sheetId);
-        if (current !== update.expectedRevision) {
-          throw new Error(`Concurrent update detected for sheet: ${update.sheetId}`);
-        }
-      }
-      changed.push(update);
-    }
-    for (const update of changed) {
-      await tx
-        .update(blocks)
-        .set({ data: update.data })
-        .where(and(eq(blocks.id, update.id), eq(blocks.sheetId, update.sheetId)));
-    }
-    const changedSheetIds = [...new Set(changed.map((update) => update.sheetId))];
-    if (changedSheetIds.length > 0) {
-      // 内容を変える全 writer は revision を進める（R01）。ここを通さない
-      // saveSkillSheetBlocks 側の CAS と版の意味を一致させるための更新。
-      await tx
-        .update(skillSheets)
-        .set({ updatedAt: sql`now()`, revision: sql`${skillSheets.revision} + 1` })
-        .where(inArray(skillSheets.id, changedSheetIds));
-    }
-    return { written: changed.length, skipped: updates.length - changed.length, sheets: changedSheetIds.length };
-  });
-}
-
 /**
- * 更新対象のシートを明示的に絞り込む。
- *
- * 案件本文の一括更新は「案件タイトル」「会社名」の文字列一致だけで書き換え先を決めるため、
- * 対象シートを限定しないと、同じ DB にある検証用デモシートや別オーナーのシートまで
- * 巻き込んで書き換わる。DB 全体を無条件に対象にする経路を残さないよう、
- * `--sheet-id` か `SKILLSHEET_OWNER_ID` のどちらかを必須にする。
+ * v12移行ゲート。旧入口はowner/必須版/承認field hashを保証できない。
+ * dry-runの計算は残すが、限定サービスと承認journalへ移行するまで直接書込みを拒否する。
  */
+export async function writeBlockUpdates(_db: Database, updates: BlockUpdate[]): Promise<WriteResult> {
+  if (updates.length === 0) return { written: 0, skipped: 0, sheets: 0 };
+  throw new Error('LEGACY_WRITER_DISABLED: 文書サービスと承認journalへの移行が必要です');
+}
+
+/** 限定read/listで自己ownerの対象だけを解決する。明示IDでもowner検証を省略しない。 */
 export async function resolveTargetSheetIds(db: Database, argv: string[]): Promise<string[]> {
+  const service = createDocumentService(db, getOwnerId());
   const flagIndex = argv.findIndex((a) => a === '--sheet-id' || a.startsWith('--sheet-id='));
   if (flagIndex !== -1) {
     const raw = argv[flagIndex];
     const id = raw.includes('=') ? raw.slice(raw.indexOf('=') + 1) : argv[flagIndex + 1];
     if (!id) throw new Error('--sheet-id にシート ID を渡してください');
-    const found = await db.select({ id: skillSheets.id }).from(skillSheets).where(eq(skillSheets.id, id));
-    if (found.length === 0) throw new Error(`シートが見つかりません: ${id}`);
-    return [id];
+    const result = await service.read(id);
+    if (result.status !== 'OK') throw new DocumentError(result.status);
+    return [result.snapshot.sheetId];
   }
-
-  const ownerId = process.env.SKILLSHEET_OWNER_ID;
-  if (!ownerId) {
-    throw new Error('更新対象が絞れません。--sheet-id を渡すか SKILLSHEET_OWNER_ID を設定してください');
-  }
-  const owned = await db.select({ id: skillSheets.id }).from(skillSheets).where(eq(skillSheets.ownerId, ownerId));
-  if (owned.length === 0) throw new Error(`オーナー ${ownerId} のシートがありません`);
-  return owned.map((row) => row.id);
+  const owned = await service.list();
+  if (!owned.length) throw new Error('自己ownerのシートがありません');
+  return owned.map((row) => row.sheetId);
 }
 
-/** 対象シートに属する project ブロックだけを引く条件。 */
-export function projectBlocksOfSheets(sheetIds: string[]) {
-  return and(eq(blocks.type, 'project'), inArray(blocks.sheetId, sheetIds));
+/** 本文と版を単一snapshotから取得する。編集不能なrawを除外して候補を作らない。 */
+export async function readTargetBlocks(db: Database, sheetIds: string[]) {
+  const service = createDocumentService(db, getOwnerId());
+  const rows = [];
+  for (const sheetId of sheetIds) {
+    const result = await service.read(sheetId);
+    if (result.status !== 'OK') throw new DocumentError(result.status);
+    const snapshot = result.snapshot;
+    if (!snapshot.validation.editable) throw new DocumentError('UNEDITABLE_DOCUMENT', snapshot.validation.issues);
+    rows.push(
+      ...snapshot.blocks.map((block) => ({ ...block, sheetId: snapshot.sheetId, expectedRevision: snapshot.revision })),
+    );
+  }
+  return rows;
 }
 
 /**
