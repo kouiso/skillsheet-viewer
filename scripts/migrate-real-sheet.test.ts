@@ -79,6 +79,23 @@ describe('parseCareerMarkdown', () => {
     expect(dropped).toEqual([]);
   });
 
+  it('≪要約≫ マーカーの本文は item.summary へ取り込まれ、前置き文は comment 側を維持する', () => {
+    // summary は DB 正本側の項目で、私有Markdownへ ≪要約≫ として書き戻す往復整合を固定する。
+    const md = careerMarkdown().replace('≪担当業務≫', '導入文です。\n\n≪要約≫\n概要の一文。\n\n≪担当業務≫');
+    const { items, dropped } = parseCareerMarkdown(md);
+
+    expect(items[0].summary).toBe('概要の一文。');
+    expect(items[0].comment).toContain('導入文です。');
+    expect(items[0].duties).toContain('API の設計と実装。');
+    expect(dropped).toEqual([]);
+  });
+
+  it('≪要約≫ が無い既存フォーマットでは summary を立てない（空なら undefined）', () => {
+    const { items } = parseCareerMarkdown(careerMarkdown());
+
+    expect(items[0].summary).toBeUndefined();
+  });
+
   it('誰も読まない未知のサブセクションの中身を検出する', () => {
     const { dropped } = parseCareerMarkdown(careerMarkdown('', ['', '#### 備考', '', '社外秘の補足。'].join('\n')));
 

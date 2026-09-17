@@ -9,6 +9,10 @@ ALTER TABLE public.skill_sheets ADD CONSTRAINT skill_sheets_revision_nonnegative
 ALTER TABLE public.skillsheet_state ADD COLUMN deleted_sheet_ids uuid[] NOT NULL DEFAULT '{}';
 
 CREATE ROLE skillsheet_document_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+-- Neon等で OWNER TO を通すため、インストーラーへメンバーシップを付与する。
+GRANT skillsheet_document_writer TO CURRENT_USER;
+-- reader所有の read_snapshot/principals への GRANT を通すため、reader membership も必要。
+GRANT skillsheet_document_reader TO CURRENT_USER;
 GRANT USAGE ON SCHEMA public TO skillsheet_document_writer;
 GRANT USAGE, CREATE ON SCHEMA skillsheet_private TO skillsheet_document_writer;
 GRANT SELECT ON skillsheet_private.principals TO skillsheet_document_writer;
@@ -189,4 +193,7 @@ REVOKE ALL ON FUNCTION skillsheet_private.delete_sheet(uuid, text, text) FROM PU
 REVOKE CREATE ON SCHEMA skillsheet_private FROM skillsheet_document_writer;
 ALTER DEFAULT PRIVILEGES FOR ROLE skillsheet_document_writer IN SCHEMA skillsheet_private
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+-- membership は install 中の OWNER TO / GRANT 用で、残すと pg_dumpall の復元移植性を壊すため剥がす。
+REVOKE skillsheet_document_writer FROM CURRENT_USER;
+REVOKE skillsheet_document_reader FROM CURRENT_USER;
 COMMIT;
