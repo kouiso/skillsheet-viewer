@@ -317,9 +317,9 @@ function parseProcessSection(lines: TrackedLine[], dropped: DroppedLine[] = [], 
   return result;
 }
 
-// --- コメントセクション（≪担当業務≫/≪習得スキル≫/≪コメント≫）------------------------------
-function parseCommentSection(text: string): { duties: string; acquired: string; comment: string } {
-  const markers = ['≪担当業務≫', '≪習得スキル≫', '≪コメント≫'];
+// --- コメントセクション（≪要約≫/≪担当業務≫/≪習得スキル≫/≪コメント≫）------------------------
+function parseCommentSection(text: string): { duties: string; acquired: string; comment: string; summary: string } {
+  const markers = ['≪要約≫', '≪担当業務≫', '≪習得スキル≫', '≪コメント≫'];
   const positions: { marker: string; index: number }[] = [];
   for (const marker of markers) {
     const idx = text.indexOf(marker);
@@ -338,7 +338,7 @@ function parseCommentSection(text: string): { duties: string; acquired: string; 
 
   if (positions.length === 0) {
     // マーカーが見つからない場合は全文を comment に落とす（データを消さない）。
-    return { duties: '', acquired: '', comment: text.trim() };
+    return { duties: '', acquired: '', comment: text.trim(), summary: '' };
   }
 
   // 先頭マーカー前の前置き文（≪担当業務≫等の前の自由文）をコメントに含める。
@@ -349,6 +349,7 @@ function parseCommentSection(text: string): { duties: string; acquired: string; 
     duties: sectionFor('≪担当業務≫'),
     acquired: sectionFor('≪習得スキル≫'),
     comment: [preface, commentBody].filter(Boolean).join('\n\n'),
+    summary: sectionFor('≪要約≫'),
   };
 }
 
@@ -423,6 +424,7 @@ function parseProjectBlock(
   let duties = '';
   let acquired = '';
   let comment = '';
+  let summary = '';
 
   for (const [name, section] of Object.entries(sections)) {
     if (!KNOWN_SUBSECTIONS.includes(name)) {
@@ -491,6 +493,7 @@ function parseProjectBlock(
       duties = parsed.duties;
       acquired = parsed.acquired;
       comment = parsed.comment;
+      summary = parsed.summary;
     }
   }
 
@@ -507,6 +510,7 @@ function parseProjectBlock(
     duties: [overviewExtra.length > 0 ? overviewExtra.join('\n') : '', duties].filter(Boolean).join('\n\n'),
     acquired,
     comment,
+    ...(summary ? { summary } : {}),
   };
 }
 

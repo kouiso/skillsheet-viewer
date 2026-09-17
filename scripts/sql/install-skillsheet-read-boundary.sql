@@ -14,6 +14,10 @@ BEGIN
 END
 $$;
 
+-- Neon等で AUTHORIZATION / OWNER TO を通すため、インストーラーへメンバーシップを付与する。
+-- runtime へ membership を広げる用途ではない（管理接続限定の前提条件）。
+GRANT skillsheet_document_reader TO CURRENT_USER;
+
 CREATE SCHEMA skillsheet_private AUTHORIZATION skillsheet_document_reader;
 REVOKE ALL ON SCHEMA skillsheet_private FROM PUBLIC;
 CREATE TABLE skillsheet_private.principals (
@@ -104,4 +108,6 @@ REVOKE ALL ON FUNCTION skillsheet_private.read_snapshot(uuid, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION skillsheet_private.list_sheets(text) FROM PUBLIC;
 ALTER DEFAULT PRIVILEGES FOR ROLE skillsheet_document_reader IN SCHEMA skillsheet_private
   REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+-- membership は install 中の AUTHORIZATION/OWNER TO 用で、残すと pg_dumpall の復元移植性を壊すため剥がす。
+REVOKE skillsheet_document_reader FROM CURRENT_USER;
 COMMIT;
