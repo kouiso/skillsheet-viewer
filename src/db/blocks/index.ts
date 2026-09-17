@@ -368,7 +368,7 @@ export {
   tableBlockToMarkdown,
 } from './serialize';
 
-import { blockToMarkdown } from './serialize';
+import { blockToMarkdown, markdownExperienceContext } from './serialize';
 
 // 構造境界: レベル2〜4の見出し、または <details> ブロックの開始行。
 // ここでドキュメントを分割し、各セクションを 1 ブロックとする。
@@ -474,7 +474,14 @@ export function blockJoinSeparator(prevType: BlockType, curType: BlockType, curM
  * 直前ブロック判定（blockJoinSeparator / i === 0 の先頭判定）がスキップされた要素を
  * 指さないようにしている（ループ内 continue だとこれが壊れる）。
  */
-export function blocksToMarkdown(blocks: Block[]): string {
+export function blocksToMarkdown(blocks: Block[], referenceMonth?: number): string {
+  const context =
+    referenceMonth === undefined
+      ? undefined
+      : markdownExperienceContext(
+          blocks.flatMap((block) => (block.type === 'project' ? [block.data] : [])),
+          referenceMonth,
+        );
   const sorted = [...blocks].filter((b) => !isBlockInputEmpty(b)).sort((a, b) => a.order - b.order);
   const hasFeatured = sorted.some(
     (block) =>
@@ -483,7 +490,7 @@ export function blocksToMarkdown(blocks: Block[]): string {
   );
   let result = '';
   for (let i = 0; i < sorted.length; i++) {
-    const markdown = blockToMarkdown(sorted[i], hasFeatured);
+    const markdown = blockToMarkdown(sorted[i], hasFeatured, referenceMonth, context);
     if (i === 0) {
       result = markdown;
       continue;

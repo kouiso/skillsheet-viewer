@@ -213,10 +213,10 @@ describe('experienceBlockToMarkdown', () => {
     expect(md).toContain('React/TypeScript による SPA 開発');
   });
 
-  it('endDate が空のとき「現在」と表示する', () => {
+  it('endDate が空でも継続中と推測しない', () => {
     const md = experienceBlockToMarkdown({ ...EXP, endDate: '' });
-    expect(md).toContain('〜現在');
-    expect(md).toContain('| 期間 | 2020.04〜現在 |');
+    expect(md).not.toContain('現在');
+    expect(md).toContain('| 期間 | 2020.04 |');
   });
 
   it('role が空のとき職種行を省略する', () => {
@@ -770,6 +770,17 @@ describe('statsBlockToMarkdown', () => {
 });
 
 describe('projectBlockToMarkdown', () => {
+  it('継続案件の本人入力と固定基準月の算出期間を原文を変えず出力する', () => {
+    const data = structuredClone(PROJECT);
+    data.items[0].period = '2026.01 — 現在';
+    data.items[0].duration = '半年';
+    const before = JSON.stringify(data);
+    expect(projectBlockToMarkdown(data, { referenceMonth: 2026 * 12 + 8 })).toContain(
+      '| 参画期間 | 本人入力 半年／2026-09基準 9か月 |',
+    );
+    expect(JSON.stringify(data)).toBe(before);
+  });
+
   it('会社名・案件タイトル・期間・技術スタックを含む markdown を出力する', () => {
     const md = projectBlockToMarkdown(PROJECT);
     expect(md).toContain('### 株式会社テスト — テストシステム開発');

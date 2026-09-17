@@ -6,7 +6,23 @@ const PROJECT_COUNT_LABELS = new Set(['案件数', 'プロジェクト数', '参
 
 /** サーバーからクライアントへ渡す、月初基準の固定月キー。 */
 export function currentMonthKey(date = new Date()): number {
-  return date.getFullYear() * 12 + date.getMonth();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(date);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  return year * 12 + month - 1;
+}
+
+/** Web/PDFで共通の経験集計の凡例。基準月を暗黙に現在へ差し替えない。 */
+export function experienceLegend(referenceMonth?: number): string {
+  const month =
+    referenceMonth === undefined
+      ? '基準月未指定'
+      : `${Math.floor(referenceMonth / 12)}-${String((referenceMonth % 12) + 1).padStart(2, '0')}基準`;
+  return `${month}。表示案件の開始月・終了月を含み、重複月は1回だけ集計。工数・習熟度を表す値ではありません。`;
 }
 
 /** 月数を計算できる精度の期間を、重複排除に使う連続した月キーへ変換する。 */
@@ -48,12 +64,24 @@ export function resolveDisplayedStats(
 ): StatItem[] {
   if (visibleProjects === undefined) return items;
   const experienceMonths = collectProjectMonths(visibleProjects, undefined, referenceMonth).size;
+  const partial = visibleProjects.some((project) => {
+    const { status, bounds } = classifyPeriod(project.period, referenceMonth);
+    return status === 'unknown' || status === 'invalid' || (bounds?.openEnded && referenceMonth === undefined);
+  });
   return items.map((item) => {
     const label = item.label.trim();
-    if (ENGINEER_EXPERIENCE_LABELS.has(label) && experienceMonths > 0) {
+    if (ENGINEER_EXPERIENCE_LABELS.has(label)) {
       const unit = item.unit.trim();
-      if (unit === '年') return { ...item, value: String(Math.floor(experienceMonths / 12)) };
-      if (/^(?:ヶ|か|ケ)月$/.test(unit)) return { ...item, value: String(experienceMonths) };
+      if (unit === '年' || /^(?:ヶ|か|ケ)月$/.test(unit)) {
+        return {
+          ...item,
+          value:
+            partial && experienceMonths === 0
+              ? '—'
+              : String(unit === '年' ? Math.floor(experienceMonths / 12) : experienceMonths),
+          label: partial ? `${label}（算出可能分）` : label,
+        };
+      }
     }
     if (PROJECT_COUNT_LABELS.has(label)) {
       return { ...item, value: String(visibleProjects.length) };
@@ -166,21 +194,49 @@ export interface DisplayedSkillExperience {
   /** 表示文字列。空なら年数を表示しない。 */
   label: string;
   derived: boolean;
+  source: 'derived' | 'manual' | 'unavailable';
+  precision: 'complete' | 'partial';
+}
+
+export function experienceSourceLabel(experience: Pick<DisplayedSkillExperience, 'source' | 'precision'>): string {
+  if (experience.source === 'manual') return '本人入力';
+  if (experience.precision === 'partial') return '算出可能分';
+  return experience.source === 'derived' ? '案件算出' : '未入力';
 }
 
 export function resolveDisplayedSkillExperience(
   skill: Pick<SkillEntry, 'name' | 'years'>,
   visibleProjects: ProjectItem[],
   referenceMonth?: number,
+  recordedTechnologies: readonly string[] = [],
 ): DisplayedSkillExperience {
-  const derivedMonths = deriveSkillExperienceMonths(skill.name, visibleProjects, referenceMonth);
-  if (derivedMonths > 0) {
-    return { months: derivedMonths, label: formatExperienceMonths(derivedMonths), derived: true };
+  const matching = visibleProjects.filter((item) =>
+    flattenTech(item.tech).some((technology) => technologyNamesRelated(skill.name, technology)),
+  );
+  if (matching.length) {
+    const months = deriveSkillExperienceMonths(skill.name, matching, referenceMonth);
+    const partial = matching.some((item) => {
+      const { status, bounds } = classifyPeriod(item.period, referenceMonth);
+      return status === 'unknown' || status === 'invalid' || (bounds?.openEnded && referenceMonth === undefined);
+    });
+    return {
+      months,
+      label: months > 0 || !partial ? formatExperienceMonths(months) : '未確定',
+      derived: true,
+      source: months === 0 && partial ? 'unavailable' : 'derived',
+      precision: partial ? 'partial' : 'complete',
+    };
+  }
+  // 非表示案件の存在は手入力fallbackの抑止だけに使う。期間や件数は返さない。
+  if (recordedTechnologies.some((technology) => technologyNamesRelated(skill.name, technology))) {
+    return { months: 0, label: formatExperienceMonths(0), derived: true, source: 'derived', precision: 'complete' };
   }
   const fallbackMonths = Math.max(0, skill.years) * 12;
   return {
     months: fallbackMonths,
     label: skill.years > 0 ? `${skill.years}年` : '',
     derived: false,
+    source: skill.years > 0 ? 'manual' : 'unavailable',
+    precision: 'complete',
   };
 }

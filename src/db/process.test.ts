@@ -463,3 +463,20 @@ describe('classifyPeriod（R02: 経験月へ計上してよいのは valid の�
     expect(classifyPeriod('2020.04 — 2020.04', REF).status).toBe('valid');
   });
 });
+
+describe('実在日と原文の精度', () => {
+  const ref = 2026 * 12 + 8;
+  it.each(['2023-02-29', '2024-02-30', '2026-04-31', '1900-02-29'])('実在しない%sを集計しない', (day) => {
+    expect(classifyPeriod(`${day} — 現在`, ref).status).toBe('invalid');
+  });
+  it.each(['2024-02-29', '2000-02-29'])('閏年の%sは受理する', (day) => {
+    expect(classifyPeriod(`${day} — 現在`, ref).status).toBe('valid');
+  });
+  it('同月内の日付逆転も拒否する', () => {
+    expect(classifyPeriod('2026-04-30 — 2026-04-01', ref).status).toBe('invalid');
+  });
+  it('年だけの開始と曖昧な現在表現を確定期間にしない', () => {
+    expect(classifyPeriod('2020 — 現在', ref).status).toBe('unknown');
+    expect(classifyPeriod('2020.01 — 現在か不明', ref).status).toBe('unknown');
+  });
+});
