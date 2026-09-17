@@ -137,7 +137,9 @@ const SheetViewClient = ({
       });
     } catch (err) {
       console.error('Error generating PDF:', err);
-      toast.error(err instanceof PdfDurationConflictError ? err.message : `${label}の生成に失敗しました`, { id: toastId });
+      toast.error(err instanceof PdfDurationConflictError ? err.message : `${label}の生成に失敗しました`, {
+        id: toastId,
+      });
       track({
         name: 'pdf_exported',
         edition,

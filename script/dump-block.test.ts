@@ -21,7 +21,7 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
-describe('dump-blocks CLI', () => {
+describe('dump-block CLI', () => {
   it('単一シートの省略と明示指定を受け付ける', () => {
     expect(parseArgs(['--out', '/tmp/blocks.json'])).toEqual({ out: '/tmp/blocks.json' });
     expect(parseArgs(['--sheet-id', id, '--out', '/tmp/blocks.json'])).toEqual({

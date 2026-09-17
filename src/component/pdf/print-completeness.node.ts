@@ -41,6 +41,7 @@ import { resolveProjectArea } from '@/db/tech-area';
 import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import type { QualityPage } from './print-quality';
 import { PRINT_SIZE, PRINT_TOP_SKILL_LIMIT, PRINT_TYPE, PRINT_YEAR_VISIBLE_CATEGORIES } from './print-token';
+import type { PrintViewKey } from './print-view-model';
 import {
   compactPeriod,
   companyLabelOf,
@@ -48,7 +49,6 @@ import {
   formatProcessForPrint,
   stripDecorativeHeading,
 } from './print-view-model';
-import type { PrintViewKey } from './print-view-model';
 
 const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline', 'duration'];
 
@@ -740,10 +740,7 @@ export interface ContinuationHeaderNoise {
  * **継続ページの先頭に一致したときだけ**剥がす（初出ページや他の案件は対象にしない）。
  * 簡約版カード（`project-card-compact.tsx`）は行ごとの `fixed` ヘッダーを持たないため対象外。
  */
-export function buildContinuationHeaderNoise(
-  blocks: Block[],
-  referenceMonth?: number,
-): ContinuationHeaderNoise[] {
+export function buildContinuationHeaderNoise(blocks: Block[], referenceMonth?: number): ContinuationHeaderNoise[] {
   // enumerateCompletenessFacts と同じく、期待値は描画用 view model を経由せず
   // raw ブロックから同じ純粋関数で組み立てる。
   const projectBlocks = blocks.filter(

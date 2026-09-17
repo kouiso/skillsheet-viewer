@@ -117,6 +117,27 @@ jobs:
             echo "E2E_PASSWORD=$E2E_PASSWORD"
           } >> "$GITHUB_ENV"
 
+      # 文書境界（skillsheet_private スキーマ＋関数）は drizzle migration の外側にある
+      # 管理SQLで、e2e のアプリ経路はこれを通る。e2e DB は永続なので install は
+      # role 不在のときだけ流し（install は既存 role を検知すると例外で止まる設計）、
+      # 接続 role への境界 membership と principals 対応は毎回揃える
+      # —— e2e の owner は実行ごとに作り直されるため、login→owner の写像は固定できない。
+      - name: Install document boundary
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_roles WHERE rolname='skillsheet_document_reader'" | grep -q 1; then
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-read-boundary.sql
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-write-boundary.sql
+          fi
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<SQL
+          GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER;
+          INSERT INTO skillsheet_private.principals (login_name, owner_id)
+            VALUES (CURRENT_USER, '$SKILLSHEET_OWNER_ID')
+            ON CONFLICT (login_name) DO UPDATE SET owner_id = EXCLUDED.owner_id;
+          SQL
+
       - name: Playwright E2E
         if: matrix.check-type == 'e2e'
         env:

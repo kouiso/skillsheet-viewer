@@ -68,10 +68,11 @@ is_exempt() {
 #         ness(completeness) ous(miscellaneous) sis/xis
 #   canvas:   複数形に見えるだけの単数の英単語（app/builder/canvas）
 #   contents: 「table of contents」は固定の熟語で、table-of-content は非文法的
+#   cas:      Compare-And-Swap の頭字語。複数形ではない（script/sql/*-cas-*.sql）
 NONPLURAL_SUFFIX='(ss|us|is|ness|ous|sis|xis)$'
 is_nonplural_token() {
   case "$1" in
-    canvas|contents) return 0 ;;
+    canvas|contents|cas) return 0 ;;
   esac
   printf '%s' "$1" | grep -qE "$NONPLURAL_SUFFIX"
 }

@@ -71,10 +71,7 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 /** 同じ表示名が複数ある場合は選ばせず失敗させる。解決結果だけをIDで返す。 */
-function resolveUnique<T extends { id: string }>(
-  matches: T[],
-  label: string,
-): T | null {
+function resolveUnique<T extends { id: string }>(matches: T[], label: string): T | null {
   if (matches.length === 0) return null;
   if (matches.length > 1) throw new Error(`AMBIGUOUS_NARRATIVE_TARGET: ${label}`);
   return matches[0];
@@ -109,7 +106,12 @@ export function proposeNarrativeUpdate(
     for (const company of data.companies) {
       const patch = narrative.companies?.[company.name.trim()];
       if (!patch) continue;
-      if (resolveUnique(data.companies.filter((c) => c.name.trim() === company.name.trim()), company.name) !== company)
+      if (
+        resolveUnique(
+          data.companies.filter((c) => c.name.trim() === company.name.trim()),
+          company.name,
+        ) !== company
+      )
         throw new Error(`AMBIGUOUS_NARRATIVE_TARGET: ${company.name}`);
       unmatched.companies.delete(company.name.trim());
       for (const field of COMPANY_NARRATIVE_FIELDS) {
@@ -132,7 +134,12 @@ export function proposeNarrativeUpdate(
     for (const item of data.items) {
       const patch = narrative.projects?.[item.title.trim()];
       if (!patch) continue;
-      if (resolveUnique(data.items.filter((i) => i.title.trim() === item.title.trim()), item.title) !== item)
+      if (
+        resolveUnique(
+          data.items.filter((i) => i.title.trim() === item.title.trim()),
+          item.title,
+        ) !== item
+      )
         throw new Error(`AMBIGUOUS_NARRATIVE_TARGET: ${item.title}`);
       unmatched.projects.delete(item.title.trim());
       for (const field of PROJECT_NARRATIVE_FIELDS) {
@@ -234,10 +241,7 @@ export function verifyNarrativeProposal(
   ) {
     throw new Error('STALE_OR_CHANGED_NARRATIVE');
   }
-  if (
-    approvedHashes.beforeHash !== proposal.beforeHash ||
-    approvedHashes.afterHash !== proposal.afterHash
-  ) {
+  if (approvedHashes.beforeHash !== proposal.beforeHash || approvedHashes.afterHash !== proposal.afterHash) {
     throw new Error('NARRATIVE_APPROVAL_MISMATCH');
   }
   if (proposal.remainingIssues.length > 0) throw new Error('UNRESOLVED_DOCUMENT_ISSUES');

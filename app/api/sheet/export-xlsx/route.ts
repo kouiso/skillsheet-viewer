@@ -2,11 +2,11 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
-import { readViewerDocument } from '@/server/document-view';
 import { buildSkillSheetXlsx } from '@/lib/export/build-xlsx';
 import { buildSkillSheetXlsxDigest } from '@/lib/export/build-xlsx-digest';
 import { digestTitle, EXPORT_EDITIONS } from '@/lib/export/edition';
 import { isEditor } from '@/server/auth-gate';
+import { readViewerDocument } from '@/server/document-view';
 import { hasViewerSession } from '@/server/viewer-gate';
 
 export const runtime = 'nodejs';

@@ -18,16 +18,10 @@ import 'server-only';
  */
 
 import { revalidateTag } from 'next/cache';
-import type {
-  CompanyInfo,
-  ProjectBlockData,
-  ProjectItem,
-  ProjectTech,
-  StatItem,
-} from '@/db/block';
+import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech, StatItem } from '@/db/block';
 import { getDb } from '@/db/client';
-import { type DocumentSnapshot, createDocumentService, DocumentError } from '@/db/document-service';
 import type { RawDocumentBlock } from '@/db/document-contract';
+import { createDocumentService, DocumentError, type DocumentSnapshot } from '@/db/document-service';
 import { getOwnerId } from '@/db/skillsheet';
 
 /** MCP/HTTP 共通の業務エラー分類。設計のエラー規約（Issue #305）に対応する。 */
@@ -122,11 +116,7 @@ function findStatsBlock(sheet: DocumentSnapshot): RawDocumentBlock & { data: { i
 }
 
 /** ブロック列のうち 1 ブロックの data だけを差し替える（id/order は保持する）。 */
-function replaceBlockData(
-  blocks: RawDocumentBlock[],
-  type: string,
-  data: unknown,
-): RawDocumentBlock[] {
+function replaceBlockData(blocks: RawDocumentBlock[], type: string, data: unknown): RawDocumentBlock[] {
   return blocks.map((b) => (b.type === type ? { ...b, data } : b));
 }
 

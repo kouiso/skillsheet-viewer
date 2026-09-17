@@ -3,11 +3,7 @@ import type { Database } from '../src/db/client';
 import { canonicalJson } from '../src/db/document-contract';
 import { createDocumentService, DocumentError } from '../src/db/document-service';
 import type { recordNarrativeApproval } from './narrative-approval';
-import {
-  type NarrativeProposal,
-  narrativeApprovalChanges,
-  verifyNarrativeProposal,
-} from './narrative-proposal';
+import { type NarrativeProposal, narrativeApprovalChanges, verifyNarrativeProposal } from './narrative-proposal';
 
 /** 承認記録は信頼できるローカル記録から読込むこと。通常保存のeditable制約は変更しない。 */
 export async function applyNarrativeUpdate(

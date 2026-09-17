@@ -123,12 +123,16 @@ afterEach(() => {
 describe('listOwnerSheets / getOwnerSheet', () => {
   it('一覧は文書境界へ委譲する', async () => {
     serviceMock.list.mockResolvedValue([
-      { sheetId: SHEET_ID, title: 't', isDefault: true, createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-02T00:00:00Z' },
+      {
+        sheetId: SHEET_ID,
+        title: 't',
+        isDefault: true,
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-02T00:00:00Z',
+      },
     ]);
     const sheets = await listOwnerSheets();
-    expect(sheets).toEqual([
-      { id: SHEET_ID, title: 't', isDefault: true, updatedAt: '2026-01-02T00:00:00Z' },
-    ]);
+    expect(sheets).toEqual([{ id: SHEET_ID, title: 't', isDefault: true, updatedAt: '2026-01-02T00:00:00Z' }]);
     expect(serviceMock.list).toHaveBeenCalledTimes(1);
   });
 
@@ -153,12 +157,7 @@ describe('updateProjectItem', () => {
       { field: 'hidden', before: undefined, after: true },
     ]);
     // 楽観ロック: expectedRevision をそのまま replace へ渡す
-    expect(serviceMock.replace).toHaveBeenCalledWith(
-      SHEET_ID,
-      REVISION,
-      'エンジニアスキルシート',
-      expect.any(Array),
-    );
+    expect(serviceMock.replace).toHaveBeenCalledWith(SHEET_ID, REVISION, 'エンジニアスキルシート', expect.any(Array));
     // キャッシュ失効
     expect(revalidateTagMock).toHaveBeenCalledWith('db-sheet', { expire: 0 });
     const savedBlocks = serviceMock.replace.mock.calls[0][3];

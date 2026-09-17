@@ -39,7 +39,14 @@ import { createDocumentService } from '../src/db/document-service';
 import { proposeNarrativeUpdate } from './narrative-proposal';
 import { persistPrivateRepairRecord } from './repair-proposal-file';
 
-type ProjectPatch = { comment?: string; duties?: string; acquired?: string; scope?: string; role?: string; summary?: string };
+type ProjectPatch = {
+  comment?: string;
+  duties?: string;
+  acquired?: string;
+  scope?: string;
+  role?: string;
+  summary?: string;
+};
 type CompanyPatch = { note?: string; kind?: string };
 export interface NarrativeFile {
   projects?: Record<string, ProjectPatch>;
