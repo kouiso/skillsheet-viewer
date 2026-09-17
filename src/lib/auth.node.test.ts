@@ -79,4 +79,15 @@ describe('getAuth の OAuth init フォールバック', () => {
     expect(betterAuthMock).toHaveBeenCalledTimes(1);
     expect(betterAuthMock.mock.calls[0][0].plugins).toHaveLength(0);
   });
+
+  it('BETTER_AUTH_URL 未設定なら VERCEL_PROJECT_PRODUCTION_URL から baseURL を導出する（Issue #331）', async () => {
+    stubEnv();
+    vi.stubEnv('BETTER_AUTH_URL', undefined);
+    vi.stubEnv('VERCEL_PROJECT_PRODUCTION_URL', 'skill-sheet-snowy.vercel.app');
+    betterAuthMock.mockImplementation(() => fakeAuth(Promise.resolve({})));
+    const { getAuth } = await importFresh();
+
+    await getAuth();
+    expect(betterAuthMock.mock.calls[0][0].baseURL).toBe('https://skill-sheet-snowy.vercel.app');
+  });
 });
