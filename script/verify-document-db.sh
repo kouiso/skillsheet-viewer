@@ -34,14 +34,14 @@ for migration in "$repo_dir"/drizzle/migrations/*.sql; do
   psql "${psql_args[@]}" -f "$migration" >>"$run_dir/migrations.log" 2>&1
 done
 for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary test-skillsheet-read-boundary test-skillsheet-write-boundary; do
-  psql "${psql_args[@]}" -f "$repo_dir/scripts/sql/$stage.sql" >"$run_dir/$stage.log" 2>&1
+  psql "${psql_args[@]}" -f "$repo_dir/script/sql/$stage.sql" >"$run_dir/$stage.log" 2>&1
   printf '%s: PASS\n' "$stage"
 done
 # 2接続目が実際にロック待ちになったことを観測し、直列実行を競合試験と誤認しない。
-psql "${psql_args[@]}" -f "$repo_dir/scripts/sql/seed-document-cas-proof.sql" >"$run_dir/cas-seed.log" 2>&1
+psql "${psql_args[@]}" -f "$repo_dir/script/sql/seed-document-cas-proof.sql" >"$run_dir/cas-seed.log" 2>&1
 cas_args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55440 -U cas_runtime -d postgres)
-psql "${psql_args[@]}" -f "$repo_dir/scripts/sql/seed-period-repair-proof.sql" >"$run_dir/repair-seed.log" 2>&1
-(cd "$repo_dir" && pnpm exec tsx scripts/verify-repair-db.ts "$run_dir") >"$run_dir/repair-dry-run.log" 2>&1
+psql "${psql_args[@]}" -f "$repo_dir/script/sql/seed-period-repair-proof.sql" >"$run_dir/repair-seed.log" 2>&1
+(cd "$repo_dir" && pnpm exec tsx script/verify-repair-db.ts "$run_dir") >"$run_dir/repair-dry-run.log" 2>&1
 printf '修復案dry-run実DB検証: PASS\n'
 observe_wait() {
   local application="$1" event_type="$2" seen=false
@@ -53,10 +53,10 @@ observe_wait() {
   done
   [[ "$seen" == true ]]
 }
-psql "${cas_args[@]}" -f "$repo_dir/scripts/sql/test-document-cas-first.sql" >"$run_dir/cas-first.log" 2>&1 &
+psql "${cas_args[@]}" -f "$repo_dir/script/sql/test-document-cas-first.sql" >"$run_dir/cas-first.log" 2>&1 &
 first_pid=$!
 observe_wait cas-first Timeout
-psql "${cas_args[@]}" -f "$repo_dir/scripts/sql/test-document-cas-second.sql" >"$run_dir/cas-second.log" 2>&1 &
+psql "${cas_args[@]}" -f "$repo_dir/script/sql/test-document-cas-second.sql" >"$run_dir/cas-second.log" 2>&1 &
 second_pid=$!
 observe_wait cas-second Lock
 wait "$first_pid"
@@ -64,10 +64,10 @@ wait "$second_pid"
 printf '2接続CAS・実ロック待機・競合拒否: PASS\n'
 
 # 削除がowner lockを保持している間に古いcreateを再送する。
-psql "${cas_args[@]}" -f "$repo_dir/scripts/sql/test-document-delete-first.sql" >"$run_dir/delete-first.log" 2>&1 &
+psql "${cas_args[@]}" -f "$repo_dir/script/sql/test-document-delete-first.sql" >"$run_dir/delete-first.log" 2>&1 &
 first_pid=$!
 observe_wait delete-first Timeout
-psql "${cas_args[@]}" -f "$repo_dir/scripts/sql/test-document-create-after-delete.sql" >"$run_dir/create-after-delete.log" 2>&1 &
+psql "${cas_args[@]}" -f "$repo_dir/script/sql/test-document-create-after-delete.sql" >"$run_dir/create-after-delete.log" 2>&1 &
 second_pid=$!
 observe_wait create-after-delete Lock
 wait "$first_pid"
@@ -75,20 +75,20 @@ wait "$second_pid"
 printf '削除中create再送・実ロック待機・復活拒否: PASS\n'
 
 # role・所有権・関数ACLも含むcluster backupを、別の新規clusterへ復元する。
-psql "${psql_args[@]}" -f "$repo_dir/scripts/sql/seed-document-restore-proof.sql" >"$run_dir/restore-fixture.log" 2>&1
-psql "${psql_args[@]}" -At -f "$repo_dir/scripts/sql/read-document-restore-proof.sql" >"$run_dir/before.json"
+psql "${psql_args[@]}" -f "$repo_dir/script/sql/seed-document-restore-proof.sql" >"$run_dir/restore-fixture.log" 2>&1
+psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-document-restore-proof.sql" >"$run_dir/before.json"
 pg_dumpall -h "$run_dir" -p 55440 -U boundary_admin >"$run_dir/cluster.sql"
 initdb -D "$run_dir/restored" -U restore_admin --auth=trust --no-locale -E UTF8 >"$run_dir/restore-init.log" 2>&1
 pg_ctl -D "$run_dir/restored" -l "$run_dir/restore-server.log" -o "-c listen_addresses='' -k '$run_dir' -p 55441" -w start >/dev/null
 restore_args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55441 -U restore_admin -d postgres)
 psql "${restore_args[@]}" -f "$run_dir/cluster.sql" >"$run_dir/restore.log" 2>&1
-psql "${restore_args[@]}" -At -f "$repo_dir/scripts/sql/read-document-restore-proof.sql" >"$run_dir/after.json"
+psql "${restore_args[@]}" -At -f "$repo_dir/script/sql/read-document-restore-proof.sql" >"$run_dir/after.json"
 cmp "$run_dir/before.json" "$run_dir/after.json"
 for stage in test-skillsheet-read-boundary test-skillsheet-write-boundary; do
-  psql "${restore_args[@]}" -f "$repo_dir/scripts/sql/$stage.sql" >"$run_dir/restored-$stage.log" 2>&1
+  psql "${restore_args[@]}" -f "$repo_dir/script/sql/$stage.sql" >"$run_dir/restored-$stage.log" 2>&1
 done
 psql -X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55441 -U cas_runtime -d postgres \
-  -f "$repo_dir/scripts/sql/test-document-create-after-delete.sql" >"$run_dir/restored-create-after-delete.log" 2>&1
+  -f "$repo_dir/script/sql/test-document-create-after-delete.sql" >"$run_dir/restored-create-after-delete.log" 2>&1
 printf '別cluster復旧・文書3表一致・復旧後権限試験: PASS\n'
 
 cleanup

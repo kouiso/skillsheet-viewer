@@ -13,14 +13,10 @@ import { sql } from 'drizzle-orm';
 import { createDb, type Database } from '../src/db/client';
 import { canonicalJson } from '../src/db/document-contract';
 import { createDocumentService, type DocumentSnapshot } from '../src/db/document-service';
-import { readNarrative } from './apply-project-narrative';
 import { applyNarrativeUpdate } from './apply-narrative';
+import { readNarrative } from './apply-project-narrative';
 import { recordNarrativeApproval } from './narrative-approval';
-import {
-  appendNarrativeJournal,
-  type NarrativeJournalEntry,
-  narrativeChangeId,
-} from './narrative-journal';
+import { appendNarrativeJournal, type NarrativeJournalEntry, narrativeChangeId } from './narrative-journal';
 import {
   type NarrativeProposal,
   narrativeApprovalChanges,
@@ -141,17 +137,18 @@ async function approveNarrative(
   // 承認時点で案が現在文書と完全に一致しなければstaleとして拒否する。
   const proposal = verifyNarrativeProposal(owner, current.snapshot, candidate, confirmed);
   persistPrivateRepairRecord(join(directory, 'before.json'), { owner, snapshot: current.snapshot });
-  const approval = recordNarrativeApproval(join(directory, 'approved.json'), owner, current.snapshot, proposal, confirmed);
+  const approval = recordNarrativeApproval(
+    join(directory, 'approved.json'),
+    owner,
+    current.snapshot,
+    proposal,
+    confirmed,
+  );
   appendNarrativeJournal(join(directory, JOURNAL), journalEntry('approved', owner, proposal));
   return approval;
 }
 
-async function applyNarrative(
-  db: Pick<Database, 'execute'>,
-  owner: string,
-  directory: string,
-  sheetId: string,
-) {
+async function applyNarrative(db: Pick<Database, 'execute'>, owner: string, directory: string, sheetId: string) {
   const proposal = readPrivateRepairRecord(join(directory, 'proposal.json')) as NarrativeProposal;
   const approval = readPrivateRepairRecord(join(directory, 'approved.json')) as ReturnType<
     typeof recordNarrativeApproval
@@ -234,16 +231,14 @@ export async function executeNarrativeCommand(args: string[], databaseUrl: strin
   const db = createDb(databaseUrl);
   try {
     if (action === 'prepare') {
-      return await prepareNarrative(createDocumentService(db, owner), owner, sheetId, parsed.narrativePath!, directory);
+      const { narrativePath } = parsed;
+      if (!narrativePath) throw new Error('ABSOLUTE_NARRATIVE_PATH_REQUIRED');
+      return await prepareNarrative(createDocumentService(db, owner), owner, sheetId, narrativePath, directory);
     }
     if (action === 'approve') {
-      const approval = await approveNarrative(
-        createDocumentService(db, owner),
-        owner,
-        sheetId,
-        directory,
-        parsed.confirmed!,
-      );
+      const { confirmed } = parsed;
+      if (!confirmed) throw new Error('EXPLICIT_APPROVAL_REQUIRED');
+      const approval = await approveNarrative(createDocumentService(db, owner), owner, sheetId, directory, confirmed);
       return { approved: true, sheetId: approval.sheetId, revision: approval.expectedRevision };
     }
     if (action === 'apply') return await applyNarrative(db, owner, directory, sheetId);

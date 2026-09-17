@@ -40,22 +40,24 @@ export function resolveDuration(period: string, raw: string | undefined, referen
   if (status !== 'valid' || !bounds?.precise) {
     return { manual, derivedMonths: status === 'planned' ? 0 : null, label: value || '未確定', conflict: false };
   }
-  if (bounds.openEnded && referenceMonth === undefined) {
-    return { manual, derivedMonths: null, label: value || '未確定', conflict: false };
-  }
   const start = Math.round(bounds.start * 12);
-  const end = bounds.openEnded
-    ? referenceMonth!
-    : referenceMonth === undefined
-      ? Math.round(bounds.end * 12)
-      : Math.min(Math.round(bounds.end * 12), referenceMonth);
+  if (bounds.openEnded) {
+    if (referenceMonth === undefined) {
+      return { manual, derivedMonths: null, label: value || '未確定', conflict: false };
+    }
+    const months = Math.max(0, referenceMonth - start + 1);
+    const derived = formatDurationMonths(months);
+    if (value) {
+      const month = `${Math.floor(referenceMonth / 12)}-${String((referenceMonth % 12) + 1).padStart(2, '0')}`;
+      return { manual, derivedMonths: months, label: `本人入力 ${value}／${month}基準 ${derived}`, conflict: false };
+    }
+    return { manual, derivedMonths: months, label: derived, conflict: false };
+  }
+  const closedEnd = Math.round(bounds.end * 12);
+  const end = referenceMonth === undefined ? closedEnd : Math.min(closedEnd, referenceMonth);
   const months = Math.max(0, end - start + 1);
   const derived = formatDurationMonths(months);
   const parsed = value ? parseDurationMonths(value) : null;
-  if (bounds.openEnded && value) {
-    const month = `${Math.floor(referenceMonth! / 12)}-${String((referenceMonth! % 12) + 1).padStart(2, '0')}`;
-    return { manual, derivedMonths: months, label: `本人入力 ${value}／${month}基準 ${derived}`, conflict: false };
-  }
   return {
     manual,
     derivedMonths: months,

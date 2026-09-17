@@ -109,7 +109,9 @@ export function registerSkillsheetTools(server: McpServer): void {
     async () =>
       runTool(async () => {
         const sheets = await listOwnerSheets();
-        return { sheets: sheets.map((s) => ({ id: s.id, title: s.title, isDefault: s.isDefault, updatedAt: s.updatedAt })) };
+        return {
+          sheets: sheets.map((s) => ({ id: s.id, title: s.title, isDefault: s.isDefault, updatedAt: s.updatedAt })),
+        };
       }),
   );
 
@@ -178,9 +180,7 @@ export function registerSkillsheetTools(server: McpServer): void {
     },
     async ({ sheetId, projectId, expectedRevision, fields }) =>
       runTool(async () =>
-        serializeWriteResult(
-          await updateProjectItem({ sheetId, projectId, expectedRevision, fields }),
-        ),
+        serializeWriteResult(await updateProjectItem({ sheetId, projectId, expectedRevision, fields })),
       ),
   );
 
@@ -204,11 +204,7 @@ export function registerSkillsheetTools(server: McpServer): void {
       },
     },
     async ({ sheetId, companyId, expectedRevision, fields }) =>
-      runTool(async () =>
-        serializeWriteResult(
-          await updateCompany({ sheetId, companyId, expectedRevision, fields }),
-        ),
-      ),
+      runTool(async () => serializeWriteResult(await updateCompany({ sheetId, companyId, expectedRevision, fields }))),
   );
 
   server.registerTool(
@@ -275,9 +271,7 @@ export function registerSkillsheetTools(server: McpServer): void {
       },
     },
     async ({ sheetId, expectedRevision, item }) =>
-      runTool(async () =>
-        serializeWriteResult(await addProjectItem({ sheetId, expectedRevision, item })),
-      ),
+      runTool(async () => serializeWriteResult(await addProjectItem({ sheetId, expectedRevision, item }))),
   );
 
   server.registerTool(
@@ -292,10 +286,6 @@ export function registerSkillsheetTools(server: McpServer): void {
       },
     },
     async ({ sheetId, expectedRevision, projectIds }) =>
-      runTool(async () =>
-        serializeWriteResult(
-          await reorderProjectItems({ sheetId, expectedRevision, projectIds }),
-        ),
-      ),
+      runTool(async () => serializeWriteResult(await reorderProjectItems({ sheetId, expectedRevision, projectIds }))),
   );
 }

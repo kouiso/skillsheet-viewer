@@ -1,9 +1,5 @@
 import type { DocumentSnapshot } from '../src/db/document-service';
-import {
-  type NarrativeProposal,
-  narrativeApprovalChanges,
-  verifyNarrativeProposal,
-} from './narrative-proposal';
+import { type NarrativeProposal, narrativeApprovalChanges, verifyNarrativeProposal } from './narrative-proposal';
 import { persistPrivateRepairRecord } from './repair-proposal-file';
 
 /** 呼出元が本人の明示確認で取得した対象ハッシュを記録する。自動承認は行わない。 */

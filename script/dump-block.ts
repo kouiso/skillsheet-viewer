@@ -16,7 +16,7 @@ import { loadScriptEnv } from './env';
  * 受け取り側は `REAL_BLOCKS_JSON` にこのファイルのパスを取る（print-document.node.test.tsx）。
  */
 
-const USAGE = `Usage: pnpm exec tsx script/dump-blocks.ts --out <path> [--sheet-id <uuid>] [--evidence <path>]
+const USAGE = `Usage: pnpm exec tsx script/dump-block.ts --out <path> [--sheet-id <uuid>] [--evidence <path>]
 
   --out       書き出し先のパス（必須）
   --sheet-id  対象シート。省略時はシートがちょうど 1 枚のときだけそれを使う

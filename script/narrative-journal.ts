@@ -35,13 +35,17 @@ export function appendNarrativeJournal(path: string, entry: NarrativeJournalEntr
       throw new Error('PRIVATE_DIRECTORY_REQUIRED');
     }
     const target = `/proc/self/fd/${dir}/${basename(path)}`;
-    const fd = openSync(target, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW, 0o600);
+    const fd = openSync(
+      target,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW,
+      0o600,
+    );
     try {
       const file = fstatSync(fd);
       if (!file.isFile() || (file.mode & 0o077) !== 0 || (process.getuid && file.uid !== process.getuid())) {
         throw new Error('PRIVATE_FILE_REQUIRED');
       }
-      writeSync(fd, canonicalJson(entry) + '\n');
+      writeSync(fd, `${canonicalJson(entry)}\n`);
       fsyncSync(fd);
     } finally {
       closeSync(fd);

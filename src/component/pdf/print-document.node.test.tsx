@@ -389,4 +389,3 @@ describe('印刷経路: 稼働月数はビュートグル「稼働月数」に�
     expect(missingOn.filter((m) => m.fact.label === '参画期間')).toEqual([]);
   }, 60_000);
 });
-

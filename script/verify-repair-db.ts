@@ -42,7 +42,7 @@ async function main() {
         process.execPath,
         [
           '--import',
-          './scripts/isolated-neon-preload.mjs',
+          './script/isolated-neon-preload.mjs',
           '--input-type=module',
           '-e',
           script +

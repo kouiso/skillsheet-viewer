@@ -25,9 +25,7 @@ const snapshot = (data?: Partial<ProjectBlockData>): DocumentSnapshot => ({
       type: 'project',
       order: 0,
       data: {
-        companies: [
-          { id: companyId, name: '会社A', kind: '自社', period: '2020.04 — ', note: '' },
-        ],
+        companies: [{ id: companyId, name: '会社A', kind: '自社', period: '2020.04 — ', note: '' }],
         items: [
           {
             id: itemId,
@@ -109,17 +107,13 @@ describe('承認対象と現在文書の照合', () => {
   it('別owner・古い版・改変された案を拒否する', () => {
     const source = snapshot();
     const proposal = proposeNarrativeUpdate('owner-a', source, narrative);
-    expect(() => verifyNarrativeProposal('owner-b', source, proposal, proposal)).toThrow(
+    expect(() => verifyNarrativeProposal('owner-b', source, proposal, proposal)).toThrow('STALE_OR_CHANGED_NARRATIVE');
+    expect(() => verifyNarrativeProposal('owner-a', { ...source, revision: '43' }, proposal, proposal)).toThrow(
       'STALE_OR_CHANGED_NARRATIVE',
     );
-    expect(() =>
-      verifyNarrativeProposal('owner-a', { ...source, revision: '43' }, proposal, proposal),
-    ).toThrow('STALE_OR_CHANGED_NARRATIVE');
     const changed = structuredClone(proposal);
     (changed.blocks[0].data as ProjectBlockData).items[0].duties = '改ざん';
-    expect(() => verifyNarrativeProposal('owner-a', source, changed, proposal)).toThrow(
-      'STALE_OR_CHANGED_NARRATIVE',
-    );
+    expect(() => verifyNarrativeProposal('owner-a', source, changed, proposal)).toThrow('STALE_OR_CHANGED_NARRATIVE');
   });
 
   it('承認hash不一致を拒否する', () => {
@@ -135,9 +129,7 @@ describe('承認対象と現在文書の照合', () => {
     const proposal = proposeNarrativeUpdate('owner-a', source, narrative);
     const moved = snapshot();
     (moved.blocks[0].data as ProjectBlockData).items[0].duties = '誰かの後続変更';
-    expect(() => verifyNarrativeProposal('owner-a', moved, proposal, proposal)).toThrow(
-      'STALE_OR_CHANGED_NARRATIVE',
-    );
+    expect(() => verifyNarrativeProposal('owner-a', moved, proposal, proposal)).toThrow('STALE_OR_CHANGED_NARRATIVE');
   });
 });
 

@@ -1,14 +1,14 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectBlockData } from '../src/db/block';
 import type { Database } from '../src/db/client';
 import type { DocumentSnapshot } from '../src/db/document-service';
-import type { NarrativeFile } from './apply-project-narrative';
 import { applyNarrativeUpdate } from './apply-narrative';
+import type { NarrativeFile } from './apply-project-narrative';
 import { recordNarrativeApproval } from './narrative-approval';
 import { proposeNarrativeUpdate } from './narrative-proposal';
-import { mkdtempSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
 
 const sheetId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const blockId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -35,7 +35,11 @@ const data: ProjectBlockData = {
   ],
 };
 const snapshot = (revision = '42', blocks = [{ id: blockId, type: 'project', order: 0, data }]): DocumentSnapshot => ({
-  sheetId, title: '合成', revision, blocks, validation: { editable: true, issues: [] },
+  sheetId,
+  title: '合成',
+  revision,
+  blocks,
+  validation: { editable: true, issues: [] },
 });
 const narrative: NarrativeFile = { projects: { 案件α: { duties: '新しい担当' } } };
 
@@ -49,7 +53,10 @@ function db(...responses: unknown[]) {
   for (const result of responses) execute.mockResolvedValueOnce({ rows: [{ result }] });
   return { execute: execute as unknown as Database['execute'] };
 }
-const ok = (rev: string, blocks: unknown) => ({ status: 'OK', snapshot: { sheetId, title: '合成', revision: rev, blocks } });
+const ok = (rev: string, blocks: unknown) => ({
+  status: 'OK',
+  snapshot: { sheetId, title: '合成', revision: rev, blocks },
+});
 
 describe('applyNarrativeUpdate', () => {
   it('承認一致+現在文書一致ならCAS→読戻しで新snapshotを返す', async () => {
@@ -58,9 +65,9 @@ describe('applyNarrativeUpdate', () => {
     const approval = approvalFor('owner-a', current, proposal);
     const afterBlocks = proposal.blocks;
     const fake = db(
-      ok('42', current.blocks),                    // service.read (current)
-      ok('43', afterBlocks),                       // replace_sheet → saved() のreadResult
-      ok('43', afterBlocks),                       // service.read (readback)
+      ok('42', current.blocks), // service.read (current)
+      ok('43', afterBlocks), // replace_sheet → saved() のreadResult
+      ok('43', afterBlocks), // service.read (readback)
     );
     const result = await applyNarrativeUpdate(fake, 'owner-a', proposal, approval);
     expect(result.revision).toBe('43');
