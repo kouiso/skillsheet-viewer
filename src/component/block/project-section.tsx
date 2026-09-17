@@ -15,6 +15,7 @@ import { TechFilter } from './tech-filter';
 import { Timeline } from './timeline';
 
 interface ProjectSectionProps {
+  referenceMonth?: number;
   data: ProjectBlockData;
   /**
    * 1枚のシートに project ブロックが複数あるときに見出しの id を分けるための接尾辞。
@@ -66,6 +67,7 @@ export function projectSearchHaystack(
 }
 
 export function ProjectSection({
+  referenceMonth,
   data,
   headingIdSuffix,
   showProcess = true,
@@ -188,6 +190,7 @@ export function ProjectSection({
           <div className="flex flex-col gap-10">
             {companyGroups.map((group) => (
               <CompanySection
+                referenceMonth={referenceMonth}
                 key={group.companyId}
                 companyId={group.companyId}
                 headingIdSuffix={headingIdSuffix}
@@ -225,6 +228,7 @@ export function ProjectSection({
               companyMap={companyMap}
               activeTech={timelineActiveTech}
               showDuration={showDuration}
+              referenceMonth={referenceMonth}
             />
           )}
         </FadeUpSection>

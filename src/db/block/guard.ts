@@ -153,7 +153,10 @@ export function isProjectBlockData(data: unknown): data is ProjectBlockData {
       optionalTypeOk((item as ProjectItem).hidden, 'boolean') &&
       optionalTypeOk((item as ProjectItem).periodStart, 'string') &&
       optionalTypeOk((item as ProjectItem).periodEnd, 'string') &&
-      optionalTypeOk((item as ProjectItem).ongoing, 'boolean'),
+      optionalTypeOk((item as ProjectItem).ongoing, 'boolean') &&
+      // summary/duration は optional だが、入るなら文字列限定（数値等が入ると描画側で壊れる）
+      optionalTypeOk((item as ProjectItem).summary, 'string') &&
+      optionalTypeOk((item as ProjectItem).duration, 'string'),
   );
 }
 

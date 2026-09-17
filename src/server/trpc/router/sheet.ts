@@ -1,16 +1,9 @@
 import { TRPCError } from '@trpc/server';
-import { ConflictError, createSheet, deleteSheet, listSheets as listDbSheets, SkillSheetNotFoundError } from '@/db';
+import { revalidateTag } from 'next/cache';
+import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
+import { createDocumentService, DocumentError } from '@/db/document-service';
+import { getCachedDbSheet, getCachedDbSheetById, toStaleSheet } from '@/server/sheet-cache';
 
-import {
-  getCachedDbSheet,
-  getCachedDbSheetById,
-  getCachedDbSheets,
-  toStaleSheet,
-  toStaleSheetList,
-} from '@/server/sheet-cache';
-import { invalidateDbSheetCache, saveOwnerSheet } from '@/server/sheet-service';
-
-import { getTemplate } from '../../../../app/builder/sheet-template';
 import { editorProcedure, router, viewerProcedure } from '../init';
 import {
   builderStateInputSchema,
@@ -20,36 +13,53 @@ import {
   sheetIdInputSchema,
 } from '../schema';
 
+// Route Handler は Server Action ではないため next/cache の updateTag は使えない
+// （Next.js 16 公式: "It cannot be used in Route Handlers"）。tRPC mutation は必ず
+// Route Handler 経由で実行されるため、代わりに revalidateTag(tag, { expire: 0 }) で
+// 即時失効させる。同じ問題を maintenance.revalidate が解決しており、
+// { expire: 0 } を指定しないと即時失効が保証されない（本番で無効化されない不具合実績あり）。
+function invalidateDbSheetCache(): void {
+  try {
+    revalidateTag('db-sheet', { expire: 0 });
+  } catch {
+    console.warn('Document committed; cache invalidation pending');
+  }
+}
+
+function documents() {
+  return createDocumentService(getDb(), getOwnerId());
+}
+async function navigation() {
+  return (await documents().list()).map((s) => ({ id: s.sheetId, title: s.title, updatedAt: new Date(s.updatedAt) }));
+}
+async function documentCall<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    if (error instanceof DocumentError) {
+      const code =
+        error.code === 'CONFLICT'
+          ? 'CONFLICT'
+          : error.code === 'NOT_FOUND'
+            ? 'NOT_FOUND'
+            : ['UNEDITABLE_DOCUMENT', 'INVALID_STATE'].includes(error.code)
+              ? 'PRECONDITION_FAILED'
+              : 'BAD_REQUEST';
+      throw new TRPCError({ code, message: error.code });
+    }
+    throw error;
+  }
+}
+
 export const sheetRouter = router({
-  // fetchedAt は内部実装詳細のため公開レスポンスに出さず、stale 判定結果だけを返す
-  // （toStaleSheet と同じ方針。toStaleSheetList 参照）。
-  list: viewerProcedure.query(async () => toStaleSheetList(await getCachedDbSheets())),
+  list: viewerProcedure.query(async () => ({ sheets: await navigation(), stale: false })),
 
   builderState: editorProcedure.input(builderStateInputSchema).query(async ({ input }) => {
-    let { sheets } = await getCachedDbSheets();
-
-    if (input.sheetId) {
-      try {
-        const sheet = await getCachedDbSheetById(input.sheetId);
-        return { sheet: toStaleSheet(sheet), sheets, activeSheetId: input.sheetId };
-      } catch (err) {
-        // 指定 ID のシートが存在しない場合はデフォルトシートにフォールバックする。
-        // 一覧キャッシュが古くて新規作成したシートを含んでいなくても、
-        // ID 指定なら直接取得して開く（autosave テストの sheetId 指定で
-        // キャッシュ外のシートが開けずにフォールバックしていた不具合の修正）。
-        if (!(err instanceof SkillSheetNotFoundError)) throw err;
-      }
-    }
-
-    const sheet = await getCachedDbSheet();
-    if (sheets.length === 0) {
-      // getCachedDbSheet() は初回アクセス時にデフォルトシートを作成し得る。
-      // 直前に空配列をキャッシュしていても作成済み ID を返せるよう、この一度だけ
-      // 正本を直接読む。RSC の render 中は revalidateTag を呼べないため、
-      // 一覧キャッシュは従来どおり最大 60 秒で自然更新させる。
-      sheets = await listDbSheets();
-    }
-    return { sheet: toStaleSheet(sheet), sheets, activeSheetId: sheets[0]?.id ?? '' };
+    return documentCall(async () => {
+      const result = await documents().read(input.sheetId ?? null);
+      if (result.status === 'NOT_FOUND') throw new DocumentError('NOT_FOUND');
+      return { ...result, sheets: await navigation() };
+    });
   }),
 
   // tRPC procedure は throw された値を無条件で TRPCError にラップする（server caller 経由でも
@@ -70,28 +80,25 @@ export const sheetRouter = router({
 
   getDefault: viewerProcedure.query(async () => toStaleSheet(await getCachedDbSheet())),
 
-  save: editorProcedure.input(saveSheetInputSchema).mutation(async ({ input }) => {
-    try {
-      // 保存 + キャッシュ失効は MCP ツールと共有のサービス層へ（Issue #305）。
-      return await saveOwnerSheet(input);
-    } catch (err) {
-      if (err instanceof ConflictError) {
-        throw new TRPCError({ code: 'CONFLICT', message: err.message });
-      }
-      throw err;
-    }
-  }),
-
-  create: editorProcedure.input(createSheetInputSchema).mutation(async ({ input }) => {
-    const initialBlocks = input.templateId ? getTemplate(input.templateId)?.blocks : undefined;
-    const sheetId = await createSheet(input.title, initialBlocks);
-    invalidateDbSheetCache();
-    return { sheetId };
-  }),
-
-  delete: editorProcedure.input(deleteSheetInputSchema).mutation(async ({ input }) => {
-    await deleteSheet(input.sheetId);
-    invalidateDbSheetCache();
-    return { ok: true as const };
-  }),
+  save: editorProcedure.input(saveSheetInputSchema).mutation(async ({ input }) =>
+    documentCall(async () => {
+      const snapshot = await documents().replace(input.sheetId, input.expectedRevision, input.title, input.blocks);
+      invalidateDbSheetCache();
+      return snapshot;
+    }),
+  ),
+  create: editorProcedure.input(createSheetInputSchema).mutation(async ({ input }) =>
+    documentCall(async () => {
+      const snapshot = await documents().create(input.sheetId, input.title, input.blocks);
+      invalidateDbSheetCache();
+      return snapshot;
+    }),
+  ),
+  delete: editorProcedure.input(deleteSheetInputSchema).mutation(async ({ input }) =>
+    documentCall(async () => {
+      await documents().delete(input.sheetId, input.expectedRevision);
+      invalidateDbSheetCache();
+      return { ok: true as const };
+    }),
+  ),
 });

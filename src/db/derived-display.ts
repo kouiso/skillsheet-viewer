@@ -1,22 +1,43 @@
 import type { CompanyInfo, ProjectItem, SkillEntry, StatItem } from './block';
-import { deriveCompanyPeriod, flattenTech, parsePeriodBounds } from './process';
+import { classifyPeriod, deriveCompanyPeriod, flattenTech } from './process';
 
 const ENGINEER_EXPERIENCE_LABELS = new Set(['エンジニア歴', 'エンジニア経験', '経験年数', '実務経験']);
 const PROJECT_COUNT_LABELS = new Set(['案件数', 'プロジェクト数', '参画案件数', '参画プロジェクト数']);
 
 /** サーバーからクライアントへ渡す、月初基準の固定月キー。 */
 export function currentMonthKey(date = new Date()): number {
-  return date.getFullYear() * 12 + date.getMonth();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Tokyo',
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(date);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  return year * 12 + month - 1;
+}
+
+/** Web/PDFで共通の経験集計の凡例。基準月を暗黙に現在へ差し替えない。 */
+export function experienceLegend(referenceMonth?: number): string {
+  const month =
+    referenceMonth === undefined
+      ? '基準月未指定'
+      : `${Math.floor(referenceMonth / 12)}-${String((referenceMonth % 12) + 1).padStart(2, '0')}基準`;
+  return `${month}。表示案件の開始月・終了月を含み、重複月は1回だけ集計。工数・習熟度を表す値ではありません。`;
 }
 
 /** 月数を計算できる精度の期間を、重複排除に使う連続した月キーへ変換する。 */
 function periodMonthKeys(period: string, referenceMonth?: number): number[] {
-  const bounds = parsePeriodBounds(period);
+  // R02: 13月・逆転・終了未記載・未来開始の期間を黙って経験月へ変換しない。
+  // valid 以外（planned/invalid/unknown）は原文を保持したまま集計対象外にする。
+  const { status, bounds } = classifyPeriod(period, referenceMonth);
   // 年だけの期間から「1ヶ月」を捏造しない。継続中はSSRとHydrationで同じ固定月を使う。
-  if (!bounds?.precise) return [];
+  if (status !== 'valid' || !bounds?.precise) return [];
   const start = Math.round(bounds.start * 12);
   if (bounds.openEnded && referenceMonth === undefined) return [];
-  const end = bounds.openEnded ? Math.max(referenceMonth ?? start, start) : Math.round(bounds.end * 12);
+  const rawEnd = bounds.openEnded ? Math.max(referenceMonth ?? start, start) : Math.round(bounds.end * 12);
+  // 終了予定が基準月より先の期間も、実績として数えるのは基準月まで（R02:
+  // 予定の終了月と実績集計の終了月は別概念）。基準月が無いときは従来どおり書かれた範囲。
+  const end = referenceMonth === undefined ? rawEnd : Math.min(rawEnd, referenceMonth);
   const months: number[] = [];
   for (let month = start; month <= end; month += 1) months.push(month);
   return months;
@@ -43,12 +64,24 @@ export function resolveDisplayedStats(
 ): StatItem[] {
   if (visibleProjects === undefined) return items;
   const experienceMonths = collectProjectMonths(visibleProjects, undefined, referenceMonth).size;
+  const partial = visibleProjects.some((project) => {
+    const { status, bounds } = classifyPeriod(project.period, referenceMonth);
+    return status === 'unknown' || status === 'invalid' || (bounds?.openEnded && referenceMonth === undefined);
+  });
   return items.map((item) => {
     const label = item.label.trim();
-    if (ENGINEER_EXPERIENCE_LABELS.has(label) && experienceMonths > 0) {
+    if (ENGINEER_EXPERIENCE_LABELS.has(label)) {
       const unit = item.unit.trim();
-      if (unit === '年') return { ...item, value: String(Math.floor(experienceMonths / 12)) };
-      if (/^(?:ヶ|か|ケ)月$/.test(unit)) return { ...item, value: String(experienceMonths) };
+      if (unit === '年' || /^(?:ヶ|か|ケ)月$/.test(unit)) {
+        return {
+          ...item,
+          value:
+            partial && experienceMonths === 0
+              ? '—'
+              : String(unit === '年' ? Math.floor(experienceMonths / 12) : experienceMonths),
+          label: partial ? `${label}（算出可能分）` : label,
+        };
+      }
     }
     if (PROJECT_COUNT_LABELS.has(label)) {
       return { ...item, value: String(visibleProjects.length) };
@@ -63,31 +96,80 @@ export function resolveCompanyPeriod(company: CompanyInfo | undefined, items: Pr
 }
 
 function stripTrailingVersion(value: string): string {
-  return value.replace(/\s+v?\d+(?:\.\d+)*(?:[-.][a-z0-9]+)*$/i, '').trim();
+  return value
+    .replace(/\s+v?\d+(?:\.\d+)*(?:[-.][a-z0-9]+)*$/i, '')
+    .replace(/\s+\d+系$/, '')
+    .trim();
 }
 
 /**
+ * 表記揺れを同一技術の正規キーへ寄せる承認済み別名辞書。
+ * 正規化（NFKC・小文字化・版除去）の後でだけ適用し、キーは正規化済みの小文字形で持つ。
+ * React / React Native のような関連技術の同一視は経験期間の水増しになるため禁止。
+ * 追加する別名は「同一技術である」と実データで確認できたものだけに絞る。
+ */
+const TECHNOLOGY_ALIASES: Record<string, string> = {
+  // NestJS / Nest.js は同一フレームワーク。表記揺れで経験月数が過小算出されていた（issue M01）。
+  nestjs: 'nest.js',
+  // K8S は Kubernetes の略称（実データでは "K8S" 表記の案件のみ存在）。
+  k8s: 'kubernetes',
+  // Prisma ORM / Prisma、Sanity CMS / Sanity は同一プロダクト。
+  'prisma orm': 'prisma',
+  'sanity cms': 'sanity',
+};
+
+/**
  * 複合名・括弧注釈・バージョン付きの既存データを、完全一致用の候補へ分解する。
+ * 括弧内は技術の注釈（RDS・Hooks 等）であり本体名ではないため、
+ * 本体候補（primary）と注釈候補（annotation）を分けて返す。
  * 元データ自体は変更せず、表示時の導出にだけ用いる。
  */
-export function normalizeTechnologyCandidates(value: string): Set<string> {
+function normalizeTechnologyParts(value: string): { primary: Set<string>; annotation: Set<string> } {
   const normalized = value.normalize('NFKC').trim();
-  if (!normalized) return new Set();
+  const empty = { primary: new Set<string>(), annotation: new Set<string>() };
+  if (!normalized) return empty;
 
   const parenthetical = [...normalized.matchAll(/\(([^()]*)\)/g)].map((match) => match[1]);
   const base = normalized.replace(/\([^()]*\)/g, ' ');
-  const candidates = [base, ...parenthetical]
-    .flatMap((part) => [part, ...part.split(/\s*(?:\/|(?<!\+)\+(?!\+)|,|、|・|&)\s*/)])
-    .map(stripTrailingVersion)
-    .map((part) => part.replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US'))
-    .filter(Boolean);
-  return new Set(candidates);
+  const splitPart = (part: string) =>
+    [part, ...part.split(/\s*(?:\/|(?<!\+)\+(?!\+)|,|、|・|&)\s*/)]
+      .map(stripTrailingVersion)
+      .map((piece) => piece.replace(/\s+/g, ' ').trim().toLocaleLowerCase('en-US'))
+      .map((piece) => TECHNOLOGY_ALIASES[piece] ?? piece)
+      .filter(Boolean);
+  return { primary: new Set(splitPart(base)), annotation: new Set(parenthetical.flatMap(splitPart)) };
 }
 
+export function normalizeTechnologyCandidates(value: string): Set<string> {
+  const { primary, annotation } = normalizeTechnologyParts(value);
+  return new Set([...primary, ...annotation]);
+}
+
+/**
+ * 同一技術かどうかの判定。本体名（括弧注釈を除く正規形）の一致だけを同一視する。
+ * 「PostgreSQL (RDS)」と「RDS」は同一技術ではない（RDSは注釈=関連技術）。
+ * 経験月数の集計では technologyNamesRelated を使うこと。
+ */
 export function technologyNamesMatch(skillName: string, projectTechnology: string): boolean {
-  const skillCandidates = normalizeTechnologyCandidates(skillName);
-  const projectCandidates = normalizeTechnologyCandidates(projectTechnology);
-  return [...skillCandidates].some((candidate) => projectCandidates.has(candidate));
+  const skill = normalizeTechnologyParts(skillName);
+  const project = normalizeTechnologyParts(projectTechnology);
+  return [...skill.primary].some((c) => project.primary.has(c));
+}
+
+/**
+ * 経験月数集計用の「関連技術」判定。同一技術（本体名一致）に加えて、
+ * 片方の本体名が他方の注釈と一致する場合も関連ありとみなす。
+ * 例: スキル「RDS」は「MySQL (RDS)」「PostgreSQL (RDS)」を使う案件の経験に含む。
+ * 注釈どうし（「PostgreSQL (RDS)」と「MySQL (RDS)」の rds）だけでは関連にしない。
+ */
+export function technologyNamesRelated(skillName: string, projectTechnology: string): boolean {
+  const skill = normalizeTechnologyParts(skillName);
+  const project = normalizeTechnologyParts(projectTechnology);
+  return (
+    [...skill.primary].some((c) => project.primary.has(c)) ||
+    [...skill.primary].some((c) => project.annotation.has(c)) ||
+    [...skill.annotation].some((c) => project.primary.has(c))
+  );
 }
 
 export function deriveSkillExperienceMonths(
@@ -97,7 +179,7 @@ export function deriveSkillExperienceMonths(
 ): number {
   return collectProjectMonths(
     visibleProjects,
-    (item) => flattenTech(item.tech).some((technology) => technologyNamesMatch(skillName, technology)),
+    (item) => flattenTech(item.tech).some((technology) => technologyNamesRelated(skillName, technology)),
     referenceMonth,
   ).size;
 }
@@ -112,21 +194,49 @@ export interface DisplayedSkillExperience {
   /** 表示文字列。空なら年数を表示しない。 */
   label: string;
   derived: boolean;
+  source: 'derived' | 'manual' | 'unavailable';
+  precision: 'complete' | 'partial';
+}
+
+export function experienceSourceLabel(experience: Pick<DisplayedSkillExperience, 'source' | 'precision'>): string {
+  if (experience.source === 'manual') return '本人入力';
+  if (experience.precision === 'partial') return '算出可能分';
+  return experience.source === 'derived' ? '案件算出' : '未入力';
 }
 
 export function resolveDisplayedSkillExperience(
   skill: Pick<SkillEntry, 'name' | 'years'>,
   visibleProjects: ProjectItem[],
   referenceMonth?: number,
+  recordedTechnologies: readonly string[] = [],
 ): DisplayedSkillExperience {
-  const derivedMonths = deriveSkillExperienceMonths(skill.name, visibleProjects, referenceMonth);
-  if (derivedMonths > 0) {
-    return { months: derivedMonths, label: formatExperienceMonths(derivedMonths), derived: true };
+  const matching = visibleProjects.filter((item) =>
+    flattenTech(item.tech).some((technology) => technologyNamesRelated(skill.name, technology)),
+  );
+  if (matching.length) {
+    const months = deriveSkillExperienceMonths(skill.name, matching, referenceMonth);
+    const partial = matching.some((item) => {
+      const { status, bounds } = classifyPeriod(item.period, referenceMonth);
+      return status === 'unknown' || status === 'invalid' || (bounds?.openEnded && referenceMonth === undefined);
+    });
+    return {
+      months,
+      label: months > 0 || !partial ? formatExperienceMonths(months) : '未確定',
+      derived: true,
+      source: months === 0 && partial ? 'unavailable' : 'derived',
+      precision: partial ? 'partial' : 'complete',
+    };
+  }
+  // 非表示案件の存在は手入力fallbackの抑止だけに使う。期間や件数は返さない。
+  if (recordedTechnologies.some((technology) => technologyNamesRelated(skill.name, technology))) {
+    return { months: 0, label: formatExperienceMonths(0), derived: true, source: 'derived', precision: 'complete' };
   }
   const fallbackMonths = Math.max(0, skill.years) * 12;
   return {
     months: fallbackMonths,
     label: skill.years > 0 ? `${skill.years}年` : '',
     derived: false,
+    source: skill.years > 0 ? 'manual' : 'unavailable',
+    precision: 'complete',
   };
 }

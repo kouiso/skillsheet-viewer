@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import type { Block } from '@/db/block';
+import type { Block, ProjectItem } from '@/db/block';
 
 import SkillSheetViewer from './skill-sheet-viewer';
 
@@ -209,6 +209,59 @@ describe('SkillSheetViewer', () => {
     );
     expect(duplicateKeyWarning).toBe(false);
     consoleErrorSpy.mockRestore();
+  });
+
+  it('複数案件ブロックの経験を集計し、非表示案件を加えない', () => {
+    const item = (id: string, period: string, hidden = false): ProjectItem => ({
+      id,
+      companyId: 'company',
+      title: id,
+      period,
+      hidden,
+      scope: '',
+      role: '',
+      team: '',
+      tech: {
+        lang: hidden ? ['Example', 'PrivateExample'] : ['Example'],
+        fw: [],
+        db: [],
+        infra: [],
+        tools: [],
+        collab: [],
+      },
+      process: [],
+      duties: '',
+      acquired: '',
+      comment: '',
+    });
+    const blocks: Block[] = [
+      {
+        id: 's',
+        type: 'skills',
+        order: 0,
+        data: {
+          category: '言語',
+          skills: [
+            { name: 'Example', years: 9, level: '★★★' },
+            { name: 'PrivateExample', years: 9, level: '★★★' },
+          ],
+        },
+      },
+      { id: 'p1', type: 'project', order: 1, data: { companies: [], items: [item('a', '2020.01 — 2020.12')] } },
+      {
+        id: 'p2',
+        type: 'project',
+        order: 2,
+        data: { companies: [], items: [item('b', '2021.01 — 2021.12'), item('private', '2000.01 — 2019.12', true)] },
+      },
+    ];
+    render(
+      <SkillSheetViewer skillSheet={{ title: '合成', content: '' }} blocks={blocks} referenceMonth={2026 * 12 + 8} />,
+    );
+    expect(screen.getByText('2年0ヶ月')).toBeInTheDocument();
+    expect(screen.getByText('0年0ヶ月')).toBeInTheDocument();
+    expect(screen.queryByText('private')).not.toBeInTheDocument();
+    expect(screen.queryByText('9年')).not.toBeInTheDocument();
   });
 
   it('ダッシュボードのセクション間隔は SP で space-y-8、sm 以上で space-y-12（#190: SP の fold 内情報量を増やす）', async () => {

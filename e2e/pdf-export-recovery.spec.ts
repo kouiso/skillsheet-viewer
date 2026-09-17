@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { type Browser, expect, type Page, test } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist';
-import { createSheet, deleteSheet, listSheets } from '@/db';
 import { buildConsoleDemoBlocks } from '@/db/fixture';
+import { createSheet, deleteSheet, listSheets } from './document-fixture';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const RUN_ID = randomUUID().slice(0, 8);

@@ -14,25 +14,18 @@
  * 外部 JSON で渡す。
  *
  * 冪等。既に値が入っている項目は上書きしない（人が後から直した値を潰さないため）。
- * 中身が変わらなかったブロックは UPDATE 自体を出さない（`block-write.ts` 参照）。
+ * 中身が変わらないなら replace も出さない。
  *
- * 対象シートは `--sheet-id` か `SKILLSHEET_OWNER_ID` で必ず絞る（`block-write.ts` 参照）。
+ * 対象シートは `--sheet-id <uuid>` で必ず1件指定する。接続先は明示DATABASE_URLのみ。
+ * document-service の read/replace（owner照合+版CAS）だけを使う。
  *
  * 実行:
- *   確認のみ: pnpm exec tsx script/backfill-project-data.ts
- *   反映:     pnpm exec tsx script/backfill-project-data.ts --apply
- *   シート指定: 上記に `--sheet-id <uuid>` を足す（省略時は SKILLSHEET_OWNER_ID の全シート）
+ *   確認のみ: pnpm exec tsx script/backfill-project-data.ts --sheet-id <uuid>
+ *   反映:     上記に --apply を足す
  */
 import { isProjectBlockData, type ProjectTech } from '../src/db/block';
-import { getDb } from '../src/db/client';
-import { blocks } from '../src/db/schema';
-import {
-  type BlockUpdate,
-  loadWebEnvLocal,
-  projectBlocksOfSheets,
-  resolveTargetSheetIds,
-  writeBlockUpdates,
-} from './block-write';
+import { createDb } from '../src/db/client';
+import { createDocumentService, DocumentError } from '../src/db/document-service';
 
 // 技術スタックの分類が実態と合っていないもの（#240 / #241）。
 // 課金 SDK・決済サービス・分析タグはフレームワークでもコラボレーションツールでもないので、
@@ -95,25 +88,42 @@ function resolveKind(name: string, note: string): string | null {
   return kindFromCompanyName(name) ?? kindFromNote(note);
 }
 
+function argValue(args: string[], key: string): string | undefined {
+  const index = args.indexOf(key);
+  const value = args[index + 1];
+  return index >= 0 && value && !value.startsWith('--') ? value : undefined;
+}
+const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function main(): Promise<void> {
-  loadWebEnvLocal();
   const apply = process.argv.includes('--apply');
-  const db = getDb();
-  const sheetIds = await resolveTargetSheetIds(db, process.argv.slice(2));
-  console.log(`対象シート: ${sheetIds.length} 件`);
-  const rows = await db.select().from(blocks).where(projectBlocksOfSheets(sheetIds));
+  const sheetId = argValue(process.argv.slice(2), '--sheet-id');
+  if (!sheetId || !uuid.test(sheetId)) {
+    throw new Error('対象シートを --sheet-id <uuid> で1件だけ明示してください。');
+  }
+  const owner = process.env.SKILLSHEET_OWNER_ID;
+  if (!owner) throw new Error('SKILLSHEET_OWNER_ID が必要です');
+  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL_REQUIRED');
+
+  const db = createDb(process.env.DATABASE_URL);
+  const service = createDocumentService(db, owner);
+  const result = await service.read(sheetId);
+  if (result.status !== 'OK') throw new DocumentError(result.status);
+  const snapshot = result.snapshot;
+  console.log(`対象シート: ${snapshot.sheetId}`);
 
   let companiesFilled = 0;
   let companiesSkipped = 0;
   let techMoved = 0;
-  const updates: BlockUpdate[] = [];
+  let changed = false;
 
-  for (const row of rows) {
-    if (!isProjectBlockData(row.data)) {
-      console.warn(`skip: project ブロックとして解釈できない data (block ${row.id})`);
-      continue;
+  const blocks = snapshot.blocks.map((block) => {
+    if (block.type !== 'project') return block;
+    if (!isProjectBlockData(block.data)) {
+      console.warn(`skip: project ブロックとして解釈できない data (block ${block.id})`);
+      return block;
     }
-    const data = row.data;
+    const data = block.data;
 
     const companies = data.companies.map((company) => {
       if (company.kind?.trim()) {
@@ -126,6 +136,7 @@ async function main(): Promise<void> {
         return company;
       }
       companiesFilled += 1;
+      changed = true;
       console.log(`  会社区分 ${company.name} → ${kind}`);
       return { ...company, kind };
     });
@@ -133,13 +144,14 @@ async function main(): Promise<void> {
     const items = data.items.map((item) => {
       const tech = recategoriseTech(item.tech, (name, from, to) => {
         techMoved += 1;
+        changed = true;
         console.log(`  技術分類 ${item.title}: ${name} を ${from} → ${to}`);
       });
       return { ...item, tech };
     });
 
-    updates.push({ id: row.id, sheetId: row.sheetId, data: { ...data, companies, items }, previous: data });
-  }
+    return { ...block, data: { ...data, companies, items } };
+  });
 
   console.log('');
   console.log(`会社区分:   ${companiesFilled} 件を補完 / ${companiesSkipped} 件は入力済みのため据え置き`);
@@ -147,12 +159,18 @@ async function main(): Promise<void> {
 
   if (!apply) {
     console.log('→ 確認のみ（反映するには --apply を付ける）。');
+    await db.$client.end();
     return;
   }
-  const result = await writeBlockUpdates(db, updates);
-  console.log(
-    `→ DB へ反映しました（ブロック ${result.written} 件を更新 / ${result.skipped} 件は変更なしのため据え置き、シート ${result.sheets} 件の updated_at を更新）。`,
-  );
+  if (!changed) {
+    console.log('→ 変更がないため書き込みません。');
+    await db.$client.end();
+    return;
+  }
+
+  const after = await service.replace(snapshot.sheetId, snapshot.revision, snapshot.title, blocks);
+  console.log(`→ DB へ反映しました（revision ${snapshot.revision} → ${after.revision}）。`);
+  await db.$client.end();
 }
 
 main().catch((err) => {

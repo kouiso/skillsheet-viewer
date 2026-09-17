@@ -15,10 +15,12 @@ import path from 'node:path';
 import { Font, renderToBuffer } from '@react-pdf/renderer';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Block } from '@/db/block';
+import { currentMonthKey } from '@/db/derived-display';
 
 import PDF_FONT_FAMILY from './constant';
 import { buildPdfQualityFixtureBlocks, PDF_QUALITY_FIXTURE_TITLE } from './fixture/print-quality-fixture';
 import { splitForHyphenation } from './font';
+import { buildCompletenessReport, checkCompleteness, enumerateCompletenessFacts } from './print-completeness.node';
 import { buildPrintSkillSheetDocument } from './print-document';
 import { DEFAULT_QUALITY_OPTIONS, runQualityChecks, summarize, toSearchKey } from './print-quality';
 import { runDuplicateHeadingChecks } from './print-quality-duplicate-heading';
@@ -32,12 +34,18 @@ const BOLD_TTF = path.join(FONTS_DIR, 'noto-sans-jp-bold.ttf');
 
 const REAL_BLOCKS_JSON = process.env.REAL_BLOCKS_JSON;
 const OUT_PDF = process.env.PRINT_PDF_OUT;
+const generatedAt = new Date();
+const monthInput = process.env.PRINT_REFERENCE_MONTH;
+if (monthInput !== undefined && (!/^\d+$/.test(monthInput) || !Number.isSafeInteger(Number(monthInput)))) {
+  throw new Error('PRINT_REFERENCE_MONTH は年*12+月(0始まり)の整数で指定してください');
+}
+const referenceMonth = monthInput === undefined ? currentMonthKey(generatedAt) : Number(monthInput);
 
-if (!REAL_BLOCKS_JSON) {
+if (REAL_BLOCKS_JSON === undefined) {
   // スキップは vitest の一覧上では見えるが、大量のテストに埋もれて「実データでの確認が
   // 1度も走っていない」という事実がログから読み取りにくい。ここで明示しておく。
   console.warn(
-    '[print-document.node.test.tsx] REAL_BLOCKS_JSON 未設定 — 「実データで 7 項目すべて緑になる」はスキップされる。' +
+    '[print-document.node.test.tsx] REAL_BLOCKS_JSON 未設定 — 実データのテキスト・ラスタ・見出し重複・完全性検査はスキップされる。' +
       'CI の実効ゲートは committed synthetic fixture を使うテストが担う（このファイルの別テスト）。',
   );
 }
@@ -45,6 +53,7 @@ if (!REAL_BLOCKS_JSON) {
 /**
  * pdfjs のテキスト層検査に必要な headings / requiredTexts を組み立てる。
  * 実データのテストと合成フィクスチャのテストで同じ組み立てを使う（重複を避ける）。
+ * 描画と同じ VM 由来のため、VM 自体の欠落は検出できない。元ブロックとの完全性検査は別途必要。
  */
 function buildTextQualityInputs(title: string, vm: PrintViewModel) {
   const projects = vm.companies.flatMap((c) => c.projects);
@@ -78,8 +87,15 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
   return { headings, requiredTexts, footerText };
 }
 
+/** 実データの欠落本文をCIログへ出さず、件数だけでゲートを判定する。 */
+function assertComplete(blocks: Block[], pages: Awaited<ReturnType<typeof extractQualityPages>>) {
+  const report = buildCompletenessReport(blocks, pages, undefined, referenceMonth);
+  expect(report.missing.length, 'PDF完全性: 元データの事実が欠落しています').toBe(0);
+  expect(report.durationConflicts.length, '参画期間の矛盾は本人の差分確認が必要です').toBe(0);
+}
+
 describe('新しい印刷経路の品質', () => {
-  // 3 つの検査（テキスト層 7 項目・ラスタ・見出し重複）で同じ 1 回のレンダーを使い回す。
+  // テキスト層・ラスタ・見出し重複・完全性で同じ1回のレンダーを使い回す。
   // 検査ごとに render し直すと合成フィクスチャでも数十秒かかる処理を 3 倍にしてしまう。
   let fixtureBuffer: Buffer;
   let fixturePages: Awaited<ReturnType<typeof extractQualityPages>>;
@@ -101,9 +117,9 @@ describe('新しい印刷経路の品質', () => {
     }
 
     const blocks = buildPdfQualityFixtureBlocks();
-    fixtureVm = buildPrintViewModel(PDF_QUALITY_FIXTURE_TITLE, blocks);
+    fixtureVm = buildPrintViewModel(PDF_QUALITY_FIXTURE_TITLE, blocks, undefined, referenceMonth);
     fixtureBuffer = await renderToBuffer(
-      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks }),
+      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks, referenceMonth }),
     );
     fixturePages = await extractQualityPages(fixtureBuffer);
   }, 120_000);
@@ -140,21 +156,38 @@ describe('新しい印刷経路の品質', () => {
     expect(findings).toEqual([]);
   });
 
-  it.skipIf(!REAL_BLOCKS_JSON)(
-    '実データで 7 項目すべて緑になる',
-    async () => {
-      const blocks = JSON.parse(readFileSync(REAL_BLOCKS_JSON as string, 'utf-8')) as Block[];
-      const title = 'エンジニアスキルシート';
-      const vm = buildPrintViewModel(title, blocks);
+  it('合成PDFの完全性が通り、未描画の事実を追加すると同じゲートが失敗する', () => {
+    const blocks = buildPdfQualityFixtureBlocks();
+    assertComplete(blocks, fixturePages);
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('合成案件がありません');
+    project.data.items[0].duties += '\n\n完全性検査専用の未描画合成事実。';
+    expect(() => assertComplete(blocks, fixturePages)).toThrow('PDF完全性');
+  });
 
-      const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks }));
-      if (OUT_PDF) writeFileSync(OUT_PDF, buffer);
+  it.skipIf(REAL_BLOCKS_JSON === undefined)(
+    '実データでテキスト・ラスタ・見出し重複・完全性の全検査が緑になる',
+    async () => {
+      if (!REAL_BLOCKS_JSON || !existsSync(REAL_BLOCKS_JSON)) {
+        throw new Error('REAL_BLOCKS_JSON の実データファイルがありません');
+      }
+      const parsed: unknown = JSON.parse(readFileSync(REAL_BLOCKS_JSON, 'utf-8'));
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error('REAL_BLOCKS_JSON は空でないブロック配列を指定してください');
+      }
+      const blocks = parsed as Block[];
+      const title = 'エンジニアスキルシート';
+      const vm = buildPrintViewModel(title, blocks, undefined, referenceMonth);
+
+      const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, referenceMonth }));
+      if (OUT_PDF) writeFileSync(OUT_PDF, buffer, { mode: 0o600 });
 
       const pages = await extractQualityPages(buffer);
       if (process.env.PRINT_TEXT_OUT) {
         writeFileSync(
           process.env.PRINT_TEXT_OUT,
           pages.map((items, i) => `=== page ${i + 1} ===\n${items.map((it) => it.text).join('')}`).join('\n\n'),
+          { mode: 0o600 },
         );
       }
       const { headings, requiredTexts, footerText } = buildTextQualityInputs(title, vm);
@@ -170,7 +203,19 @@ describe('新しい印刷経路の品質', () => {
         for (const f of list.slice(0, 20)) console.log(`[print] p${f.page} ${f.detail}`);
       }
 
-      expect(findings).toEqual([]);
+      // テキスト検査が失敗しても、同じ成果物に残りの検査を適用して結果をそろえる。
+      const rasterFindings = await runRasterQualityChecks(buffer, pages);
+      const titles = vm.companies.flatMap((company) => company.projects.map((project) => project.title));
+      const duplicateHeadings = runDuplicateHeadingChecks(pages, titles);
+      assertComplete(blocks, pages);
+      console.log(
+        `[print] raster findings=${rasterFindings.length} duplicate-heading findings=${duplicateHeadings.length}`,
+      );
+      expect({ text: findings, raster: rasterFindings, duplicateHeadings }).toEqual({
+        text: [],
+        raster: [],
+        duplicateHeadings: [],
+      });
     },
     300_000,
   );
@@ -194,11 +239,41 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
   const blocks: Block[] = buildPdfQualityFixtureBlocks();
 
   async function renderHeadingSet(views: PrintViewKey[] | undefined): Promise<Set<string>> {
-    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views }));
+    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views, referenceMonth }));
     const pages = await extractQualityPages(buffer);
     const fullText = pages.map((page) => page.map((item) => item.text).join('')).join('\n');
     return new Set(fullText.includes('スキル一覧') ? ['スキル一覧'] : []);
   }
+
+  it('100案件を末尾まで欠落なく出力する', async () => {
+    const volumeBlocks = buildPdfQualityFixtureBlocks();
+    const projectBlock = volumeBlocks.find((block) => block.type === 'project');
+    if (projectBlock?.type !== 'project' || !projectBlock.data.items.length) throw new Error('fixture');
+    const templates = projectBlock.data.items.filter((item) => !item.hidden);
+    projectBlock.data.companies = projectBlock.data.companies.map((company) => ({ ...company, hidden: false }));
+    projectBlock.data.items = Array.from({ length: 100 }, (_, index) => ({
+      ...structuredClone(templates[index % templates.length]),
+      id: `volume-project-${index}`,
+      title: `大量案件検証 ${String(index + 1).padStart(3, '0')}`,
+      hidden: false,
+    }));
+    const vm = buildPrintViewModel(title, volumeBlocks, undefined, referenceMonth);
+    expect(vm.companies.flatMap((company) => company.projects)).toHaveLength(100);
+    const document = await buildPrintSkillSheetDocument({ title, blocks: volumeBlocks, referenceMonth });
+    const buffer = await renderToBuffer(document);
+    const pages = await extractQualityPages(buffer);
+    expect(pages.length).toBeGreaterThan(20);
+    assertComplete(volumeBlocks, pages);
+    const inputs = buildTextQualityInputs(title, vm);
+    expect(runQualityChecks({ pages, ...inputs }, DEFAULT_QUALITY_OPTIONS)).toEqual([]);
+    expect(await runRasterQualityChecks(buffer, pages)).toEqual([]);
+    expect(
+      runDuplicateHeadingChecks(
+        pages,
+        vm.companies.flatMap((company) => company.projects.map((project) => project.title)),
+      ),
+    ).toEqual([]);
+  }, 300_000);
 
   it('views が skills を含まない場合、スキル一覧セクションを出さない', async () => {
     const headings = await renderHeadingSet(['process', 'projects', 'timeline']);
@@ -215,16 +290,41 @@ describe('印刷経路: スキル一覧はビュートグルに従う', () => {
     expect(headings.has('スキル一覧')).toBe(true);
   }, 60_000);
 
+  it('継続案件の本人入力と固定月の算出期間を実PDFに残す', async () => {
+    const durationBlocks = buildPdfQualityFixtureBlocks();
+    const projects = durationBlocks.find((block) => block.type === 'project');
+    if (projects?.type !== 'project' || !projects.data.items[0]) throw new Error('fixture');
+    projects.data.items[0].period = '2026.01 — 現在';
+    projects.data.items[0].duration = '半年';
+    const before = JSON.stringify(durationBlocks);
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title, blocks: durationBlocks, referenceMonth: 2026 * 12 + 8 }),
+    );
+    const pages = await extractQualityPages(buffer);
+    const normalized = pages
+      .flatMap((page) => page.map((item) => item.text))
+      .join('')
+      .replaceAll(/\s/g, '');
+    expect(normalized).toContain('本人入力半年／2026-09基準9ヶ月');
+    expect(JSON.stringify(durationBlocks)).toBe(before);
+  }, 60_000);
+
   it('推しモードの凡例を実PDFのテキスト層へ出す', async () => {
     const featuredBlocks = buildPdfQualityFixtureBlocks();
     const skills = featuredBlocks.find((block) => block.type === 'skills');
     if (skills?.type === 'skills' && skills.data.skills[0]) skills.data.skills[0].featured = true;
 
-    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks: featuredBlocks }));
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title, blocks: featuredBlocks, referenceMonth }),
+    );
     const pages = await extractQualityPages(buffer);
     const fullText = pages.flatMap((page) => page.map((item) => item.text)).join('');
     const normalized = fullText.replaceAll(/\s/g, '');
     expect(normalized).toContain('塗り=主に使う技術／枠線=その他。カッコ内は経験年数。');
+    expect(normalized).toContain(
+      `${Math.floor(referenceMonth / 12)}-${String((referenceMonth % 12) + 1).padStart(2, '0')}基準`,
+    );
+    expect(normalized).toContain('重複月は1回だけ集計');
   }, 60_000);
 });
 
@@ -246,43 +346,46 @@ describe('印刷経路: 稼働月数はビュートグル「稼働月数」に�
   const blocks: Block[] = buildPdfQualityFixtureBlocks();
   const ALL: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline', 'duration'];
 
-  async function renderItemTexts(views: PrintViewKey[] | undefined): Promise<string[]> {
+  async function renderPages(views: PrintViewKey[] | undefined) {
     const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views }));
-    const pages = await extractQualityPages(buffer);
-    return pages.flatMap((page) => page.map((item) => item.text.replaceAll(/\s/g, '')));
+    return extractQualityPages(buffer);
   }
-
-  // pdfjs のテキスト抽出は「ヶ」を別 item に切り離す（このグリフの ToUnicode 対応の都合）。
-  // そのため item 単位ではなく、空白を除いて連結した文字列で判定する。
-  const countOccurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
+  const joinTexts = (pages: Awaited<ReturnType<typeof renderPages>>) =>
+    pages.flatMap((page) => page.map((item) => item.text.replaceAll(/\s/g, ''))).join('');
 
   it('ON（既定）: 詳細版ヘッダーと簡約版メタ行の両方に稼働月数が出る', async () => {
-    const on = (await renderItemTexts(ALL)).join('');
-    const off = (await renderItemTexts(ALL.filter((v) => v !== 'duration'))).join('');
+    const onPages = await renderPages(ALL);
+    const offPages = await renderPages(ALL.filter((v) => v !== 'duration'));
+    const on = joinTexts(onPages);
+    const off = joinTexts(offPages);
 
     // 簡約版はメタ行の「期間：Nヶ月」（fixture の「社内ツールの保守」2017.01〜2017.02）。
     // 「期間：」は稼働月数のためだけにある節なので OFF ではゼロになる。
     expect(on).toContain('期間：2ヶ月');
     expect(off).not.toContain('期間：');
 
-    // 詳細版は期間バッジ直下に単独 Text で出る（fixture の V社案件 2025.11〜2026.06 → 8ヶ月）。
-    // スキルの経験年数ラベルにも「N年8ヶ月」があり得るので、ON/OFF で出現回数が 1 増える
-    // ことで「案件の稼働月数として出た」ことを確認する。
-    expect(countOccurrences(on, '8ヶ月')).toBe(countOccurrences(off, '8ヶ月') + 1);
+    // 詳細版の期間バッジ直下テキストを含め、参画期間の事実が全件 ON の抽出テキストで
+    // 見つかる。pdfjs は「ヶ」を独立 item に切り離し、分割位置はレイアウトで変わるため、
+    // item 形状に依存しない completeness 照合（ページ連結+正規化）で検証する。
+    // スコープ（案件ごとのページ範囲）は全事実から決まるため、照合は全事実で行う。
+    const facts = enumerateCompletenessFacts(blocks, ALL, referenceMonth);
+    expect(facts.some((f) => f.label === '参画期間')).toBe(true);
+    const missingOn = checkCompleteness(facts, onPages).missing;
+    expect(missingOn.filter((m) => m.fact.label === '参画期間')).toEqual([]);
   }, 60_000);
 
   it('OFF: 詳細版・簡約版のどちらにも出さない', async () => {
-    const onItems = await renderItemTexts(ALL);
-    const offItems = await renderItemTexts(ALL.filter((v) => v !== 'duration'));
+    const onPages = await renderPages(ALL);
+    const offPages = await renderPages(ALL.filter((v) => v !== 'duration'));
     // durationText が空になるので、簡約版メタ行の「期間：」節はまるごと消える。
-    expect(offItems.join('')).not.toContain('期間：');
-    // 詳細版の単独テキストは pdfjs で「8」「ヶ」「月」と別 item に分かれ、
-    // スキル年数ラベル「N 年 M ヶ月」と紛れる — そのため「ヶ」グリフの総数で検証し、
-    // 稼働月数を持つ案件の件数分だけ OFF で減っていることを確認する。
-    const durationCount = buildPrintViewModel(title, blocks)
-      .companies.flatMap((c) => c.projects)
-      .filter((p) => p.durationText.length > 0).length;
-    const countKahi = (xs: string[]) => xs.filter((t) => t === 'ヶ').length;
-    expect(countKahi(offItems) + durationCount).toBe(countKahi(onItems));
+    expect(joinTexts(offPages)).not.toContain('期間：');
+    // 参画期間の事実は OFF の描画には1件も載らない（詳細版・簡約版とも）。
+    const facts = enumerateCompletenessFacts(blocks, ALL, referenceMonth);
+    const durationFacts = facts.filter((f) => f.label === '参画期間');
+    const missingOff = checkCompleteness(facts, offPages).missing;
+    expect(missingOff.filter((m) => m.fact.label === '参画期間').map((m) => m.fact)).toEqual(durationFacts);
+    // 対照として ON 側は全件見つかる（消えたのが描画経路の差でなく抽出側の問題でないこと）。
+    const missingOn = checkCompleteness(facts, onPages).missing;
+    expect(missingOn.filter((m) => m.fact.label === '参画期間')).toEqual([]);
   }, 60_000);
 });

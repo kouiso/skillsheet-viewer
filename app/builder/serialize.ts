@@ -23,6 +23,8 @@ import {
   type TableColumn,
   tableBlockToMarkdown,
 } from '@/db/block';
+import { type MarkdownExperienceContext, markdownExperienceContext } from '@/db/block/serialize';
+import type { RawDocumentBlock } from '@/db/document-contract';
 import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 
 // エディタ上のブロック。type と内容を一致させた判別ユニオン（DB の Block に対応）。
@@ -35,15 +37,18 @@ export type EditorItem =
   | { id: string; type: 'stats'; data: StatsBlockData }
   | { id: string; type: 'project'; data: ProjectBlockData };
 
-export const newId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `b-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+export const newId = (): string => {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
 
-// 初期ブロックの ID は SSR/CSR で一致させるためインデックス基準の安定値にする
-// （newId() は乱数/時刻依存でハイドレーション不整合を起こす）。追加ブロックのみ newId()。
-export const blockToItem = (block: Block, index: number): EditorItem => {
-  const id = `block-${index}`;
+// DBのUUIDを保持する。SSR/CSRで一致し、並替えや再保存でも同じブロックを指す。
+export const blockToItem = (block: Block): EditorItem => {
+  const id = block.id;
   switch (block.type) {
     case 'markdown':
       return { id, type: 'markdown', markdown: block.data.markdown };
@@ -76,10 +81,10 @@ export const itemToBlockInput = (item: EditorItem): BlockInput => {
     }
     case 'profile': {
       const { name, title, pr, strengths, meta, company } = item;
-      // strengths はエディタ上で改行区切り編集するため、保存時に空行を除去する
+      // 本人原文の空行と、optional項目の欠落を編集往復で変更しない。
       return {
         type: 'profile',
-        data: { name, title, pr, strengths: strengths.filter((s) => s.trim()), meta, company },
+        data: { name, title, pr, strengths, meta, ...(company === undefined ? {} : { company }) },
       };
     }
     case 'stats':
@@ -89,16 +94,32 @@ export const itemToBlockInput = (item: EditorItem): BlockInput => {
   }
 };
 
+/** 新保存契約用。編集開始時のUUIDを保ち、並替え後の配列順を明示する。 */
+export const itemsToDocumentBlocks = (items: readonly EditorItem[]): RawDocumentBlock[] =>
+  items.map((item, order) => ({ ...itemToBlockInput(item), id: item.id, order }));
+
 // 1 ブロックを markdown 文字列へ（table/skills/experience は GFM 表・セクションへ変換）。
 // includeHidden はバックアップ書き出し用（hidden な会社・案件も欠落させない）。
-export const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolean; hasFeatured?: boolean }): string => {
+export const itemToMarkdown = (
+  item: EditorItem,
+  opts?: {
+    includeHidden?: boolean;
+    referenceMonth?: number;
+    hasFeatured?: boolean;
+    experience?: MarkdownExperienceContext;
+  },
+): string => {
   switch (item.type) {
     case 'markdown':
       return sanitizeMarkdown(item.markdown);
     case 'table':
       return tableBlockToMarkdown({ columns: item.columns, rows: item.rows });
     case 'skills':
-      return skillsBlockToMarkdown({ category: item.category, skills: item.skills }, opts?.hasFeatured);
+      return skillsBlockToMarkdown(
+        { category: item.category, skills: item.skills },
+        opts?.hasFeatured,
+        opts?.experience,
+      );
     case 'experience': {
       const { company, startDate, endDate, role, description } = item;
       return experienceBlockToMarkdown({ company, startDate, endDate, role, description });
@@ -108,7 +129,7 @@ export const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolea
       return profileBlockToMarkdown({ name, title, pr, strengths: strengths.filter((s) => s.trim()), meta, company });
     }
     case 'stats':
-      return statsBlockToMarkdown(item.data);
+      return statsBlockToMarkdown(item.data, opts?.experience);
     case 'project':
       return projectBlockToMarkdown(item.data, opts);
   }
@@ -117,7 +138,18 @@ export const itemToMarkdown = (item: EditorItem, opts?: { includeHidden?: boolea
 // 連結規則はサーバ側 blocksToMarkdown と共有の blockJoinSeparator に一元化する。
 // 手コピーで 2 箇所に規則が重複していたのを解消し、markdown 分割の無損失性と
 // GFM テーブルが直前段落へ lazy continuation として飲み込まれない区切りを両立する。
-export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: boolean }): string => {
+export const assembleMarkdown = (
+  items: EditorItem[],
+  opts?: { includeHidden?: boolean; referenceMonth?: number },
+): string => {
+  const experience =
+    opts?.referenceMonth === undefined
+      ? undefined
+      : markdownExperienceContext(
+          items.flatMap((item) => (item?.type === 'project' ? [item.data] : [])),
+          opts.referenceMonth,
+          opts.includeHidden,
+        );
   const hasFeatured = items.some(
     (item) =>
       item?.type === 'skills' &&
@@ -133,7 +165,7 @@ export const assembleMarkdown = (items: EditorItem[], opts?: { includeHidden?: b
     // — 後から continue すると直前ブロック判定（blockJoinSeparator / 先頭判定）が
     // スキップされた要素を指してしまう。
     if (isBlockInputEmpty(itemToBlockInput(item))) continue;
-    const markdown = itemToMarkdown(item, { ...opts, hasFeatured });
+    const markdown = itemToMarkdown(item, { ...opts, hasFeatured, experience });
     // items[i - 1] を位置で参照すると sparse 配列（途中の undefined 要素）で
     // 実際に直前にレンダリングされたブロックを見失う。実際にレンダリングした
     // 直前アイテムを prev で追跡し、先頭要素の判定も prev の有無で行う。

@@ -1,9 +1,25 @@
 import { sql } from 'drizzle-orm';
-import { boolean, index, integer, jsonb, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 /**
  * スキルシート本体。将来のマルチユーザー化を見据え owner_id を持つ。
  * #50 で複数シート対応のため owner_id の unique 制約を除去し、代わりにインデックスを追加。
+ *
+ * is_default: 編集で既定が移動しないよう、既定シートを updated_at 昇順ではなく
+ * 明示フラグで持つ（S09）。owner ごとに高々 1 枚を部分ユニーク索引で保証する。
  */
 export const skillSheets = pgTable(
   'skill_sheets',
@@ -12,10 +28,32 @@ export const skillSheets = pgTable(
     ownerId: text('owner_id').notNull(),
     title: text('title').notNull(),
     theme: text('theme').notNull().default('light'),
+    isDefault: boolean('is_default').notNull().default(false),
+    // created_at は「最古シート」の決定を完全に決定的にするための列。
+    // updated_at は編集で変わるため、昇格・実効既定の対象決定には使わない。
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
+    // DB内は64bit整数。限定APIは10進文字列で返し、JS Numberへ変換しない。
+    revision: bigint('revision', { mode: 'bigint' }).notNull().default(0n),
   },
-  (table) => [index('skill_sheets_owner_id_idx').on(table.ownerId)],
+  (table) => [
+    check('skill_sheets_revision_nonnegative', sql`${table.revision} >= 0`),
+    index('skill_sheets_owner_id_idx').on(table.ownerId),
+    uniqueIndex('skill_sheets_owner_default_unique').on(table.ownerId).where(sql`${table.isDefault}`),
+  ],
 );
+
+/**
+ * owner 単位の初期化済みフラグ。シートとは別に永続化することで、
+ * 「まだ一度も初期化していない（初回導入）」と「全シートを削除した後」を
+ * 区別する（S09: 全削除後に初期データを復活させない）。
+ * 明示作成・削除で行を確保する。削除済みIDは古いcreate再送による復活を防ぎ、復旧対象に含める。
+ */
+export const skillsheetState = pgTable('skillsheet_state', {
+  ownerId: text('owner_id').primaryKey(),
+  deletedSheetIds: uuid('deleted_sheet_ids').array().notNull().default(sql`'{}'::uuid[]`),
+  initializedAt: timestamp('initialized_at', { withTimezone: true }).notNull().default(sql`now()`),
+});
 
 /**
  * スキルシートを構成する順序付きブロック。

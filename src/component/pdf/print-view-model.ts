@@ -13,10 +13,15 @@
 
 import type { Block, CompanyInfo, ProfileBlockData, ProjectItem, ProjectTech, StatsBlockData } from '@/db/block';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/block';
-import { resolveCompanyPeriod, resolveDisplayedSkillExperience, resolveDisplayedStats } from '@/db/derived-display';
+import {
+  experienceSourceLabel,
+  resolveCompanyPeriod,
+  resolveDisplayedSkillExperience,
+  resolveDisplayedStats,
+} from '@/db/derived-display';
+import { resolveDuration } from '@/db/duration';
 import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
 import {
-  displayDuration,
   flattenTech,
   formatMonthToken,
   formatPeriodDisplay,
@@ -31,13 +36,10 @@ import { resolveDetailLevels } from '@/db/project-detail-level';
 import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 import { resolveProjectArea } from '@/db/tech-area';
 
-import {
-  PRINT_SIZE,
-  PRINT_TECH_LABEL,
-  PRINT_TOP_SKILL_LIMIT,
-  PRINT_TYPE,
-  PRINT_YEAR_VISIBLE_CATEGORIES,
-} from './print-token';
+import { PRINT_TECH_LABEL, PRINT_TOP_SKILL_LIMIT, PRINT_YEAR_VISIBLE_CATEGORIES } from './print-token';
+
+// 既存の利用先との互換性を保つ。描画側は専用モジュールを直接参照する。
+export { fitContinuationHeading } from './print-continuation-heading';
 
 /**
  * 画面側のビュートグル（viewer-topbar.tsx の ViewKey）と同じキー。PDF もこの ON/OFF に従う。
@@ -297,69 +299,6 @@ export function compactPeriod(period: string): string {
   return `${start}–${endMatch[1].slice(2)}.${endMatch[2]}`;
 }
 
-/** 半角相当とみなす文字（ASCII 全般・半角カナ）か。それ以外は全角として扱う。 */
-function isHalfWidthChar(codePoint: number): boolean {
-  return codePoint <= 0xff || (codePoint >= 0xff61 && codePoint <= 0xffdc);
-}
-
-/** 文字列の概算幅（pt）。全角 1em・半角 0.55em として積み上げる（継続見出しを 1 行に収める判定用）。 */
-function estimateTextWidth(text: string, fontSizePt: number): number {
-  let width = 0;
-  for (const ch of text) {
-    const isHalf = isHalfWidthChar(ch.codePointAt(0) ?? 0);
-    width += fontSizePt * (isHalf ? 0.55 : 1);
-  }
-  return width;
-}
-
-/**
- * ページ跨ぎの継続見出し（「A 社（つづき）　案件名（続き）」）を **1 行に収める**。
- *
- * この見出しは Page 直下の絶対配置（`position:absolute`, top 16pt）で描いており、
- * 本文の流れに高さとして寄与しない。本文が始まるのはページ余白 `padTop` = 42pt からで、
- * 見出しに使えるのは実質 26pt（11pt × 行間 1.55 ≒ 17pt の 1 行ぶん）しかない。
- * 会社名と案件名が両方長いと見出しが 2 行に折り返し、2 行目が本文 1 行目の上に
- * そのまま重なる（実測: p4「Q 社（…）（つづき）　動画配信サービスの…（Web）（続き）」の
- * 2 行目が習得スキルの箇条書きに罫線ごと重なっていた）。
- *
- * 落とす順番は「読み手にとっての必要度が低い方から」。会社名は直前のページで必ず見えて
- * いるが、案件名は跨いだ先で初めて必要になるので、**会社名を先に捨てて案件名を残す**。
- * それでも収まらないときだけ案件名を末尾から詰める。
- */
-export function fitContinuationHeading(companyLabel: string | undefined, projectLabel: string | undefined): string {
-  const company = (companyLabel ?? '').trim();
-  const project = (projectLabel ?? '').trim();
-  if (!company && !project) return '';
-  // 見積り幅は概算（全角 1em / 半角 0.55em）で、実フォントの太字はこれよりやや広い。
-  // 折り返しは即座に本文への重なりになるので、9 割で切って安全側に倒す。
-  const budget = PRINT_SIZE.contentWidth * 0.9;
-  const fontSize = PRINT_TYPE.meta.fontSize;
-  const fits = (text: string) => estimateTextWidth(text, fontSize) <= budget;
-
-  const projectPart = project ? `${project}（続き）` : '';
-  const companyPart = company ? `${company}（つづき）` : '';
-  const both = projectPart && companyPart ? `${companyPart}　${projectPart}` : projectPart || companyPart;
-  if (fits(both)) return both;
-  // 会社名を落として案件名だけにする。
-  if (projectPart && fits(projectPart)) return projectPart;
-  return truncateToWidth(projectPart || companyPart, budget, fontSize);
-}
-
-/** 末尾を `…` に置き換えて見積り幅へ収める。1 文字も入らない場合でも空文字は返さない。 */
-function truncateToWidth(text: string, budgetPt: number, fontSizePt: number): string {
-  const chars = [...text];
-  const ellipsisWidth = estimateTextWidth('…', fontSizePt);
-  let width = 0;
-  const kept: string[] = [];
-  for (const ch of chars) {
-    const next = width + estimateTextWidth(ch, fontSizePt);
-    if (next + ellipsisWidth > budgetPt) break;
-    kept.push(ch);
-    width = next;
-  }
-  return kept.length === 0 ? '…' : `${kept.join('')}…`;
-}
-
 /**
  * プロフィール帯（1 行 3 列 = 1 セル約 110pt）に収まる値の文字数の上限。
  * 11pt の全角文字は 1 セルに約 10 文字しか入らないので、30 文字を超えると 3 行以上に
@@ -500,6 +439,7 @@ function buildProject(
   company: CompanyInfo | undefined,
   level: DetailLevel,
   index: number,
+  referenceMonth: number | undefined,
   showDuration: boolean,
 ): PrintProject {
   const area = resolveProjectArea(item.scope, item.tech);
@@ -531,9 +471,9 @@ function buildProject(
     companyLabel,
     periodText: formatPeriodDisplay(item.period),
     compactPeriodText: compactPeriod(item.period),
-    // 画面の案件カード（project-card.tsx）と同じ判定（displayDuration: 手入力 duration 優先、
-    // 月精度の無い期間では出さない）。ビュートグル OFF なら空文字 — 描画側は空文字を出さない。
-    durationText: showDuration ? trimmed(displayDuration(item)) : '',
+    // 画面の案件カードと同じ判定（resolveDuration: 手入力 duration 優先、基準月は
+    // 呼出側で固定）。ビュートグル OFF なら空文字 — 描画側は空文字を出さない。
+    durationText: showDuration ? trimmed(resolveDuration(item.period, item.duration, referenceMonth).label) : '',
     team: trimmed(item.team),
     metaRows,
     techGroups,
@@ -580,6 +520,7 @@ function buildCompany(
   isLatest: boolean,
   /** この会社の先頭案件に振る通し番号。会社をまたいで連番になるよう呼び出し側が積み上げる。 */
   startIndex: number,
+  referenceMonth: number | undefined,
   /** 稼働月数（durationText）を出すか（ビュートグル 'duration'）。 */
   showDuration: boolean,
 ): PrintCompany {
@@ -601,7 +542,7 @@ function buildCompany(
     teamRange,
     isLatest,
     projects: items.map((item, i) =>
-      buildProject(item, company, levelById.get(item.id) ?? 'compact', startIndex + i, showDuration),
+      buildProject(item, company, levelById.get(item.id) ?? 'compact', startIndex + i, referenceMonth, showDuration),
     ),
   };
 }
@@ -694,8 +635,15 @@ export function buildPrintViewModel(
 
   const profile = blocks.find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile')?.data;
   const stats = blocks.find((b): b is Extract<Block, { type: 'stats' }> => b.type === 'stats')?.data;
-  const projectBlock = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')?.data;
-  const visible = projectBlock ? filterVisibleProjectData(projectBlock) : { companies: [], items: [] };
+  const projectBlocks = blocks.filter((b): b is Extract<Block, { type: 'project' }> => b.type === 'project');
+  const visibleParts = projectBlocks.map((block) => filterVisibleProjectData(block.data));
+  const visible = {
+    companies: visibleParts.flatMap((part) => part.companies),
+    items: visibleParts.flatMap((part) => part.items),
+  };
+  const recordedTechnologies = projectBlocks.flatMap((block) =>
+    block.data.items.flatMap((item) => flattenTech(item.tech)),
+  );
   const skillGroups: PrintSkillGroup[] = blocks
     .filter((b): b is Extract<Block, { type: 'skills' }> => b.type === 'skills')
     .map((b) => {
@@ -705,7 +653,7 @@ export function buildPrintViewModel(
         skills: (b.data.skills ?? [])
           .filter((s) => trimmed(s.name))
           .map((s) => {
-            const experience = resolveDisplayedSkillExperience(s, visible.items, referenceMonth);
+            const experience = resolveDisplayedSkillExperience(s, visible.items, referenceMonth, recordedTechnologies);
             return {
               name: trimmed(s.name),
               years: experience.months / 12,
@@ -713,7 +661,7 @@ export function buildPrintViewModel(
               featured: s.featured === true,
               yearsLabel:
                 on('skills') && PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
-                  ? printExperienceLabel(experience.label)
+                  ? `${printExperienceLabel(experience.label)} ${experienceSourceLabel(experience)}`.trim()
                   : '',
             };
           }),
@@ -739,6 +687,7 @@ export function buildPrintViewModel(
       levelById,
       index === latestIndex,
       nextProjectIndex,
+      referenceMonth,
       on('duration'),
     );
     nextProjectIndex += company.projects.length;
@@ -755,7 +704,7 @@ export function buildPrintViewModel(
       on('skills'),
       skillEmphasisMode,
       referenceMonth,
-      projectBlock !== undefined,
+      projectBlocks.length > 0,
     ),
     skillGroups,
     companies,

@@ -550,7 +550,9 @@ export function buildPdfQualityFixtureBlocks(): Block[] {
       id: nextId('block'),
       order: order++,
       type: 'project',
-      data: { companies: COMPANIES, items },
+      // items/companies はモジュール共有なので呼び出し毎に複製する — 複製しないと
+      // テストが items[i] を書き換えた変更が別テストの fixture に漏れる。
+      data: { companies: structuredClone(COMPANIES), items: structuredClone(items) },
     },
   ];
   return blocks;

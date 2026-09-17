@@ -4,31 +4,25 @@ import 'server-only';
 /**
  * スキルシート読み書きの共有サービス層（Issue #305）。
  *
- * tRPC router（app/api/trpc）と Remote MCP ツール（app/api/mcp）の両方がここを通る。
- * MCP から tRPC HTTP API を内側で叩く構成は Cookie 偽装経路になるため禁止で、
- * オーナー照合・ブロック検証・楽観ロック・差分生成・キャッシュ失効はこの層に集約する。
+ * Remote MCP ツール（app/api/mcp）がここを通る。MCP から tRPC HTTP API を内側で叩く
+ * 構成は Cookie 偽装経路になるため禁止で、オーナー照合・ブロック検証・楽観ロック・
+ * 差分生成・キャッシュ失効はこの層に集約する。
+ *
+ * 読み書きは必ず文書境界（src/db/document-service.ts → skillsheet_private.*）を通す。
+ * 楽観ロックのトークンは revision（文字列の正整数）— get_sheet / 書き込み結果の
+ * revision をクライアントが expectedRevision へそのまま渡す。
  *
  * エラーは SheetServiceError（code: NOT_FOUND / BAD_REQUEST / CONFLICT）か
- * db 層の ConflictError / SkillSheetNotFoundError で投げ、呼び出し側が
- * HTTP ステータスや MCP の isError へマップする。内部例外（SQL 等）はここで
- * 作らない — 握り潰しもしない（ログ・レスポンス方針は呼び出し側の責務）。
+ * db 層の DocumentError で投げ、呼び出し側が HTTP ステータスや MCP の isError へ
+ * マップする。内部例外（SQL 等）はここで作らない — 握り潰しもしない。
  */
 
 import { revalidateTag } from 'next/cache';
-import {
-  type Block,
-  type BlockInput,
-  type CompanyInfo,
-  listSheets as dbListSheets,
-  getOwnerSkillSheetById,
-  type OwnerSkillSheet,
-  type ProjectBlockData,
-  type ProjectItem,
-  type ProjectTech,
-  type SheetSummary,
-  type StatItem,
-  saveSkillSheetBlocks,
-} from '@/db';
+import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech, StatItem } from '@/db/block';
+import { getDb } from '@/db/client';
+import type { RawDocumentBlock } from '@/db/document-contract';
+import { createDocumentService, DocumentError, type DocumentSnapshot } from '@/db/document-service';
+import { getOwnerId } from '@/db/skillsheet';
 
 /** MCP/HTTP 共通の業務エラー分類。設計のエラー規約（Issue #305）に対応する。 */
 export type SheetServiceErrorCode = 'NOT_FOUND' | 'BAD_REQUEST' | 'CONFLICT';
@@ -54,7 +48,8 @@ export interface SheetChange {
 export interface SheetWriteResult {
   sheetId: string;
   targetId: string;
-  updatedAt: Date;
+  /** 保存後の文書 revision。次の書き込みの expectedRevision に使う。 */
+  revision: string;
   changes: SheetChange[];
 }
 
@@ -66,96 +61,83 @@ export function invalidateDbSheetCache(): void {
   revalidateTag('db-sheet', { expire: 0 });
 }
 
-/** オーナーのシート一覧。listSheets が内部で owner_id 照合済み。 */
-export async function listOwnerSheets(): Promise<SheetSummary[]> {
-  return dbListSheets();
+function documents() {
+  return createDocumentService(getDb(), getOwnerId());
 }
 
-/**
- * オーナー所有が確認できたシートの詳細（updatedAt 付き）。
- * 他人のシート ID / 不存在は SkillSheetNotFoundError（= NOT_FOUND）。
- */
-export async function getOwnerSheet(sheetId: string): Promise<OwnerSkillSheet> {
-  return getOwnerSkillSheetById(sheetId);
-}
-
-/** Block[] → BlockInput[]（id/order を剥がす。order は配列順で再採番される）。 */
-function toBlockInputs(blocks: Block[]): BlockInput[] {
-  return blocks.map((block) => {
-    // 判別ユニオンの type/data 対応を保つため、分岐して組み立て直す。
-    switch (block.type) {
-      case 'markdown':
-        return { type: 'markdown', data: block.data };
-      case 'table':
-        return { type: 'table', data: block.data };
-      case 'skills':
-        return { type: 'skills', data: block.data };
-      case 'experience':
-        return { type: 'experience', data: block.data };
-      case 'profile':
-        return { type: 'profile', data: block.data };
-      case 'stats':
-        return { type: 'stats', data: block.data };
-      case 'project':
-        return { type: 'project', data: block.data };
-      default: {
-        // Block は閉じた判別ユニオンなので到達しないが、将来 type が増えたときに
-        // ここで落ちるように網羅性チェックを残す。
-        const exhaustive: never = block;
-        return exhaustive;
-      }
-    }
-  });
-}
-
-/**
- * シート全体を読み → 変更を適用 → 楽観ロック付きで保存 → キャッシュ失効、
- * という全書き込みツール共通の骨格。
- *
- * `mutate` は読み取ったシートから次のブロック列と差分・対象IDを返す純粋関数。
- * 保存時の ConflictError はそのまま呼び出し側へ伝播させる（保存しない保証は
- * saveSkillSheetBlocks のトランザクションが担う）。
- */
-async function mutateOwnerSheet(
-  sheetId: string,
-  expectedUpdatedAt: Date,
-  mutate: (sheet: OwnerSkillSheet) => { blocks: BlockInput[]; targetId: string; changes: SheetChange[] },
-): Promise<SheetWriteResult> {
-  const sheet = await getOwnerSheet(sheetId);
-  const { blocks: nextBlocks, targetId, changes } = mutate(sheet);
-  const { updatedAt } = await saveSkillSheetBlocks(sheet.title, nextBlocks, sheetId, expectedUpdatedAt);
-  invalidateDbSheetCache();
-  return { sheetId, targetId, updatedAt, changes };
-}
-
-/** tRPC の sheet.save 用: ブロック丸ごと保存 + キャッシュ失効。 */
-export async function saveOwnerSheet(input: {
+/** MCP の list_sheets が返す一覧行。updatedAt は表示専用（CAS には revision を使う）。 */
+export interface OwnerSheetSummary {
+  id: string;
   title: string;
-  blocks: BlockInput[];
-  sheetId?: string;
-  expectedUpdatedAt?: Date;
-}): Promise<{ updatedAt: Date }> {
-  const result = await saveSkillSheetBlocks(input.title, input.blocks, input.sheetId, input.expectedUpdatedAt);
-  invalidateDbSheetCache();
-  return result;
+  isDefault: boolean;
+  updatedAt: string;
 }
 
-// --- project ブロック内の探索ヘルパー ---
+/** オーナーのシート一覧。文書境界が内部で owner 照合済み。 */
+export async function listOwnerSheets(): Promise<OwnerSheetSummary[]> {
+  return (await documents().list()).map((s) => ({
+    id: s.sheetId,
+    title: s.title,
+    isDefault: s.isDefault,
+    updatedAt: s.updatedAt,
+  }));
+}
 
-function findProjectBlock(sheet: OwnerSkillSheet): Block & { type: 'project'; data: ProjectBlockData } {
+/**
+ * オーナー所有が確認できたシートのスナップショット（revision 付き）。
+ * 他人のシート ID / 不存在 / 空は NOT_FOUND。文書が壊れている場合は
+ * DocumentError（INVALID_STATE / UNREADABLE）がそのまま伝播する。
+ */
+export async function getOwnerSheet(sheetId: string): Promise<DocumentSnapshot> {
+  const result = await documents().read(sheetId);
+  if (result.status === 'OK') return result.snapshot;
+  if (result.status === 'NOT_FOUND' || result.status === 'EMPTY') {
+    throw new SheetServiceError('NOT_FOUND', `シートが見つかりません: ${sheetId}`);
+  }
+  throw new DocumentError(result.status);
+}
+
+// RawDocumentBlock.data は unknown。文書境界の検証（isBlockInput）を通った値だけが
+// ここへ来るので、type 判別後の data は各ブロック型へ安全にキャストできる。
+function findProjectBlock(sheet: DocumentSnapshot): RawDocumentBlock & { data: ProjectBlockData } {
   const block = sheet.blocks.find((b) => b.type === 'project');
   if (!block) {
     throw new SheetServiceError('NOT_FOUND', 'project ブロックがシートに存在しません');
   }
-  return block as Block & { type: 'project'; data: ProjectBlockData };
+  return block as RawDocumentBlock & { data: ProjectBlockData };
 }
 
-function findStatsBlock(sheet: OwnerSkillSheet): Block & { type: 'stats'; data: { items: StatItem[] } } {
+function findStatsBlock(sheet: DocumentSnapshot): RawDocumentBlock & { data: { items: StatItem[] } } {
   const block = sheet.blocks.find((b) => b.type === 'stats');
   if (!block) {
     throw new SheetServiceError('NOT_FOUND', 'stats ブロックがシートに存在しません');
   }
-  return block as Block & { type: 'stats'; data: { items: StatItem[] } };
+  return block as RawDocumentBlock & { data: { items: StatItem[] } };
+}
+
+/** ブロック列のうち 1 ブロックの data だけを差し替える（id/order は保持する）。 */
+function replaceBlockData(blocks: RawDocumentBlock[], type: string, data: unknown): RawDocumentBlock[] {
+  return blocks.map((b) => (b.type === type ? { ...b, data } : b));
+}
+
+/**
+ * シート全体を読み → 変更を適用 → revision CAS で保存 → キャッシュ失効、
+ * という全書き込みツール共通の骨格。
+ *
+ * `mutate` は読み取ったスナップショットから次のブロック列と差分・対象IDを返す
+ * 純粋関数。保存時の競合（DocumentError 'CONFLICT'）はそのまま呼び出し側へ伝播
+ * させる（保存しない保証は文書境界の CAS が担う）。
+ */
+async function mutateOwnerSheet(
+  sheetId: string,
+  expectedRevision: string,
+  mutate: (sheet: DocumentSnapshot) => { blocks: RawDocumentBlock[]; targetId: string; changes: SheetChange[] },
+): Promise<SheetWriteResult> {
+  const sheet = await getOwnerSheet(sheetId);
+  const { blocks, targetId, changes } = mutate(sheet);
+  const saved = await documents().replace(sheetId, expectedRevision, sheet.title, blocks);
+  invalidateDbSheetCache();
+  return { sheetId, targetId, revision: saved.revision, changes };
 }
 
 // --- 読み取り系 ---
@@ -179,20 +161,20 @@ export interface ProjectSearchHit {
 export async function searchProjects(query: string, sheetId?: string): Promise<ProjectSearchHit[]> {
   const sheets = sheetId
     ? [await getOwnerSheet(sheetId)]
-    : await Promise.all((await listOwnerSheets()).map((s) => getOwnerSheet(s.id)));
+    : await Promise.all((await documents().list()).map((s) => getOwnerSheet(s.sheetId)));
   const hits: ProjectSearchHit[] = [];
 
   for (const sheet of sheets) {
     const projectBlock = sheet.blocks.find((b) => b.type === 'project');
     if (!projectBlock) continue;
-    const data = (projectBlock as Block & { type: 'project' }).data;
+    const data = projectBlock.data as ProjectBlockData;
 
     const companyById = new Map(data.companies.map((c) => [c.id, c]));
 
     for (const item of data.items) {
       if (item.title === query) {
         hits.push({
-          sheetId: sheet.id,
+          sheetId: sheet.sheetId,
           projectId: item.id,
           companyId: item.companyId,
           matchedOn: 'project',
@@ -204,7 +186,7 @@ export async function searchProjects(query: string, sheetId?: string): Promise<P
       const techHit = flattenTechValues(item.tech).includes(query);
       if (techHit) {
         hits.push({
-          sheetId: sheet.id,
+          sheetId: sheet.sheetId,
           projectId: item.id,
           companyId: item.companyId,
           matchedOn: 'tech',
@@ -220,7 +202,7 @@ export async function searchProjects(query: string, sheetId?: string): Promise<P
       const members = data.items.filter((i) => i.companyId === company.id);
       if (members.length === 0) {
         hits.push({
-          sheetId: sheet.id,
+          sheetId: sheet.sheetId,
           projectId: null,
           companyId: company.id,
           matchedOn: 'company',
@@ -231,7 +213,7 @@ export async function searchProjects(query: string, sheetId?: string): Promise<P
       }
       for (const item of members) {
         hits.push({
-          sheetId: sheet.id,
+          sheetId: sheet.sheetId,
           projectId: item.id,
           companyId: company.id,
           matchedOn: 'company',
@@ -297,7 +279,7 @@ const PROJECT_ITEM_PATCHABLE_FIELDS = [
 export async function updateProjectItem(input: {
   sheetId: string;
   projectId: string;
-  expectedUpdatedAt: Date;
+  expectedRevision: string;
   fields: ProjectItemPatch;
 }): Promise<SheetWriteResult> {
   const patchKeys = Object.keys(input.fields).filter((k) => (input.fields as Record<string, unknown>)[k] !== undefined);
@@ -311,7 +293,7 @@ export async function updateProjectItem(input: {
     throw new SheetServiceError('BAD_REQUEST', `更新できないフィールドが含まれています: ${unknown.join(', ')}`);
   }
 
-  return mutateOwnerSheet(input.sheetId, input.expectedUpdatedAt, (sheet) => {
+  return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
     const projectBlock = findProjectBlock(sheet);
     const item = projectBlock.data.items.find((i) => i.id === input.projectId);
     if (!item) {
@@ -358,10 +340,7 @@ export async function updateProjectItem(input: {
       companies: projectBlock.data.companies,
       items: projectBlock.data.items.map((i) => (i.id === input.projectId ? next : i)),
     };
-    const blocks = toBlockInputs(sheet.blocks).map((b) =>
-      b.type === 'project' ? { type: 'project' as const, data: nextData } : b,
-    );
-    return { blocks, targetId: input.projectId, changes };
+    return { blocks: replaceBlockData(sheet.blocks, 'project', nextData), targetId: input.projectId, changes };
   });
 }
 
@@ -374,7 +353,7 @@ const COMPANY_PATCHABLE_FIELDS = ['name', 'kind', 'period', 'note', 'hidden'] as
 export async function updateCompany(input: {
   sheetId: string;
   companyId: string;
-  expectedUpdatedAt: Date;
+  expectedRevision: string;
   fields: CompanyPatch;
 }): Promise<SheetWriteResult> {
   const patchKeys = Object.keys(input.fields).filter((k) => (input.fields as Record<string, unknown>)[k] !== undefined);
@@ -388,7 +367,7 @@ export async function updateCompany(input: {
     throw new SheetServiceError('BAD_REQUEST', `更新できないフィールドが含まれています: ${unknown.join(', ')}`);
   }
 
-  return mutateOwnerSheet(input.sheetId, input.expectedUpdatedAt, (sheet) => {
+  return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
     const projectBlock = findProjectBlock(sheet);
     const company = projectBlock.data.companies.find((c) => c.id === input.companyId);
     if (!company) {
@@ -414,10 +393,7 @@ export async function updateCompany(input: {
       companies: projectBlock.data.companies.map((c) => (c.id === input.companyId ? next : c)),
       items: projectBlock.data.items,
     };
-    const blocks = toBlockInputs(sheet.blocks).map((b) =>
-      b.type === 'project' ? { type: 'project' as const, data: nextData } : b,
-    );
-    return { blocks, targetId: input.companyId, changes };
+    return { blocks: replaceBlockData(sheet.blocks, 'project', nextData), targetId: input.companyId, changes };
   });
 }
 
@@ -430,7 +406,7 @@ export async function updateStatsItem(input: {
   sheetId: string;
   index: number;
   expectedLabel: string;
-  expectedUpdatedAt: Date;
+  expectedRevision: string;
   fields: Partial<Pick<StatItem, 'label' | 'value' | 'unit'>>;
 }): Promise<SheetWriteResult> {
   const patchKeys = (['label', 'value', 'unit'] as const).filter((k) => input.fields[k] !== undefined);
@@ -442,7 +418,7 @@ export async function updateStatsItem(input: {
     throw new SheetServiceError('BAD_REQUEST', `更新できないフィールドが含まれています: ${unknown.join(', ')}`);
   }
 
-  return mutateOwnerSheet(input.sheetId, input.expectedUpdatedAt, (sheet) => {
+  return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
     const statsBlock = findStatsBlock(sheet);
     const target = statsBlock.data.items[input.index];
     if (!target || target.label !== input.expectedLabel) {
@@ -461,10 +437,7 @@ export async function updateStatsItem(input: {
       .map((field) => ({ field, before: target[field], after: next[field] }));
 
     const nextData = { items: statsBlock.data.items.map((i, idx) => (idx === input.index ? next : i)) };
-    const blocks = toBlockInputs(sheet.blocks).map((b) =>
-      b.type === 'stats' ? { type: 'stats' as const, data: nextData } : b,
-    );
-    return { blocks, targetId: `stats:${input.index}`, changes };
+    return { blocks: replaceBlockData(sheet.blocks, 'stats', nextData), targetId: `stats:${input.index}`, changes };
   });
 }
 
@@ -477,10 +450,10 @@ export type NewProjectItem = Omit<ProjectItem, 'id' | 'companyId' | 'tech'> & {
 /** 案件を 1 件追加する。ID はサーバー側で生成し、クライアントの id 指定は受け付けない。 */
 export async function addProjectItem(input: {
   sheetId: string;
-  expectedUpdatedAt: Date;
+  expectedRevision: string;
   item: NewProjectItem;
 }): Promise<SheetWriteResult> {
-  return mutateOwnerSheet(input.sheetId, input.expectedUpdatedAt, (sheet) => {
+  return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
     const projectBlock = findProjectBlock(sheet);
     const companyId = input.item.companyId ?? '';
     if (companyId !== '' && !projectBlock.data.companies.some((c) => c.id === companyId)) {
@@ -512,10 +485,11 @@ export async function addProjectItem(input: {
       companies: projectBlock.data.companies,
       items: [...projectBlock.data.items, newItem],
     };
-    const blocks = toBlockInputs(sheet.blocks).map((b) =>
-      b.type === 'project' ? { type: 'project' as const, data: nextData } : b,
-    );
-    return { blocks, targetId: newItem.id, changes: [{ field: 'items', before: null, after: newItem }] };
+    return {
+      blocks: replaceBlockData(sheet.blocks, 'project', nextData),
+      targetId: newItem.id,
+      changes: [{ field: 'items', before: null, after: newItem }],
+    };
   });
 }
 
@@ -526,10 +500,10 @@ export async function addProjectItem(input: {
  */
 export async function reorderProjectItems(input: {
   sheetId: string;
-  expectedUpdatedAt: Date;
+  expectedRevision: string;
   projectIds: string[];
 }): Promise<SheetWriteResult> {
-  return mutateOwnerSheet(input.sheetId, input.expectedUpdatedAt, (sheet) => {
+  return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
     const projectBlock = findProjectBlock(sheet);
     const existingIds = projectBlock.data.items.map((i) => i.id);
     const seen = new Set<string>();
@@ -560,11 +534,8 @@ export async function reorderProjectItems(input: {
     const orderChanged = existingIds.some((id, idx) => input.projectIds[idx] !== id);
 
     const nextData: ProjectBlockData = { companies: projectBlock.data.companies, items: orderedItems };
-    const blocks = toBlockInputs(sheet.blocks).map((b) =>
-      b.type === 'project' ? { type: 'project' as const, data: nextData } : b,
-    );
     return {
-      blocks,
+      blocks: replaceBlockData(sheet.blocks, 'project', nextData),
       targetId: 'items',
       changes: orderChanged ? [{ field: 'items.order', before: existingIds, after: input.projectIds }] : [],
     };

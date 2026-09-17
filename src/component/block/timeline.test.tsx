@@ -47,8 +47,16 @@ describe('Timeline', () => {
 });
 
 describe('稼働月数（ビュートグル「稼働月数」に従う）', () => {
-  const renderTimeline = (item: ProjectItem, showDuration?: boolean) =>
-    render(<Timeline items={[item]} companyMap={new Map()} activeTech={[]} showDuration={showDuration} />);
+  const renderTimeline = (item: ProjectItem, showDuration?: boolean, referenceMonth?: number) =>
+    render(
+      <Timeline
+        items={[item]}
+        companyMap={new Map()}
+        activeTech={[]}
+        showDuration={showDuration}
+        referenceMonth={referenceMonth}
+      />,
+    );
 
   it('期間の右に「（Nヶ月）」を添える（案件カードと同じ表記、既定 ON）', () => {
     renderTimeline(buildItem({ period: '2025.01 — 2025.09' }));
@@ -62,17 +70,23 @@ describe('稼働月数（ビュートグル「稼働月数」に従う）', () =
     expect(screen.queryByText('（9ヶ月）')).not.toBeInTheDocument();
   });
 
-  it('終端が「現在」なら月数ではなく「（継続中）」を出す', () => {
-    renderTimeline(buildItem({ period: '2025.11 — 現在' }));
-    expect(screen.getByText('（継続中）')).toBeInTheDocument();
+  it('終端が「現在」なら固定基準月までの月数を出す（時計依存の「継続中」にしない）', () => {
+    renderTimeline(buildItem({ period: '2025.11 — 現在' }), undefined, 2026 * 12 + 8);
+    expect(screen.getByText('（11ヶ月）')).toBeInTheDocument();
   });
 
-  it('月まで書かれていない期間は稼働月数を出さない（書いていない精度を足さない）', () => {
+  it('終端が「現在」で基準月が未指定なら月数を推測せず「（未確定）」とする', () => {
+    renderTimeline(buildItem({ period: '2025.11 — 現在' }));
+    expect(screen.getByText('（未確定）')).toBeInTheDocument();
+  });
+
+  it('月まで書かれていない期間は月数を捏造せず「（未確定）」とする（書いていない精度を足さない）', () => {
     renderTimeline(buildItem({ period: '2020 — 2021' }));
     // deriveDuration 素通しだと年だけの両端を数えて「1年1ヶ月」が出る。
-    // 案件カード・PDF と同じ precise 判定で出さない。
+    // 案件カード・PDF と同じ precise 判定で月数を足さない。
     expect(screen.getByText('2020〜2021')).toBeInTheDocument();
     expect(screen.queryByText(/1年1ヶ月/)).not.toBeInTheDocument();
+    expect(screen.getByText('（未確定）')).toBeInTheDocument();
   });
 
   it('期間が空・解釈不能なら稼働月数も出さない（手入力の duration があっても期間無しでは出さない）', () => {

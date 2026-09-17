@@ -1,126 +1,84 @@
 ---
 name: skillsheet-narrative-update
-description: Use when rewriting the narrative fields of a skill sheet — a project's 担当業務 / 習得スキル / コメント / 役割 / 期間, a company note, or a skills-table row — and when reflecting those edits into the Neon database. Covers the verification pass that must precede any wording, the approval gate before writing, and the transaction shape that keeps the viewer's type guard satisfied. Triggers on script/apply-project-narrative.ts, block-write.ts, project blocks, skills blocks, and any request to "案件の文章を直す".
+description: Use when rewriting skill-sheet narrative fields or preparing their Neon and private Markdown synchronization. Preserve original claims separately from independent evidence, bind owner approval to exact field hashes, and use the v12 document CAS boundary. Triggers on scripts/apply-project-narrative.ts, block-write.ts, project blocks, skills blocks, and requests to rewrite project narratives.
 ---
 
 # 案件本文の書き換えと DB 反映
 
-このリポジトリは **public**。案件本文・顧客名・実在の案件タイトルをここへ書かない。
-文章の正本は private 側（`skill-sheet` の `skillsheet.md`）、データの正本は Neon。
-このスキルには手順だけを置き、値は置かない。
+このリポジトリは **public**。案件本文・顧客名・実在の案件タイトル・資格情報をここへ書かない。
+データの正本は Neon、文章の同期先は private 側の `skill-sheet/skillsheet.md`。
+このスキルには手順だけを置き、原文・候補・根拠・承認は永続的な私有領域に保存する。
 
-## 順序（飛ばすと必ず手戻りする）
+## 1. 原文・本人申告・独立した証拠・AI候補を分ける
 
-```
-1. 裏取り  → 書こうとしている記述が、コード・コミット・設計文書のどれで確認できるか
-2. 資料化  → 変更前 / 変更後 / 理由 を 1 枚にまとめて本人へ出す
-3. 承認    → 本人が明示的に承認するまで DB もファイルも触らない
-4. 反映    → Neon → skillsheet.md の順。両方を同じ内容にする
-5. 確認    → SQL で読み戻し、閲覧画面を目視
-```
+**リポジトリで見つからないことは、本人が経験していない証拠ではない。**
+未発見の技術・数値・成果・担当を削除したり弱めたりせず、原文を保持し、該当する変更候補だけを保留する。
+新しい事実を足すときも、一般仕様とその案件で実装した事実を混同しない。
 
-## 1. 裏取り — 書く前に必ず
-
-案件本文は面接で突かれる。**リポジトリで確認できない記述を残さない。**
-
-| 主張の種類 | 確認方法 | 確認できない時 |
+| 主張 | 調べる一次情報 | 見つからない場合 |
 |---|---|---|
-| 使用技術 | 依存定義（package.json / pyproject / go.mod）と import | tech から消す |
-| 構成・設定値 | IaC と設定ファイルの実値 | 数値を書かない |
-| 件数・種類数 | 定義の実数を数える | 「〜群」等に丸める |
-| 成果（改善した・短縮した） | 計測ログ・PR 本文の記録 | 成果断定を外し、何をしたかだけ書く |
-| 選定理由 | 設計文書・ADR・planning 系ドキュメント | 推測で書かない。本人に聞く |
-| 担当範囲 | `git log --author` | 下記「帰属」の規約に従う |
+| 使用技術 | 依存定義・import・当時の設定 | 本人申告として原文を保持し、独立検証は未確認と記録 |
+| 構成・数値・測定対象 | IaC・計測ログ・当時のPR | 対象・単位・数値を変えず、補足候補のみ保留 |
+| 選定理由 | 設計文書・ADR・本人の既回答 | 推測で理由を追加せず、原文を保持 |
+| 担当範囲 | 本人回答・履歴・設計資料 | git authorだけで本人の実績を否定しない |
 
-### git 履歴が浅い場合
+shallow cloneや参画期間を含まない履歴で、担当の不存在を断定しない。
+データサイエンス・モデル研究と、アプリ/API/RAG/インフラ/CI/CDの本人担当範囲を分ける。
+本人の帰属裁定は保持し、新規作成・単独担当・選定理由・成果を証拠不足だけで弱めない。
+技術的な弱点を見つけても、別の架空実績で埋めず、原文と改善候補を分ける。
 
-shallow clone だと「本人のコミットが無い」が「やってない」を意味しない。
-`.git/shallow` の有無と最古コミット日を確認し、**参画期間より後の履歴しか無いなら
-「判定不能」であって「本人の実績でない」ではない**。結論を出す前にこれを見る。
+## 2. 候補の作成と本人承認
 
-### 帰属の規約
+主語・原因・担当範囲・選定理由・測定対象・単位・時制をbefore/afterで照合する。
+既存の500〜600字の執筆方針は保持するが、字数を埋めるための事実追加はしない。
+要約や代表案件は全文の入口として追加する候補であり、全文の置換や省略にしない。
+本人の既回答を再質問せず、未回答の事実に関係する候補だけを保留する。
 
-- **データサイエンス / モデル研究側**（アルゴリズム設計、プライバシー予算、スコアリング設計）
-  → 「そういう技術構成だった」と主語なしで書く。自分がやったとは書かない。
-- **アプリケーション側**（API、RAG、LLM 連携、インフラ、CI/CD、フロント）
-  → git の著者が別人でも、本人の実績として書いてよい。
+承認資料は変更前・変更後・理由・根拠種別・未確認部分を分けて示す。
+承認を `owner + sheet UUID + project/company UUID + field + before/after hash + 根拠元content hash` に結びつける。
+タイトルや会社名の文字列一致だけで対象を選ばない。
+JSONは共通canonical処理とSHA-256、Markdown対象fieldはLF・UTF-8のSHA-256を使う。
+異形式のwhole-file hash同士を同一内容として比べない。
+本人がこの差分を承認するまでDB・Markdownへ反映しない。承認後に根拠・beforeが変わればstaleとして該当候補の公開を止める。
 
-## 2. 選定理由を必ず書く
+## 3. 書込み前の安全条件
 
-「何を使ったか」だけでは面接で沈む。**なぜそれを選んだか**を 1〜2 文で添える。
-本人が覚えていないことは多いので、先に設計文書を探す（`docs/` の ADR・設計書・
-planning）。文書に無ければ、コードから読み取れる制約（アクセスパターン、課金形態、
-データの寿命）を根拠にする。それも無ければ本人に聞く。**推測で理由を書かない。**
+Vercelのproject/deploy/alias/SHAとNeonのproject/branch/database/owner/sheetを、資格情報を表示せず同定する。
+ローカルの接続文字列や既知URLだけで本番同定済みとは扱わない。
+本番対象、限定runtimeの権限、backupの復元、退避buildが未確認なら本番切替は行わない。
 
-## 3. アンチパターン判定
+`read_snapshot`でsheetId/title/blocks/revision/validationを一体取得する。
+revisionは10進文字列、0も有効。保存はsheetIdとexpectedRevisionの完全一致CASを必須にする。
+不明type・壊れたJSON・未対応key・期間投影不一致はrawを保持して編集不可にし、削って検査を通さない。
+`src/db/blocks`の型と意味往復、`document-contract`の検査を通し、本人入力の本文・期間を勝手に正規化しない。
 
-設計の詳細を書く前に「これは弱点として突かれるか」を一度考える。
+旧`block-write`やタイトル照合のwriterが停止されていれば、停止を解除して使わない。
+文書サービス・限定DB関数・承認journalへの移行が済むまで反映は未完了として扱う。
+基表の直接UPDATEや`updated_at`だけの更新でCASを代用しない。
+編集タブを閉じることもCASの代用にはならず、ユーザーに閉じてもらったことを安全性の証拠にしない。
 
-- 突かれる例: 最小権限になっていない権限設計、再現性の誤った説明、
-  縮退を「自動で継続」とだけ書く（失敗が検知されない設計に読める）
-- 問題ない例: 標準 API が効かない環境向けのフォールバック経路、
-  型定義で選択肢と検証を同時に担保する構造
+## 4. Neon → Markdown の同期と復旧
 
-弱点になるなら、その項目は書かずに別の実績で埋める。ごまかして書かない。
+ownerだけが読書きできる永続私有領域にbefore全文と復旧情報を保存する。
+change IDごとにappend-only journalへ `approved / db-applied / sync-pending / synced / reverted` を記録する。
+承認とbeforeをdurable化してから、DB CAS、成功後のMarkdown反映の順で実行する。
+要約・profile.title・strengthsも同じ契約に含める。
 
-## 4. 承認ゲート
+| 再開時の読戻し | 実施する処理 |
+|---|---|
+| DB after / Markdown before | DBへ再書込みせずMarkdownだけ反映 |
+| 双方after | no-op、同期確認を記録 |
+| 双方before | 承認済み差分をDB CAS→Markdownの順で反映 |
+| その他 | 後続変更を守って停止し、該当差分を再照合 |
 
-**資料を出して本人が承認するまで、DB・md・git のいずれも書き換えない。**
-承認は本人のチャット返答で確認する。自分の推測で「承認された」と扱わない。
+rollbackは今回のafterと一致するときだけ、本人承認と対象確認を経てbeforeへCASする。revisionは増やす。
+応答喪失時の同値readbackは「現在DBに同内容がある」の確認であり、この要求が保存した証明とはしない。
+復旧のためでも未承認の削除・パスワード変更・資格情報失効は行わない。
 
-資料に載せる項目: 変更前 / 変更後 / なぜ変えるか / 裏取りできなかったので落とした項目 /
-本人の判断が要る項目。
+## 5. 反映後の確認
 
-## 5. Neon への反映
-
-`DATABASE_URL` を使う経路（`script/apply-project-narrative.ts`）が通らない環境
-（WebSocket 不可のサンドボックス等）では Neon MCP の `run_sql_transaction` に寄せる。
-
-手順:
-
-1. 編集画面のタブを閉じてもらう（保存が競合する）
-2. `create_snapshot` でスナップショットを取る
-3. 現状の `blocks` を JSON でファイルへ退避
-4. 対象シートは **`skill_sheets` を `id` と `owner_id` の両方で引いて 1 行に確定**してから
-   触る。`sheet_id` だけで進めると別所有者のシートへ書ける経路になる。
-   0 行なら中止（`SELECT id FROM skill_sheets WHERE id = $1 AND owner_id = $2`）
-5. ブロックは **`sheet_id` + `type`** で解決する。id を決め打ちしない
-6. 案件タイトルは **DB から読んだ文字列をそのまま使う**（手打ちしない）
-6. 書き込む JSON は `src/db/block.ts` の型ガードを満たすこと。
-   不合格だと**そのブロック全体が画面から消える**。特に:
-   - `tech` は 6 つの配列すべて（欠けは不可）
-   - `process` は `string[]`
-   - `hidden` / `ongoing` は boolean
-   - `role` 等の文字列項目に `null` を入れない
-7. ブロックを新設する場合は `order` を**降順に**繰り下げてから挿入
-   （`unique(sheet_id, order)` があるため昇順だと衝突する）
-8. 最後に `skill_sheets.updated_at` を進める
-   （進めないと編集タブの保存が競合検知されない）
-
-### 反映後の確認
-
-- `order` が 0 から連続しているか
-- 非表示を除いた案件数が想定どおりか
-- 本文が承認版と一致するか（md5 で比較）
-- `updated_at` が進んだか
-- 60 秒待って閲覧画面を開き、対象案件を目視
-
-## 6. 副作用に注意する項目
-
-- **案件を非表示にすると、そこで使った技術の年数が減る。** 閲覧側は年数を案件期間から
-  自動算出しているため、古い案件を隠すと言語・FW の経験年数が短く表示される。
-  隠す前に、その技術の合計年数がどう変わるか確認して本人に伝える。
-- **案件の期間を変えても同じことが起きる。** 期間を縮めると、その案件だけで
-  持っていた技術の年数が落ちる。
-- PDF 出力は分類の許可リストで年数の印字を決めている。新しい技術分類を足しても
-  PDF には年数が出ない場合がある。
-
-## 7. 対象を必ず絞る
-
-案件タイトル・会社名の文字列一致だけで書き換え先が決まる経路なので、
-`--sheet-id` か `SKILLSHEET_OWNER_ID` で対象シートを必ず限定する。
-絞らないと同じ DB の検証用シートまで巻き込む。
-
-Origin: 2026-09 の全案件書き換え。リポジトリと突き合わせたら、裏取りできない記述が
-37 件見つかった（存在しない依存、参画期間外の設定値、計測記録の無い成果、実装されて
-いない機能）。以後、書く前に裏取り、書いた後に本人ヒアリングを通す。
+固定秒数の待機ではなく、DBのrevision・意味hashとMarkdownの対象field hashを読戻す。
+文書全体の型・未対応key・block順序・owner境界・対象UUIDを確認する。
+同じrevision/hashと固定基準月でWeb/PDFを検証し、全文・全技術・全会社経歴が残っていることを確かめる。
+期間・hidden変更は経験集計への増減を差分として示し、派生値をDBへ逆書込みしない。
+本文の本人承認、DB反映、Markdown同期、Web/PDF確認を別々に記録し、どれか欠ければ反映完了とは言わない。

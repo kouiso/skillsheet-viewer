@@ -1,0 +1,1 @@
+ALTER TABLE "skill_sheets" ADD COLUMN "revision" integer DEFAULT 1 NOT NULL;

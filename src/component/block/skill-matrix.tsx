@@ -1,7 +1,7 @@
 'use client';
 
 import type { ProjectItem, SkillsBlockData } from '@/db/block';
-import { resolveDisplayedSkillExperience } from '@/db/derived-display';
+import { experienceSourceLabel, resolveDisplayedSkillExperience } from '@/db/derived-display';
 import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface SkillMatrixProps {
@@ -9,21 +9,9 @@ interface SkillMatrixProps {
   /** シート内に推しがある場合だけ、推しの視覚表現を有効にする。 */
   hasFeatured?: boolean;
   projectItems?: ProjectItem[];
+  recordedTechnologies?: string[];
   referenceMonth?: number;
   className?: string;
-}
-
-const LEVEL_WIDTH: Record<string, string> = {
-  '★★★': 'w-full',
-  '★★☆': 'w-2/3',
-  '★☆☆': 'w-1/3',
-  上級: 'w-full',
-  中級: 'w-2/3',
-  初級: 'w-1/3',
-};
-
-function getLevelWidth(level: string): string {
-  return LEVEL_WIDTH[level] ?? 'w-1/2';
 }
 
 // 経験年数からバー幅を算出する（8年で上限クランプ、下限フロア8%で小さい正の値も潰れない）。
@@ -36,6 +24,7 @@ export const SkillMatrix = ({
   data,
   hasFeatured = false,
   projectItems = [],
+  recordedTechnologies,
   referenceMonth,
   className = 'mb-6',
 }: SkillMatrixProps) => {
@@ -53,7 +42,7 @@ export const SkillMatrix = ({
       )}
       <div className="grid gap-y-[11px]">
         {data.skills.map((skill, i) => {
-          const experience = resolveDisplayedSkillExperience(skill, projectItems, referenceMonth);
+          const experience = resolveDisplayedSkillExperience(skill, projectItems, referenceMonth, recordedTechnologies);
           const isFeatured = hasFeatured && skill.featured === true;
           const barColor = isFeatured ? 'var(--primary)' : hasFeatured ? 'var(--faint)' : undefined;
           return (
@@ -79,22 +68,18 @@ export const SkillMatrix = ({
               <span className="truncate text-center text-xs text-foreground" title={skill.level}>
                 {skill.level}
               </span>
-              <span className="barTrack" title={skill.level}>
-                {experience.months > 0 ? (
-                  <span
-                    className="barFill block"
-                    style={{ width: `${getMonthsBarPercent(experience.months)}%`, backgroundColor: barColor }}
-                  />
-                ) : (
-                  // 年数が無いスキルは ★ の段階でバー幅を決める。
-                  <span
-                    className={`barFill block ${getLevelWidth(skill.level)}`}
-                    style={{ backgroundColor: barColor }}
-                  />
-                )}
+              <span className="barTrack" title="経験月数（8年で上限）">
+                <span
+                  className="barFill block"
+                  style={{
+                    width: `${experience.months > 0 ? getMonthsBarPercent(experience.months) : 0}%`,
+                    backgroundColor: barColor,
+                  }}
+                />
               </span>
               <span className="whitespace-nowrap text-right font-mono text-[11px] text-foreground">
                 {experience.label || <span className="text-faint">—</span>}
+                <span className="block text-[11px] text-muted-foreground">{experienceSourceLabel(experience)}</span>
               </span>
             </div>
           );

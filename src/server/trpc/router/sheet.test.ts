@@ -11,6 +11,8 @@ vi.mock('@/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/db')>();
   return {
     ...actual,
+    getDb: vi.fn(),
+    getOwnerId: () => 'owner',
     saveSkillSheetBlocks: vi.fn(),
     createSheet: vi.fn(),
     deleteSheet: vi.fn(),
@@ -33,32 +35,26 @@ vi.mock('@/server/sheet-cache', async (importOriginal) => {
   };
 });
 
-import { revalidateTag } from 'next/cache';
-import {
-  ConflictError,
-  createSheet,
-  deleteSheet,
-  listSheets,
-  SkillSheetNotFoundError,
-  saveSkillSheetBlocks,
-} from '@/db';
+vi.mock('@/db/document-service', async (original) => ({
+  ...(await original<typeof import('@/db/document-service')>()),
+  createDocumentService: vi.fn(),
+}));
 
-import { getCachedDbSheet, getCachedDbSheetById, getCachedDbSheets } from '@/server/sheet-cache';
+import { revalidateTag } from 'next/cache';
+import { SkillSheetNotFoundError } from '@/db';
+import { createDocumentService, DocumentError } from '@/db/document-service';
+
+import { getCachedDbSheet, getCachedDbSheetById } from '@/server/sheet-cache';
 
 import { createCallerFactory } from '../init';
 import { createTestContext } from '../test-context';
 import { appRouter } from './index';
 
 const createCaller = createCallerFactory(appRouter);
-const saveMock = vi.mocked(saveSkillSheetBlocks);
-const createSheetMock = vi.mocked(createSheet);
-const deleteSheetMock = vi.mocked(deleteSheet);
-const listSheetsMock = vi.mocked(listSheets);
-const getCachedDbSheetsMock = vi.mocked(getCachedDbSheets);
 const getCachedDbSheetByIdMock = vi.mocked(getCachedDbSheetById);
 const getCachedDbSheetMock = vi.mocked(getCachedDbSheet);
 const revalidateTagMock = vi.mocked(revalidateTag);
-const MD = { type: 'markdown' as const, data: { markdown: 'x' } };
+const MD = { id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', order: 0, type: 'markdown' as const, data: { markdown: 'x' } };
 const SHEET_ID = '00000000-0000-4000-8000-000000000001';
 
 // editorProcedure/viewerProcedure は middleware が ctx.getEditorUserId() / ctx.getIsViewer() を
@@ -69,84 +65,11 @@ function callerAs(editorUserId: string | null, isViewer = editorUserId !== null)
   return createCaller(createTestContext({ editorUserId, isViewer, request: null, responseHeaders: null }));
 }
 
+const service = { read: vi.fn(), list: vi.fn(), replace: vi.fn(), create: vi.fn(), delete: vi.fn() };
 beforeEach(() => {
   vi.clearAllMocks();
-});
-
-describe('sheet.list', () => {
-  it('viewer でない場合は UNAUTHORIZED を返す', async () => {
-    const caller = callerAs(null, false);
-    await expect(caller.sheet.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-    expect(getCachedDbSheetsMock).not.toHaveBeenCalled();
-  });
-
-  it('viewer は getCachedDbSheets の結果を返す（fetchedAt は落とし stale に置き換える）', async () => {
-    const summaries = [{ id: 's1', title: 'T1', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
-    getCachedDbSheetsMock.mockResolvedValue({ sheets: summaries, fetchedAt: Date.now() } as never);
-    const caller = callerAs(null, true);
-    const result = await caller.sheet.list();
-    expect(result).toEqual({ sheets: summaries, stale: false });
-  });
-
-  it('再検証間隔の3倍を超えて古い fetchedAt は stale: true になる', async () => {
-    const summaries = [{ id: 's1', title: 'T1', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
-    const staleFetchedAt = Date.now() - 61 * 60 * 1000; // 十分に古い（60秒revalidateの3倍=180秒を大幅に超える）
-    getCachedDbSheetsMock.mockResolvedValue({ sheets: summaries, fetchedAt: staleFetchedAt } as never);
-    const caller = callerAs(null, true);
-    const result = await caller.sheet.list();
-    expect(result).toMatchObject({ stale: true });
-  });
-});
-
-describe('sheet.builderState', () => {
-  it('非編集者は UNAUTHORIZED を返す', async () => {
-    const caller = callerAs(null, true);
-    await expect(caller.sheet.builderState({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-    expect(getCachedDbSheetsMock).not.toHaveBeenCalled();
-  });
-
-  it('指定 sheetId が一覧にあればそのシートを返す', async () => {
-    const sheets = [{ id: 's2', title: 'T2', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
-    const sheet = { title: 'T2', blocks: [MD], fetchedAt: Date.now() };
-    getCachedDbSheetsMock.mockResolvedValue({ sheets, fetchedAt: Date.now() } as never);
-    getCachedDbSheetByIdMock.mockResolvedValue(sheet as never);
-
-    const result = await callerAs('owner').sheet.builderState({ sheetId: 's2' });
-    // fetchedAt は内部実装詳細のため公開レスポンスからは落とし、stale 判定結果に置き換える
-    // （レビュー指摘: 生タイムスタンプが viewerProcedure 経由で外部に漏れていた）。
-    expect(result).toEqual({ sheet: { title: 'T2', blocks: [MD], stale: false }, sheets, activeSheetId: 's2' });
-    expect(getCachedDbSheetByIdMock).toHaveBeenCalledWith('s2');
-    expect(getCachedDbSheetMock).not.toHaveBeenCalled();
-  });
-
-  it('sheetId 未指定なら一覧の先頭を active にしてデフォルトシートを返す', async () => {
-    const sheets = [{ id: 's1', title: 'T1', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
-    const sheet = { title: 'T1', blocks: [MD], fetchedAt: Date.now() };
-    getCachedDbSheetsMock.mockResolvedValue({ sheets, fetchedAt: Date.now() } as never);
-    getCachedDbSheetMock.mockResolvedValue(sheet as never);
-
-    await expect(callerAs('owner').sheet.builderState({})).resolves.toEqual({
-      sheet: { title: 'T1', blocks: [MD], stale: false },
-      sheets,
-      activeSheetId: 's1',
-    });
-  });
-
-  it('空一覧がキャッシュ済みでも seed 後の正本を一度だけ再取得する', async () => {
-    const sheet = { title: 'Seeded', blocks: [MD], fetchedAt: Date.now() };
-    const seededSheets = [{ id: 'seeded', title: 'Seeded', updatedAt: new Date('2026-01-01T00:00:00.000Z') }];
-    getCachedDbSheetsMock.mockResolvedValue({ sheets: [], fetchedAt: Date.now() });
-    getCachedDbSheetMock.mockResolvedValue(sheet as never);
-    listSheetsMock.mockResolvedValue(seededSheets as never);
-
-    await expect(callerAs('owner').sheet.builderState({})).resolves.toEqual({
-      sheet: { title: 'Seeded', blocks: [MD], stale: false },
-      sheets: seededSheets,
-      activeSheetId: 'seeded',
-    });
-    expect(listSheetsMock).toHaveBeenCalledOnce();
-    expect(revalidateTagMock).not.toHaveBeenCalled();
-  });
+  vi.mocked(createDocumentService).mockReturnValue(service as never);
+  service.list.mockResolvedValue([]);
 });
 
 describe('sheet.byId', () => {
@@ -215,100 +138,99 @@ describe('sheet.getDefault', () => {
   });
 });
 
-describe('sheet.save', () => {
-  it('非編集者は UNAUTHORIZED を返し保存しない', async () => {
-    const caller = callerAs(null);
-    await expect(caller.sheet.save({ title: 'T', blocks: [MD] })).rejects.toMatchObject({
+const snapshot = {
+  sheetId: SHEET_ID,
+  title: 'T',
+  revision: '0',
+  blocks: [MD],
+  validation: { editable: true, issues: [] },
+};
+const saveInput = { sheetId: SHEET_ID, title: 'T', blocks: [MD], expectedRevision: '0' };
+describe('owner-bound document API', () => {
+  it('requires viewer authentication for navigation', async () => {
+    await expect(callerAs(null, false).sheet.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(service.list).not.toHaveBeenCalled();
+  });
+  it('reads navigation without loading or initializing a document', async () => {
+    expect(await callerAs('owner').sheet.list()).toEqual({ sheets: [], stale: false });
+    expect(service.read).not.toHaveBeenCalled();
+  });
+  it('uses snapshot identity even when navigation is empty', async () => {
+    service.read.mockResolvedValue({ status: 'OK', snapshot });
+    expect(await callerAs('owner').sheet.builderState({ sheetId: SHEET_ID })).toEqual({
+      status: 'OK',
+      snapshot,
+      sheets: [],
+    });
+    expect(service.read).toHaveBeenCalledWith(SHEET_ID);
+  });
+  it('never substitutes a default document for a missing explicit ID', async () => {
+    service.read.mockResolvedValue({ status: 'NOT_FOUND' });
+    await expect(callerAs('owner').sheet.builderState({ sheetId: SHEET_ID })).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+    expect(service.read).toHaveBeenCalledTimes(1);
+  });
+  it.each(['EMPTY', 'INVALID_STATE'])('returns %s without implicit create', async (status) => {
+    service.read.mockResolvedValue({ status });
+    expect(await callerAs('owner').sheet.builderState({})).toEqual({ status, sheets: [] });
+    expect(service.create).not.toHaveBeenCalled();
+  });
+  it('requires editor auth for every writer', async () => {
+    const caller = callerAs(null, true);
+    await expect(caller.sheet.save(saveInput)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.sheet.create({ sheetId: SHEET_ID, title: 'T', blocks: [MD] })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
-    expect(saveMock).not.toHaveBeenCalled();
+    await expect(caller.sheet.delete({ sheetId: SHEET_ID, expectedRevision: '0' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(service.replace).not.toHaveBeenCalled();
   });
-
-  it('不正な blocks は BAD_REQUEST を返す', async () => {
-    const caller = callerAs('owner');
-    await expect(
-      caller.sheet.save({ title: 'T', blocks: [{ type: 'bogus', data: {} }] as never }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-    expect(saveMock).not.toHaveBeenCalled();
+  it('rejects missing IDs, missing revision and number revision before save', async () => {
+    for (const input of [
+      { title: 'T', blocks: [MD] },
+      { ...saveInput, expectedRevision: 0 },
+      { ...saveInput, sheetId: 'bad' },
+    ]) {
+      await expect(callerAs('owner').sheet.save(input as never)).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    }
+    expect(service.replace).not.toHaveBeenCalled();
   });
-
-  it('UUID でない sheetId は BAD_REQUEST を返し保存しない', async () => {
-    const caller = callerAs('owner');
-    await expect(caller.sheet.save({ title: 'T', blocks: [MD], sheetId: 'not-a-uuid' })).rejects.toMatchObject({
+  it('passes exact snapshot revision zero and block IDs to save', async () => {
+    service.replace.mockResolvedValue(snapshot);
+    expect(await callerAs('owner').sheet.save(saveInput)).toEqual(snapshot);
+    expect(service.replace).toHaveBeenCalledWith(SHEET_ID, '0', 'T', [MD]);
+    expect(revalidateTag).toHaveBeenCalledWith('db-sheet', { expire: 0 });
+  });
+  it.each([
+    ['CONFLICT', 'CONFLICT'],
+    ['UNEDITABLE_DOCUMENT', 'PRECONDITION_FAILED'],
+    ['NOT_FOUND', 'NOT_FOUND'],
+  ])('maps %s without hiding failures', async (code, expected) => {
+    service.replace.mockRejectedValueOnce(new DocumentError(code));
+    await expect(callerAs('owner').sheet.save(saveInput)).rejects.toMatchObject({ code: expected });
+  });
+  it('does not report a committed write as failed when cache invalidation fails', async () => {
+    service.replace.mockResolvedValue(snapshot);
+    revalidateTagMock.mockImplementationOnce(() => {
+      throw new Error('cache unavailable');
+    });
+    await expect(callerAs('owner').sheet.save(saveInput)).resolves.toEqual(snapshot);
+  });
+  it('preserves the caller create operation UUID and content', async () => {
+    service.create.mockResolvedValue(snapshot);
+    await callerAs('owner').sheet.create({ sheetId: SHEET_ID, title: 'T', blocks: [MD] });
+    expect(service.create).toHaveBeenCalledWith(SHEET_ID, 'T', [MD]);
+  });
+  it('requires deletion revision and supports deleting the last document', async () => {
+    service.delete.mockResolvedValue(undefined);
+    await expect(callerAs('owner').sheet.delete({ sheetId: SHEET_ID } as never)).rejects.toMatchObject({
       code: 'BAD_REQUEST',
     });
-    expect(saveMock).not.toHaveBeenCalled();
-  });
-
-  it('ConflictError は CONFLICT に変換し、キャッシュは無効化しない', async () => {
-    saveMock.mockRejectedValue(new ConflictError());
-    const caller = callerAs('owner');
-    await expect(caller.sheet.save({ title: 'T', blocks: [MD] })).rejects.toMatchObject({
-      code: 'CONFLICT',
+    await expect(callerAs('owner').sheet.delete({ sheetId: SHEET_ID, expectedRevision: '0' })).resolves.toEqual({
+      ok: true,
     });
-    expect(revalidateTagMock).not.toHaveBeenCalled();
-  });
-
-  it('成功時は updatedAt を返し db-sheet タグを即時失効させる', async () => {
-    const d = new Date('2026-05-01T00:00:00.000Z');
-    saveMock.mockResolvedValue({ updatedAt: d });
-    const caller = callerAs('owner');
-    const result = await caller.sheet.save({ title: 'T', blocks: [MD] });
-    expect(result).toEqual({ updatedAt: d });
-    expect(revalidateTagMock).toHaveBeenCalledWith('db-sheet', { expire: 0 });
-  });
-});
-
-describe('sheet.create', () => {
-  it('非編集者は UNAUTHORIZED を返し作成しない', async () => {
-    const caller = callerAs(null);
-    await expect(caller.sheet.create({ title: 'New' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-    expect(createSheetMock).not.toHaveBeenCalled();
-  });
-
-  it('templateId 未指定なら initialBlocks は undefined で作成し、キャッシュを即時失効させる', async () => {
-    createSheetMock.mockResolvedValue('new-id');
-    const caller = callerAs('owner');
-    const result = await caller.sheet.create({ title: 'New' });
-    expect(result).toEqual({ sheetId: 'new-id' });
-    expect(createSheetMock).toHaveBeenCalledWith('New', undefined);
-    expect(revalidateTagMock).toHaveBeenCalledWith('db-sheet', { expire: 0 });
-  });
-
-  it('templateId 指定時はテンプレートの blocks を渡して作成する', async () => {
-    createSheetMock.mockResolvedValue('new-id-2');
-    const caller = callerAs('owner');
-    const result = await caller.sheet.create({ title: 'New', templateId: 'blank' });
-    expect(result).toEqual({ sheetId: 'new-id-2' });
-    expect(createSheetMock).toHaveBeenCalledWith('New', expect.any(Array));
-  });
-
-  it('存在しない templateId は initialBlocks を undefined として扱う', async () => {
-    createSheetMock.mockResolvedValue('new-id-3');
-    const caller = callerAs('owner');
-    await caller.sheet.create({ title: 'New', templateId: 'no-such-template' });
-    expect(createSheetMock).toHaveBeenCalledWith('New', undefined);
-  });
-});
-
-describe('sheet.delete', () => {
-  it('非編集者は UNAUTHORIZED を返し削除しない', async () => {
-    const caller = callerAs(null);
-    await expect(caller.sheet.delete({ sheetId: SHEET_ID })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
-    expect(deleteSheetMock).not.toHaveBeenCalled();
-  });
-
-  it('UUID でない sheetId は BAD_REQUEST を返し削除しない', async () => {
-    const caller = callerAs('owner');
-    await expect(caller.sheet.delete({ sheetId: 'not-a-uuid' })).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-    expect(deleteSheetMock).not.toHaveBeenCalled();
-  });
-
-  it('編集者は指定 sheetId を削除し、キャッシュを即時失効させる', async () => {
-    const caller = callerAs('owner');
-    const result = await caller.sheet.delete({ sheetId: SHEET_ID });
-    expect(result).toEqual({ ok: true });
-    expect(deleteSheetMock).toHaveBeenCalledWith(SHEET_ID);
-    expect(revalidateTagMock).toHaveBeenCalledWith('db-sheet', { expire: 0 });
+    expect(service.delete).toHaveBeenCalledWith(SHEET_ID, '0');
   });
 });

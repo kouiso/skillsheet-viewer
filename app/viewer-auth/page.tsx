@@ -84,9 +84,10 @@ const ViewerAuthPage = () => {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
-              className="text-center text-2xl font-bold"
+              className="text-balance text-center text-2xl font-bold"
             >
-              エンジニアスキルシート閲覧
+              <span className="inline-block max-w-full">エンジニア</span>
+              <span className="inline-block max-w-full">スキルシート閲覧</span>
             </motion.h1>
 
             <motion.p

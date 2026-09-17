@@ -1,7 +1,8 @@
 'use client';
 
 import type { CompanyInfo, ProjectItem } from '@/db/block';
-import { displayDuration, flattenTech, formatPeriodDisplay, sortByStartDesc } from '@/db/process';
+import { resolveDuration } from '@/db/duration';
+import { flattenTech, formatPeriodDisplay, sortByStartDesc } from '@/db/process';
 import { resolveProjectArea } from '@/db/tech-area';
 import { sanitizeHtml } from '@/util/sanitize-html';
 
@@ -11,6 +12,8 @@ interface TimelineProps {
   activeTech: string[];
   /** 稼働月数（期間の右の括弧書き）を出すか。ビュートグル「稼働月数」に従う。既定 true。 */
   showDuration?: boolean;
+  /** 「現在」終端の導出に使う固定基準月。サーバが読取時に決めた値を渡す。 */
+  referenceMonth?: number;
 }
 
 function timelineArea(item: ProjectItem): string {
@@ -21,7 +24,7 @@ function timelineArea(item: ProjectItem): string {
 
 // 案件タイムライン。start（period から導出）降順の縦レール表示。
 // activeTech に該当する技術を含む案件はノード・ラベルをハイライトする。
-export function Timeline({ items, companyMap, activeTech, showDuration = true }: TimelineProps) {
+export function Timeline({ items, companyMap, activeTech, showDuration = true, referenceMonth }: TimelineProps) {
   if (items.length === 0) return null;
   const sorted = sortByStartDesc(items, (item) => item.period);
 
@@ -37,7 +40,10 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true }:
           const periodDisplay = formatPeriodDisplay(item.period);
           // 案件カード（project-card.tsx）と同じ「期間（稼働月数）」の表記に揃える。
           // 期間が空・解釈不能なら稼働月数も出さない（カード側と同じ条件分岐）。
-          const duration = showDuration && periodDisplay ? sanitizeHtml(displayDuration(item)) : '';
+          const duration =
+            showDuration && periodDisplay
+              ? sanitizeHtml(resolveDuration(item.period, item.duration, referenceMonth).label)
+              : '';
           return (
             <div key={item.id} className="relative">
               <span
