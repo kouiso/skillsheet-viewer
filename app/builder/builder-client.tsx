@@ -17,10 +17,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/component/ui/button';
 import { useThemeMode } from '@/context/theme-context';
 // 型・純関数はサーバ専用モジュール（neon ドライバ等）を client バンドルに巻き込まないため、
-// root の @/db ではなく純粋サブエクスポート @/db/blocks から import する
+// root の @/db ではなく純粋サブエクスポート @/db/block から import する
 // （詳細は serialize.ts の同趣旨コメント）。
 import {
   type Block,
@@ -30,13 +30,13 @@ import {
   type ProjectBlockData,
   type SkillEntry,
   type TableColumn,
-} from '@/db/blocks';
+} from '@/db/block';
 import { currentMonthKey } from '@/db/derived-display';
 import { isRevision, validateDocumentBlocks } from '@/db/document-contract';
 import type { DocumentSnapshot } from '@/db/document-service';
 import { trpc } from '@/lib/trpc-client';
 
-import type { CustomMetaRow } from './block-editors/profile-block-editor';
+import type { CustomMetaRow } from './block-editor/profile-block-editor';
 import { CanvasDroppable } from './canvas/canvas-droppable';
 import { createPaletteItem, DragPreview, PALETTE_ITEMS, type PaletteBlockType, PaletteChip } from './canvas/palette';
 import { SortableBlock } from './canvas/sortable-block';
@@ -53,7 +53,7 @@ import {
   newId,
   snapshot,
 } from './serialize';
-import { TEMPLATES } from './templates';
+import { TEMPLATES } from './sheet-template';
 
 // 分割前（builder-client.tsx 1 枚だった頃）と同じ import 元を保つための再エクスポート。
 // 実体は serialize.ts にある。既存の import 元（テスト等）を書き換えずに済ませる。

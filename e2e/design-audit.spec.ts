@@ -6,7 +6,7 @@ import {
   REAL_VOLUME_COMPANY_COUNT,
   REAL_VOLUME_DEMO_TITLE,
   REAL_VOLUME_PROJECT_COUNT,
-} from '@/db/fixtures';
+} from '@/db/fixture';
 import { authFile, login } from './auth';
 import { getSkillSheetById } from './document-fixture';
 

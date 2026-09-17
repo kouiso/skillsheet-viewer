@@ -4,7 +4,7 @@
 
 // tableBlockToMarkdown 等の純関数/型はサーバ専用モジュール（neon ドライバ等）を
 // client バンドルに巻き込まないため、root の @/db ではなく純粋サブエクスポート
-// @/db/blocks から import する。
+// @/db/block から import する。
 import {
   type Block,
   type BlockInput,
@@ -22,8 +22,8 @@ import {
   statsBlockToMarkdown,
   type TableColumn,
   tableBlockToMarkdown,
-} from '@/db/blocks';
-import { type MarkdownExperienceContext, markdownExperienceContext } from '@/db/blocks/serialize';
+} from '@/db/block';
+import { type MarkdownExperienceContext, markdownExperienceContext } from '@/db/block/serialize';
 import type { RawDocumentBlock } from '@/db/document-contract';
 import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 

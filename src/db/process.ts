@@ -6,7 +6,7 @@
  * とビューの集計軸（ここ）を分離するため、この変換結果は DB に保存しない。
  */
 
-import type { ProjectTech } from './blocks';
+import type { ProjectTech } from './block';
 
 /** 工程の俯瞰・ステッパーで使う表示専用の7段モデル。builderの選択肢とは語彙が異なる。 */
 export const PROCESS_LABELS = [
@@ -347,6 +347,9 @@ export function deriveDuration(period: string): string {
   return remMonths === 0 ? `${years}年` : `${years}年${remMonths}ヶ月`;
 }
 
+// 稼働月数の表示判定は src/db/duration.ts の resolveDuration に一本化している
+// （カード・タイムライン・会社レーン・PDF が共有。ここに置くと2系統に分岐する）。
+
 // --- 月入力（YYYY-MM）ベースの期間ユーティリティ（エディタ用） -----------------
 
 /** `YYYY-MM` を表示用 `YYYY.MM` に変換する（不正値は空文字）。 */
@@ -469,24 +472,39 @@ function isEmptyTechValue(value: unknown): boolean {
   return trimmed === '' || EMPTY_TECH_PLACEHOLDERS.has(trimmed);
 }
 
+/** flattenTechEntries の1要素。技術名と、それが属するバケット。 */
+export interface TechEntry {
+  name: string;
+  bucket: keyof ProjectTech;
+}
+
 /**
- * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * 6バケットの技術スタックを、初出順を保った重複なしのエントリ配列にする。
  * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ * 同名が複数バケットにまたがる場合は TECH_BUCKET_ORDER で先に来るバケットを採用する。
  */
-export function flattenTech(tech: ProjectTech): string[] {
+export function flattenTechEntries(tech: ProjectTech): TechEntry[] {
   if (!tech) return [];
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: TechEntry[] = [];
   for (const key of TECH_BUCKET_ORDER) {
     for (const value of tech[key] ?? []) {
       if (isEmptyTechValue(value)) continue;
       if (!seen.has(value)) {
         seen.add(value);
-        out.push(value);
+        out.push({ name: value, bucket: key });
       }
     }
   }
   return out;
+}
+
+/**
+ * 6バケットの技術スタックを、初出順を保った重複なしのフラット配列にする。
+ * `-` / `ー` / `—` / 空白のみの「該当なし」プレースホルダは技術名として扱わず除外する。
+ */
+export function flattenTech(tech: ProjectTech): string[] {
+  return flattenTechEntries(tech).map((entry) => entry.name);
 }
 
 /**

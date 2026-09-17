@@ -1,12 +1,12 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
-import { classifyConfigErrorOrRethrow } from '@/components/view-error';
+import { classifyConfigErrorOrRethrow } from '@/component/view-error';
 import type { SheetSummary } from '@/db';
 import { createServerCaller } from '@/server/trpc/caller';
 import { requireViewer } from '@/server/viewer-gate';
 import type { ConfigErrorKind } from '@/util/is-config-error';
 
-import DbSheetsListClient from './db-sheets-list-client';
+import DbSheetsListClient from './db-sheet-list-client';
 
 export const metadata: Metadata = {
   title: 'スキルシート一覧 | エンジニアスキルシート',

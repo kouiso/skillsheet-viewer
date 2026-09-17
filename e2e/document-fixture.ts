@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { readReproDocument } from '../scripts/manual-repro/read-document';
-import type { Block, BlockInput } from '../src/db/blocks';
+import { readReproDocument } from '../script/manual-repro/read-document';
+import type { Block, BlockInput } from '../src/db/block';
 import { getDb } from '../src/db/client';
 import { currentMonthKey } from '../src/db/derived-display';
 import { createDocumentService, DocumentError } from '../src/db/document-service';

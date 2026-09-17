@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { buildConsoleDemoBlocks } from '@/db/fixtures';
+import { buildConsoleDemoBlocks } from '@/db/fixture';
 import { authFile, login } from './auth';
 import { createSheet, deleteSheet, listSheets } from './document-fixture';
 

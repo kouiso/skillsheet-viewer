@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/blocks';
+import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/block';
 import { deriveCompanyPeriod } from '@/db/process';
 
-import useMediaQuery from '@/hooks/use-media-query';
+import useMediaQuery from '@/hook/use-media-query';
 
 import { CompanyBar, ProjectForm } from './project-form';
 import { ProjectNav } from './project-nav';

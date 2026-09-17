@@ -18,7 +18,7 @@ describe('durationの完全一致換算', () => {
 });
 describe('durationの原文保持と矛盾', () => {
   it('未来の終了月を経験の経過月へ含めない', () => {
-    expect(resolveDuration('2026.08 — 2026.12', undefined, ref)).toMatchObject({ derivedMonths: 2, label: '2か月' });
+    expect(resolveDuration('2026.08 — 2026.12', undefined, ref)).toMatchObject({ derivedMonths: 2, label: '2ヶ月' });
   });
   it('基準月なしでは現在時刻で算出せず原文を残す', () => {
     expect(resolveDuration('2026.01 — 現在', ' 半年 ')).toEqual({
@@ -29,7 +29,7 @@ describe('durationの原文保持と矛盾', () => {
     });
   });
 
-  it('同月を1か月とし、本人入力の同義表記を保持する', () => {
+  it('同月を1ヶ月とし、本人入力の同義表記を保持する', () => {
     expect(resolveDuration('2020.01 — 2020.01', ' 1ヶ月 ', ref)).toEqual({
       manual: ' 1ヶ月 ',
       derivedMonths: 1,
@@ -44,7 +44,7 @@ describe('durationの原文保持と矛盾', () => {
   it('継続中は本人入力と基準月の導出を両方残す', () => {
     expect(resolveDuration('2026.01 — 現在', '半年', ref)).toMatchObject({
       conflict: false,
-      label: '本人入力 半年／2026-09基準 9か月',
+      label: '本人入力 半年／2026-09基準 9ヶ月',
     });
   });
   it('不明期間の本人入力を消さず、未入力は未確定とする', () => {

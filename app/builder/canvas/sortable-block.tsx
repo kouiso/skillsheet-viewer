@@ -4,13 +4,13 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2 } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
-import { Button } from '@/components/ui/button';
-import type { ExperienceBlockData, ProfileBlockData, SkillEntry, TableColumn } from '@/db/blocks';
+import { Button } from '@/component/ui/button';
+import type { ExperienceBlockData, ProfileBlockData, SkillEntry, TableColumn } from '@/db/block';
 
-import { ExperienceBlockEditor } from '../block-editors/experience-block-editor';
-import { type CustomMetaRow, ProfileBlockEditor } from '../block-editors/profile-block-editor';
-import { SkillsBlockEditor } from '../block-editors/skills-block-editor';
-import { TableBlockEditor } from '../block-editors/table-block-editor';
+import { ExperienceBlockEditor } from '../block-editor/experience-block-editor';
+import { type CustomMetaRow, ProfileBlockEditor } from '../block-editor/profile-block-editor';
+import { SkillsBlockEditor } from '../block-editor/skill-block-editor';
+import { TableBlockEditor } from '../block-editor/table-block-editor';
 import type { EditorItem } from '../serialize';
 
 export const SortableBlock = ({

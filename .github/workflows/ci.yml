@@ -26,12 +26,14 @@ jobs:
       # 供給網対策でタグではなく commit へ固定する（タグは上流で付け替えられる）。v4 の実体。
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check file and directory naming
-        run: ./scripts/check-naming.sh
+        run: ./script/check-naming.sh
 
   node:
     name: Node (${{ matrix.check-type }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # e2e はヘッドレス + playwright の2段構成で単体テストが最大 3 分あるため 15 分だと
+    # 途中で打ち切られ、失敗詳細と証跡（trace）が残らない。完了まで待てるよう脚だけ延長する。
+    timeout-minutes: ${{ matrix.check-type == 'e2e' && 30 || 15 }}
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
@@ -93,7 +95,29 @@ jobs:
         if: matrix.check-type == 'e2e'
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
-      - name: Headless browser E2E
+      # 編集者系テストは /builder のオーナーゲート（session.user.id === SKILLSHEET_OWNER_ID）
+      # を通る必要がある。シークレットの E2E ユーザーと SKILLSHEET_OWNER_ID が食い違うと
+      # /builder が /login へリダイレクトし、ボタン待ちのテストが全てタイムアウトまで
+      # ハングする（実際に 2026-09-14 に e2e 全体が赤化した）。対処として、CI 実行ごとに
+      # e2e 専用ユーザーを provision し、その user.id を SKILLSHEET_OWNER_ID として
+      # GITHUB_ENV 経由で後続ステップに渡す。シークレットの値には依存しない。
+      - name: Provision E2E owner
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          E2E_EMAIL: e2e-owner@example.test
+          E2E_PASSWORD: E2e-test-pass-99
+        run: |
+          OWNER_ID=$(pnpm exec tsx script/bootstrap-owner.ts --email="$E2E_EMAIL" --password="$E2E_PASSWORD" --name="E2E Owner" | tail -n 1 | tr -d '[:space:]')
+          test -n "$OWNER_ID"
+          {
+            echo "SKILLSHEET_OWNER_ID=$OWNER_ID"
+            echo "E2E_EMAIL=$E2E_EMAIL"
+            echo "E2E_PASSWORD=$E2E_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Playwright E2E
         if: matrix.check-type == 'e2e'
         env:
           BETTER_AUTH_URL: http://127.0.0.1:3210
@@ -101,13 +125,22 @@ jobs:
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
           REVALIDATE_SECRET: ${{ vars.REVALIDATE_SECRET }}
-        run: |
-          pnpm run test:e2e
-          pnpm run test:e2e:playwright
+        # playwright は起動時に test-results/ 全体を消去する。headless-e2e の証跡
+        # （test-results/e2e）が先に書かれていると消されるため、playwright を先に流す。
+        run: pnpm run test:e2e:playwright
+
+      # Playwright が失敗しても headless E2E まで止めない（証跡 artifact を残すため）。
+      - name: Headless browser E2E
+        if: matrix.check-type == 'e2e' && always()
+        env:
+          BETTER_AUTH_URL: http://127.0.0.1:3210
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          REVALIDATE_SECRET: ${{ vars.REVALIDATE_SECRET }}
+        run: pnpm run test:e2e
 
       - name: Upload E2E evidence
         if: matrix.check-type == 'e2e' && always()

@@ -66,7 +66,7 @@ jobs:
         run: |
           umask 077
           status=0
-          pnpm exec tsx scripts/dump-blocks.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$PDF_CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/pdf-dump.log" 2>&1 || status=$?
+          pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$PDF_CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/pdf-dump.log" 2>&1 || status=$?
           echo "Database dump finished (exit $status)."
           exit "$status"
 

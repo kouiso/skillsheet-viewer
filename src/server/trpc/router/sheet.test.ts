@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// appRouter は github-sheet.ts 経由で sheets-cache.ts（unstable_cache 使用）も読み込むため、
+// appRouter は github-sheet.ts 経由で sheet-cache.ts（unstable_cache 使用）も読み込むため、
 // revalidateTag のみ上書きし他の export は importOriginal で残す。
 vi.mock('next/cache', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next/cache')>();
@@ -21,10 +21,10 @@ vi.mock('@/db', async (importOriginal) => {
 });
 
 // list/byId/getDefault は unstable_cache 経由で実 DB を呼んでしまうため、
-// sheets-cache.ts の export ごとモックする（github-sheet.test.ts と同じ方針）。
+// sheet-cache.ts の export ごとモックする（github-sheet.test.ts と同じ方針）。
 // toStaleSheet は fetchedAt 非依存の純粋関数なので importOriginal の実装をそのまま使う。
-vi.mock('@/server/sheets-cache', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/server/sheets-cache')>();
+vi.mock('@/server/sheet-cache', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/server/sheet-cache')>();
   return {
     ...actual,
     getCachedSheet: vi.fn(),
@@ -44,7 +44,7 @@ import { revalidateTag } from 'next/cache';
 import { SkillSheetNotFoundError } from '@/db';
 import { createDocumentService, DocumentError } from '@/db/document-service';
 
-import { getCachedDbSheet, getCachedDbSheetById } from '@/server/sheets-cache';
+import { getCachedDbSheet, getCachedDbSheetById } from '@/server/sheet-cache';
 
 import { createCallerFactory } from '../init';
 import { createTestContext } from '../test-context';
