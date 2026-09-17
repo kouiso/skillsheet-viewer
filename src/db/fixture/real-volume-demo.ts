@@ -184,7 +184,10 @@ function buildItems(companies: CompanyInfo[]): ProjectItem[] {
         acquired: '',
         comment: '',
         summary: `${companies[c].name}にて${titleTemplate}を担当。要件整理から実装・運用まで一気通貫で対応。`,
-        duration: isFlagship ? '継続中' : `${(idx % 11) + 1}ヶ月`,
+        // 期間はすべて4か月（年を跨がないものは classifyPeriod が invalid にする）なので、
+        // duration は導出と一致する '4ヶ月' に固定する — 不一致にすると
+        // generateSkillSheetPdfBlob の conflict ゲートが出力自体を止める。
+        duration: isFlagship ? '継続中' : '4ヶ月',
       });
       idx++;
     }
