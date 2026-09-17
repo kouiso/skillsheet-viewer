@@ -2,8 +2,8 @@
 
 import { type ReactNode, useState } from 'react';
 import type { ProjectItem } from '@/db/block';
+import { resolveDuration } from '@/db/duration';
 import {
-  displayDuration,
   flattenTech,
   formatPeriodDisplay,
   normalizeProcess,
@@ -29,6 +29,8 @@ export function splitCommentParagraphs(comment: string): string[] {
 
 interface ProjectCardProps {
   item: ProjectItem;
+  /** 稼働月数の基準月（YYYY*12+M-1 の連番）。呼出側で固定して描画を決定的にする。 */
+  referenceMonth?: number;
   /** フィルタ前の全件配列基準の通し番号。絞り込んでも変わらない。 */
   no: number;
   /** メタ行に出す会社名。CompanySection の見出しと同じ表示名を渡す。 */
@@ -60,11 +62,13 @@ export const ProjectCard = ({
   tech,
   queryTerms = [],
   showDuration = true,
+  referenceMonth,
 }: ProjectCardProps) => {
   const [commentOpen, setCommentOpen] = useState(false);
   const normalized = normalizeProcess(item.process);
-  // タイムライン・会社レーン・PDF と同じ判定（displayDuration）。トグル OFF では出さない。
-  const duration = showDuration ? sanitizeHtml(displayDuration(item)) : '';
+  // PDF と同じ判定（resolveDuration: 手入力 duration 優先、基準月は呼出側で固定）。
+  // トグル OFF では出さない。
+  const duration = showDuration ? sanitizeHtml(resolveDuration(item.period, item.duration, referenceMonth).label) : '';
   const summary = item.summary?.trim() || item.duties;
   const area = resolveProjectArea(item.scope, item.tech);
   const periodDisplay = formatPeriodDisplay(item.period);

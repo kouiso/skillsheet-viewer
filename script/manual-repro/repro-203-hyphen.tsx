@@ -15,7 +15,9 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import React from 'react';
-import { getSkillSheetById } from '@/db';
+import { getDb } from '../../src/db/client';
+import { getOwnerId } from '../../src/db/skillsheet';
+import { readReproDocument } from './read-document';
 
 // tsx(esbuild) の classic JSX トランスフォームが React.createElement をグローバル参照として
 // 埋め込むため（このリポジトリの tsconfig は jsx:"preserve" で Next.js の SWC 変換前提だが、
@@ -48,7 +50,12 @@ async function main() {
   if (!sheetId) throw new Error('usage: repro-203-hyphen.tsx <sheetId>');
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is not set');
 
-  const sheet = await getSkillSheetById(sheetId);
+  const sheet = await readReproDocument(
+    getDb(),
+    getOwnerId(),
+    sheetId,
+    Number(process.env.PRINT_REFERENCE_MONTH?.trim() || NaN),
+  );
   console.log(
     `[repro-203] sheet="${sheet.title}" blocks=${sheet.blocks.length} content.length=${sheet.content.length}`,
   );

@@ -24,8 +24,9 @@ import { eq, sql } from 'drizzle-orm';
 
 import type { BlockInput, CompanyInfo, ProjectItem, ProjectTech } from '../block';
 import { getDb } from '../client';
-import { blocks as blocksTable, realVolumeDemoFixtures } from '../schema';
-import { createSheetInTx, getOwnerId } from '../skillsheet';
+import { createDocumentService, DocumentError } from '../document-service';
+import { realVolumeDemoFixtures } from '../schema';
+import { getOwnerId } from '../skillsheet';
 import { buildConsoleDemoBlocks } from './console-demo';
 
 const newId = () => crypto.randomUUID();
@@ -183,7 +184,10 @@ function buildItems(companies: CompanyInfo[]): ProjectItem[] {
         acquired: '',
         comment: '',
         summary: `${companies[c].name}にて${titleTemplate}を担当。要件整理から実装・運用まで一気通貫で対応。`,
-        duration: isFlagship ? '継続中' : `${(idx % 11) + 1}ヶ月`,
+        // 期間はすべて4か月（年を跨がないものは classifyPeriod が invalid にする）なので、
+        // duration は導出と一致する '4ヶ月' に固定する — 不一致にすると
+        // generateSkillSheetPdfBlob の conflict ゲートが出力自体を止める。
+        duration: isFlagship ? '継続中' : '4ヶ月',
       });
       idx++;
     }
@@ -240,18 +244,25 @@ export async function createRealVolumeDemoSheet(): Promise<string> {
       .limit(1);
     if (existing[0]?.sheetId) {
       const sheetId = existing[0].sheetId;
-      // 既存フィクスチャを最新の buildRealVolumeDemoBlocks() 出力へ置き換える
-      // （delete + insert を同一トランザクションで行い、途中状態を残さない）。
-      await tx.delete(blocksTable).where(eq(blocksTable.sheetId, sheetId));
-      await tx
-        .insert(blocksTable)
-        .values(
-          buildRealVolumeDemoBlocks().map((block, order) => ({ sheetId, type: block.type, order, data: block.data })),
-        );
+      const service = createDocumentService(tx, ownerId);
+      const current = await service.read(sheetId);
+      if (current.status !== 'OK') throw new DocumentError(current.status);
+      // fixture更新も文書の版を進める。利用者の同時編集はCASで拒否する。
+      await service.replace(
+        sheetId,
+        current.snapshot.revision,
+        REAL_VOLUME_DEMO_TITLE,
+        buildRealVolumeDemoBlocks().map((block, order) => ({ ...block, id: newId(), order })),
+      );
       return sheetId;
     }
 
-    const sheetId = await createSheetInTx(tx, REAL_VOLUME_DEMO_TITLE, buildRealVolumeDemoBlocks());
+    const sheetId = newId();
+    await createDocumentService(tx, ownerId).create(
+      sheetId,
+      REAL_VOLUME_DEMO_TITLE,
+      buildRealVolumeDemoBlocks().map((block, order) => ({ ...block, id: newId(), order })),
+    );
     // fixture 行の INSERT は onConflictDoNothing で二重登録を許容し、衝突しても無視する。
     // これが最後の安全網（advisory lock と合わせて万全）。
     await tx

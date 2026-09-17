@@ -26,6 +26,19 @@ function buildItem(overrides: Partial<ProjectItem>): ProjectItem {
 }
 
 describe('ProjectCard', () => {
+  it('継続案件の本人入力と固定月からの期間を両方表示する', () => {
+    render(
+      <ProjectCard
+        item={buildItem({ period: '2026.01 — 現在', duration: '半年' })}
+        no={1}
+        activeTech={[]}
+        tech={[]}
+        referenceMonth={2026 * 12 + 8}
+      />,
+    );
+    expect(screen.getByText(/本人入力 半年／2026-09基準 9ヶ月/)).toBeInTheDocument();
+  });
+
   it('チーム人数は既に単位が付いていればそのまま出す（単位を二重に足さない）', () => {
     render(<ProjectCard item={buildItem({})} no={1} activeTech={[]} tech={[]} />);
     expect(screen.getByText(/13 名/)).toBeInTheDocument();
@@ -128,18 +141,28 @@ describe('ProjectCard', () => {
         companyName="D社"
         activeTech={[]}
         tech={[]}
+        referenceMonth={2026 * 12 + 8}
       />,
     );
 
     expect(screen.queryByText('SE')).not.toBeInTheDocument();
-    expect(screen.getByText('役割').parentElement).toHaveTextContent('SE · D社 · 13 名 · 継続中');
+    expect(screen.getByText('役割').parentElement).toHaveTextContent('SE · D社 · 13 名 · 11ヶ月');
   });
 
   it('役割が空なら「役割」ラベルを出さず、会社・人数・期間だけのメタ行にする', () => {
-    render(<ProjectCard item={buildItem({ role: '' })} no={1} companyName="D社" activeTech={[]} tech={[]} />);
+    render(
+      <ProjectCard
+        item={buildItem({ role: '' })}
+        no={1}
+        companyName="D社"
+        activeTech={[]}
+        tech={[]}
+        referenceMonth={2026 * 12 + 8}
+      />,
+    );
 
     expect(screen.queryByText('役割')).not.toBeInTheDocument();
-    expect(screen.getByText(/D社 · 13 名 · 継続中/)).toBeInTheDocument();
+    expect(screen.getByText(/D社 · 13 名 · 11ヶ月/)).toBeInTheDocument();
   });
 
   it('コメント3段落なら既定は2段落＋続きを読む（残り 1）、展開後に3段落全部', async () => {
@@ -188,9 +211,23 @@ describe('ProjectCard', () => {
       expect(screen.getByText('2025.01〜2025.09')).toBeInTheDocument();
     });
 
-    it('終端が「現在」ならメタ行に「継続中」を出す', () => {
+    it('終端が「現在」なら固定基準月までの稼働月数を出す', () => {
+      // 継続中は終端が動かないため基準月で確定する。時計依存の「継続中」表示にしない。
+      render(
+        <ProjectCard
+          item={buildItem({ period: '2025.11 — 現在' })}
+          no={1}
+          activeTech={[]}
+          tech={[]}
+          referenceMonth={2026 * 12 + 8}
+        />,
+      );
+      expect(screen.getByText(/11ヶ月/)).toBeInTheDocument();
+    });
+
+    it('終端が「現在」で基準月が未指定なら月数を推測せず「未確定」とする', () => {
       render(<ProjectCard item={buildItem({ period: '2025.11 — 現在' })} no={1} activeTech={[]} tech={[]} />);
-      expect(screen.getByText(/継続中/)).toBeInTheDocument();
+      expect(screen.getByText(/未確定/)).toBeInTheDocument();
     });
 
     it('showDuration=false ならメタ行に月数を出さない', () => {
@@ -208,10 +245,11 @@ describe('ProjectCard', () => {
       expect(screen.queryByText(/9ヶ月/)).not.toBeInTheDocument();
     });
 
-    it('月まで書かれていない期間は月数を添えない（書いていない精度を足さない）', () => {
+    it('月まで書かれていない期間は月数を足さず「未確定」とする（書いていない精度を捏造しない）', () => {
       render(<ProjectCard item={buildItem({ period: '2020 — 2021' })} no={1} activeTech={[]} tech={[]} />);
       expect(screen.getByText('2020〜2021')).toBeInTheDocument();
       expect(screen.queryByText(/1年1ヶ月/)).not.toBeInTheDocument();
+      expect(screen.getByText(/未確定/)).toBeInTheDocument();
     });
   });
 

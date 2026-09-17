@@ -212,7 +212,11 @@ export function SectionLabel({ children }: { children: ReactNode }) {
 }
 
 export function Chip({ chip }: { chip: PrintChip }) {
-  return <PrintText style={chip.emphasis === 'solid' ? styles.chipSolid : styles.chipOutline}>{chip.label}</PrintText>;
+  return (
+    <PrintText wrap={false} style={chip.emphasis === 'solid' ? styles.chipSolid : styles.chipOutline}>
+      {chip.label}
+    </PrintText>
+  );
 }
 
 /** 帯色のチップ（対応可能工程）。 */

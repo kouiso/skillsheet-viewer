@@ -12,8 +12,13 @@ vi.mock('next/cache', async (importOriginal) => {
 
 vi.mock('@/db', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/db')>();
-  return { ...actual, deleteSheet: vi.fn().mockResolvedValue(undefined) };
+  return { ...actual, getDb: vi.fn(), getOwnerId: () => 'owner' };
 });
+
+vi.mock('@/db/document-service', () => ({
+  createDocumentService: () => ({ delete: vi.fn().mockResolvedValue(undefined) }),
+  DocumentError: class extends Error {},
+}));
 
 import { createServerCaller } from './caller';
 import { createTestContext } from './test-context';
@@ -42,7 +47,7 @@ describe('createServerCaller', () => {
       createTestContext({ editorUserId: 'owner', isViewer: true, request: null, responseHeaders: null }),
     );
     const caller = await createServerCaller();
-    await expect(caller.sheet.delete({ sheetId: SHEET_ID })).resolves.toEqual({ ok: true });
+    await expect(caller.sheet.delete({ sheetId: SHEET_ID, expectedRevision: '0' })).resolves.toEqual({ ok: true });
   });
 
   it('editorUserId が無い context では editorProcedure が UNAUTHORIZED になる', async () => {
@@ -50,6 +55,8 @@ describe('createServerCaller', () => {
       createTestContext({ editorUserId: null, isViewer: true, request: null, responseHeaders: null }),
     );
     const caller = await createServerCaller();
-    await expect(caller.sheet.delete({ sheetId: SHEET_ID })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.sheet.delete({ sheetId: SHEET_ID, expectedRevision: '0' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
   });
 });

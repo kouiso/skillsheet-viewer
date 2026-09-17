@@ -8,7 +8,6 @@ import {
   companyLabelOf,
   dedupeRoles,
   firstSentence,
-  fitContinuationHeading,
   formatProcessForPrint,
 } from './print-view-model';
 
@@ -90,28 +89,6 @@ describe('buildTechGroups', () => {
 
   it('中身が無い分類は行ごと出さない', () => {
     expect(buildTechGroups({ ...emptyTech, lang: ['-', ' '] })).toEqual([]);
-  });
-});
-
-describe('fitContinuationHeading', () => {
-  it('会社名と案件名が 1 行に収まるときは両方出す', () => {
-    expect(fitContinuationHeading('M 社', '販売システム')).toBe('M 社（つづき）　販売システム（続き）');
-  });
-
-  it('収まらないときは会社名を落として案件名を残す（跨いだ先で必要なのは案件名）', () => {
-    const project = 'あ'.repeat(30);
-    const text = fitContinuationHeading('と'.repeat(20), project);
-    expect(text).toBe(`${project}（続き）`);
-  });
-
-  it('案件名だけでも収まらないときは末尾を … で詰める', () => {
-    const text = fitContinuationHeading('会社', 'ん'.repeat(80));
-    expect(text.endsWith('…')).toBe(true);
-    expect([...text].length).toBeLessThan(80);
-  });
-
-  it('どちらも空なら見出しごと出さない', () => {
-    expect(fitContinuationHeading(undefined, undefined)).toBe('');
   });
 });
 
@@ -226,6 +203,20 @@ function blocksFixture(): Block[] {
 }
 
 describe('buildPrintViewModel', () => {
+  it('継続案件の本人入力と固定基準月の期間を併記し、原文を変えない', () => {
+    const blocks = blocksFixture();
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture');
+    project.data.items[0].period = '2026.01 — 現在';
+    project.data.items[0].duration = ' 半年 ';
+    const before = JSON.stringify(blocks);
+    const vm = buildPrintViewModel('シート', blocks, undefined, 2026 * 12 + 8);
+    expect(vm.companies.flatMap((company) => company.projects).find((item) => item.id === 'p1')?.durationText).toBe(
+      '本人入力 半年／2026-09基準 9ヶ月',
+    );
+    expect(JSON.stringify(blocks)).toBe(before);
+  });
+
   it('hidden な会社と配下案件を落とす', () => {
     const vm = buildPrintViewModel('シート', blocksFixture());
     expect(vm.companies.map((c) => c.name)).toEqual(['新しい会社', '古い会社']);
@@ -263,8 +254,8 @@ describe('buildPrintViewModel', () => {
   it('主力スタックは案件から導出した経験年月の降順で、上級だけ塗りにする', () => {
     const vm = buildPrintViewModel('シート', blocksFixture());
     expect(vm.summary.topSkills).toEqual([
-      { label: 'Python 4 年', emphasis: 'outline' },
-      { label: 'TypeScript 0 年 9 ヶ月', emphasis: 'solid' },
+      { label: 'Python 4 年 本人入力', emphasis: 'outline' },
+      { label: 'TypeScript 0 年 9 ヶ月 案件算出', emphasis: 'solid' },
     ]);
   });
 
@@ -277,8 +268,8 @@ describe('buildPrintViewModel', () => {
     expect(vm.skillEmphasisMode).toBe('featured');
     expect(vm.summary.skillEmphasisMode).toBe('featured');
     expect(vm.summary.topSkills).toEqual([
-      { label: 'Python 4 年', emphasis: 'solid' },
-      { label: 'TypeScript 0 年 9 ヶ月', emphasis: 'outline' },
+      { label: 'Python 4 年 本人入力', emphasis: 'solid' },
+      { label: 'TypeScript 0 年 9 ヶ月 案件算出', emphasis: 'outline' },
     ]);
     expect(vm.skillGroups[0].skills.map((skill) => skill.featured)).toEqual([false, true]);
   });
@@ -358,13 +349,13 @@ describe('buildPrintViewModel', () => {
     expect(vm.companies.flatMap((c) => c.projects).map((p) => p.durationText)).toEqual(['', '']);
   });
 
-  it('年だけの期間は稼働月数を出さない（書いていない精度を足さない）', () => {
+  it('年だけの期間は月数を捏造せず「未確定」と出す（書いていない精度を足さない）', () => {
     const blocks = blocksFixture();
     const project = blocks.find((b) => b.type === 'project');
     if (project?.type === 'project') project.data.items[0].period = '2020 — 2021';
     // deriveDuration 素通しだと年だけの両端を数えて「1年1ヶ月」が出る。
     const vm = buildPrintViewModel('シート', blocks);
-    expect(vm.companies[0].projects[0].durationText).toBe('');
+    expect(vm.companies[0].projects[0].durationText).toBe('未確定');
   });
 
   it('スキルのビュートグルを OFF にすると 1 ページ目の主力スタックも空にする', () => {
@@ -462,4 +453,22 @@ describe('レビュー指摘の回帰: 消える情報・潰れる情報', () =>
     const vm = buildPrintViewModel('シート', blocksFixture(), ['projects']);
     expect(vm.summary.topSkills).toEqual([]);
   });
+});
+
+it('2つ目の案件ブロックもPDFの全案件へ含める', () => {
+  const blocks = blocksFixture();
+  const first = blocks.find((block) => block.type === 'project');
+  if (first?.type !== 'project') throw new Error('fixture project missing');
+  const second = structuredClone(first);
+  second.id = 'second-project-block';
+  second.data.companies = second.data.companies.map((company) => ({ ...company, id: `second-${company.id}` }));
+  second.data.items = second.data.items.map((item) => ({
+    ...item,
+    id: `second-${item.id}`,
+    companyId: `second-${item.companyId}`,
+    title: `追加-${item.title}`,
+  }));
+  const originalCount = buildPrintViewModel('合成', blocks).companies.flatMap((company) => company.projects).length;
+  const vm = buildPrintViewModel('合成', [...blocks, second]);
+  expect(vm.companies.flatMap((company) => company.projects)).toHaveLength(originalCount * 2);
 });

@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { createSheet, deleteSheet, listSheets } from '@/db';
 import type { BlockInput, ProfileBlockData } from '@/db/block';
 import {
   buildRealVolumeDemoBlocks,
@@ -11,6 +10,7 @@ import {
   REAL_VOLUME_FLAGSHIP_PROJECT_TITLE,
   TECH_POOLS,
 } from '@/db/fixture';
+import { createSheet, deleteSheet, listSheets } from './document-fixture';
 import { extractPdfPages, extractPdfText } from './pdf-extract';
 
 // PR #298（提出用 PDF をデザイン準拠の構造描画へ作り替える）のユーザーストーリーを、

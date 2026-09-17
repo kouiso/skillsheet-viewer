@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SkillSheetNotFoundError } from '@/db';
+import { DocumentError } from '@/db/document-service';
 
 import { isDbContentStale, withDbHealthCheck } from './sheet-cache';
 
@@ -31,6 +32,14 @@ describe('isDbContentStale', () => {
 // 更新されず isDbContentStale が true のまま＝古い DB で健全なのに stale 扱いという
 // 元の誤検知が再現する）。手を入れるときは同じ壊し方でもう一度赤を見ること。
 describe('withDbHealthCheck', () => {
+  it.each(['ACCESS_DENIED', 'INVALID_STATE', 'UNREADABLE_DOCUMENT'])('%sは古い本文で隠さない', async (code) => {
+    const cached = { value: 'old', fetchedAt: Date.now() - (STALE_THRESHOLD_MS + 1_000) };
+    await expect(
+      withDbHealthCheck(cached, async () => {
+        throw new DocumentError(code);
+      }),
+    ).rejects.toMatchObject({ code });
+  });
   afterEach(() => {
     vi.useRealTimers();
   });

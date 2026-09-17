@@ -1,21 +1,50 @@
-/**
- * Console方向のダッシュボードUI（プロフィール/統計/スキルマトリクス/工程の俯瞰/案件詳細/タイムライン）
- * を実データで見た目確認するための検証用シートを1件 INSERT するスクリプト。
- *
- * 実行: pnpm exec tsx script/seed-console-demo.ts
- */
-import { createConsoleDemoSheet } from '../src/db/fixture/console-demo';
-// .env.local のパース規則が2箇所に分かれると片方だけ直す退行が入るため、共通実装を使う。
-import { loadWebEnvLocal } from './block-write';
+/** 操作UUIDを指定してconsole検証シートを作成する。同じ操作の再試行では同じUUIDを使う。 */
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { getDb } from '../src/db/client';
+import { createDocumentService } from '../src/db/document-service';
+import { buildConsoleDemoBlocks, CONSOLE_DEMO_TITLE } from '../src/db/fixture/console-demo';
+import { getOwnerId } from '../src/db/skillsheet';
+import { prepareCreateOperation } from './create-operation';
+import { loadScriptEnv } from './env';
 
-async function main() {
-  loadWebEnvLocal();
-  const sheetId = await createConsoleDemoSheet();
-  console.log('created sheetId:', sheetId);
-  console.log(`URL: /view/db/${sheetId}`);
+export async function seedConsoleDemo(args: string[]): Promise<string> {
+  if (
+    args.length !== 2 ||
+    args[0] !== '--operation-id' ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(args[1])
+  )
+    throw new Error('--operation-id UUID が必要です。同じ操作の再試行では同じIDを使ってください');
+  loadScriptEnv({ required: true });
+  const owner = getOwnerId();
+  const operation = prepareCreateOperation(
+    join(
+      process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'),
+      'skillsheet-viewer',
+      'operations',
+      `${args[1].toLowerCase()}.json`,
+    ),
+    owner,
+    CONSOLE_DEMO_TITLE,
+    buildConsoleDemoBlocks(),
+  );
+  const snapshot = await createDocumentService(getDb(), owner).create(
+    operation.sheetId,
+    operation.title,
+    operation.blocks,
+  );
+  return snapshot.sheetId;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exitCode = 1;
-});
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  seedConsoleDemo(process.argv.slice(2))
+    .then((sheetId) => {
+      console.log(`Created sheet: ${sheetId}`);
+      console.log(`URL: /view/db/${sheetId}`);
+    })
+    .catch(() => {
+      console.error('console demo作成失敗: 操作IDと接続設定を確認してください');
+      process.exitCode = 1;
+    });
+}

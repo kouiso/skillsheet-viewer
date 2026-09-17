@@ -4,6 +4,8 @@
  * PDF(mdast→@react-pdf) も既存の描画パイプラインをそのまま再利用できる。
  */
 
+import { experienceLegend, resolveDisplayedSkillExperience, resolveDisplayedStats } from '../derived-display';
+import { resolveDuration } from '../duration';
 import { flattenTech, formatMonthToken, formatPeriodDisplay, normalizeProcess, PROCESS_LABELS } from '../process';
 import { sanitizeHtml, sanitizeMarkdown } from '../sanitize-html';
 // tech-area.ts はこのファイルから型のみを取り込むため、実行時の循環は発生しない。
@@ -35,10 +37,21 @@ export function tableBlockToMarkdown(data: TableBlockData): string {
   return [headerLine, alignLine, ...bodyLines].join('\n');
 }
 
+export function markdownExperienceContext(data: ProjectBlockData[], referenceMonth: number, includeHidden = false) {
+  if (!Number.isSafeInteger(referenceMonth) || referenceMonth < 0) throw new Error('INVALID_REFERENCE_MONTH');
+  return {
+    referenceMonth,
+    projects: data.flatMap((part) => (includeHidden ? part : filterVisibleProjectData(part)).items),
+    technologies: data.flatMap((part) => part.items.flatMap((item) => flattenTech(item.tech))),
+  };
+}
+export type MarkdownExperienceContext = ReturnType<typeof markdownExperienceContext>;
+
 /** スキル一覧ブロックを GFM markdown 表へ変換する。 */
 export function skillsBlockToMarkdown(
   data: SkillsBlockData,
   hasFeatured = data.skills.some((skill) => skill.featured === true),
+  context?: MarkdownExperienceContext,
 ): string {
   const category = escapeCell(data.category);
   const header = data.category.trim().length > 0 ? `### ${category}\n\n` : '';
@@ -46,17 +59,27 @@ export function skillsBlockToMarkdown(
   const alignLine = hasFeatured ? '| :--- | :---: | :--- | :---: |' : '| :--- | :---: | :--- |';
   if (data.skills.length === 0) return `${header}${headerLine}\n${alignLine}`;
   const bodyLines = data.skills.map((s) => {
-    const values = [escapeCell(s.name), s.years > 0 ? `${s.years}年` : '-', escapeCell(s.level)];
+    const experience = context
+      ? resolveDisplayedSkillExperience(s, context.projects, context.referenceMonth, context.technologies)
+      : undefined;
+    const source =
+      experience?.source === 'manual' ? '本人入力' : experience?.source === 'derived' ? '案件から算出' : '未確定';
+    const label = experience
+      ? `${experience.label || '未確定'}（${source}${experience.precision === 'partial' ? '・一部期間未確定' : ''}）`
+      : s.years > 0
+        ? `${s.years}年`
+        : '-';
+    const values = [escapeCell(s.name), escapeCell(label), escapeCell(s.level)];
     if (hasFeatured) values.push(s.featured === true && sanitizeHtml(s.name).trim() !== '' ? '✓' : '');
     return `| ${values.join(' | ')} |`;
   });
-  return `${header}${[headerLine, alignLine, ...bodyLines].join('\n')}`;
+  return `${header}${[headerLine, alignLine, ...bodyLines].join('\n')}${context ? `\n\n${experienceLegend(context.referenceMonth)}` : ''}`;
 }
 
 /** 職務経歴ブロックを markdown へ変換する。 */
 export function experienceBlockToMarkdown(data: ExperienceBlockData): string {
   const { company, startDate, endDate, role, description } = data;
-  const period = [formatMonthToken(startDate), formatMonthToken(endDate) || '現在'].filter(Boolean).join('〜');
+  const period = [formatMonthToken(startDate), formatMonthToken(endDate)].filter(Boolean).join('〜');
   const companyEscaped = escapeCell(company.trim());
   const heading = company.trim().length > 0 ? `### ${companyEscaped}（${period}）` : `### （${period}）`;
   const lines: string[] = [heading, ''];
@@ -97,11 +120,12 @@ export function profileBlockToMarkdown(data: ProfileBlockData): string {
 }
 
 /** 統計ブロックを markdown へ変換する。 */
-export function statsBlockToMarkdown(data: StatsBlockData): string {
-  if (data.items.length === 0) return '';
-  const headerLine = `| ${data.items.map((i) => escapeCell(i.label)).join(' | ')} |`;
-  const alignLine = `| ${data.items.map(() => ':---:').join(' | ')} |`;
-  const valueLine = `| ${data.items.map((i) => escapeCell(`${i.value}${i.unit}`)).join(' | ')} |`;
+export function statsBlockToMarkdown(data: StatsBlockData, context?: MarkdownExperienceContext): string {
+  const items = context ? resolveDisplayedStats(data.items, context.projects, context.referenceMonth) : data.items;
+  if (items.length === 0) return '';
+  const headerLine = `| ${items.map((i) => escapeCell(i.label)).join(' | ')} |`;
+  const alignLine = `| ${items.map(() => ':---:').join(' | ')} |`;
+  const valueLine = `| ${items.map((i) => escapeCell(`${i.value}${i.unit}`)).join(' | ')} |`;
   return [headerLine, alignLine, valueLine].join('\n');
 }
 
@@ -123,7 +147,10 @@ export function filterVisibleProjectData(data: ProjectBlockData): ProjectBlockDa
  * `includeHidden: true` は閲覧面ではないバックアップ書き出し用 — hidden も含めた全件を出力する
  * （バックアップが黙って hidden データを欠落させると、そこからの復元でデータが失われるため）。
  */
-export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeHidden?: boolean }): string {
+export function projectBlockToMarkdown(
+  data: ProjectBlockData,
+  opts?: { includeHidden?: boolean; referenceMonth?: number },
+): string {
   const visible = opts?.includeHidden ? data : filterVisibleProjectData(data);
   const companyMap = new Map(visible.companies.map((c) => [c.id, c]));
   const lines: string[] = [];
@@ -137,6 +164,7 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
     lines.push('| :--- | :--- |');
     if (company?.kind) lines.push(`| 会社区分 | ${escapeCell(company.kind)} |`);
     if (item.period) lines.push(`| 期間 | ${escapeCell(formatPeriodDisplay(item.period))} |`);
+    lines.push(`| 参画期間 | ${escapeCell(resolveDuration(item.period, item.duration, opts?.referenceMonth).label)} |`);
     if (item.role) lines.push(`| 役割 | ${escapeCell(item.role)} |`);
     // 導出値は行名を「技術領域」にする。「この技術を使った」までしか根拠が無いため。
     // 取り込んだ scope は本人の言葉なので「担当領域」で出す（tech-area.ts 参照）。
@@ -184,14 +212,19 @@ export function projectBlockToMarkdown(data: ProjectBlockData, opts?: { includeH
   return lines.join('\n');
 }
 
-export function blockToMarkdown(block: Block, hasFeatured?: boolean): string {
+export function blockToMarkdown(
+  block: Block,
+  hasFeatured?: boolean,
+  referenceMonth?: number,
+  context?: MarkdownExperienceContext,
+): string {
   if (block.type === 'markdown') return sanitizeMarkdown(block.data.markdown);
   if (block.type === 'table') return tableBlockToMarkdown(block.data);
-  if (block.type === 'skills') return skillsBlockToMarkdown(block.data, hasFeatured);
+  if (block.type === 'skills') return skillsBlockToMarkdown(block.data, hasFeatured, context);
   if (block.type === 'experience') return experienceBlockToMarkdown(block.data);
   if (block.type === 'profile') return profileBlockToMarkdown(block.data);
-  if (block.type === 'stats') return statsBlockToMarkdown(block.data);
-  if (block.type === 'project') return projectBlockToMarkdown(block.data);
+  if (block.type === 'stats') return statsBlockToMarkdown(block.data, context);
+  if (block.type === 'project') return projectBlockToMarkdown(block.data, { referenceMonth });
   // 型システム上は到達不能。DB 由来の未知 type は "" を返して他ブロックを壊さない。
   return '';
 }

@@ -8,6 +8,7 @@ import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-to
 import type { Block } from '@/db/block';
 import { useReadDepth } from '@/hook/use-read-depth';
 import { digestTitle, type ExportEdition } from '@/lib/export/edition';
+import { generateSkillSheetPdfBlob, PdfDurationConflictError } from '@/lib/generate-skillsheet-pdf';
 import { captureError, track } from '@/lib/observability/capture';
 import { type ExportFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
@@ -108,24 +109,13 @@ const SheetViewClient = ({
     const startedAt = performance.now();
     // 要約版は digestLoading、全文版は pdfLoading。どちらも「生成中」の busy 表示。
     const setLoading = edition === 'digest' ? setDigestLoading : setPdfLoading;
-    // 生成に失敗したときの後始末。import が済んだ時点で掴んでおく — catch の中で
-    // 改めて動的 import すると、その await の分だけ finally が遅れてボタンが busy のまま残る。
-    let resetFontsOnFailure: (() => void) | undefined;
     try {
       setLoading(true);
-
-      const [{ pdf }, { createSkillSheetPdf, resetPdfFontsAfterFailure }] = await Promise.all([
-        import('@react-pdf/renderer'),
-        import('@/component/pdf-export'),
-      ]);
-      resetFontsOnFailure = resetPdfFontsAfterFailure;
-
       // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
       // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
-      // 印刷デザイン経路は描く前に案件セクションの高さを測る（非同期）ので、要素を先に作ってから渡す。
-      // 要約版でも views そのものは渡す — createSkillSheetPdf 側が edition を見て解釈を決める。
-      const pdfDocument = await createSkillSheetPdf({ title, content, blocks, views, referenceMonth, edition });
-      const blob = await pdf(pdfDocument).toBlob();
+      // duration の手入力と期間の導出が矛盾するシートは generateSkillSheetPdfBlob が
+      // PdfDurationConflictError で止める（誤った月数を印刷物へ出さない）。
+      const blob = await generateSkillSheetPdfBlob({ title, content, blocks, views, referenceMonth, edition });
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -147,7 +137,9 @@ const SheetViewClient = ({
       });
     } catch (err) {
       console.error('Error generating PDF:', err);
-      toast.error(`${label}の生成に失敗しました`, { id: toastId });
+      toast.error(err instanceof PdfDurationConflictError ? err.message : `${label}の生成に失敗しました`, {
+        id: toastId,
+      });
       track({
         name: 'pdf_exported',
         edition,
@@ -156,12 +148,6 @@ const SheetViewClient = ({
         reason: exportFailureReason(err),
       });
       captureError(err, { feature: 'pdf-export' });
-      // フォント取得の失敗（オフライン・5xx 等）は @react-pdf/font 内で reject 済みの
-      // Promise として永久にキャッシュされ、次のクリックも即座に同じ失敗を再現する
-      // （リロードしないと直らない「詰み」状態になる）。失敗のたびに登録をリセットし、
-      // 次のクリックで新しい FontSource から取得し直させる（フォント取得以外の失敗
-      // でも安全 — 単に次回また登録し直すだけで副作用は無い）。
-      resetFontsOnFailure?.();
     } finally {
       setLoading(false);
     }

@@ -6,7 +6,8 @@
 import type { McpHttpHandler } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ConflictError, SkillSheetNotFoundError } from '@/db';
+import { SkillSheetNotFoundError } from '@/db';
+import { DocumentError } from '@/db/document-service';
 
 const { updateStatsItemMock } = vi.hoisted(() => ({
   updateStatsItemMock: vi.fn(),
@@ -71,7 +72,7 @@ describe('MCP ツールのエラーマッピング', () => {
         sheetId: SHEET_ID,
         index: 0,
         expectedLabel: 'x',
-        expectedUpdatedAt: '2026-01-01T00:00:00Z',
+        expectedRevision: '1',
         fields: {},
       }),
       OWNER_CLAIMS,
@@ -88,7 +89,7 @@ describe('MCP ツールのエラーマッピング', () => {
         sheetId: SHEET_ID,
         index: 0,
         expectedLabel: 'x',
-        expectedUpdatedAt: '2026-01-01T00:00:00Z',
+        expectedRevision: '1',
         fields: { value: '1' },
       }),
       OWNER_CLAIMS,
@@ -98,14 +99,14 @@ describe('MCP ツールのエラーマッピング', () => {
     expect(result.content[0].text).toContain('NOT_FOUND');
   });
 
-  it('ConflictError は isError + CONFLICT になる', async () => {
-    updateStatsItemMock.mockRejectedValue(new ConflictError());
+  it('DocumentError(CONFLICT) は isError + CONFLICT になる', async () => {
+    updateStatsItemMock.mockRejectedValue(new DocumentError('CONFLICT'));
     const res = await dispatch(
       callTool('update_stats', {
         sheetId: SHEET_ID,
         index: 0,
         expectedLabel: 'x',
-        expectedUpdatedAt: '2026-01-01T00:00:00Z',
+        expectedRevision: '1',
         fields: { value: '1' },
       }),
       OWNER_CLAIMS,

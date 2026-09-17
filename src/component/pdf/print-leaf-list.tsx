@@ -16,13 +16,14 @@
 import type { ReactElement } from 'react';
 
 import { CompanyHeadingBand, CompanyNote } from './company-heading';
+import { fitContinuationHeading } from './print-continuation-heading';
 import type { FrameSpec, Leaf, MeasuredLeaf, MeasuredLine } from './print-leaf';
 import { markdownPieces } from './print-markdown';
 import type { PrintPage } from './print-paginate';
 import { MetaTable, SectionLabel, TechChipGroup } from './print-primitive';
 import { splitTextAtLine } from './print-split-text';
 import { PRINT_SIZE } from './print-token';
-import { fitContinuationHeading, type PrintCompany, type PrintProject, type PrintViewModel } from './print-view-model';
+import type { PrintCompany, PrintProject, PrintViewModel } from './print-view-model';
 import { COMPACT_GROUP_PAD_BOTTOM, CompactRow, CompactTableHeader, compactBodyPieces } from './project-card-compact';
 import { DETAIL_HEADER_PAD, ProjectCardHeader } from './project-card-detail';
 
@@ -149,7 +150,7 @@ function detailCardDrafts(project: PrintProject): LeafDraft[] {
       el: <SectionLabel>{label}</SectionLabel>,
       keepWithNext: true,
       frame: cardFrame({
-        padTop: BLOCK_PAD.vertical,
+        padTop: BLOCK_PAD.vertical - 3,
         padBottom: pieces.length === 0 ? BLOCK_PAD.vertical : 0,
         padHorizontal: BLOCK_PAD.horizontal,
         surface,

@@ -2,8 +2,9 @@
 
 import type { CompanyInfo, ProjectItem } from '@/db/block';
 import { resolveCompanyPeriod } from '@/db/derived-display';
+import { resolveDuration } from '@/db/duration';
 import { companyDisplayName } from '@/db/group-by-company';
-import { displayDuration, formatPeriodDisplay, parsePeriodBounds } from '@/db/process';
+import { formatPeriodDisplay, parsePeriodBounds } from '@/db/process';
 import { sanitizeHtml } from '@/util/sanitize-html';
 import { CompanyLane } from './company-lane';
 import { ProjectCard } from './project-card';
@@ -33,6 +34,7 @@ export function companyCountLabel(shown: number, total: number, isSearching: boo
 }
 
 interface CompanySectionProps {
+  referenceMonth?: number;
   companyId: string;
   /** 同じ会社 ID を持つ project ブロックが 2 つあるときに id が衝突しないようにする接尾辞。 */
   headingIdSuffix?: string;
@@ -49,6 +51,7 @@ interface CompanySectionProps {
 }
 
 export function CompanySection({
+  referenceMonth,
   companyId,
   headingIdSuffix,
   company,
@@ -70,9 +73,9 @@ export function CompanySection({
   const laneItems = items.map(({ item, no }) => ({
     no: String(no).padStart(2, '0'),
     period: item.period,
-    // カード・タイムライン・PDF と同じ判定（displayDuration）。トグル OFF なら空にして
+    // カード・タイムライン・PDF と同じ判定（resolveDuration）。トグル OFF なら空にして
     // レーン右端の月数欄ごと出さない。
-    duration: showDuration ? displayDuration(item) : '',
+    duration: showDuration ? resolveDuration(item.period, item.duration, referenceMonth).label : '',
   }));
 
   return (
@@ -105,6 +108,7 @@ export function CompanySection({
             activeTech={activeTech}
             queryTerms={queryTerms}
             showDuration={showDuration}
+            referenceMonth={referenceMonth}
           />
         ))}
       </div>

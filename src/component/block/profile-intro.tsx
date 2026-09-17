@@ -88,13 +88,9 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
 
   const renderMeta = () =>
     metaEntries.length > 0 ? (
-      // design は「年齢 30代 · 勤務形態 フルリモート · …」の1行。2段組の定義リストはやめる。
-      // SP は2列グリッド、sm 以上は1行フレックスに戻す。
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs text-faint sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px]">
+      // 狭い画面では項目ごとに1行を使い、長い技術名や担当業務の折り返し幅を確保する。
+      <dl className="grid grid-cols-1 gap-y-2 text-sm text-faint sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px] sm:gap-y-1 sm:font-mono sm:text-xs">
         {metaEntries.map(([key, value], i) => (
-          // min-w-0: grid-cols-2 は各トラックを minmax(0,1fr) にするが、内側の flex 行自体は
-          // 既定 min-width:auto のままだと、区切りの無い長い値（英字の資格名など）で
-          // セルからはみ出し隣の列に重なる。break-words で折り返し可能にする。
           <div key={key} className="flex min-w-0 items-baseline gap-1.5">
             {i > 0 && (
               <span aria-hidden className="hidden sm:inline">

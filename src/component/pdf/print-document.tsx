@@ -41,6 +41,7 @@ export interface PrintSkillSheetDocumentInput {
 export interface PrintSkillSheetDocumentProps {
   title: string;
   vm: PrintViewModel;
+  referenceMonth?: number;
   /** 割り付け済みの案件セクション。案件を出さないときは空配列。 */
   projectPages: PrintPage[];
 }
@@ -68,10 +69,17 @@ export async function buildPrintSkillSheetDocument(
 ): Promise<ReactElement<DocumentProps>> {
   const vm = buildPrintViewModel(input.title, input.blocks, input.views, input.referenceMonth);
   const projectPages = await paginateProjects(vm, fontStore);
-  return <PrintSkillSheetDocument title={input.title} vm={vm} projectPages={projectPages} />;
+  return (
+    <PrintSkillSheetDocument
+      title={input.title}
+      vm={vm}
+      projectPages={projectPages}
+      referenceMonth={input.referenceMonth}
+    />
+  );
 }
 
-export function PrintSkillSheetDocument({ title, vm, projectPages }: PrintSkillSheetDocumentProps) {
+export function PrintSkillSheetDocument({ title, vm, projectPages, referenceMonth }: PrintSkillSheetDocumentProps) {
   const footer = <RunningFooter name={vm.summary.name} sheetTitle={vm.summary.sheetTitle} />;
   // スキル一覧セクション自体が出ない（ビュートグル OFF、またはスキルブロックが 0 件）とき、
   // 得意分野・得意業務（expertiseRows）の行き先が無くなり本文から丸ごと消えていた
@@ -121,6 +129,7 @@ export function PrintSkillSheetDocument({ title, vm, projectPages }: PrintSkillS
             groups={vm.skillGroups}
             expertiseRows={vm.summary.expertiseRows}
             skillEmphasisMode={vm.skillEmphasisMode}
+            referenceMonth={referenceMonth}
           />
           {footer}
         </Page>
