@@ -59,7 +59,7 @@ body:
         4. 画像サイズを自動最適化する設定を追加
 
         **該当ファイルパス:**
-        - `src/components/Hero.tsx` (L45-L60)
+        - `src/component/Hero.tsx` (L45-L60)
         - `next.config.js` (画像最適化設定)
 
         </details>

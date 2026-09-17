@@ -7,7 +7,7 @@ const { createDocument, toBlob, resetFonts, renderPdf } = vi.hoisted(() => ({
   resetFonts: vi.fn(),
   renderPdf: vi.fn(),
 }));
-vi.mock('@/components/pdf-export', () => ({
+vi.mock('@/component/pdf-export', () => ({
   createSkillSheetPdf: createDocument,
   resetPdfFontsAfterFailure: resetFonts,
 }));
@@ -43,7 +43,7 @@ describe('generateSkillSheetPdfBlob', () => {
 });
 
 it('終了済みの期間矛盾では描画・フォント取得へ進まず、原文を保持する', async () => {
-  const input: import('@/components/pdf-export').SkillSheetPDFProps = {
+  const input: import('@/component/pdf-export').SkillSheetPDFProps = {
     title: '合成',
     content: '',
     referenceMonth: 24320,

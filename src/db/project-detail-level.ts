@@ -9,7 +9,7 @@
  * 全件空なので使えない（DB 実測）。この結果は DB に保存しない — 表示のための集計軸である。
  */
 
-import type { ProjectItem } from './blocks';
+import type { ProjectItem } from './block';
 import { parsePeriodBounds } from './process';
 
 /** 詳細版にする「直近」の幅（ヶ月）。 */

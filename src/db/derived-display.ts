@@ -1,4 +1,4 @@
-import type { CompanyInfo, ProjectItem, SkillEntry, StatItem } from './blocks';
+import type { CompanyInfo, ProjectItem, SkillEntry, StatItem } from './block';
 import { classifyPeriod, deriveCompanyPeriod, flattenTech } from './process';
 
 const ENGINEER_EXPERIENCE_LABELS = new Set(['エンジニア歴', 'エンジニア経験', '経験年数', '実務経験']);

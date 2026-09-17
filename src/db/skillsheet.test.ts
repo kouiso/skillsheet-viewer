@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks';
+import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './block';
 import { getGitHubSeedConfig, isGitHubSeedConfigured } from './skillsheet';
 
 // split/joinとGitHub設定の純粋関数を検証する。文書操作はdocument-serviceの試験で扱う。

@@ -5,6 +5,7 @@ import {
   deriveDuration,
   durationFromRange,
   flattenTech,
+  flattenTechEntries,
   formatMonthToken,
   formatPeriodDisplay,
   formatPeriodRange,
@@ -178,6 +179,34 @@ describe('flattenTech', () => {
       collab: [''],
     };
     expect(flattenTech(tech)).toEqual(['TS', 'Next.js']);
+  });
+});
+
+describe('flattenTechEntries', () => {
+  it('各技術名が属するバケットを返す', () => {
+    const tech = { lang: ['TS'], fw: ['Next.js'], db: [], infra: ['AWS'], tools: ['VSCode'], collab: ['Slack'] };
+    expect(flattenTechEntries(tech)).toEqual([
+      { name: 'TS', bucket: 'lang' },
+      { name: 'Next.js', bucket: 'fw' },
+      { name: 'AWS', bucket: 'infra' },
+      { name: 'VSCode', bucket: 'tools' },
+      { name: 'Slack', bucket: 'collab' },
+    ]);
+  });
+
+  it('同名が複数バケットにまたがるときは TECH_BUCKET_ORDER で先のバケットを採用する', () => {
+    const tech = { lang: [], fw: [], db: [], infra: ['Docker'], tools: ['Docker'], collab: [] };
+    expect(flattenTechEntries(tech)).toEqual([{ name: 'Docker', bucket: 'infra' }]);
+  });
+
+  it('「該当なし」プレースホルダと非文字列は除外する', () => {
+    const tech = { lang: ['TS', '-', '  '], fw: [], db: [], infra: [], tools: [], collab: [] };
+    expect(flattenTechEntries(tech)).toEqual([{ name: 'TS', bucket: 'lang' }]);
+  });
+
+  it('tech が undefined でも例外にならない', () => {
+    // @ts-expect-error レガシーデータ由来の欠損を想定する。
+    expect(flattenTechEntries(undefined)).toEqual([]);
   });
 });
 

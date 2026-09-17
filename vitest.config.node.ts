@@ -3,7 +3,7 @@ import { defineConfig, mergeConfig } from 'vitest/config';
 import { sharedVitestConfig } from './vitest.shared';
 
 /**
- * DB 層（`src/db`）と CLI スクリプト（`scripts`）は Node で動くコード。
+ * DB 層（`src/db`）と CLI スクリプト（`script`）は Node で動くコード。
  *
  * モノレポを畳む前は `packages/db` 側が `environment: 'node'` を明示していた。
  * ルート1本にしたあと jsdom 設定へ吸収させると、サーバ専用コードに window /
@@ -16,7 +16,9 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'node',
-      include: ['src/db/**/*.test.ts', 'scripts/**/*.test.ts'],
+      // `*.node.test.ts` は node 環境専用テストの明示サフィックス（jsdom 側では除外）。
+      // MCP ルート・サービス層など window/document の無い実行経路をここで検証する。
+      include: ['src/db/**/*.test.ts', 'script/**/*.test.ts', '**/*.node.test.ts'],
     },
   }),
 );

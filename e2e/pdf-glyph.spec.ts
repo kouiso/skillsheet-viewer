@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { type Browser, expect, type Page, test } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist';
-import { buildConsoleDemoBlocks } from '@/db/fixtures';
+import { buildConsoleDemoBlocks } from '@/db/fixture';
 import { createSheet, deleteSheet, listSheets } from './document-fixture';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';

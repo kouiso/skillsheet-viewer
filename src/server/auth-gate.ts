@@ -27,7 +27,7 @@ async function resolveEditorUserId(requestHeaders?: Headers): Promise<string | n
     return null;
   }
   try {
-    const session = await getAuth().api.getSession({ headers: requestHeaders ?? (await headers()) });
+    const session = await (await getAuth()).api.getSession({ headers: requestHeaders ?? (await headers()) });
     const userId = session?.user?.id;
     if (!userId || userId !== ownerId) {
       return null;

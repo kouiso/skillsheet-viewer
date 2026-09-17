@@ -2,7 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { revalidateTag } from 'next/cache';
 import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
 import { createDocumentService, DocumentError } from '@/db/document-service';
-import { getCachedDbSheet, getCachedDbSheetById, toStaleSheet } from '@/server/sheets-cache';
+import { getCachedDbSheet, getCachedDbSheetById, toStaleSheet } from '@/server/sheet-cache';
 
 import { editorProcedure, router, viewerProcedure } from '../init';
 import {

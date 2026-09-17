@@ -6,9 +6,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { Button } from '@/component/ui/button';
+import { Card, CardContent } from '@/component/ui/card';
+import { Input } from '@/component/ui/input';
 import { signIn } from '@/lib/auth-client';
 import { resolveNextPath } from '@/util/resolve-next-path';
 
@@ -28,6 +28,14 @@ function LoginForm() {
       const result = await signIn.email({ email, password });
       if (result.error) {
         setError('メールアドレスまたはパスワードが正しくありません');
+        return;
+      }
+      // OAuth 認可フロー（Remote MCP クライアント接続、Issue #305）経由のサインインでは、
+      // セッション発行と同時に認可の続き（同意画面、またはクライアントへの code
+      // リダイレクト）が { redirect: true, url } として返る。通常遷移より先にそちらへ進む。
+      const oauthRedirect = (result.data as { url?: string } | null)?.url;
+      if (typeof oauthRedirect === 'string' && oauthRedirect.length > 0) {
+        window.location.assign(oauthRedirect);
         return;
       }
       const dest = resolveNextPath(searchParams.get('next'), '/builder', window.location.origin);

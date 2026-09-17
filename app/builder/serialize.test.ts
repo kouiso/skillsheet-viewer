@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type Block, blocksToMarkdown, type ProjectItem } from '@/db/blocks';
+import { type Block, blocksToMarkdown, type ProjectItem } from '@/db/block';
 import { canonicalJson, validateDocumentBlocks } from '@/db/document-contract';
 import { assembleMarkdown, blockToItem, itemsToDocumentBlocks, newId } from './serialize';
 

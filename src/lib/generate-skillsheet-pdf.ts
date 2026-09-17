@@ -1,5 +1,5 @@
-import type { SkillSheetPDFProps } from '@/components/pdf-export';
-import { filterVisibleProjectData } from '@/db/blocks';
+import type { SkillSheetPDFProps } from '@/component/pdf-export';
+import { filterVisibleProjectData } from '@/db/block';
 import { resolveDuration } from '@/db/duration';
 
 export class PdfDurationConflictError extends Error {
@@ -11,7 +11,9 @@ export class PdfDurationConflictError extends Error {
 
 /** PDF生成と、失敗したフォント取得を次回再試行するための復旧を受け持つ。 */
 export async function generateSkillSheetPdfBlob(input: SkillSheetPDFProps): Promise<Blob> {
-  if (input.blocks && (input.views === undefined || input.views.includes('projects'))) {
+  // 要約版は views を無視して全案件を描くので、edition で判定する。
+  const rendersProjects = input.edition === 'digest' || input.views === undefined || input.views.includes('projects');
+  if (input.blocks && rendersProjects) {
     if (!Number.isSafeInteger(input.referenceMonth) || (input.referenceMonth ?? -1) < 0) {
       throw new Error('INVALID_REFERENCE_MONTH');
     }
@@ -28,7 +30,7 @@ export async function generateSkillSheetPdfBlob(input: SkillSheetPDFProps): Prom
   try {
     const [{ pdf }, { createSkillSheetPdf, resetPdfFontsAfterFailure }] = await Promise.all([
       import('@react-pdf/renderer'),
-      import('@/components/pdf-export'),
+      import('@/component/pdf-export'),
     ]);
     resetFontsOnFailure = resetPdfFontsAfterFailure;
     const document = await createSkillSheetPdf(input);

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ProjectItem } from '@/db/blocks';
+import type { ProjectItem } from '@/db/block';
 import { ProjectForm } from './project-form';
 
 const project: ProjectItem = {

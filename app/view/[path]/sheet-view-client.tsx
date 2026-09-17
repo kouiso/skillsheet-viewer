@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import Header from '@/components/header';
-import SkillSheetViewer from '@/components/skill-sheet-viewer';
-import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
-import type { Block } from '@/db/blocks';
-import { useReadDepth } from '@/hooks/use-read-depth';
+import Header from '@/component/header';
+import SkillSheetViewer from '@/component/skill-sheet-viewer';
+import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
+import type { Block } from '@/db/block';
+import { useReadDepth } from '@/hook/use-read-depth';
+import { digestTitle, type ExportEdition } from '@/lib/export/edition';
 import { generateSkillSheetPdfBlob, PdfDurationConflictError } from '@/lib/generate-skillsheet-pdf';
 import { captureError, track } from '@/lib/observability/capture';
-import { type PdfFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
+import { type ExportFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
 interface SheetViewClientProps {
   title: string;
@@ -23,11 +24,13 @@ interface SheetViewClientProps {
   reserveEditSlot?: boolean;
   /**
    * true のとき、DB への再接続に失敗して古いキャッシュを表示している可能性があることを
-   * 画面上部に案内する（Issue #204）。sheets-cache.ts の isDbContentStale() で判定する。
+   * 画面上部に案内する（Issue #204）。sheet-cache.ts の isDbContentStale() で判定する。
    */
   stale?: boolean;
   /** SSRとHydrationで共有する、継続中案件の集計基準月。 */
   referenceMonth?: number;
+  /** DB シートの ID。省略時は API 側がデフォルトシートを出力する（/view/db 用）。 */
+  sheetId?: string;
 }
 
 // ブラウザの fetch はネットワーク失敗を `TypeError` で投げ、message はブラウザごとに違う
@@ -36,7 +39,7 @@ interface SheetViewClientProps {
 // message はここで分類にだけ使い、イベントには enum しか乗せない（URL 等が混ざっても送らない）。
 const BROWSER_FETCH_FAILURE_MESSAGE = /fetch|network|load failed/iu;
 
-function pdfFailureReason(err: unknown): PdfFailureReason {
+function exportFailureReason(err: unknown): ExportFailureReason {
   if (err instanceof TypeError) return BROWSER_FETCH_FAILURE_MESSAGE.test(err.message) ? 'FetchError' : 'TypeError';
   if (err instanceof RangeError) return 'RangeError';
   if (err instanceof Error && err.name === 'FetchError') return 'FetchError';
@@ -55,8 +58,12 @@ const SheetViewClient = ({
   reserveEditSlot = false,
   stale = false,
   referenceMonth,
+  sheetId,
 }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
+  const [excelLoading, setExcelLoading] = useState(false);
+  // 要約版（PDF / Excel）のどちらかを生成中のあいだ真。全文版の busy とは別系統にする。
+  const [digestLoading, setDigestLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
   // 意図的に raw blocks（中身が空でも）で判定する — skill-sheet-viewer.tsx の isDashboard と
   // 必ず揃えること（片方だけ直すとヘッダー/レイアウトがページ間で食い違う）。
@@ -96,17 +103,24 @@ const SheetViewClient = ({
     setViews((prev) => (enabled ? [...prev, view] : prev.filter((v) => v !== view)));
   };
 
-  const handleDownloadPdf = async () => {
-    const toastId = toast.loading('PDFを生成中…');
+  const downloadPdf = async (edition: ExportEdition) => {
+    const label = edition === 'digest' ? '要約版PDF' : 'PDF';
+    const toastId = toast.loading(`${label}を生成中…`);
     const startedAt = performance.now();
+    // 要約版は digestLoading、全文版は pdfLoading。どちらも「生成中」の busy 表示。
+    const setLoading = edition === 'digest' ? setDigestLoading : setPdfLoading;
     try {
-      setPdfLoading(true);
-      const blob = await generateSkillSheetPdfBlob({ title, content, blocks, views, referenceMonth });
+      setLoading(true);
+      // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
+      // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
+      // duration の手入力と期間の導出が矛盾するシートは generateSkillSheetPdfBlob が
+      // PdfDurationConflictError で止める（誤った月数を印刷物へ出さない）。
+      const blob = await generateSkillSheetPdfBlob({ title, content, blocks, views, referenceMonth, edition });
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${title}.pdf`;
+      link.download = `${edition === 'digest' ? digestTitle(title) : title}.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -114,26 +128,89 @@ const SheetViewClient = ({
         URL.revokeObjectURL(url);
       }, REVOKE_OBJECT_URL_DELAY_MS);
 
-      toast.success('PDFをダウンロードしました', { id: toastId });
+      toast.success(`${label}をダウンロードしました`, { id: toastId });
       track({
         name: 'pdf_exported',
+        edition,
         result: 'success',
         durationBucket: toSecondsBucket(performance.now() - startedAt),
       });
     } catch (err) {
       console.error('Error generating PDF:', err);
-      toast.error(err instanceof PdfDurationConflictError ? err.message : 'PDFの生成に失敗しました', { id: toastId });
+      toast.error(err instanceof PdfDurationConflictError ? err.message : `${label}の生成に失敗しました`, { id: toastId });
       track({
         name: 'pdf_exported',
+        edition,
         result: 'failure',
         durationBucket: toSecondsBucket(performance.now() - startedAt),
-        reason: pdfFailureReason(err),
+        reason: exportFailureReason(err),
       });
       captureError(err, { feature: 'pdf-export' });
     } finally {
-      setPdfLoading(false);
+      setLoading(false);
     }
   };
+
+  // ハンドラは引数を取らない形に分ける — モックが onClick={onDownloadPdf} と書くため、
+  // クリックイベントが第 1 引数に入り既定値が効かない。
+  const handleDownloadPdf = () => downloadPdf('full');
+  const handleDownloadPdfDigest = () => downloadPdf('digest');
+
+  // Excel 出力は DB シートなら出す（GitHub シートは対象外）。
+  // id 無し（/view/db）は API 側がデフォルトシートへフォールバックする。
+  const canExportExcel = source === 'db';
+
+  const downloadExcel = async (edition: ExportEdition) => {
+    const label = edition === 'digest' ? '要約版Excel' : 'Excel';
+    const toastId = toast.loading(`${label}を生成中…`);
+    const startedAt = performance.now();
+    const setLoading = edition === 'digest' ? setDigestLoading : setExcelLoading;
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (sheetId) params.set('id', sheetId);
+      if (edition === 'digest') params.set('edition', 'digest');
+      const query = params.size > 0 ? `?${params}` : '';
+      const res = await fetch(`/api/sheet/export-xlsx${query}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${edition === 'digest' ? digestTitle(title) : title}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, REVOKE_OBJECT_URL_DELAY_MS);
+
+      toast.success(`${label}をダウンロードしました`, { id: toastId });
+      track({
+        name: 'excel_exported',
+        edition,
+        result: 'success',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+      });
+    } catch (err) {
+      console.error('Error generating Excel:', err);
+      toast.error(`${label}の生成に失敗しました`, { id: toastId });
+      track({
+        name: 'excel_exported',
+        edition,
+        result: 'failure',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+        reason: exportFailureReason(err),
+      });
+      captureError(err, { feature: 'excel-export' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadExcel = () => downloadExcel('full');
+  const handleDownloadExcelDigest = () => downloadExcel('digest');
 
   return (
     <div>
@@ -153,13 +230,21 @@ const SheetViewClient = ({
           onToggleView={toggleView}
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
+          onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
+          excelLoading={excelLoading}
+          onDownloadPdfDigest={handleDownloadPdfDigest}
+          onDownloadExcelDigest={canExportExcel ? handleDownloadExcelDigest : undefined}
+          digestLoading={digestLoading}
           canEdit={canEdit}
           reserveEditSlot={reserveEditSlot}
         />
       ) : (
+        // project ブロックを持たない DB シート（Header 側）でも Excel 出力は出す
         <Header
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
+          onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
+          excelLoading={excelLoading}
           canEdit={canEdit}
           reserveEditSlot={reserveEditSlot}
           backHref="/view"

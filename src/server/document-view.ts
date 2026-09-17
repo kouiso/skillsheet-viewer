@@ -1,5 +1,5 @@
 import 'server-only';
-import { type Block, blocksToMarkdown, isBlockInput } from '@/db/blocks';
+import { type Block, blocksToMarkdown, isBlockInput } from '@/db/block';
 import type { Database } from '@/db/client';
 import { currentMonthKey } from '@/db/derived-display';
 import { createDocumentService, DocumentError } from '@/db/document-service';

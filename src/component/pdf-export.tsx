@@ -1,0 +1,81 @@
+import type { DocumentProps } from '@react-pdf/renderer';
+import type { ReactElement } from 'react';
+import type { Block, BlockType } from '@/db/block';
+import type { ExportEdition } from '@/lib/export/edition';
+
+import { buildPrintDigestDocument } from './pdf/digest-document';
+import registerPdfFonts from './pdf/font';
+import { buildPrintSkillSheetDocument } from './pdf/print-document';
+import type { PrintViewKey } from './pdf/print-view-model';
+import { SkillSheetDocument, type SkillSheetDocumentProps } from './pdf/skill-sheet-document';
+
+export interface SkillSheetPDFProps extends SkillSheetDocumentProps {
+  /** DB 由来の構造化ブロック。あるとき（DB 経路）は印刷デザインで描く。 */
+  blocks?: Block[];
+  /** 画面のビュートグルの状態。押した瞬間の状態がそのまま PDF に効く。 */
+  views?: PrintViewKey[];
+  /** 継続中案件の経験月数に使う固定月キー。 */
+  referenceMonth?: number;
+  /** 全文版か要約版か。省略は 'full'。 */
+  edition?: ExportEdition;
+}
+
+/**
+ * スキルシート PDF の文書要素を作る。ブラウザ用フォント（バンドルした Noto Sans JP）を
+ * 登録したうえでドキュメントを返す。sheet-view-client から動的 import して生成する。
+ * 印刷デザイン経路は描く前に案件セクションの高さを測る（非同期）ので、コンポーネントではなく
+ * async factory になっている。
+ *
+ * blocks があれば**印刷デザインの構造描画**（会社セクション + 案件カード）を使う。
+ * 無い場合はレガシーの markdown 経路にフォールバックする — GitHub 閲覧経路
+ * （`/view/[path]`）は markdown 文字列しか持たないため、この経路は消せない。
+ * **レガシー経路には機能を足さない**（片方だけ直す事故を防ぐため凍結する）。
+ */
+/** 印刷デザインのビューモデルが実際に読むブロック種別。 */
+const STRUCTURED_BLOCK_TYPES = new Set<BlockType>(['profile', 'skills', 'stats', 'project']);
+
+/**
+ * 印刷デザインで描いてよいブロック構成か。
+ *
+ * ビューモデルは profile / skills / stats / project しか読まない。`markdown` や `table`、
+ * `experience` を含むシート（GitHub から取り込んだシートは本文が markdown ブロックで入る）を
+ * そのまま構造描画に回すと、それらが 1 つも描かれずサマリだけの PDF が出る。
+ * 構造化ブロックがあり、かつ描けないブロックが 1 つも無いときだけ印刷デザインを使う。
+ */
+function canRenderStructured(blocks: Block[] | undefined): blocks is Block[] {
+  if (!blocks || blocks.length === 0) return false;
+  return (
+    blocks.some((b) => STRUCTURED_BLOCK_TYPES.has(b.type)) && blocks.every((b) => STRUCTURED_BLOCK_TYPES.has(b.type))
+  );
+}
+
+export async function createSkillSheetPdf({
+  title,
+  content,
+  blocks,
+  views,
+  referenceMonth,
+  edition,
+}: SkillSheetPDFProps): Promise<ReactElement<DocumentProps>> {
+  registerPdfFonts();
+  // 要約版は構造化ブロックが必須。markdown を含むシートには会社一覧自体が作れないので、
+  // 黙ってレガシー経路へ落とさず失敗として呼び出し側のトーストへ返す。
+  if (edition === 'digest') {
+    if (!canRenderStructured(blocks)) {
+      throw new Error('digest edition requires structured blocks');
+    }
+    // ビュートグルは要約版に効かせない（一覧は全文版と同じ並びで全件出す仕様）。
+    return await buildPrintDigestDocument({ title, blocks, referenceMonth });
+  }
+  if (canRenderStructured(blocks)) {
+    return buildPrintSkillSheetDocument({ title, blocks, views, referenceMonth });
+  }
+  return <SkillSheetDocument title={title} content={content} />;
+}
+
+// 失敗時の後始末も同じモジュールから出す。呼び出し側の catch で改めて動的 import すると、
+// その await が終わるまで finally（ローディング解除）が走らず、ボタンが busy のまま残って
+// 「押し直し」自体ができなくなる（実測でボタンが aria-busy のまま固まった）。
+export { resetPdfFontsAfterFailure } from './pdf/font';
+
+export default createSkillSheetPdf;

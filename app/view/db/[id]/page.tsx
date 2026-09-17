@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
-import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
+import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/component/view-error';
 import { createServerCaller } from '@/server/trpc/caller';
 import { requireViewer } from '@/server/viewer-gate';
 
@@ -52,6 +52,7 @@ export default async function DbSheetByIdPage({ params }: Props) {
         canEdit={canEdit}
         stale={sheet.stale}
         referenceMonth={sheet.referenceMonth}
+        sheetId={id}
       />
     );
   } catch (err) {

@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (
 SELECT 1 FROM information_schema.schemata WHERE schema_name = 'drizzle';
 
 -- 進捗管理テーブルがあるか
-SELECT to_regclass('drizzle.__drizzle_migrations') AS migrations_table;
+SELECT to_regclass('drizzle.__drizzle_migrations') AS migration_table;
 ```
 
 すでにテーブルがある場合は、適用済み行を確認します:
@@ -90,7 +90,7 @@ ORDER BY created_at;
 以下は **既存本番 DB に対して 1 回だけ** 実行します。
 2 本のマイグレーションを「適用済み」として登録します。
 
-`created_at` は `drizzle/migrations/meta/_journal.json` の `when` の値そのものです。
+`created_at` は `drizzle/migration/meta/_journal.json` の `when` の値そのものです。
 `hash` は各 SQL ファイル全文の SHA-256 です（drizzle の `crypto.createHash("sha256").update(<file 全文>)` と同一）。
 下記の値はこのリポジトリ時点の実値です。
 
@@ -129,14 +129,14 @@ SELECT id, hash, created_at FROM drizzle.__drizzle_migrations ORDER BY created_a
 リポジトリルートで以下を実行して再計算できます（`sha256sum` の値が drizzle の hash と一致します）。
 
 ```bash
-sha256sum drizzle/migrations/0000_init.sql
-sha256sum drizzle/migrations/0001_deep_switch.sql
+sha256sum drizzle/migration/0000_init.sql
+sha256sum drizzle/migration/0001_deep_switch.sql
 ```
 
 drizzle 内部の算出と完全一致させたい場合は Node で:
 
 ```bash
-node -e 'const c=require("crypto"),fs=require("fs");for(const t of ["0000_init","0001_deep_switch"]){const q=fs.readFileSync(`drizzle/migrations/${t}.sql`).toString();console.log(t, c.createHash("sha256").update(q).digest("hex"));}'
+node -e 'const c=require("crypto"),fs=require("fs");for(const t of ["0000_init","0001_deep_switch"]){const q=fs.readFileSync(`drizzle/migration/${t}.sql`).toString();console.log(t, c.createHash("sha256").update(q).digest("hex"));}'
 ```
 
 ### より安全な代替案（hash を厳密に気にしたくない場合）
