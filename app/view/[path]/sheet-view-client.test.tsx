@@ -63,7 +63,7 @@ const projectBlock: Block = { id: 'p1', type: 'project', order: 0, data: { compa
 const markdownBlock: Block = { id: 'm1', type: 'markdown', order: 0, data: { markdown: '# 目印' } };
 
 const renderClient = (props: Partial<React.ComponentProps<typeof SheetViewClient>> = {}) =>
-  render(<SheetViewClient title="テストシート" content="# 見出し" source="db" {...props} />);
+  render(<SheetViewClient title="テストシート" content="# 見出し" source="db" referenceMonth={24320} {...props} />);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -146,4 +146,57 @@ describe('SheetViewClient', () => {
       expect(screen.getByTestId('legacy-header-pdf')).toBeInTheDocument();
     });
   });
+});
+
+it('期間矛盾を本人へ伝え、修正後は同じ画面から再試行できる', async () => {
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const block: Block = {
+      id: 'conflict',
+      type: 'project',
+      order: 0,
+      data: {
+        companies: [],
+        items: [
+          {
+            id: 'p',
+            companyId: 'c',
+            title: '案件',
+            scope: '',
+            period: '2026.01 — 2026.03',
+            duration: '9ヶ月',
+            role: '',
+            team: '',
+            process: [],
+            duties: '',
+            acquired: '',
+            comment: '',
+            tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+          },
+        ],
+      },
+    };
+    const user = userEvent.setup();
+    const view = renderClient({ blocks: [block] });
+    const button = screen.getByTestId('dashboard-topbar-pdf');
+    await user.click(button);
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining('原文の差分を確認'), { id: 'toast-1' }),
+    );
+    expect(toBlob).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(button).toHaveAttribute('data-loading', 'false');
+    const corrected = structuredClone(block);
+    corrected.data.items[0].duration = '3ヶ月';
+    view.rerender(
+      <SheetViewClient title="テストシート" content="" source="db" referenceMonth={24320} blocks={[corrected]} />,
+    );
+    await user.click(screen.getByTestId('dashboard-topbar-pdf'));
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('PDFをダウンロードしました', { id: 'toast-1' }));
+    expect(toBlob).toHaveBeenCalledOnce();
+    expect(URL.createObjectURL).toHaveBeenCalledOnce();
+    expect(block.data.items[0].duration).toBe('9ヶ月');
+  } finally {
+    consoleError.mockRestore();
+  }
 });

@@ -173,3 +173,9 @@ describe('paginate', () => {
     }
   });
 });
+
+it('末尾の余白込みで収まらない葉を次ページへ送る', async () => {
+  const pages = await paginate([leaf(700), leaf(40, { marginBottom: 20 })], options);
+  expect(pages).toHaveLength(2);
+  expect(pages.every((page) => page.usedHeight <= CONTENT)).toBe(true);
+});

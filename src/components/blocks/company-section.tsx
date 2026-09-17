@@ -31,6 +31,7 @@ export function companyCountLabel(shown: number, total: number, isSearching: boo
 }
 
 interface CompanySectionProps {
+  referenceMonth?: number;
   companyId: string;
   /** 同じ会社 ID を持つ project ブロックが 2 つあるときに id が衝突しないようにする接尾辞。 */
   headingIdSuffix?: string;
@@ -45,6 +46,7 @@ interface CompanySectionProps {
 }
 
 export function CompanySection({
+  referenceMonth,
   companyId,
   headingIdSuffix,
   company,
@@ -89,7 +91,15 @@ export function CompanySection({
 
       <div className="flex min-w-0 flex-col gap-4">
         {items.map(({ item, no, tech }) => (
-          <ProjectCard key={item.id} item={item} no={no} tech={tech} activeTech={activeTech} queryTerms={queryTerms} />
+          <ProjectCard
+            referenceMonth={referenceMonth}
+            key={item.id}
+            item={item}
+            no={no}
+            tech={tech}
+            activeTech={activeTech}
+            queryTerms={queryTerms}
+          />
         ))}
       </div>
     </section>

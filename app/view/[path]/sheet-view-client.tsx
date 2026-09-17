@@ -7,7 +7,7 @@ import SkillSheetViewer from '@/components/skill-sheet-viewer';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/components/viewer-topbar';
 import type { Block } from '@/db/blocks';
 import { useReadDepth } from '@/hooks/use-read-depth';
-import { generateSkillSheetPdfBlob } from '@/lib/generate-skillsheet-pdf';
+import { generateSkillSheetPdfBlob, PdfDurationConflictError } from '@/lib/generate-skillsheet-pdf';
 import { captureError, track } from '@/lib/observability/capture';
 import { type PdfFailureReason, type SheetSource, toSecondsBucket } from '@/lib/observability/event';
 
@@ -122,7 +122,7 @@ const SheetViewClient = ({
       });
     } catch (err) {
       console.error('Error generating PDF:', err);
-      toast.error('PDFの生成に失敗しました', { id: toastId });
+      toast.error(err instanceof PdfDurationConflictError ? err.message : 'PDFの生成に失敗しました', { id: toastId });
       track({
         name: 'pdf_exported',
         result: 'failure',

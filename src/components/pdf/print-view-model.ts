@@ -13,10 +13,15 @@
 
 import type { Block, CompanyInfo, ProfileBlockData, ProjectItem, ProjectTech, StatsBlockData } from '@/db/blocks';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/blocks';
-import { resolveCompanyPeriod, resolveDisplayedSkillExperience, resolveDisplayedStats } from '@/db/derived-display';
+import {
+  experienceSourceLabel,
+  resolveCompanyPeriod,
+  resolveDisplayedSkillExperience,
+  resolveDisplayedStats,
+} from '@/db/derived-display';
+import { resolveDuration } from '@/db/duration';
 import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
 import {
-  deriveDuration,
   flattenTech,
   formatMonthToken,
   formatPeriodDisplay,
@@ -427,6 +432,7 @@ function buildProject(
   company: CompanyInfo | undefined,
   level: DetailLevel,
   index: number,
+  referenceMonth?: number,
 ): PrintProject {
   const area = resolveProjectArea(item.scope, item.tech);
   const processText = formatProcessForPrint(item.process ?? []);
@@ -457,7 +463,7 @@ function buildProject(
     companyLabel,
     periodText: formatPeriodDisplay(item.period),
     compactPeriodText: compactPeriod(item.period),
-    durationText: trimmed(item.duration) || deriveDuration(item.period),
+    durationText: resolveDuration(item.period, item.duration, referenceMonth).label,
     team: trimmed(item.team),
     metaRows,
     techGroups,
@@ -504,6 +510,7 @@ function buildCompany(
   isLatest: boolean,
   /** この会社の先頭案件に振る通し番号。会社をまたいで連番になるよう呼び出し側が積み上げる。 */
   startIndex: number,
+  referenceMonth?: number,
 ): PrintCompany {
   const roles = dedupeRoles(...items.map((i) => i.role));
   const sizes = items.flatMap((i) => parseTeamSizes(i.team));
@@ -522,7 +529,9 @@ function buildCompany(
     roles,
     teamRange,
     isLatest,
-    projects: items.map((item, i) => buildProject(item, company, levelById.get(item.id) ?? 'compact', startIndex + i)),
+    projects: items.map((item, i) =>
+      buildProject(item, company, levelById.get(item.id) ?? 'compact', startIndex + i, referenceMonth),
+    ),
   };
 }
 
@@ -614,8 +623,15 @@ export function buildPrintViewModel(
 
   const profile = blocks.find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile')?.data;
   const stats = blocks.find((b): b is Extract<Block, { type: 'stats' }> => b.type === 'stats')?.data;
-  const projectBlock = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')?.data;
-  const visible = projectBlock ? filterVisibleProjectData(projectBlock) : { companies: [], items: [] };
+  const projectBlocks = blocks.filter((b): b is Extract<Block, { type: 'project' }> => b.type === 'project');
+  const visibleParts = projectBlocks.map((block) => filterVisibleProjectData(block.data));
+  const visible = {
+    companies: visibleParts.flatMap((part) => part.companies),
+    items: visibleParts.flatMap((part) => part.items),
+  };
+  const recordedTechnologies = projectBlocks.flatMap((block) =>
+    block.data.items.flatMap((item) => flattenTech(item.tech)),
+  );
   const skillGroups: PrintSkillGroup[] = blocks
     .filter((b): b is Extract<Block, { type: 'skills' }> => b.type === 'skills')
     .map((b) => {
@@ -625,7 +641,7 @@ export function buildPrintViewModel(
         skills: (b.data.skills ?? [])
           .filter((s) => trimmed(s.name))
           .map((s) => {
-            const experience = resolveDisplayedSkillExperience(s, visible.items, referenceMonth);
+            const experience = resolveDisplayedSkillExperience(s, visible.items, referenceMonth, recordedTechnologies);
             return {
               name: trimmed(s.name),
               years: experience.months / 12,
@@ -633,7 +649,7 @@ export function buildPrintViewModel(
               featured: s.featured === true,
               yearsLabel:
                 on('skills') && PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
-                  ? printExperienceLabel(experience.label)
+                  ? `${printExperienceLabel(experience.label)} ${experienceSourceLabel(experience)}`.trim()
                   : '',
             };
           }),
@@ -652,7 +668,15 @@ export function buildPrintViewModel(
   // 案件の通し番号は会社をまたいで連番にする（会社ごとに 1 に戻さない）。
   let nextProjectIndex = 1;
   const companies = groups.map((g, index) => {
-    const company = buildCompany(g.company, g.companyId, g.items, levelById, index === latestIndex, nextProjectIndex);
+    const company = buildCompany(
+      g.company,
+      g.companyId,
+      g.items,
+      levelById,
+      index === latestIndex,
+      nextProjectIndex,
+      referenceMonth,
+    );
     nextProjectIndex += company.projects.length;
     return company;
   });
@@ -667,7 +691,7 @@ export function buildPrintViewModel(
       on('skills'),
       skillEmphasisMode,
       referenceMonth,
-      projectBlock !== undefined,
+      projectBlocks.length > 0,
     ),
     skillGroups,
     companies,

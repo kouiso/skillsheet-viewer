@@ -25,15 +25,30 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import type { Block, ProjectTech } from '@/db/blocks';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/blocks';
-import { resolveDisplayedSkillExperience } from '@/db/derived-display';
-import { flattenTech, TECH_BUCKET_LABELS, TECH_BUCKET_ORDER } from '@/db/process';
-import { sanitizeHtml } from '@/db/sanitize-html';
+import {
+  experienceSourceLabel,
+  resolveCompanyPeriod,
+  resolveDisplayedSkillExperience,
+  resolveDisplayedStats,
+} from '@/db/derived-display';
+import { resolveDuration } from '@/db/duration';
+import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
+import { flattenTech, formatPeriodDisplay, TECH_BUCKET_LABELS, TECH_BUCKET_ORDER } from '@/db/process';
+import { resolveDetailLevels } from '@/db/project-detail-level';
+import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
+import { resolveProjectArea } from '@/db/tech-area';
 
 import { MARKDOWN_REMARK_PLUGINS } from '@/lib/markdown-config';
 import type { QualityPage } from './print-quality';
 import { PRINT_SIZE, PRINT_TOP_SKILL_LIMIT, PRINT_TYPE, PRINT_YEAR_VISIBLE_CATEGORIES } from './print-tokens';
+import {
+  compactPeriod,
+  companyLabelOf,
+  dedupeRoles,
+  formatProcessForPrint,
+  stripDecorativeHeading,
+} from './print-view-model';
 import type { PrintViewKey } from './print-view-model';
-import { buildPrintViewModel } from './print-view-model';
 
 const ALL_VIEWS: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline'];
 
@@ -75,6 +90,15 @@ export interface CompletenessReport {
 
 function trimmed(value: string | undefined): string {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+/**
+ * 描画側（print-view-model の `trimmed`）と同じ sanitize+trim。
+ * 期待値は「PDFに実際に描かれる文字列」を予測するので、描画側がタグを落とす
+ * フィールドはこちらも同じく落とさないと false positive になる。
+ */
+function displayText(value: string | undefined): string {
+  return typeof value === 'string' ? sanitizeHtml(value).trim() : '';
 }
 
 function pushFact(
@@ -279,14 +303,16 @@ function headingOccurrence(np: NormalizedPage, key: string, from = 0): number {
 /**
  * ブロック配列から「印刷結果のどこかに載っているはずの事実」を列挙する。
  *
- * 会社・案件の組み立ては `buildPrintViewModel`（画面と PDF が共有する唯一のビューモデル）を
- * そのまま使う。理由は 2 つ:
- *  - hidden フィルタ・会社ごとのグルーピング・簡約/詳細の判定を、ここで再実装すると
- *    基準がずれて「検査だけ通る/検査だけ落ちる」誤差が生まれる。
- *  - 技術チップの上限（PRINT_CHIP_LIMIT）による切り捨てだけは view model の出力
- *    （`techGroups`）に既に反映されてしまっているため、そこだけは raw の
- *    `ProjectTech`（`filterVisibleProjectData` 通過後）から `flattenTech` で
- *    分類ごとに取り直す。
+ * **期待値の集合は描画用 view model を経由しない。** `buildPrintViewModel` の出力を
+ * そのまま事実の源泉にすると、VM 側が案件や会社を落とした時に期待値の一覧まで
+ * 一緒に痩せてしまい、「消えたこと」を検出できない（検査が自分自身を神託にする）。
+ * そのため会社・案件・統計・自己紹介はすべて raw ブロックから再構成する。
+ *
+ * 表示用文字列の変換（期間表記・役割の重複除去・工程の畳み込み等）だけは VM と同じ
+ * 純粋関数を共有する — 変換規則をここに複写すると「検査だけ通る/検査だけ落ちる」
+ * 誤差が生まれるため。集合の決定（hidden フィルタ・グルーピング・簡約/詳細の判定）は
+ * `filterVisibleProjectData` / `groupProjectsByCompany` / `resolveDetailLevels` を
+ * raw 入力に直接適用してこちらで行う。
  */
 export function enumerateCompletenessFacts(
   blocks: Block[],
@@ -295,15 +321,24 @@ export function enumerateCompletenessFacts(
 ): CompletenessFact[] {
   const on = (key: PrintViewKey) => views.includes(key);
   const facts: CompletenessFact[] = [];
-  // sheetTitle はここでは無視してよい（このファイルの呼び出し元が別途タイトル文字列の
-  // 有無を検証する対象ではなく、あらゆる呼び出しで固定の "エンジニアスキルシート" になる）。
-  const vm = buildPrintViewModel('', blocks, views, referenceMonth);
+
+  const projectBlocks = blocks.filter(
+    (block): block is Extract<Block, { type: 'project' }> => block.type === 'project',
+  );
+  const visibleParts = projectBlocks.map((block) => filterVisibleProjectData(block.data));
+  const visible = {
+    companies: visibleParts.flatMap((part) => part.companies),
+    items: visibleParts.flatMap((part) => part.items),
+  };
+  const { levelById } = resolveDetailLevels(visible.items);
+  const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
 
   // --- 1 ページ目: 氏名・肩書き・プロフィール項目・統計・自己紹介 ---
   const profile = blocks.find((b): b is Extract<Block, { type: 'profile' }> => b.type === 'profile')?.data;
+  const stats = blocks.find((b): b is Extract<Block, { type: 'stats' }> => b.type === 'stats')?.data;
 
-  pushFact(facts, 'profile', 'page1', '氏名', profile?.name);
-  pushFact(facts, 'profile', 'page1', '肩書き', profile?.title);
+  pushFact(facts, 'profile', 'page1', '氏名', displayText(profile?.name));
+  pushFact(facts, 'profile', 'page1', '肩書き', displayText(profile?.title));
 
   // VMのスキルや強みが誤って削られても、元ブロックから欠落を検出する。
   for (const [index, strength] of (profile?.strengths ?? []).entries()) {
@@ -311,10 +346,9 @@ export function enumerateCompletenessFacts(
     if (sanitizeHtml(strength).trim()) facts[facts.length - 1].region = 'strengths';
   }
   if (on('skills')) {
-    const projectSource = blocks.find(
-      (block): block is Extract<Block, { type: 'project' }> => block.type === 'project',
+    const recordedTechnologies = projectBlocks.flatMap((block) =>
+      block.data.items.flatMap((item) => flattenTech(item.tech)),
     );
-    const projects = projectSource ? filterVisibleProjectData(projectSource.data).items : [];
     const sourceSkills = blocks
       .filter((block): block is Extract<Block, { type: 'skills' }> => block.type === 'skills')
       .flatMap((block, groupIndex) => {
@@ -323,11 +357,19 @@ export function enumerateCompletenessFacts(
         if (skills.length > 0) pushFact(facts, 'skills', block.id, 'スキル分類', category);
         return skills.map((skill, skillIndex) => {
           const name = sanitizeHtml(skill.name).trim();
-          const experience = resolveDisplayedSkillExperience(skill, projects, referenceMonth);
-          const years = PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
+          const experience = resolveDisplayedSkillExperience(
+            skill,
+            visible.items,
+            referenceMonth,
+            recordedTechnologies,
+          );
+          const periodLabel = PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
             ? experience.label.replace(/^(\d+)年(?:(\d+)ヶ月)?$/, (_, year, month) =>
                 month === undefined ? `${year} 年` : `${year} 年 ${month} ヶ月`,
               )
+            : '';
+          const years = PRINT_YEAR_VISIBLE_CATEGORIES.has(category)
+            ? `${periodLabel} ${experienceSourceLabel(experience)}`.trim()
             : '';
           pushFact(facts, 'skills', block.id, `スキル: ${name}`, years ? `${name}（${years}）` : name);
           return {
@@ -366,26 +408,32 @@ export function enumerateCompletenessFacts(
   // 1 ページ目ではなくスキル一覧ページ（skills-page.tsx の expertiseRows）に回る。
   // 'skills' ビューが OFF だとその印刷経路自体が無い＝意図的な不在（欠落として数えない）。
   const metaEntries: [string, string][] = [];
-  if (trimmed(profile?.company)) metaEntries.push(['所属', trimmed(profile?.company)]);
+  if (displayText(profile?.company)) metaEntries.push(['所属', displayText(profile?.company)]);
   for (const [key, value] of orderedProfileMetaEntries(profile?.meta)) {
-    metaEntries.push([resolveProfileMetaLabel(key), value]);
+    metaEntries.push([resolveProfileMetaLabel(key), displayText(value)]);
   }
   for (const [label, value] of metaEntries) {
     if (value.length > PROFILE_SHORT_VALUE_CHARS && !on('skills')) continue;
     pushFact(facts, 'profile', 'page1', `プロフィール: ${label}`, value);
   }
 
-  // 生の profile.pr ではなく vm.summary.pr を使う。stripDecorativeHeading（print-view-model.ts）
-  // が飾りの見出し行（「♦ 自己紹介」等）を意図的に落としており、それは欠落ではなく
-  // 二重見出しを避けるための正しい変換のため（raw のままだと必ず missing になる）。
-  extractMarkdownFacts(vm.summary.pr).forEach((line, i) => {
+  // 生の profile.pr ではなく表示側と同じ変換（sanitize → 飾り見出し除去）をかけた値を使う。
+  // stripDecorativeHeading が飾りの見出し行（「♦ 自己紹介」等）を意図的に落としており、
+  // それは欠落ではなく二重見出しを避けるための正しい変換（raw のままだと必ず missing になる）。
+  extractMarkdownFacts(stripDecorativeHeading(sanitizeMarkdown(profile?.pr ?? '').trim())).forEach((line, i) => {
     facts.push({ category: 'pr', scope: 'page1', label: `自己紹介 ${i + 1}段落目`, text: line });
   });
 
-  for (const item of vm.summary.stats) {
-    const value = trimmed(item.value);
-    const unit = trimmed(item.unit);
-    const label = trimmed(item.label);
+  // 統計は raw の stats.items から表示用に解決する。project ブロックが無いシートでは
+  // 案件由来の自動算出を混ぜない（buildSummary の hasProjectSource と同じ条件）。
+  for (const item of resolveDisplayedStats(
+    stats?.items ?? [],
+    projectBlocks.length > 0 ? visible.items : undefined,
+    referenceMonth,
+  )) {
+    const value = displayText(item.value);
+    const unit = displayText(item.unit);
+    const label = displayText(item.label);
     // buildSummary と同じ「3 つとも空なら出さない」判定。
     if (!value && !unit && !label) continue;
     const title = label || '(無題)';
@@ -396,26 +444,31 @@ export function enumerateCompletenessFacts(
 
   // --- 会社・案件（'projects' ビューが OFF だとセクションごと出ない） ---
   if (on('projects')) {
-    const projectBlock = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')?.data;
-    const visibleItems = projectBlock ? filterVisibleProjectData(projectBlock).items : [];
-    const techById = new Map(visibleItems.map((item) => [item.id, item.tech]));
+    const techById = new Map(visible.items.map((item) => [item.id, item.tech]));
 
-    for (const company of vm.companies) {
-      const scope = company.name;
-      facts.push({ category: 'company', scope, label: '会社名', text: company.name });
-      pushFact(facts, 'company', scope, '区分', company.kind);
-      pushFact(facts, 'company', scope, '在籍期間', company.periodText);
-      pushFact(facts, 'company', scope, '会社概要', company.note);
+    for (const group of groups) {
+      const company = group.company;
+      const companyName = companyDisplayName(company);
+      const scope = companyName;
+      facts.push({ category: 'company', scope, label: '会社名', text: companyName });
+      const kind = displayText(company?.kind);
+      pushFact(facts, 'company', scope, '区分', companyName.includes(kind) ? '' : kind);
+      pushFact(facts, 'company', scope, '在籍期間', formatPeriodDisplay(resolveCompanyPeriod(company, group.items)));
+      pushFact(facts, 'company', scope, '会社概要', sanitizeMarkdown(company?.note ?? '').trim());
 
-      for (const project of company.projects) {
+      for (const item of group.items) {
         const firstFact = facts.length;
-        const projectScope = project.title;
+        const level = levelById.get(item.id) ?? 'compact';
+        const title = displayText(item.title) || '（タイトル未入力）';
+        const projectScope = title;
+        const periodText = formatPeriodDisplay(item.period);
+        const compactPeriodText = compactPeriod(item.period);
         facts.push({
           category: 'project',
           scope: projectScope,
           label: '案件名',
-          text: project.title,
-          headingPrefix: project.level === 'detail' ? undefined : project.compactPeriodText,
+          text: title,
+          headingPrefix: level === 'detail' ? undefined : compactPeriodText,
         });
 
         // 期間: 簡約版と詳細版で「印刷される文字列そのもの」が違う
@@ -423,24 +476,37 @@ export function enumerateCompletenessFacts(
         // periodText を使う）。年の省略は情報を失わない書式変換であり、
         // PRINT_CHIP_LIMIT の「他 N 件」やメタ表の省略とは性質が違うため、
         // ここでは「省略＝欠落」として扱わず、実際に描画される側の文字列だけを事実にする。
-        const periodText = project.level === 'detail' ? project.periodText : project.compactPeriodText;
-        pushFact(facts, 'project', projectScope, '期間', periodText);
+        pushFact(facts, 'project', projectScope, '期間', level === 'detail' ? periodText : compactPeriodText);
+        pushFact(
+          facts,
+          'project',
+          projectScope,
+          '参画期間',
+          resolveDuration(item.period, item.duration, referenceMonth).label,
+        );
 
-        pushFact(facts, 'project', projectScope, 'チーム規模', project.team);
+        pushFact(facts, 'project', projectScope, 'チーム規模', displayText(item.team));
 
         // metaRows は 役割 / 技術領域(or 担当領域) / チーム / 担当工程 のうち値がある行だけ。
         // 'チーム' は上の「チーム規模」と同じ値なので二重に数えない。
         // 簡約版カードはこの表自体を描かない（project-card-compact.tsx）ため、
         // 簡約版の案件ではここが軒並み「欠落」として出る。これは no-abbreviated-rendering
         // skill の判定基準どおり本物の欠落であり、レベル判定で握りつぶさない。
-        for (const row of project.metaRows) {
-          if (row.label === 'チーム') continue;
+        const metaRows: { label: string; value: string }[] = [];
+        const roleText = dedupeRoles(item.role);
+        if (roleText) metaRows.push({ label: '役割', value: roleText });
+        const area = resolveProjectArea(item.scope, item.tech);
+        const areaText = displayText(area.text);
+        if (areaText) metaRows.push({ label: area.derived ? '技術領域' : '担当領域', value: areaText });
+        const processText = formatProcessForPrint(item.process ?? []);
+        if (processText) metaRows.push({ label: '担当工程', value: processText });
+        for (const row of metaRows) {
           facts.push({ category: 'project', scope: projectScope, label: row.label, text: row.value });
         }
 
         // 技術名: view model の techGroups は PRINT_CHIP_LIMIT で切り捨てた後の値なので
         // 使わない。raw の ProjectTech（hidden フィルタ通過後）から分類ごとに取り直す。
-        const tech = techById.get(project.id);
+        const tech = techById.get(item.id);
         if (tech) {
           for (const bucket of TECH_BUCKET_ORDER) {
             const names = flattenTech({ ...emptyTech(), [bucket]: tech[bucket] ?? [] });
@@ -455,16 +521,19 @@ export function enumerateCompletenessFacts(
           }
         }
 
-        extractMarkdownFacts(project.duties).forEach((line, i) => {
+        // 表示側と同じ優先順位（summary → duties フォールバック）で業務内容を決める。
+        // project-card.tsx:55 `item.summary?.trim() || item.duties` と同じ規則。
+        const duties = sanitizeMarkdown(item.summary ?? '').trim() || sanitizeMarkdown(item.duties ?? '').trim();
+        extractMarkdownFacts(duties).forEach((line, i) => {
           facts.push({ category: 'project', scope: projectScope, label: `業務内容 ${i + 1}行目`, text: line });
         });
-        extractMarkdownFacts(project.acquired).forEach((line, i) => {
+        extractMarkdownFacts(sanitizeMarkdown(item.acquired ?? '').trim()).forEach((line, i) => {
           facts.push({ category: 'project', scope: projectScope, label: `習得スキル・実績 ${i + 1}行目`, text: line });
         });
-        extractMarkdownFacts(project.comment).forEach((line, i) => {
+        extractMarkdownFacts(sanitizeMarkdown(item.comment ?? '').trim()).forEach((line, i) => {
           facts.push({ category: 'project', scope: projectScope, label: `コメント ${i + 1}行目`, text: line });
         });
-        for (let i = firstFact; i < facts.length; i++) facts[i].scopeId = project.id;
+        for (let i = firstFact; i < facts.length; i++) facts[i].scopeId = item.id;
       }
     }
   }
@@ -668,21 +737,32 @@ export interface ContinuationHeaderNoise {
  */
 export function buildContinuationHeaderNoise(
   blocks: Block[],
-  views: PrintViewKey[] = ALL_VIEWS,
   referenceMonth?: number,
 ): ContinuationHeaderNoise[] {
-  const vm = buildPrintViewModel('', blocks, views, referenceMonth);
+  // enumerateCompletenessFacts と同じく、期待値は描画用 view model を経由せず
+  // raw ブロックから同じ純粋関数で組み立てる。
+  const projectBlocks = blocks.filter(
+    (block): block is Extract<Block, { type: 'project' }> => block.type === 'project',
+  );
+  const visibleParts = projectBlocks.map((block) => filterVisibleProjectData(block.data));
+  const visible = {
+    companies: visibleParts.flatMap((part) => part.companies),
+    items: visibleParts.flatMap((part) => part.items),
+  };
+  const { levelById } = resolveDetailLevels(visible.items);
+  const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
   const noise: ContinuationHeaderNoise[] = [];
-  for (const company of vm.companies) {
-    for (const project of company.projects) {
-      if (project.level !== 'detail') continue;
+  for (const group of groups) {
+    const companyLabel = companyLabelOf(companyDisplayName(group.company), displayText(group.company?.kind));
+    for (const item of group.items) {
+      if ((levelById.get(item.id) ?? 'compact') !== 'detail') continue;
       // 先頭の `${title}（続き）` は含めない。checkCompleteness 側で案件名（続き）は
       // 既に blind に剥がしてあるため、それを含めた文字列を渡すと先頭が一致しなくなる
       // （実測で発見した自己バグ）。残りの会社名・期間・稼働期間だけを渡す。
       noise.push({
-        scope: project.title,
-        scopeId: project.id,
-        text: `${project.companyLabel}${project.periodText}${project.durationText}`,
+        scope: displayText(item.title) || '（タイトル未入力）',
+        scopeId: item.id,
+        text: `${companyLabel}${formatPeriodDisplay(item.period)}${resolveDuration(item.period, item.duration, referenceMonth).label}`,
       });
     }
   }
@@ -694,11 +774,21 @@ export function buildCompletenessReport(
   blocks: Block[],
   pages: QualityPage[],
   views: PrintViewKey[] = ALL_VIEWS,
-  referenceMonth?: number,
-): CompletenessReport {
+  referenceMonth: number,
+): CompletenessReport & { durationConflicts: { blockId: string; projectId: string }[] } {
+  if (!Number.isSafeInteger(referenceMonth) || referenceMonth < 0) throw new Error('INVALID_REFERENCE_MONTH');
   const facts = enumerateCompletenessFacts(blocks, views, referenceMonth);
-  const extraNoise = buildContinuationHeaderNoise(blocks, views, referenceMonth);
-  return checkCompleteness(facts, pages, extraNoise);
+  const extraNoise = views.includes('projects') ? buildContinuationHeaderNoise(blocks, referenceMonth) : [];
+  const durationConflicts = views.includes('projects')
+    ? blocks.flatMap((block) =>
+        block.type === 'project'
+          ? filterVisibleProjectData(block.data)
+              .items.filter((item) => resolveDuration(item.period, item.duration, referenceMonth).conflict)
+              .map((item) => ({ blockId: block.id, projectId: item.id }))
+          : [],
+      )
+    : [];
+  return { ...checkCompleteness(facts, pages, extraNoise), durationConflicts };
 }
 
 /** 欠落を `category:scope` でグルーピングする（レポート表示用）。 */

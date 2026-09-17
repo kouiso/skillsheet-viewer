@@ -26,6 +26,19 @@ function buildItem(overrides: Partial<ProjectItem>): ProjectItem {
 }
 
 describe('ProjectCard', () => {
+  it('継続案件の本人入力と固定月からの期間を両方表示する', () => {
+    render(
+      <ProjectCard
+        item={buildItem({ period: '2026.01 — 現在', duration: '半年' })}
+        no={1}
+        activeTech={[]}
+        tech={[]}
+        referenceMonth={2026 * 12 + 8}
+      />,
+    );
+    expect(screen.getByText(/本人入力 半年／2026-09基準 9か月/)).toBeInTheDocument();
+  });
+
   it('チーム人数は既に単位が付いていればそのまま出す（単位を二重に足さない）', () => {
     render(<ProjectCard item={buildItem({})} no={1} activeTech={[]} tech={[]} />);
     expect(screen.getByText(/13 名/)).toBeInTheDocument();

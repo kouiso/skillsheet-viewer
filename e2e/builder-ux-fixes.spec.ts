@@ -1,7 +1,7 @@
 import { expect, type Locator, test } from '@playwright/test';
-import { createSheet, deleteSheet } from '@/db';
 import { TEMPLATES } from '../app/builder/templates';
 import { authFile, login } from './auth';
+import { createSheet, deleteSheet } from './document-fixture';
 
 test.use({ storageState: authFile });
 

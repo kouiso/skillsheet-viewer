@@ -2,8 +2,8 @@
 
 import { type ReactNode, useState } from 'react';
 import type { ProjectItem } from '@/db/blocks';
+import { resolveDuration } from '@/db/duration';
 import {
-  deriveDuration,
   flattenTech,
   formatPeriodDisplay,
   normalizeProcess,
@@ -29,6 +29,7 @@ export function splitCommentParagraphs(comment: string): string[] {
 
 interface ProjectCardProps {
   item: ProjectItem;
+  referenceMonth?: number;
   /** フィルタ前の全件配列基準の通し番号。絞り込んでも変わらない。 */
   no: number;
   /** ハイライト対象の技術（TechFilterで選択中のチップ）。 */
@@ -48,10 +49,10 @@ function CardBlock({ label, children }: { label: string; children: ReactNode }) 
   );
 }
 
-export const ProjectCard = ({ item, no, activeTech, tech, queryTerms = [] }: ProjectCardProps) => {
+export const ProjectCard = ({ item, no, activeTech, tech, queryTerms = [], referenceMonth }: ProjectCardProps) => {
   const [commentOpen, setCommentOpen] = useState(false);
   const normalized = normalizeProcess(item.process);
-  const duration = sanitizeHtml(item.duration?.trim() || deriveDuration(item.period));
+  const duration = sanitizeHtml(resolveDuration(item.period, item.duration, referenceMonth).label);
   const summary = item.summary?.trim() || item.duties;
   const area = resolveProjectArea(item.scope, item.tech);
   const periodDisplay = formatPeriodDisplay(item.period);

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { createSheet, deleteSheet } from '@/db';
+import { createSheet, deleteSheet } from './document-fixture';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 

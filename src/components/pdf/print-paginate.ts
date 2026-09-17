@@ -117,7 +117,7 @@ async function trySplit(
     // 本文と行が対応付けられない葉は割らない（呼び出し側の判断。葉ごと次ページへ送る）。
     if (!parts) return null;
     const head = await measure({ ...parts.head, keepWithNext: false });
-    if (head.marginTop + head.height <= remaining + EPSILON) {
+    if (outerHeight(head) <= remaining + EPSILON) {
       const tail = await measure({ ...parts.tail, keepWithNext: leaf.keepWithNext });
       return { head, tail };
     }
@@ -161,7 +161,7 @@ export async function paginate(leaves: MeasuredLeaf[], options: PaginateOptions)
     }
     const remaining = contentHeight - y;
 
-    if (leaf.marginTop + leaf.height <= remaining + EPSILON) {
+    if (outerHeight(leaf) <= remaining + EPSILON) {
       const requirement = chainRequirement(queue, index, contentHeight, minLinesHead, minLinesTail);
       if (requirement <= remaining + EPSILON || pageEmpty) {
         place(leaf);
