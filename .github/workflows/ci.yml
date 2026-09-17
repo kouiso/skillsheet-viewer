@@ -129,6 +129,8 @@ jobs:
         run: |
           if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_roles WHERE rolname='skillsheet_document_reader'" | grep -q 1; then
             psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-read-boundary.sql
+          fi
+          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_roles WHERE rolname='skillsheet_document_writer'" | grep -q 1; then
             psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-write-boundary.sql
           fi
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<SQL
