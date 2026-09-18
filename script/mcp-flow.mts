@@ -5,7 +5,8 @@ import { loadScriptEnv } from './env';
 
 loadScriptEnv({ required: true });
 
-const BASE = 'http://localhost:3000';
+// 本番検証は MCP_BASE_URL で差し替える（例: https://skill-sheet-snowy.vercel.app）。
+const BASE = process.env.MCP_BASE_URL ?? 'http://localhost:3000';
 const RESOURCE = `${BASE}/api/mcp`;
 const token = process.argv[2];
 if (!token) throw new Error('usage: tsx script/mcp-flow.mts <sessionToken> [scope...] [--decline]');
@@ -19,7 +20,10 @@ const scope =
 const secret = process.env.BETTER_AUTH_SECRET;
 if (!secret) throw new Error('BETTER_AUTH_SECRET が未設定');
 const signed = `${token}.${createHmac('sha256', secret).update(token).digest('base64')}`;
-const cookie = `better-auth.session_token=${signed}`;
+// better-auth は https 配下で cookie 名へ __Secure- を付ける。http と同じ名前で送ると
+// 署名が正しくても session 未検出で /login へ流される。
+const cookieName = BASE.startsWith('https://') ? '__Secure-better-auth.session_token' : 'better-auth.session_token';
+const cookie = `${cookieName}=${signed}`;
 const verifier = randomBytes(32).toString('base64url');
 const { createHash } = await import('node:crypto');
 const challenge = createHash('sha256').update(verifier).digest('base64url');
