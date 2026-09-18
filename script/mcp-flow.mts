@@ -22,9 +22,7 @@ if (!secret) throw new Error('BETTER_AUTH_SECRET が未設定');
 const signed = `${token}.${createHmac('sha256', secret).update(token).digest('base64')}`;
 // better-auth は https 配下で cookie 名へ __Secure- を付ける。http と同じ名前で送ると
 // 署名が正しくても session 未検出で /login へ流される。
-const cookieName = BASE.startsWith('https://')
-  ? '__Secure-better-auth.session_token'
-  : 'better-auth.session_token';
+const cookieName = BASE.startsWith('https://') ? '__Secure-better-auth.session_token' : 'better-auth.session_token';
 const cookie = `${cookieName}=${signed}`;
 const verifier = randomBytes(32).toString('base64url');
 const { createHash } = await import('node:crypto');
