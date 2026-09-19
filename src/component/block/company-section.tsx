@@ -78,14 +78,18 @@ export function CompanySection({
   }));
 
   return (
-    <section aria-label={tenure ? `${name}（${effectivePeriod}）` : name} className="flex min-w-0 flex-col gap-4">
+    <section
+      id={`company-${companyId}${headingIdSuffix ?? ''}`}
+      aria-label={tenure ? `${name}（${effectivePeriod}）` : name}
+      className="flex min-w-0 scroll-mt-40 flex-col gap-4 sm:scroll-mt-[4.75rem]"
+    >
       <div className="sticky top-40 z-20 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 border-b border-border bg-background py-2.5 sm:top-[4.75rem]">
-        {/* ToC は h1..h6[id] を拾うため、アンカー用 id は section ではなく h2 側に置く。
-            これで長いシートでも会社ごとの導線が目次に出る（#355）。
-            scroll-mt は sticky topbar の高さ分。 */}
+        {/* ToC は h1..h6[id] を拾う。section 側の id は #company-<id> リンクの
+            到着点として残し（company-jump-nav と既存 e2e が参照）、h2 には
+            派生 id を付けて目次へ出す（#355）。scroll-mt は sticky topbar の高さ分。 */}
         <h2
-          id={`company-${companyId}${headingIdSuffix ?? ''}`}
-          className="scroll-mt-40 text-[19px] font-semibold leading-snug text-foreground sm:scroll-mt-[4.75rem] sm:text-[22px]"
+          id={`company-${companyId}${headingIdSuffix ?? ''}-heading`}
+          className="text-[19px] font-semibold leading-snug text-foreground sm:text-[22px]"
         >
           {name}
         </h2>
