@@ -13,7 +13,18 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 ALTER TABLE public.skillsheet_state ADD COLUMN IF NOT EXISTS deleted_sheet_ids uuid[] NOT NULL DEFAULT '{}';
 
-CREATE ROLE skillsheet_document_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+-- role は cluster 全域・schema は DB 単位。同一 cluster の別 DB（例: e2e 専用
+-- DB）へ install すると role だけが既に存在する。その場合だけ
+-- PGOPTIONS='-c vars.allow_existing_role=on' で既存 role を再利用する。
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'skillsheet_document_writer') THEN
+    CREATE ROLE skillsheet_document_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+  ELSIF current_setting('vars.allow_existing_role', true) IS DISTINCT FROM 'on' THEN
+    RAISE EXCEPTION 'Dedicated writer role already exists; inspect ownership before installation';
+  END IF;
+END
+$$;
 -- Neon等で OWNER TO を通すため、インストーラーへメンバーシップを付与する。
 GRANT skillsheet_document_writer TO CURRENT_USER;
 -- reader所有の read_snapshot/principals への GRANT を通すため、reader membership も必要。

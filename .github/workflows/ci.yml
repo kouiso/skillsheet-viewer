@@ -135,7 +135,11 @@ jobs:
 
       # 文書境界（skillsheet_private スキーマ＋関数）は drizzle migration の外側にある
       # 管理SQLで、e2e のアプリ経路はこれを通る。e2e DB は永続なので install は
-      # role 不在のときだけ流し（install は既存 role を検知すると例外で止まる設計）、
+      # スキーマ/関数が未設置のときだけ流す。判定を role ではなく schema/function
+      # 存在で見るのは、role が cluster 全域で共有される一方 schema は DB 単位の
+      # ため —— 同一 Neon プロジェクトの別 DB では「role はあるが schema は無い」
+      # 状態になり得る。そのケースで install が既存 role に止まらないよう
+      # vars.allow_existing_role を渡す。
       # 接続 role への権限と principals 対応は毎回揃える
       # —— e2e の owner は実行ごとに作り直されるため、login→owner の写像は固定できない。
       # membership（reader/writer role への GRANT ... TO）は付けない: NOINHERIT でも
@@ -146,11 +150,12 @@ jobs:
         if: matrix.check-type == 'e2e'
         env:
           DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+          PGOPTIONS: -c vars.allow_existing_role=on
         run: |
-          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_roles WHERE rolname='skillsheet_document_reader'" | grep -q 1; then
+          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM information_schema.schemata WHERE schema_name='skillsheet_private'" | grep -q 1; then
             psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-read-boundary.sql
           fi
-          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_roles WHERE rolname='skillsheet_document_writer'" | grep -q 1; then
+          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname='skillsheet_private' AND p.proname='replace_sheet'" | grep -q 1; then
             psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-write-boundary.sql
           fi
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<SQL

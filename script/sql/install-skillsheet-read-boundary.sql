@@ -4,11 +4,15 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
+-- role は cluster 全域・schema は DB 単位。同一 cluster の別 DB（例: e2e 専用
+-- DB）へ install すると role だけが既に存在する。その場合だけ
+-- PGOPTIONS='-c vars.allow_existing_role=on' で既存 role を再利用する。
+-- 既定では従来どおり拒否し、所有者の目視確認を強制する。
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'skillsheet_document_reader') THEN
     CREATE ROLE skillsheet_document_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
-  ELSE
+  ELSIF current_setting('vars.allow_existing_role', true) IS DISTINCT FROM 'on' THEN
     RAISE EXCEPTION 'Dedicated reader role already exists; inspect ownership before installation';
   END IF;
 END
