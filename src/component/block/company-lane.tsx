@@ -63,22 +63,22 @@ export function CompanyLane({ companyPeriod, items }: { companyPeriod: string; i
             key={row.no}
             className="grid grid-cols-[26px_minmax(0,1fr)_auto] items-center gap-2.5 sm:grid-cols-[30px_minmax(0,1fr)_auto]"
           >
-            <span className="font-mono text-[11px] leading-none text-accent-text">{row.no}</span>
+            <span className="font-mono text-[12px] leading-none text-accent-text">{row.no}</span>
             <div className="relative h-2.5 rounded-full bg-chip-bg">
               <div
                 className="absolute inset-y-0 rounded-full bg-primary-dark"
                 style={{ left: row.left, width: row.width }}
               />
             </div>
-            <span className="whitespace-nowrap font-mono text-[11px] text-muted-foreground">{row.duration}</span>
+            <span className="whitespace-nowrap font-mono text-[12px] text-muted-foreground">{row.duration}</span>
           </div>
         ))}
       </div>
       <div className="grid grid-cols-[26px_minmax(0,1fr)_auto] gap-2.5 sm:grid-cols-[30px_minmax(0,1fr)_auto]">
         <span aria-hidden />
         <div className="flex justify-between gap-2.5 border-t border-border pt-1.5">
-          <span className="font-mono text-[11px] text-muted-foreground">{lane.startLabel}</span>
-          <span className="font-mono text-[11px] text-muted-foreground">{lane.endLabel}</span>
+          <span className="font-mono text-[12px] text-muted-foreground">{lane.startLabel}</span>
+          <span className="font-mono text-[12px] text-muted-foreground">{lane.endLabel}</span>
         </div>
         <span aria-hidden />
       </div>

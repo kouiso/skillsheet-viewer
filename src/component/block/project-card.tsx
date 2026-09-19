@@ -10,10 +10,10 @@ import {
   TECH_BUCKET_LABELS,
   TECH_BUCKET_ORDER,
 } from '@/db/process';
+import { sanitizeHtml } from '@/db/sanitize-html';
 import { resolveProjectArea } from '@/db/tech-area';
 import { collapseSoftBreaks } from '@/db/text';
 import { formatTeamSize } from '@/util/format-team-size';
-import { sanitizeHtml } from '@/util/sanitize-html';
 import { InlineMarkdown } from '../inline-markdown';
 import { ProcessStepper } from './process-stepper';
 import { techMatchesQuery } from './project-search';
@@ -49,7 +49,9 @@ function CardBlock({ label, children }: { label: string; children: ReactNode }) 
   return (
     <div className="flex flex-col gap-2 border-t border-border pt-4">
       <span className="text-[12px] leading-normal text-muted-foreground">{label}</span>
-      {children}
+      {/* 他の本文（会社 note 等）は 72ch 制限があるため、カード本文も揃える（#355）。
+          ~100字/行は長文の行追跡を難しくする。 */}
+      <div className="max-w-[72ch]">{children}</div>
     </div>
   );
 }
@@ -101,7 +103,7 @@ export const ProjectCard = ({
   const chipHit = (name: string) => activeTech.includes(name) || techMatchesQuery(name, queryTerms);
 
   return (
-    <article className="flex min-w-0 flex-col gap-4 rounded-[var(--radius-lg)] border border-border bg-card px-[22px] py-5 transition-colors duration-150 hover:border-primary">
+    <article className="flex min-w-0 flex-col gap-4 rounded-[var(--radius-lg)] border border-border bg-card px-[22px] py-5">
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
@@ -123,7 +125,16 @@ export const ProjectCard = ({
         {metaParts.length > 0 && (
           <p className="m-0 font-mono text-[12px] leading-normal text-muted-foreground [overflow-wrap:anywhere]">
             {roleText && <span className="kicker mr-1.5">役割</span>}
-            {metaParts.join(' · ')}
+            {/* 採用側が最重視する「この案件で何をしたか（役割）」をメタ行で最も弱い
+                階層にしない。役割部分だけ前景色で示す（#355）。 */}
+            {roleText ? (
+              <>
+                <span className="font-medium text-foreground">{roleText}</span>
+                {metaParts.length > 1 && ` · ${metaParts.slice(1).join(' · ')}`}
+              </>
+            ) : (
+              metaParts.join(' · ')
+            )}
           </p>
         )}
       </div>
