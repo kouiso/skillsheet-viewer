@@ -85,7 +85,12 @@ table / experience は Markdown 経由で描画するが、skills / profile / st
 
 ## Part 3: 読み取り・保存
 
-`src/db/skillsheet.ts` が DB アクセスの中心。DB クライアントは `src/db/client.ts` の `getDb()`（Neon serverless / WebSocket ドライバ、`DATABASE_URL` からモジュールスコープでキャッシュ）を使う。
+`src/db/skillsheet.ts` は `getOwnerId()` / `SkillSheetNotFoundError` 等の共通部品のみを持ち、
+DB アクセスの中心は `src/db/document-service.ts` の `createDocumentService(getDb(), owner)`。
+すべての読み書きは `skillsheet_private` スキーマの文書境界 SQL 関数経由で行い、
+ランタイムロールはテーブルを直接触らず `EXECUTE` のみを持つ（doc/05 参照）。
+DB クライアントは `src/db/client.ts` の `getDb()`（Neon serverless / WebSocket ドライバ、
+`DATABASE_URL` からモジュールスコープでキャッシュ）を使う。
 
 ### オーナー ID
 
@@ -99,55 +104,34 @@ function getOwnerId(): string {
 ```
 
 個人名のベタ書きを排し、`SKILLSHEET_OWNER_ID` 環境変数から取得する。
+owner 照合自体は境界 SQL 側が `skillsheet_private.principals` の SESSION_USER マッピングで行う。
 
 ### 読み取り
 
-- `listSheets()`: オーナーのシート一覧（`SheetSummary[]`）。
-- `getSkillSheetById(sheetId)`: 指定 ID のシートを `{ title, content, blocks }` として返す。DB 行は `rowToBlock()` が型ガード付きで `Block` へ変換し、壊れた/未知の JSON は `null` にして skip する（読み込み側の防御）。
-- `getSkillSheet()`: デフォルトシートを読む。空なら GitHub からシードする（後述）。
+- `documents().list()`: オーナーのシート一覧（`DocumentSummary[]`。`skillsheet_private.list_sheets`）。
+- `documents().read(sheetId)`: 指定シートを `skillsheet_private.read_snapshot` で読み、
+  `{ sheetId, revision, title, blocks, validation }` の snapshot を返す。
+  `revision` は decimal 文字列（JS の Number 精度を超えないよう API 境界では文字列で持ち回る）。
+- 壊れた/未知のブロック行は `validateDocumentBlocks` で issues に集約し、
+  snapshot の `validation.editable` で編集可否を表す。
 
-### 保存（saveSkillSheetBlocks）
+### 保存（documents().replace）
 
-`saveSkillSheetBlocks(title, blocksInput, sheetId?, expectedUpdatedAt?)` が保存の要。全処理を単一トランザクションで囲み、次の 3 つの保護を提供する。
+保存の要は `documents().replace(sheetId, expectedRevision, title, blocks)` で、
+`skillsheet_private.replace_sheet` が単一呼び出しで CAS・置換・revision 採番を行う。
+サービス側は呼び出し前に `read()` で現行 revision を確認するが、最終判定は常に DB 側の
+CAS であり、読取成功を更新権限や版一致の代用にしない。
 
-```ts
-// skillsheet.ts（抜粋・要約）
-return db.transaction(async (tx) => {
-  let resolvedSheetId: string;
-  if (sheetId) {
-    // A2: 所有者検証 — id + ownerId を同一トランザクション内で照合（TOCTOU 回避）
-    const [existing] = await tx.select(...).where(and(eq(id, sheetId), eq(ownerId, ...))).limit(1);
-    if (!existing) throw new Error('Forbidden: sheet does not belong to the current owner');
-    resolvedSheetId = sheetId;
-  } else {
-    resolvedSheetId = await getOrCreateDefaultSheetId(tx);
-  }
-
-  // A3: 楽観ロック — 行ロック（for('update')）で updatedAt を読み、期待より新しければ中断
-  if (expectedUpdatedAt) {
-    const [current] = await tx.select({ updatedAt }).where(eq(id, resolvedSheetId)).for('update').limit(1);
-    if (current && current.updatedAt.getTime() > new Date(expectedUpdatedAt).getTime()) {
-      throw new ConflictError();
-    }
-  }
-
-  await tx.delete(blocks).where(eq(blocks.sheetId, resolvedSheetId));
-  // cleaned なブロックを order 付きで一括 insert
-  const [updated] = await tx.update(skillSheets).set({ title, updatedAt: sql`now()` })... .returning({ updatedAt });
-  return { updatedAt: updated.updatedAt }; // A4: サーバー時刻を返す
-});
-```
-
-- **A2 所有者検証**: `sheetId` 指定時に `id + ownerId` を同一トランザクション内で照合し、他人のシートを破壊しない。
-- **A3 楽観ロック**: `expectedUpdatedAt` を渡すと、`for('update')` で行ロックを取り、現在の `updatedAt` がそれより新しい場合に `ConflictError`（`skillsheet.ts` で定義）を throw する。ロストアップデートを防ぐ。
-- **A4**: 保存後のサーバー時刻 `updatedAt` を返す。クライアントはこれを次回の `expectedUpdatedAt` に使い、時計ズレによる誤 Conflict を防ぐ。
+- **所有者検証**: owner は境界 SQL が principals マッピングで照合し、
+  未マッピングや他人のシートは `UNMAPPED_PRINCIPAL` / `NOT_FOUND` で拒否される。
+- **楽観ロック（CAS）**: `expectedRevision` が現行 `revision` と一致しない限り
+  `CONFLICT` で保存しない。ロストアップデートを防ぐ。
+- **削除**: `documents().delete(sheetId, expectedRevision)` も同じ CAS。
 - 保存前に `normalizeBlockInput()`（markdown 末尾空白除去・table 行の列数正規化）だけを行う。**`isBlockInputEmpty()` は永続化フィルタとして使わない** — テンプレの空ブロック（入力用スカフォールド）やユーザーが「追加」したばかりの空ブロックも、中身が空のまま insert される。空判定は描画時（`blocksToMarkdown` / Web の `groupBlocks`）と「シート全体が空」ガード（自動保存スキップ・全消し保存の confirm）でのみ使う（issue #128）。
-
-`createSheet()` / `deleteSheet()` も同様にオーナーを検証し、`createSheet` はシートとブロックの挿入を単一トランザクションで囲む。
 
 ### tRPC mutation からの利用
 
-ビルダーの保存は `src/server/trpc/router/sheet.ts` の `sheet.save` procedure が入口（以前の Server Action 経路は廃止済み）。`editorProcedure` ミドルウェアが `getEditorUserId()` で認可を再検証し、zod スキーマ（`z.custom<BlockInput>(isBlockInput)`。既存の型ガードを正本として再利用し `src/db` に zod は入れない）でペイロードを検証してから `saveSkillSheetBlocks` を呼ぶ。`ConflictError` は `TRPCError({ code: 'CONFLICT' })` に変換してクライアントへ返す。`sheet.create` / `sheet.delete` も同じ `editorProcedure` を使う。
+ビルダーの保存は `src/server/trpc/router/sheet.ts` の `sheet.save` procedure が入口（以前の Server Action 経路は廃止済み）。`editorProcedure` ミドルウェアが `getEditorUserId()` で認可を再検証し、`saveSheetInputSchema`（`src/server/trpc/schema.ts` の zod スキーマ）でペイロードを検証してから `documents().replace()` を呼ぶ。`DocumentError` の `CONFLICT` は `TRPCError({ code: 'CONFLICT' })` に、`NOT_FOUND` 等は対応するコードに変換してクライアントへ返す。`sheet.create` / `sheet.delete` も同じ `editorProcedure` を使う。
 
 ---
 
@@ -166,10 +150,10 @@ GitHub 系の環境変数は任意扱いで、`assertServerEnv()` は欠けて�
 ## Part 5: キャッシュと revalidate
 
 `src/server/sheet-cache.ts` が `unstable_cache` でラップした読み取り関数群を提供する。
+一覧（`/view`）は `sheet.list` → `navigation()` が境界 SQL を毎回直接呼ぶためキャッシュを介さない。
 
 | 関数 | 対象 | tag | revalidate |
 |------|------|-----|-----------|
-| `getCachedDbSheets` | DB シート一覧 | `db-sheet` | 60s |
 | `getCachedDbSheetById` | ID 指定 DB シート | `db-sheet` | 60s |
 | `getCachedDbSheet` | デフォルト DB シート | `db-sheet` | 60s |
 | `getCachedSheets` / `getCachedSheet` | GitHub 経路（レガシー） | `sheets` | 3600s |
@@ -183,7 +167,7 @@ GitHub 系の環境変数は任意扱いで、`assertServerEnv()` は欠けて�
 ## まとめ
 
 - 正本は Neon DB。スキルシート＝順序付きブロック配列で、`blocksToMarkdown` が 1 つの Markdown へ連結する。
-- 保存は単一トランザクション内で所有者検証（A2）・楽観ロック（A3・`ConflictError`）・サーバー時刻返却（A4）を行う。
+- 保存は文書境界 SQL（`skillsheet_private.replace_sheet`）の revision CAS で所有者検証・楽観ロック・採番を行う。
 - GitHub は DB 空時のシードとレガシー `/view/[path]` の副系統として残る。
 - 読み取りは `unstable_cache` でタグ付けし、tRPC mutation 後は `revalidateTag(tag, { expire: 0 })` で即時失効させる（`updateTag` は Route Handler から使えないため使用しない）。
 - 認可・入力検証・エラーコードは `src/server/trpc/router/*.ts` の procedure に集約されている（詳細は `01-setup-and-routing.md` の「RSC とデータ取得（tRPC server caller）」参照）。

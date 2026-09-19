@@ -19,9 +19,9 @@ import {
 } from '@/db/block';
 import { experienceLegend } from '@/db/derived-display';
 import { flattenTech } from '@/db/process';
+import { sanitizeHtml } from '@/db/sanitize-html';
 import { useActiveHeading } from '@/hook/use-active-heading';
 import { isSafeImageSrc, MARKDOWN_REMARK_PLUGINS, MARKDOWN_SANITIZE_SCHEMA } from '@/lib/markdown-config';
-import { sanitizeHtml } from '@/util/sanitize-html';
 import { ProfileIntro } from './block/profile-intro';
 import { ProjectSection } from './block/project-section';
 import { SectionHead } from './block/section-head';
@@ -276,6 +276,7 @@ const SkillSheetViewer = ({
   // 通さない。sheet-view-client.tsx の同名ロジックと必ず揃えること（片方だけ直すと
   // ヘッダー/レイアウトがページ間で食い違う）。
   const isDashboard = useMemo(() => (blocks ?? []).some((b) => b.type === 'project'), [blocks]);
+  const reduceMotion = useReducedMotion();
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -365,7 +366,7 @@ const SkillSheetViewer = ({
 
       {/* メインコンテンツ */}
       <motion.main
-        initial={{ opacity: 0, y: 20 }}
+        initial={reduceMotion ? false : { opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         // design: max-width 1180px / padding 44px 32px 96px / セクション間 48px
@@ -391,7 +392,11 @@ const SkillSheetViewer = ({
                   return (
                     <FadeUpSection key={key}>
                       <SectionHead kicker="Skill Matrix" title="スキルマトリクス" />
-                      <p className="mb-3 text-xs text-muted-foreground">{experienceLegend(referenceMonth)}</p>
+                      {/* 集計元の表示案件が無いときは凡例を出さない — 集計していないのに
+                          集計の説明だけが残ると読み手を混乱させる（#354） */}
+                      {(visibleProjectItems?.length ?? 0) > 0 && (
+                        <p className="mb-3 text-xs text-muted-foreground">{experienceLegend(referenceMonth)}</p>
+                      )}
                       {/* design: gap 28px(縦) 40px(横) の auto-fit グリッド。
                           横 gap は 40px から 24px へ詰めた — 3 列に割ったときの 1 列が
                           283px しかなく、スキル名の列が 1 語を語中で折るほど狭かったため

@@ -22,7 +22,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run && vitest run --config vitest.config.node.ts && vitest run --config vitest.config.pdf.ts",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage && vitest run --config vitest.config.node.ts --coverage && vitest run --config vitest.config.pdf.ts --coverage",
     "test:playwright": "NODE_OPTIONS=--conditions=react-server playwright test",
     "test:e2e": "pnpm build && node script/headless-e2e.mjs",
     "test:e2e:playwright": "pnpm build && pnpm test:playwright",

@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     const buf =
       edition.data === 'digest'
         ? await buildSkillSheetXlsxDigest(sheet.blocks, sheet.title)
-        : await buildSkillSheetXlsx(sheet.blocks);
+        : await buildSkillSheetXlsx(sheet.blocks, sheet.referenceMonth);
     const filename = encodeURIComponent(
       edition.data === 'digest' ? `${digestTitle(sheet.title)}.xlsx` : `${sheet.title}.xlsx`,
     );

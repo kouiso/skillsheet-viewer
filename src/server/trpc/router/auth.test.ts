@@ -29,10 +29,14 @@ beforeEach(() => {
     SESSION_SECRET: process.env.SESSION_SECRET,
     VIEWER_CODE: process.env.VIEWER_CODE,
     VITE_VIEWER_CODE: process.env.VITE_VIEWER_CODE,
+    VERCEL: process.env.VERCEL,
   };
   process.env.SESSION_SECRET = 'test-session-secret';
   process.env.VIEWER_CODE = 'correct-code';
   delete process.env.VITE_VIEWER_CODE;
+  // XFF を信用するのは前段が上書きしてくれる環境だけ（#351）。
+  // このテストは「送り元ごとのキー」を検証するため、信頼プロキシ環境として振る舞わせる。
+  process.env.VERCEL = '1';
   // 回数制限はプロセス内カウンタを持つため、テスト間で持ち越さない。
   resetViewerLoginRateLimitMemory();
   vi.spyOn(console, 'warn').mockImplementation(() => {});

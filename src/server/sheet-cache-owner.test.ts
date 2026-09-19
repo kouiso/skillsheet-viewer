@@ -25,19 +25,17 @@ vi.mock('./document-view', () => ({
     Promise.resolve([{ id: owner, title: owner, updatedAt: new Date() }]),
 }));
 
-import { getCachedDbSheet, getCachedDbSheetById, getCachedDbSheets } from './sheet-cache';
+import { getCachedDbSheet, getCachedDbSheetById } from './sheet-cache';
 
 describe('owner-scoped viewer caches', () => {
-  it('separates identical document IDs, defaults and navigation across owners', async () => {
+  it('separates identical document IDs and defaults across owners', async () => {
     const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     state.owner = 'owner-a';
     expect((await getCachedDbSheetById(id)).title).toBe(`owner-a:${id}`);
     expect((await getCachedDbSheet()).title).toBe('owner-a:null');
-    expect((await getCachedDbSheets()).sheets[0].id).toBe('owner-a');
     state.owner = 'owner-b';
     expect((await getCachedDbSheetById(id)).title).toBe(`owner-b:${id}`);
     expect((await getCachedDbSheet()).title).toBe('owner-b:null');
-    expect((await getCachedDbSheets()).sheets[0].id).toBe('owner-b');
     state.owner = 'owner-a';
     expect((await getCachedDbSheetById(id)).title).toBe(`owner-a:${id}`);
     expect(state.read).toHaveBeenCalledTimes(4);

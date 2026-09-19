@@ -29,8 +29,9 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
   // 以前はどちらも「空の編集画面」になり、利用者は自分の書いたものが消えたと誤解した。
   let loadFailure: 'config' | 'unknown' | 'uneditable' | 'invalid-state' | 'not-found' | null = null;
 
+  let caller: Awaited<ReturnType<typeof createServerCaller>> | null = null;
   try {
-    const caller = await createServerCaller();
+    caller = await createServerCaller();
     const state = await caller.sheet.builderState({ sheetId: sheetIdParam });
     if (state.status === 'OK') {
       initialTitle = state.snapshot.title;
@@ -57,6 +58,16 @@ export default async function BuilderPage({ searchParams }: { searchParams: Prom
         : classifyConfigError(err)
           ? 'config'
           : 'unknown';
+    // not-found の画面は「一覧から対象を選び直してください」と案内するが、
+    // builderState が投げた時点で sheets は空のまま。一覧だけは別途取り、
+    // 案内が実態の無い指示にならないようにする（#353）。
+    if (loadFailure === 'not-found' && caller) {
+      try {
+        sheets = (await caller.sheet.list()).sheets;
+      } catch {
+        // 一覧取得まで失敗しているなら空のままにする（個別の案内は出ない）。
+      }
+    }
     console.error('Failed to load sheet for builder:', err);
   }
 

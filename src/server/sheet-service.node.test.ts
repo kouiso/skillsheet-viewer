@@ -383,3 +383,126 @@ describe('searchProjects', () => {
     expect(await searchProjects('案件', SHEET_ID)).toEqual([]);
   });
 });
+
+describe('複数の同型ブロックを持つシート（#357 回帰）', () => {
+  function makeSnapshotWithTwoProjectBlocks(): DocumentSnapshot {
+    const base = makeSnapshot();
+    return {
+      ...base,
+      blocks: [
+        ...base.blocks,
+        {
+          id: 'cccccccc-3333-4333-8333-333333333333',
+          type: 'project',
+          order: 2,
+          data: {
+            companies: [{ id: 'c3', name: '株式会社C', kind: '自社', period: '2025-', note: '' }],
+            items: [
+              {
+                id: 'p3',
+                companyId: 'c3',
+                title: '案件γ',
+                scope: '保守',
+                period: '2025-01〜',
+                role: 'PG',
+                team: '2名',
+                tech: { lang: ['Go'], fw: [], db: [], infra: [], tools: [], collab: [] },
+                process: [],
+                duties: '',
+                acquired: '',
+                comment: '',
+              },
+            ],
+          },
+        },
+      ],
+    };
+  }
+
+  function savedBlocks(): { id: string; data: unknown }[] {
+    return serviceMock.replace.mock.calls[0][3] as { id: string; data: unknown }[];
+  }
+
+  it('1 ブロック目の案件を更新しても 2 ブロック目のデータは保持される', async () => {
+    serviceMock.read.mockResolvedValue({ status: 'OK', snapshot: makeSnapshotWithTwoProjectBlocks() });
+    await updateProjectItem({
+      sheetId: SHEET_ID,
+      projectId: 'p1',
+      expectedRevision: REVISION,
+      fields: { role: 'TL' },
+    });
+    const blocks = savedBlocks();
+    const second = blocks.find((b) => b.id === 'cccccccc-3333-4333-8333-333333333333');
+    const data = second?.data as { companies: { id: string }[]; items: { id: string }[] };
+    expect(data.companies.map((c) => c.id)).toEqual(['c3']);
+    expect(data.items.map((i) => i.id)).toEqual(['p3']);
+    const first = blocks.find((b) => b.id === 'aaaaaaaa-1111-4111-8111-111111111111');
+    expect((first?.data as { items: { role: string }[] }).items[0].role).toBe('TL');
+  });
+
+  it('2 ブロック目の案件も更新できる（先頭ブロックだけを見ない）', async () => {
+    serviceMock.read.mockResolvedValue({ status: 'OK', snapshot: makeSnapshotWithTwoProjectBlocks() });
+    const result = await updateProjectItem({
+      sheetId: SHEET_ID,
+      projectId: 'p3',
+      expectedRevision: REVISION,
+      fields: { role: 'SE' },
+    });
+    expect(result.targetId).toBe('p3');
+    const blocks = savedBlocks();
+    const first = blocks.find((b) => b.id === 'aaaaaaaa-1111-4111-8111-111111111111');
+    expect((first?.data as { items: { id: string }[] }).items.map((i) => i.id)).toEqual(['p1', 'p2']);
+    const second = blocks.find((b) => b.id === 'cccccccc-3333-4333-8333-333333333333');
+    expect((second?.data as { items: { role: string }[] }).items[0].role).toBe('SE');
+  });
+
+  it('searchProjects は全ての project ブロックを対象にする', async () => {
+    serviceMock.read.mockResolvedValue({ status: 'OK', snapshot: makeSnapshotWithTwoProjectBlocks() });
+    const hits = await searchProjects('案件γ', SHEET_ID);
+    expect(hits).toEqual([
+      expect.objectContaining({ projectId: 'p3', companyId: 'c3', matchedOn: 'project', companyName: '株式会社C' }),
+    ]);
+  });
+
+  it('会社を追加した案件はその会社が属するブロックへ入る', async () => {
+    serviceMock.read.mockResolvedValue({ status: 'OK', snapshot: makeSnapshotWithTwoProjectBlocks() });
+    const result = await addProjectItem({
+      sheetId: SHEET_ID,
+      expectedRevision: REVISION,
+      item: {
+        companyId: 'c3',
+        title: '案件δ',
+        scope: '',
+        period: '',
+        role: '',
+        team: '',
+        process: [],
+        duties: '',
+        acquired: '',
+        comment: '',
+      },
+    });
+    const blocks = savedBlocks();
+    const second = blocks.find((b) => b.id === 'cccccccc-3333-4333-8333-333333333333');
+    const items = (second?.data as { items: { id: string; companyId: string }[] }).items;
+    expect(items.map((i) => i.id)).toEqual(['p3', result.targetId]);
+    const first = blocks.find((b) => b.id === 'aaaaaaaa-1111-4111-8111-111111111111');
+    expect((first?.data as { items: { id: string }[] }).items.map((i) => i.id)).toEqual(['p1', 'p2']);
+  });
+
+  it('ブロックをまたぐ projectIds の並び替えは拒否する', async () => {
+    serviceMock.read.mockResolvedValue({ status: 'OK', snapshot: makeSnapshotWithTwoProjectBlocks() });
+    await expect(
+      reorderProjectItems({ sheetId: SHEET_ID, expectedRevision: REVISION, projectIds: ['p1', 'p2', 'p3'] }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(serviceMock.replace).not.toHaveBeenCalled();
+  });
+
+  it('2 ブロック目だけの ID 集合ならそのブロックだけ並び替えられる', async () => {
+    serviceMock.read.mockResolvedValue({ status: 'OK', snapshot: makeSnapshotWithTwoProjectBlocks() });
+    await reorderProjectItems({ sheetId: SHEET_ID, expectedRevision: REVISION, projectIds: ['p3'] });
+    const blocks = savedBlocks();
+    const first = blocks.find((b) => b.id === 'aaaaaaaa-1111-4111-8111-111111111111');
+    expect((first?.data as { items: { id: string }[] }).items.map((i) => i.id)).toEqual(['p1', 'p2']);
+  });
+});

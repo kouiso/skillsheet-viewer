@@ -2,7 +2,7 @@
 
 import type { ProjectItem, SkillsBlockData } from '@/db/block';
 import { experienceSourceLabel, resolveDisplayedSkillExperience } from '@/db/derived-display';
-import { sanitizeHtml } from '@/util/sanitize-html';
+import { sanitizeHtml } from '@/db/sanitize-html';
 
 interface SkillMatrixProps {
   data: SkillsBlockData;
@@ -77,9 +77,9 @@ export const SkillMatrix = ({
                   }}
                 />
               </span>
-              <span className="whitespace-nowrap text-right font-mono text-[11px] text-foreground">
+              <span className="whitespace-nowrap text-right font-mono text-[12px] text-foreground">
                 {experience.label || <span className="text-faint">—</span>}
-                <span className="block text-[11px] text-muted-foreground">{experienceSourceLabel(experience)}</span>
+                <span className="block text-[12px] text-muted-foreground">{experienceSourceLabel(experience)}</span>
               </span>
             </div>
           );

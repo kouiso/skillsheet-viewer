@@ -193,9 +193,14 @@ describe('enumerateCompletenessFacts', () => {
     expect(facts.some((f) => f.scope === '案件アルファ')).toBe(true);
   });
 
-  it("views で 'projects' を OFF にすると案件・会社の事実を列挙しない", () => {
-    const facts = enumerateCompletenessFacts(PROJECT_BLOCKS, ['skills', 'process', 'timeline']);
+  it("views で 'projects' と 'timeline' を両方 OFF にすると案件・会社の事実を列挙しない", () => {
+    const facts = enumerateCompletenessFacts(PROJECT_BLOCKS, ['skills', 'process']);
     expect(facts.some((f) => f.category === 'project' || f.category === 'company')).toBe(false);
+  });
+
+  it("views が 'timeline' だけでも案件・会社の事実を列挙する（描画側と同じ判定 #354）", () => {
+    const facts = enumerateCompletenessFacts(PROJECT_BLOCKS, ['timeline']);
+    expect(facts.some((f) => f.category === 'project' || f.category === 'company')).toBe(true);
   });
 
   it("views で 'duration' を OFF にすると稼働月数の事実を列挙しない（意図的な不在）", () => {

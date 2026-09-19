@@ -1,4 +1,5 @@
 import { initTRPC, TRPCError } from '@trpc/server';
+import { TRPC_ERROR_CODES_BY_KEY } from '@trpc/server/rpc';
 import superjson from 'superjson';
 
 import type { TRPCContext } from './context';
@@ -8,6 +9,15 @@ import type { TRPCContext } from './context';
 // なり、楽観ロックの .getTime() 比較がエラーなく壊れる（サイレント劣化）。
 const t = initTRPC.context<TRPCContext>().create({
   transformer: superjson,
+  // 内部例外の message（DB エラーのクエリ文・設定不備・内部コード名等）が公開 JSON に
+  // そのまま出るのを防ぐ（#350）。INTERNAL_SERVER_ERROR は一律汎用文へ置き換え、
+  // 内部の詳細は onError のサーバログだけに残す。
+  errorFormatter({ shape }) {
+    if (shape.code === TRPC_ERROR_CODES_BY_KEY.INTERNAL_SERVER_ERROR) {
+      return { ...shape, message: 'サーバー内部でエラーが発生しました' };
+    }
+    return shape;
+  },
 });
 
 export const router = t.router;

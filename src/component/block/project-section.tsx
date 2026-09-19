@@ -219,7 +219,7 @@ export function ProjectSection({
           {/* Timeline は 0 件で null を返すため、見出しだけが残って下が真っ白になっていた。
               案件詳細と同じ空状態を出して「絞り込みの結果ゼロ件」だと分かるようにする。 */}
           {timelineItems.length === 0 ? (
-            <p className="rounded border border-dashed border-border py-8 text-center text-sm text-muted-foreground">
+            <p className="rounded border border-dashed border-border-strong py-8 text-center text-sm text-foreground">
               条件に一致する案件がありません
             </p>
           ) : (

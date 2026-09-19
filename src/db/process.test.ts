@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   classifyPeriod,
   deriveCompanyPeriod,
-  deriveDuration,
-  durationFromRange,
   flattenTech,
   flattenTechEntries,
   formatMonthToken,
@@ -78,32 +76,6 @@ describe('labelsForProcessIndex', () => {
   it('曖昧な「テスト」は含まれない（トグルOFFで消える対象にしない）', () => {
     expect(labelsForProcessIndex(4)).not.toContain('テスト');
     expect(labelsForProcessIndex(5)).not.toContain('テスト');
-  });
-});
-
-describe('deriveDuration', () => {
-  it('開始・終了とも判明していれば月数から算出する', () => {
-    expect(deriveDuration('2025.1 — 2025.4')).toBe('4ヶ月');
-  });
-
-  it('終端が「現在」なら継続中', () => {
-    expect(deriveDuration('2025.11 — 現在')).toBe('継続中');
-  });
-
-  it('period が空文字の場合は継続中ではなく空文字を返す（レガシーデータの誤表示防止）', () => {
-    expect(deriveDuration('')).toBe('');
-  });
-
-  it('period が undefined/非文字列でも例外にならず空文字を返す', () => {
-    // @ts-expect-error 型上は string だが、レガシーデータ由来の非文字列混入を想定する。
-    expect(deriveDuration(undefined)).toBe('');
-  });
-
-  it('終了が単に未記載（開始のみ）の period は継続中とみなさず空文字を返す', () => {
-    // 継続中チェック OFF のまま終了月未入力の案件（"2020.06"）や単年レガシー（"2020"）を
-    // 「継続中」と誤表示しない。「継続中」は "現在" 終端の明示があるときだけ。
-    expect(deriveDuration('2020.06')).toBe('');
-    expect(deriveDuration('2020')).toBe('');
   });
 });
 
@@ -321,10 +293,9 @@ describe('parseTokenToDate', () => {
   });
 });
 
-describe('parseStart/deriveDuration（ISO日付トークン対応の回帰防止）', () => {
+describe('parseStart（ISO日付トークン対応の回帰防止）', () => {
   it('ISO日付トークンを含む期間を既存の月精度トークンと同じ精度で解釈する', () => {
     expect(parseStart('2020-04-15 — 2023-03-20')).toBeCloseTo(2020 + 3 / 12);
-    expect(deriveDuration('2020-04-15 — 2023-03-20')).toBe('3年');
   });
 });
 
@@ -344,25 +315,6 @@ describe('formatPeriodRange', () => {
 
   it('end が不正/空なら開始のみ表示する', () => {
     expect(formatPeriodRange('2020-06', '', false)).toBe('2020.06');
-  });
-});
-
-describe('durationFromRange', () => {
-  it('開始・終了から両端含む月数を導出する', () => {
-    expect(durationFromRange('2020-06', '2021-08', false)).toBe('1年3ヶ月');
-    expect(durationFromRange('2025-01', '2025-04', false)).toBe('4ヶ月');
-  });
-
-  it('ongoing=true のときは「継続中」', () => {
-    expect(durationFromRange('2024-01', '', true)).toBe('継続中');
-  });
-
-  it('start が不正なら空文字', () => {
-    expect(durationFromRange('', '2021-08', false)).toBe('');
-  });
-
-  it('ongoing=false で終了月が未入力なら「継続中」ではなく空文字（継続中はチェック時のみ）', () => {
-    expect(durationFromRange('2020-06', '', false)).toBe('');
   });
 });
 

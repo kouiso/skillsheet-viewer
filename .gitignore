@@ -85,3 +85,6 @@ playwright/.auth/
 .omx/
 .playwright-mcp/
 .claude/settings.local.json
+tmp-*.mts
+tmp-*.ts
+.dbg/

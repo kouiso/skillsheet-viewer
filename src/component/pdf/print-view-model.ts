@@ -47,6 +47,15 @@ export { fitContinuationHeading } from './print-continuation-heading';
  */
 export type PrintViewKey = 'skills' | 'process' | 'projects' | 'timeline' | 'duration';
 
+/**
+ * この views 指定で案件カードが描かれるか。timeline 表示も案件カードを出すため、
+ * 'projects' だけを見ると timeline-only 出力で duration ゲートや completeness 集計が
+ * 素通りになる（#354）。views 未指定（=全表示）は true。
+ */
+export function rendersProjectCards(views: PrintViewKey[] | undefined): boolean {
+  return views === undefined || views.includes('projects') || views.includes('timeline');
+}
+
 /** チップ 1 個。塗り（その分類の主役）と枠線（それ以外）の 2 種だけ。 */
 export interface PrintChip {
   label: string;
@@ -708,7 +717,7 @@ export function buildPrintViewModel(
     ),
     skillGroups,
     companies,
-    showProjects: on('projects') || on('timeline'),
+    showProjects: rendersProjectCards(views),
     showSkills: on('skills'),
     showProcess: on('process'),
     skillEmphasisMode,

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { orderedProfileMetaEntries, type ProfileBlockData, resolveProfileMetaLabel } from '@/db/block';
-import { sanitizeHtml } from '@/util/sanitize-html';
+import { sanitizeHtml } from '@/db/sanitize-html';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;

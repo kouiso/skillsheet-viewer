@@ -94,10 +94,6 @@ async function runTool(fn: () => Promise<unknown>): Promise<CallToolResult> {
   }
 }
 
-function serializeWriteResult(result: { sheetId: string; targetId: string; revision: string; changes: unknown[] }) {
-  return result;
-}
-
 export function registerSkillsheetTools(server: McpServer): void {
   server.registerTool(
     'list_sheets',
@@ -179,9 +175,7 @@ export function registerSkillsheetTools(server: McpServer): void {
       },
     },
     async ({ sheetId, projectId, expectedRevision, fields }) =>
-      runTool(async () =>
-        serializeWriteResult(await updateProjectItem({ sheetId, projectId, expectedRevision, fields })),
-      ),
+      runTool(async () => await updateProjectItem({ sheetId, projectId, expectedRevision, fields })),
   );
 
   server.registerTool(
@@ -204,7 +198,7 @@ export function registerSkillsheetTools(server: McpServer): void {
       },
     },
     async ({ sheetId, companyId, expectedRevision, fields }) =>
-      runTool(async () => serializeWriteResult(await updateCompany({ sheetId, companyId, expectedRevision, fields }))),
+      runTool(async () => await updateCompany({ sheetId, companyId, expectedRevision, fields })),
   );
 
   server.registerTool(
@@ -228,15 +222,13 @@ export function registerSkillsheetTools(server: McpServer): void {
     },
     async ({ sheetId, index, expectedLabel, expectedRevision, fields }) =>
       runTool(async () =>
-        serializeWriteResult(
-          await updateStatsItem({
-            sheetId,
-            index,
-            expectedLabel,
-            expectedRevision,
-            fields,
-          }),
-        ),
+        updateStatsItem({
+          sheetId,
+          index,
+          expectedLabel,
+          expectedRevision,
+          fields,
+        }),
       ),
   );
 
@@ -271,7 +263,7 @@ export function registerSkillsheetTools(server: McpServer): void {
       },
     },
     async ({ sheetId, expectedRevision, item }) =>
-      runTool(async () => serializeWriteResult(await addProjectItem({ sheetId, expectedRevision, item }))),
+      runTool(async () => await addProjectItem({ sheetId, expectedRevision, item })),
   );
 
   server.registerTool(
@@ -286,6 +278,6 @@ export function registerSkillsheetTools(server: McpServer): void {
       },
     },
     async ({ sheetId, expectedRevision, projectIds }) =>
-      runTool(async () => serializeWriteResult(await reorderProjectItems({ sheetId, expectedRevision, projectIds }))),
+      runTool(async () => await reorderProjectItems({ sheetId, expectedRevision, projectIds })),
   );
 }

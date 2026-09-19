@@ -118,7 +118,11 @@ export async function reserveViewerLoginAttemptBoth(key: string, now = Date.now(
   try {
     const inDb = await reserveViewerLoginAttempt(key, new Date(now));
     // 失敗が積まれたついでに、期限切れの記録を掃除する（行が増え続けるのを防ぐ）。
-    purgeExpiredViewerLoginAttempts(new Date(now)).catch(() => {});
+    // 消えたままだとサイレント失敗になるので warn を出す（#349）。catch しないと
+    // unhandled rejection になるため catch は残す。
+    purgeExpiredViewerLoginAttempts(new Date(now)).catch((err) => {
+      console.warn('viewer rate limit: purge of expired attempts failed', err);
+    });
     return strictest(inMemory, inDb);
   } catch (err) {
     console.warn('viewer rate limit: DB reserve failed, falling back to in-process counter', err);

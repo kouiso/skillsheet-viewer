@@ -112,3 +112,15 @@ baseline の具体手順（確認用 SQL・登録 SQL・hash の出し方・推�
 - `drizzle/migration-baseline.md`
 
 baseline 後は、新規・既存どちらも `pnpm db:migrate` を通常のデプロイ手順として実行できる（新しいマイグレーションがある場合のみ適用される）。破壊的操作を含むため、本番 DB への実行前は Neon ブランチ等でバックアップを取ること。
+
+### 文書境界・runtime role の適用順序（P0-3）
+
+`skillsheet_private.*` の文書境界と runtime の最小権限化は、`pnpm db:migrate` とは別の SQL で適用する。新規環境へのセットアップ順序は次の通り。この順序を崩すと `UNMAPPED_PRINCIPAL` / `ACCESS_DENIED` で全 read/write が止まる。
+
+1. `pnpm db:migrate`（テーブル・カラム・制約の正本）
+2. `psql -f script/sql/install-skillsheet-read-boundary.sql`（reader role・principals 表・read 関数）
+3. `psql -f script/sql/install-skillsheet-write-boundary.sql`（writer role・write 関数）
+4. `psql -f script/sql/install-runtime-role.sql`（runtime LOGIN role・EXECUTE 付与・principals 登録。`-v runtime_role=... -v runtime_password=... -v owner_id=<SKILLSHEET_OWNER_ID>` が必須）
+5. `DATABASE_URL` を runtime role の接続文字列へ切り替えて redeploy
+
+境界の健全性は `script/verify-document-db.sh` でまとめて検証できる（隔離クラスタを立てて migration → install → CAS・権限・restore まで実走する）。

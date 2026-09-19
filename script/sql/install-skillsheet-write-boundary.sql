@@ -3,12 +3,35 @@
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
+-- これらのカラム・制約は drizzle migration 0010 が正本として発行する（#344）。
+-- migration 適用済みの DB へこの install を流しても失敗しないよう冪等にしてある。
 ALTER TABLE public.skill_sheets ALTER COLUMN revision TYPE bigint;
 ALTER TABLE public.skill_sheets ALTER COLUMN revision SET DEFAULT 0;
-ALTER TABLE public.skill_sheets ADD CONSTRAINT skill_sheets_revision_nonnegative CHECK (revision >= 0);
-ALTER TABLE public.skillsheet_state ADD COLUMN deleted_sheet_ids uuid[] NOT NULL DEFAULT '{}';
+DO $$ BEGIN
+  ALTER TABLE public.skill_sheets ADD CONSTRAINT skill_sheets_revision_nonnegative CHECK (revision >= 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+ALTER TABLE public.skillsheet_state ADD COLUMN IF NOT EXISTS deleted_sheet_ids uuid[] NOT NULL DEFAULT '{}';
 
-CREATE ROLE skillsheet_document_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+-- role は cluster 全域・schema は DB 単位。同一 cluster の別 DB（例: e2e 専用
+-- DB）へ install すると role だけが既に存在する。その場合だけ
+-- -v allow_existing_role=on で既存 role を再利用する。
+-- Neon pooler は startup parameter を通さないため PGOPTIONS ではなく
+-- psql 変数 → SET LOCAL で渡す。
+\if :{?allow_existing_role}
+\else
+  \set allow_existing_role off
+\endif
+SET LOCAL vars.allow_existing_role = :'allow_existing_role';
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'skillsheet_document_writer') THEN
+    CREATE ROLE skillsheet_document_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+  ELSIF current_setting('vars.allow_existing_role', true) IS DISTINCT FROM 'on' THEN
+    RAISE EXCEPTION 'Dedicated writer role already exists; inspect ownership before installation';
+  END IF;
+END
+$$;
 -- Neon等で OWNER TO を通すため、インストーラーへメンバーシップを付与する。
 GRANT skillsheet_document_writer TO CURRENT_USER;
 -- reader所有の read_snapshot/principals への GRANT を通すため、reader membership も必要。

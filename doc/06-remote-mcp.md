@@ -69,10 +69,10 @@ src/db（Neon Postgres）
 | ツール | 説明 |
 |--------|------|
 | `list_sheets` | `id` / `title` / `updatedAt` の一覧 |
-| `get_sheet` | 指定シートの全ブロック（hidden 含む編集者向け全件）+ `updatedAt` |
+| `get_sheet` | 指定シートの全ブロック（hidden 含む編集者向け全件）+ `revision` |
 | `search_projects` | 案件名・会社名・技術名の完全一致検索。`projectId`/`companyId` を必ず返す |
 
-### 書き込み（すべて `expectedUpdatedAt` 必須・楽観ロック）
+### 書き込み（すべて `expectedRevision` 必須・文書境界の revision CAS）
 
 | ツール | 説明 |
 |--------|------|
@@ -88,12 +88,12 @@ src/db（Neon Postgres）
 {
   "sheetId": "...",
   "targetId": "...",
-  "updatedAt": "...(ISO 8601)",
+  "revision": "...(次の expectedRevision に使う文書版)",
   "changes": [{ "field": "role", "before": "SE", "after": "TL" }]
 }
 ```
 
-`updatedAt` は次の `expectedUpdatedAt` に使う。競合時は保存せず `CONFLICT` の isError 結果を返す。
+`revision` は次の `expectedRevision` に使う。競合時は保存せず `CONFLICT` の isError 結果を返す。
 
 ## エラー規約
 
@@ -148,8 +148,8 @@ Better Auth の OAuth テーブル（`oauth_access_token` / `oauth_refresh_token
 
 - **サービス層の共有**: MCP から tRPC HTTP API を内側で呼ぶ構成は Cookie 偽装経路に
   なるため禁止。`src/server/sheet-service.ts` を tRPC router と MCP ツールの双方が使う。
-- **owner 照合**: 読み取りでも `getOwnerSkillSheetById`（owner_id 付き照合）を使う。
-  `getSkillSheetById` はオーナー未確認のため MCP 経路では使わない。
+- **owner 照合**: 読み取りでも `getOwnerSheet`（owner 付き照合）を使う。
+  owner 未確認の取得関数は MCP 経路では使わない。
 - **閲覧コードは流用しない**: HMAC 閲覧 cookie は編集権を持たず、MCP 認証にも使わない。
 - **削除ツールは作らない**: 削除は `hidden` 更新 + 画面操作で行う。
 - **ログにシークレットを出さない**: エラー文言・SQL をレスポンスへ返さない。
@@ -165,8 +165,8 @@ Better Auth の OAuth テーブル（`oauth_access_token` / `oauth_refresh_token
 - `skillsheet:read` のみの JWT で `update_stats` → 403 `insufficient_scope`
 - `skillsheet:read` JWT で `list_sheets` → 200（実データ）
 - `read+write` JWT で `get_sheet` / `search_projects` / `update_stats` → 200
-  （`update_stats` は before/after `changes` と更新後 `updatedAt` を返却）
-- 古い `expectedUpdatedAt` での再書き込み → `CONFLICT`（isError）
+  （`update_stats` は before/after `changes` と更新後 `revision` を返却）
+- 古い `expectedRevision` での再書き込み → `CONFLICT`（isError）
 - 存在しない sheetId → `NOT_FOUND`（isError）
 - `/.well-known/oauth-protected-resource/api/mcp` → 200（PRM）
 - `/.well-known/oauth-authorization-server/api/auth` → 200（AS metadata、CIMD 対応宣言あり）

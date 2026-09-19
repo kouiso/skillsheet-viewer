@@ -5,9 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 
 // Playwright 実行プロセスでも .env.local を読み込む（Web サーバーは Next.js が読むがテスト本体は読まないため）。
-const envPath = resolve(dirname(fileURLToPath(import.meta.url)), '.env.local');
-if (existsSync(envPath)) {
-  for (const line of readFileSync(envPath, 'utf-8').split('\n')) {
+const rootDir = dirname(fileURLToPath(import.meta.url));
+function loadEnvFile(path: string) {
+  if (!existsSync(path)) return;
+  for (const line of readFileSync(path, 'utf-8').split('\n')) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
     const eqIndex = trimmed.indexOf('=');
@@ -16,6 +17,15 @@ if (existsSync(envPath)) {
     const value = trimmed.slice(eqIndex + 1).trim();
     if (process.env[key] === undefined) process.env[key] = value;
   }
+}
+loadEnvFile(resolve(rootDir, '.env.local'));
+// e2e 専用 DB（#346）。.env.local の DATABASE_URL は正本の共有 DB を指すため、
+// e2e が migrate・行作成・principals 張替えを行うと本番データを壊す。
+// .env.e2e（または環境変数）に E2E_DATABASE_URL を置けば、このプロセスと
+// webServer 双方の DATABASE_URL を e2e 専用 DB へ切り替える。
+loadEnvFile(resolve(rootDir, '.env.e2e'));
+if (process.env.E2E_DATABASE_URL) {
+  process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
 }
 
 const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
