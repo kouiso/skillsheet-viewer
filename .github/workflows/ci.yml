@@ -159,18 +159,29 @@ jobs:
           if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname='skillsheet_private' AND p.proname='replace_sheet'" | grep -q 1; then
             psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v allow_existing_role=on -f script/sql/install-skillsheet-write-boundary.sql
           fi
+          # schema・関数・principals の owner は boundary role であり、接続ユーザーは
+          # install 末尾で membership を剥がされる。GRANT/INSERT は SET ROLE で
+          # owner になってから SESSION_USER（= 接続ユーザー）へ付与する。
+          # membership はこのステップ内で貸して返す（cluster 全域に残さない）。
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<SQL
-          GRANT USAGE ON SCHEMA skillsheet_private TO CURRENT_USER;
+          GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER;
+          SET ROLE skillsheet_document_reader;
+          GRANT USAGE ON SCHEMA skillsheet_private TO SESSION_USER;
           GRANT EXECUTE ON FUNCTION
             skillsheet_private.read_snapshot(uuid, text),
-            skillsheet_private.list_sheets(text),
+            skillsheet_private.list_sheets(text)
+          TO SESSION_USER;
+          INSERT INTO skillsheet_private.principals (login_name, owner_id)
+            VALUES (SESSION_USER, '$SKILLSHEET_OWNER_ID')
+            ON CONFLICT (login_name) DO UPDATE SET owner_id = EXCLUDED.owner_id;
+          SET ROLE skillsheet_document_writer;
+          GRANT EXECUTE ON FUNCTION
             skillsheet_private.replace_sheet(uuid, text, text, jsonb, text),
             skillsheet_private.create_sheet(uuid, text, jsonb, text),
             skillsheet_private.delete_sheet(uuid, text, text)
-          TO CURRENT_USER;
-          INSERT INTO skillsheet_private.principals (login_name, owner_id)
-            VALUES (CURRENT_USER, '$SKILLSHEET_OWNER_ID')
-            ON CONFLICT (login_name) DO UPDATE SET owner_id = EXCLUDED.owner_id;
+          TO SESSION_USER;
+          RESET ROLE;
+          REVOKE skillsheet_document_reader, skillsheet_document_writer FROM CURRENT_USER;
           SQL
 
       - name: Playwright E2E
