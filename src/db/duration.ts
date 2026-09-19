@@ -1,4 +1,5 @@
-import { classifyPeriod } from './process';
+import { currentMonthKey } from './derived-display';
+import { classifyPeriod, formatPeriodRange } from './process';
 
 /** 本人入力の完全一致比較に使う。近似表現や未知表記は推測しない。 */
 export function parseDurationMonths(raw: string): number | null {
@@ -58,10 +59,26 @@ export function resolveDuration(period: string, raw: string | undefined, referen
   const months = Math.max(0, end - start + 1);
   const derived = formatDurationMonths(months);
   const parsed = value ? parseDurationMonths(value) : null;
+  // conflict は「期間そのものの幅」と比較する。derivedMonths（経過月）は基準月で
+  // clamp されるため、終了が基準月より後の閉じた期間に使うと、正しい本人入力を
+  // 矛盾と誤判定して PDF 出力を止めてしまう（#354）。
+  const periodMonths = Math.max(0, closedEnd - start + 1);
   return {
     manual,
     derivedMonths: months,
     label: value || derived,
-    conflict: value !== '' && parsed !== null && parsed !== months,
+    conflict: value !== '' && parsed !== null && parsed !== periodMonths,
   };
+}
+
+/**
+ * 月入力（YYYY-MM）から期間の長さバッジ（"Nヶ月"/"N年Mヶ月"）を導出する。
+ * viewer/PDF と同じ resolveDuration に寄せて語彙を統一する。ongoing でも
+ * 「継続中」ではなく基準月時点の月数を出す（旧 deriveDuration との差）。
+ */
+export function durationFromRange(start: string, end: string, ongoing: boolean): string {
+  const period = formatPeriodRange(start, end, ongoing);
+  // 開始のみの不完全な期間（"2020.06"）には月数を推測せずバッジを出さない。
+  if (!period.includes(' — ')) return '';
+  return resolveDuration(period, undefined, currentMonthKey()).label;
 }
