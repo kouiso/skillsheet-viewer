@@ -4,8 +4,8 @@ import type { CompanyInfo, ProjectItem } from '@/db/block';
 import { resolveCompanyPeriod } from '@/db/derived-display';
 import { resolveDuration } from '@/db/duration';
 import { companyDisplayName } from '@/db/group-by-company';
-import { formatPeriodDisplay, parsePeriodBounds } from '@/db/process';
-import { sanitizeHtml } from '@/util/sanitize-html';
+import { formatPeriodDisplay } from '@/db/process';
+import { sanitizeHtml } from '@/db/sanitize-html';
 import { CompanyLane } from './company-lane';
 import { ProjectCard } from './project-card';
 
@@ -15,18 +15,17 @@ export interface NumberedProject {
   tech: string[];
 }
 
-export function companyTenureLabel(period: string, showDuration = true): string {
+export function companyTenureLabel(period: string, showDuration = true, referenceMonth?: number): string {
   const trimmed = period.trim();
   if (!trimmed) return '';
-  const bounds = parsePeriodBounds(trimmed);
   const display = formatPeriodDisplay(trimmed);
-  // 年だけの表記・終了未記載・終端「現在」は月数を数えない。数えると `2020` が
-  // 「在籍 2020（1ヶ月）」になり、書いていない精度を勝手に足すことになる。
-  // 「稼働月数」トグル OFF のときはこの（Nヶ月）も同じ判定で隠す — 月数系の注記が
-  // カードだけ消えて会社見出しには残る、という半端な状態を避けるため。
-  if (!bounds?.precise || bounds.openEnded || !showDuration) return `在籍 ${display}`;
-  const months = Math.round((bounds.end - bounds.start) * 12) + 1;
-  return months > 0 ? `在籍 ${display}（${months}ヶ月）` : `在籍 ${display}`;
+  // 月数はカード・PDF と同じ resolveDuration で導出する（'N年Nヶ月' 形式に統一し、
+  // ローカルの「（61ヶ月）」表記をやめる #354）。「〜現在」は基準月があれば導出される。
+  // 未確定・0ヶ月は書いていない精度を勝手に足さないよう括弧を出さない。
+  // 「稼働月数」トグル OFF では同じ判定で隠す — カードだけ消えて会社見出しに残る、
+  // という半端な状態を避けるため。
+  const resolved = showDuration ? resolveDuration(trimmed, undefined, referenceMonth) : null;
+  return resolved?.derivedMonths ? `在籍 ${display}（${resolved.label}）` : `在籍 ${display}`;
 }
 
 export function companyCountLabel(shown: number, total: number, isSearching: boolean): string {
@@ -66,7 +65,7 @@ export function CompanySection({
   const name = companyDisplayName(company);
   const periodItems = allCompanyItems ?? items.map(({ item }) => item);
   const effectivePeriod = resolveCompanyPeriod(company, periodItems);
-  const tenure = companyTenureLabel(effectivePeriod, showDuration);
+  const tenure = companyTenureLabel(effectivePeriod, showDuration, referenceMonth);
   const note = company?.note?.trim() ?? '';
   const kind = company?.kind?.trim() ?? '';
   const countLabel = companyCountLabel(items.length, totalCount, isSearching);
@@ -85,7 +84,15 @@ export function CompanySection({
       className="flex min-w-0 scroll-mt-40 flex-col gap-4 sm:scroll-mt-[4.75rem]"
     >
       <div className="sticky top-40 z-20 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 border-b border-border bg-background py-2.5 sm:top-[4.75rem]">
-        <h2 className="text-[19px] font-semibold leading-snug text-foreground sm:text-[22px]">{name}</h2>
+        {/* ToC は h1..h6[id] を拾う。section 側の id は #company-<id> リンクの
+            到着点として残し（company-jump-nav と既存 e2e が参照）、h2 には
+            派生 id を付けて目次へ出す（#355）。scroll-mt は sticky topbar の高さ分。 */}
+        <h2
+          id={`company-${companyId}${headingIdSuffix ?? ''}-heading`}
+          className="text-[19px] font-semibold leading-snug text-foreground sm:text-[22px]"
+        >
+          {name}
+        </h2>
         {kind ? (
           <span className="rounded bg-accent-soft px-2 py-0.5 text-[11px] leading-normal text-accent-text">{kind}</span>
         ) : null}

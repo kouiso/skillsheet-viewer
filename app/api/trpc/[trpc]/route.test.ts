@@ -93,6 +93,33 @@ describe('POST /api/trpc', () => {
     consoleErrorSpy.mockRestore();
   });
 
+  // errorFormatter の結線検証: INTERNAL_SERVER_ERROR の message は公開 JSON へ
+  // 出さず汎用文へ置き換える（#350）。設定不備エラーは実装詳細（env 名・内部コード）
+  // を含みうるので、そのまま返ると情報漏洩になる。
+  it('INTERNAL_SERVER_ERROR の message は内部詳細を出さず汎用文になる', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // VIEWER_CODE 未設定 → auth.login は INTERNAL_SERVER_ERROR を投げる。
+    vi.stubEnv('SESSION_SECRET', 'test-session-secret');
+    vi.stubEnv('VIEWER_CODE', '');
+    vi.stubEnv('VITE_VIEWER_CODE', '');
+    const req = new Request('http://localhost:3000/api/trpc/auth.login?batch=1', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        origin: 'http://localhost:3000',
+        host: 'localhost:3000',
+      },
+      body: JSON.stringify({ 0: { json: { code: 'any-code' } } }),
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Array<{ error?: { json?: { message?: string; code?: number } } }>;
+    expect(body[0]?.error?.json?.message).toBe('サーバー内部でエラーが発生しました');
+    consoleErrorSpy.mockRestore();
+  });
+
   it('FORBIDDEN（cross-origin 拒否）は CSRF 試行の唯一のサーバー側シグナルなので console.error を呼ぶ', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.stubEnv('SESSION_SECRET', 'test-session-secret');

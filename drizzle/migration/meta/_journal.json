@@ -71,6 +71,13 @@
       "when": 1789401857541,
       "tag": "0009_chubby_hannibal_king",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789754625088,
+      "tag": "0010_stale_silk_fever",
+      "breakpoints": true
     }
   ]
 }

@@ -132,6 +132,34 @@ export const GITHUB_AUTH_FAILED_NOTICE = {
   ],
 };
 
+// 文書境界（skillsheet_private.*）が未 install、または runtime role / principals が
+// 未整備の場合の案内文（#345）。テーブル自体はあるので「未マイグレーション」とは
+// 別の案内が必要。
+export const DB_BOUNDARY_MISSING_NOTICE = {
+  title: 'スキルシートを表示できません',
+  message: 'データベースの権限設定（文書境界）が完了していない可能性があります。以下を確認してください。',
+  hints: [
+    {
+      key: 'boundary',
+      content: (
+        <>
+          文書境界を install する: <code className="font-mono">script/sql/install-skillsheet-read-boundary.sql</code> →{' '}
+          <code className="font-mono">install-skillsheet-write-boundary.sql</code>
+        </>
+      ),
+    },
+    {
+      key: 'runtime',
+      content: (
+        <>
+          runtime role と principals マッピングを設定する:{' '}
+          <code className="font-mono">script/sql/install-runtime-role.sql</code>
+        </>
+      ),
+    },
+  ],
+};
+
 /** classifyConfigError() の結果からそのまま渡せる案内文の一覧。 */
 export const CONFIG_ERROR_NOTICES: Record<
   ConfigErrorKind,
@@ -139,6 +167,7 @@ export const CONFIG_ERROR_NOTICES: Record<
 > = {
   'db-missing-env': DB_CONFIG_NOTICE,
   'db-table-missing': DB_CONFIG_NOTICE,
+  'db-boundary-missing': DB_BOUNDARY_MISSING_NOTICE,
   'db-malformed-url': DB_MALFORMED_URL_NOTICE,
   'github-missing-env': GITHUB_MISSING_ENV_NOTICE,
   'github-auth-failed': GITHUB_AUTH_FAILED_NOTICE,

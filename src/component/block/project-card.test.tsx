@@ -145,8 +145,11 @@ describe('ProjectCard', () => {
       />,
     );
 
-    expect(screen.queryByText('SE')).not.toBeInTheDocument();
-    expect(screen.getByText('役割').parentElement).toHaveTextContent('SE · D社 · 13 名 · 11ヶ月');
+    // 役割は強調のため span になるが、独立要素（右枠・別列）ではなく
+    // メタ行 <p> の内側に畳まれていることを構造で見る（#355 でも同じ条件）。
+    const metaLine = screen.getByText('役割').parentElement as HTMLElement;
+    expect(screen.getByText('SE').closest('p')).toBe(metaLine);
+    expect(metaLine).toHaveTextContent('SE · D社 · 13 名 · 11ヶ月');
   });
 
   it('役割が空なら「役割」ラベルを出さず、会社・人数・期間だけのメタ行にする', () => {

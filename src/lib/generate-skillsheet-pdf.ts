@@ -1,3 +1,4 @@
+import { rendersProjectCards } from '@/component/pdf/print-view-model';
 import type { SkillSheetPDFProps } from '@/component/pdf-export';
 import { filterVisibleProjectData } from '@/db/block';
 import { resolveDuration } from '@/db/duration';
@@ -12,7 +13,9 @@ export class PdfDurationConflictError extends Error {
 /** PDF生成と、失敗したフォント取得を次回再試行するための復旧を受け持つ。 */
 export async function generateSkillSheetPdfBlob(input: SkillSheetPDFProps): Promise<Blob> {
   // 要約版は views を無視して全案件を描くので、edition で判定する。
-  const rendersProjects = input.edition === 'digest' || input.views === undefined || input.views.includes('projects');
+  // 'projects' だけ見ると timeline-only 出力でゲートが素通りになるため、
+  // 描画側と同じ rendersProjectCards で判定する（#354）。
+  const rendersProjects = input.edition === 'digest' || rendersProjectCards(input.views);
   if (input.blocks && rendersProjects) {
     if (!Number.isSafeInteger(input.referenceMonth) || (input.referenceMonth ?? -1) < 0) {
       throw new Error('INVALID_REFERENCE_MONTH');

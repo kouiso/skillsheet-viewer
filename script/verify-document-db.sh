@@ -30,7 +30,7 @@ initdb -D "$run_dir/data" -U boundary_admin --auth=trust --no-locale -E UTF8 >"$
 # TCPを無効化。0700のsocket directoryへアクセスできる同一OS利用者だけが接続できる。
 pg_ctl -D "$run_dir/data" -l "$run_dir/server.log" -o "-c listen_addresses='' -k '$run_dir' -p 55440" -w start >/dev/null
 psql_args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55440 -U boundary_admin -d postgres)
-for migration in "$repo_dir"/drizzle/migrations/*.sql; do
+for migration in "$repo_dir"/drizzle/migration/*.sql; do
   psql "${psql_args[@]}" -f "$migration" >>"$run_dir/migrations.log" 2>&1
 done
 for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary test-skillsheet-read-boundary test-skillsheet-write-boundary; do

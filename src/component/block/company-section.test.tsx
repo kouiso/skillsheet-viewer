@@ -116,11 +116,17 @@ describe('稼働月数（ビュートグル「稼働月数」に従う）', () =
 
   it('既定（ON）は在籍月数・レーン・カードの括弧書きを出す', () => {
     renderSection();
-    expect(screen.getByText('在籍 2018.02〜2021.02（37ヶ月）')).toBeInTheDocument();
+    // 在籍月数は resolveDuration と同じ「N年Nヶ月」形式（#354。旧「（37ヶ月）」表記は廃止）
+    expect(screen.getByText('在籍 2018.02〜2021.02（3年1ヶ月）')).toBeInTheDocument();
     // レーン右端の月数欄（2 案件とも 1年2ヶ月）。
     expect(screen.getAllByText('1年2ヶ月')).toHaveLength(2);
     // カードのメタ行（役割・会社・人数・月数の1行、#289/#290 由来）にも月数が出る。
-    expect(screen.getAllByText(/エンジニア · 個人開発 · 5名 · 1年2ヶ月/)).toHaveLength(2);
+    // 役割は #355 で強調 span 化したため、メタ行 <p> の textContent で見る。
+    expect(
+      screen.getAllByText(
+        (_, el) => el?.tagName === 'P' && /エンジニア · 個人開発 · 5名 · 1年2ヶ月/.test(el.textContent ?? ''),
+      ),
+    ).toHaveLength(2);
   });
 
   it('OFF なら在籍月数・レーン・カードの括弧書きを全部消す（月数系の注記が半端に残らない）', () => {

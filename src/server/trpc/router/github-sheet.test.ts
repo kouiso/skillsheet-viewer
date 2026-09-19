@@ -8,7 +8,6 @@ vi.mock('next/cache', async (importOriginal) => {
 vi.mock('@/server/sheet-cache', () => ({
   getCachedSheet: vi.fn(),
   getCachedSheets: vi.fn(),
-  getCachedDbSheets: vi.fn(),
   getCachedDbSheetById: vi.fn(),
   getCachedDbSheet: vi.fn(),
 }));

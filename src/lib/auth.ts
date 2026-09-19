@@ -126,6 +126,12 @@ export function getAuth(): Promise<Auth> {
       return auth;
     }
   })();
+  // 両方の init が失敗（一時的な DB 不通等）した rejected promise をキャッシュし続けると、
+  // 以後の getAuth() が全て同じ rejection を返し lambda 内で auth が死ぬ（#349）。
+  // 失敗したら _init をリセットして次回呼び出しで再試行させる。
+  _init.catch(() => {
+    _init = undefined;
+  });
   return _init;
 }
 

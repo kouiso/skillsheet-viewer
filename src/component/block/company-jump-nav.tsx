@@ -46,7 +46,7 @@ export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompan
   const items = buildCompanyJumpItems(groups, headingIdSuffix ?? '');
   if (items.length === 0) return null;
   return (
-    <nav aria-label="会社別ジャンプ" className="mb-5">
+    <nav aria-label="会社別ジャンプ" className="company-jump-nav mb-5">
       <details>
         <summary className="cursor-pointer py-1.5 text-[13px] leading-normal text-muted-foreground">
           会社から探す

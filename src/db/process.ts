@@ -326,27 +326,6 @@ export function classifyPeriod(period: string, referenceMonth?: number): Classif
   return { status: 'valid', bounds };
 }
 
-/**
- * period の期間表現から表示用の duration 文字列を導出する（"現在" 終端のみ「継続中」）。
- * 終了が単に未記載（"2020.06" / "2020" 等）の場合は継続中とみなさず空文字を返す —
- * 継続中チェック OFF のまま終了月未入力の案件を「継続中」と誤表示しないため。
- */
-export function deriveDuration(period: string): string {
-  const [startToken, endToken] = splitPeriodRange(period);
-  if (!startToken) return '';
-  if (/現在/.test(endToken)) return '継続中';
-  if (!endToken) return '';
-  const start = parseYearMonth(startToken);
-  const end = parseYearMonth(endToken);
-  if (start === null || end === null) return '';
-  const months = Math.round((end - start) * 12) + 1;
-  if (months <= 0) return '';
-  if (months < 12) return `${months}ヶ月`;
-  const years = Math.floor(months / 12);
-  const remMonths = months % 12;
-  return remMonths === 0 ? `${years}年` : `${years}年${remMonths}ヶ月`;
-}
-
 // 稼働月数の表示判定は src/db/duration.ts の resolveDuration に一本化している
 // （カード・タイムライン・会社レーン・PDF が共有。ここに置くと2系統に分岐する）。
 
@@ -371,11 +350,6 @@ export function formatPeriodRange(start: string, end: string, ongoing: boolean):
   const endDisp = ymToDisplay(end);
   if (!endDisp) return startDisp;
   return `${startDisp} — ${endDisp}`;
-}
-
-/** 月入力（YYYY-MM）から期間の長さバッジ（"Nヶ月"/"N年Mヶ月"/"継続中"）を導出する。 */
-export function durationFromRange(start: string, end: string, ongoing: boolean): string {
-  return deriveDuration(formatPeriodRange(start, end, ongoing));
 }
 
 export interface PeriodRange {

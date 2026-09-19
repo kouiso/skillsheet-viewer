@@ -45,9 +45,9 @@ describe('maintenance.revalidate', () => {
     expect(revalidateTag).toHaveBeenNthCalledWith(2, 'db-sheet', { expire: 0 });
   });
 
-  it('互換用 query secret も受け付ける', async () => {
+  it('query secret は受理しない（URL に秘密値を残さない #351）', async () => {
     const caller = callerWith(new Request('https://example.com/api/trpc/maintenance.revalidate?secret=test-secret'));
-    await expect(caller.revalidate()).resolves.toMatchObject({ ok: true });
+    await expect(caller.revalidate()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
   it('secret が不一致なら UNAUTHORIZED でタグを失効させない', async () => {

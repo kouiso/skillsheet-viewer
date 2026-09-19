@@ -292,6 +292,63 @@ describe('BuilderClient', () => {
     }
   });
 
+  it('複数 project ブロックの文書で案件編集しても2件目のブロックに複写されない（#353）', async () => {
+    const user = userEvent.setup();
+    const tech = { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] };
+    const projectItem = (id: string, companyId: string, title: string) => ({
+      id,
+      companyId,
+      title,
+      scope: '',
+      period: '2024.01 — 2024.12',
+      role: '',
+      team: '',
+      tech,
+      process: [],
+      duties: '',
+      acquired: '',
+      comment: '',
+    });
+    render(
+      <BuilderClient
+        initialTitle="t"
+        {...defaultProps}
+        initialBlocks={[
+          {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            type: 'project',
+            order: 0,
+            data: {
+              companies: [{ id: 'c1', name: 'A社', kind: '', period: '', note: '' }],
+              items: [projectItem('p1', 'c1', '案件A')],
+            },
+          },
+          {
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            type: 'project',
+            order: 1,
+            data: {
+              companies: [{ id: 'c2', name: 'B社', kind: '', period: '', note: '' }],
+              items: [projectItem('p2', 'c2', '案件B')],
+            },
+          },
+        ]}
+      />,
+    );
+    // 先頭ブロックの案件だけを編集する
+    fireEvent.click(screen.getByRole('button', { name: '案件エディタ' }));
+    fireEvent.change(screen.getByLabelText('案件タイトル'), { target: { value: '案件A改' } });
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    const blocks = mockSave.mock.calls[0][0].blocks;
+    expect(blocks.filter((b: { type: string }) => b.type === 'project')).toHaveLength(2);
+    expect(blocks[0]).toMatchObject({ type: 'project', data: { items: [{ title: '案件A改' }] } });
+    // 旧実装は全 project ブロックへ同じ data を複写し、案件B が消えていた
+    expect(blocks[1]).toMatchObject({
+      type: 'project',
+      data: { companies: [{ name: 'B社' }], items: [{ title: '案件B' }] },
+    });
+  });
+
   it('文書IDがないビルダーは保存から暗黙作成しない', async () => {
     const user = userEvent.setup();
     render(

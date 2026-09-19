@@ -13,10 +13,6 @@ vi.mock('@/db', async (importOriginal) => {
     ...actual,
     getDb: vi.fn(),
     getOwnerId: () => 'owner',
-    saveSkillSheetBlocks: vi.fn(),
-    createSheet: vi.fn(),
-    deleteSheet: vi.fn(),
-    listSheets: vi.fn(),
   };
 });
 
@@ -29,7 +25,6 @@ vi.mock('@/server/sheet-cache', async (importOriginal) => {
     ...actual,
     getCachedSheet: vi.fn(),
     getCachedSheets: vi.fn(),
-    getCachedDbSheets: vi.fn(),
     getCachedDbSheetById: vi.fn(),
     getCachedDbSheet: vi.fn(),
   };
@@ -206,10 +201,20 @@ describe('owner-bound document API', () => {
   it.each([
     ['CONFLICT', 'CONFLICT'],
     ['UNEDITABLE_DOCUMENT', 'PRECONDITION_FAILED'],
+    ['INVALID_STATE', 'PRECONDITION_FAILED'],
     ['NOT_FOUND', 'NOT_FOUND'],
+    ['ACCESS_DENIED', 'INTERNAL_SERVER_ERROR'],
+    ['INVALID_DB_RESPONSE', 'INTERNAL_SERVER_ERROR'],
+    ['SNAPSHOT_ID_MISMATCH', 'INTERNAL_SERVER_ERROR'],
+    ['OWNER_REQUIRED', 'INTERNAL_SERVER_ERROR'],
+    ['UNREADABLE_DOCUMENT', 'INTERNAL_SERVER_ERROR'],
   ])('maps %s without hiding failures', async (code, expected) => {
     service.replace.mockRejectedValueOnce(new DocumentError(code));
     await expect(callerAs('owner').sheet.save(saveInput)).rejects.toMatchObject({ code: expected });
+  });
+  it('maps DocumentError from list through the same contract', async () => {
+    service.list.mockRejectedValueOnce(new DocumentError('UNREADABLE_DOCUMENT'));
+    await expect(callerAs('owner').sheet.list()).rejects.toMatchObject({ code: 'INTERNAL_SERVER_ERROR' });
   });
   it('does not report a committed write as failed when cache invalidation fails', async () => {
     service.replace.mockResolvedValue(snapshot);

@@ -7,5 +7,5 @@ export const DESIGN_TOKENS_LIGHT = {
   primaryDark: '#08665e',
   mutedForeground: '#4a565c',
   muted: '#f0f3f3',
-  border: '#dce3e4',
+  border: '#c4cdce',
 } as const;

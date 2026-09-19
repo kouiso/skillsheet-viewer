@@ -3,8 +3,8 @@
 import type { CompanyInfo, ProjectItem } from '@/db/block';
 import { resolveDuration } from '@/db/duration';
 import { flattenTech, formatPeriodDisplay, sortByStartDesc } from '@/db/process';
+import { sanitizeHtml } from '@/db/sanitize-html';
 import { resolveProjectArea } from '@/db/tech-area';
-import { sanitizeHtml } from '@/util/sanitize-html';
 
 interface TimelineProps {
   items: ProjectItem[];
@@ -39,11 +39,11 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
           const company = companyMap.get(item.companyId);
           const periodDisplay = formatPeriodDisplay(item.period);
           // 案件カード（project-card.tsx）と同じ「期間（稼働月数）」の表記に揃える。
-          // 期間が空・解釈不能なら稼働月数も出さない（カード側と同じ条件分岐）。
-          const duration =
-            showDuration && periodDisplay
-              ? sanitizeHtml(resolveDuration(item.period, item.duration, referenceMonth).label)
-              : '';
+          // カード側は期間の有無を見ず showDuration だけで出す — period が空でも
+          // 手入力 duration があれば '9ヶ月' と表示されるので、ここも同じ条件にする（#354）。
+          const duration = showDuration
+            ? sanitizeHtml(resolveDuration(item.period, item.duration, referenceMonth).label)
+            : '';
           return (
             <div key={item.id} className="relative">
               <span
@@ -54,7 +54,7 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
               {/* 320px では日付列 min-w-[132px] がタイトル列を圧迫し5〜6行に断片化していた（#150）。
                   狭幅は日付を独立行に落とし、sm 以上でのみ従来どおり横並びにする。 */}
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-                <span className="font-mono text-[11.5px] text-accent-text sm:min-w-[132px]">
+                <span className="font-mono text-[12px] text-accent-text sm:min-w-[132px]">
                   {periodDisplay || '(期間未入力)'}
                   {duration && <span className="text-faint">（{duration}）</span>}
                 </span>

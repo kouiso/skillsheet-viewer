@@ -99,8 +99,12 @@ describe('buildSkillSheetXlsx', () => {
       period: '2024.1 — 2024.12',
       process: ['要件定義', '結合テスト'],
     });
-    // 入力順をあえて古い順にして、出力が開始月降順になることを見る
-    const buf = await buildSkillSheetXlsx([profileBlock, projectBlock([older, newest], [{ id: 'c1', name: 'C社' }])]);
+    // 入力順をあえて古い順にして、出力が開始月降順になることを見る。
+    // referenceMonth=2026-12（viewer と同じ基準月）で継続中案件の月数を確定させる。
+    const buf = await buildSkillSheetXlsx(
+      [profileBlock, projectBlock([older, newest], [{ id: 'c1', name: 'C社' }])],
+      2026 * 12 + 11,
+    );
     const ws = (await reload(buf)).worksheets[0];
 
     expect(ws.name).toMatch(/^latest-\d{4}-\d{2}$/);
@@ -127,8 +131,9 @@ describe('buildSkillSheetXlsx', () => {
     expect((start as Date).getUTCMonth()).toBe(7);
     expect(ws.getCell('E10').value).toBe('-');
     expect(ws.getCell('G10').value).toBe('現在');
-    // 進行中の月数は TODAY() 参照の数式
-    expect(ws.getCell('B12').value).toEqual({ formula: 'DATEDIF(B10,TODAY(),"M")+1' });
+    // 進行中の月数は数式ではなく viewer と同じ resolveDuration の静的ラベル
+    // （2026.8 開始・基準月 2026-12 → 5ヶ月。開くたび値が変わる TODAY() 参照はやめた）
+    expect(ws.getCell('B12').value).toBe('5ヶ月');
 
     // 業務内容セル: ≪≫ 3 段、'- '→'・'、'**' 除去、'#' 除去
     const desc = ws.getCell('J11').value;
@@ -162,7 +167,8 @@ describe('buildSkillSheetXlsx', () => {
     expect(end).toBeInstanceOf(Date);
     expect((end as Date).getUTCDate()).toBe(31);
     expect((end as Date).getUTCMonth()).toBe(11);
-    expect(ws.getCell('B15').value).toEqual({ formula: 'DATEDIF(B13,G13,"M")+1' });
+    // 終了済みの月数も同じく静的ラベル（2024.1〜2024.12 → 12ヶ月 = '1年'）
+    expect(ws.getCell('B15').value).toBe('1年');
     expect(ws.getCell('BR13').value).toBe('●'); // 要件定義
     expect(ws.getCell('BV13').value).toBe('●'); // 結合テスト
   });
@@ -201,10 +207,11 @@ describe('buildSkillSheetXlsx', () => {
 
     expect(ws.getCell('J10').value).toBe('期間不明の案件');
     expect(ws.getCell('B10').value).toBe('不定期');
-    expect(ws.getCell('B12').value).toBeNull();
+    // 解釈不能な期間の月数は resolveDuration と同じく「未確定」
+    expect(ws.getCell('B12').value).toBe('未確定');
   });
 
-  it("終了月のない期間（'2024.1'）は終了セル・月数セルを空にし Invalid Date を書かない", async () => {
+  it("終了月のない期間（'2024.1'）は終了セルを空にし Invalid Date を書かない", async () => {
     const noEnd = item({ id: 'i-noend', title: '終了月なしの案件', period: '2024.1' });
     const buf = await buildSkillSheetXlsx([projectBlock([noEnd], [{ id: 'c1', name: 'C社' }])]);
     const ws = (await reload(buf)).worksheets[0];
@@ -212,7 +219,8 @@ describe('buildSkillSheetXlsx', () => {
     const start = ws.getCell('B10').value;
     expect(start).toBeInstanceOf(Date);
     expect(ws.getCell('G10').value).toBeNull();
-    expect(ws.getCell('B12').value).toBeNull();
+    // 月数は導出不能 → 「未確定」（viewer の表示と同じ）
+    expect(ws.getCell('B12').value).toBe('未確定');
   });
 
   it('1 案件 = 3 行で、結合セル・行高を持ち、説明行は内容量に応じて高くなる', async () => {
@@ -243,6 +251,46 @@ describe('buildSkillSheetXlsx', () => {
     expect(ws.getRow(12).height).toBeGreaterThanOrEqual(120);
     // 19.5 以外（内容量に応じて引き伸ばされている）
     expect(ws.getRow(12).height).toBeGreaterThan(19.5);
+  });
+
+  it('viewer と同じ値を出す: 本人入力 duration・要約・複数 project ブロック・表外工程・タグ除去', async () => {
+    const manual = item({
+      id: 'i-manual',
+      title: '<details>手入力期間の案件</details>',
+      period: '2025.1 — 現在',
+      duration: '3年',
+      summary: '要約の本文',
+      duties: '業務の本文',
+      process: ['実装', '独自工程X'],
+    });
+    const secondBlock: Block = {
+      id: 'b-project-2',
+      type: 'project',
+      order: 2,
+      data: {
+        companies: [{ id: 'c2', name: 'D社', kind: '', period: '', note: '' }],
+        items: [item({ id: 'i-second', companyId: 'c2', title: '2枚目ブロックの案件', period: '2023.1 — 2023.6' })],
+      },
+    };
+    // 基準月 2026-12。本人入力あり → '本人入力 3年／2026-12基準 2年' 型のラベル
+    const buf = await buildSkillSheetXlsx(
+      [projectBlock([manual], [{ id: 'c1', name: 'C社' }]), secondBlock],
+      2026 * 12 + 11,
+    );
+    const ws = (await reload(buf)).worksheets[0];
+
+    // タイトルの生タグは落ちる（viewer の sanitizeHtml と同じ）
+    expect(ws.getCell('J10').value).toBe('手入力期間の案件');
+    // 月数は DATEDIF ではなく本人入力優先のラベル
+    expect(ws.getCell('B12').value).toBe('本人入力 3年／2026-12基準 2年');
+    // 要約と業務の両方が出る（画面の summary||duties 表示と同等の情報量）
+    const desc = ws.getCell('J11').value as string;
+    expect(desc).toContain('≪要約≫\n要約の本文');
+    expect(desc).toContain('≪担当業務≫\n業務の本文');
+    // 7工程表外のラベルは業務内容末尾の ≪担当工程（その他）≫ に残る
+    expect(desc).toContain('≪担当工程（その他）≫\n独自工程X');
+    // 2枚目の project ブロックの案件も消えずに出る（行13〜15）
+    expect(ws.getCell('J13').value).toBe('2枚目ブロックの案件');
   });
 
   it('ブロック間に区切り線を引き、表の最下端は中線で閉じる（旧スプシの罫線構成）', async () => {

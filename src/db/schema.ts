@@ -34,7 +34,7 @@ export const skillSheets = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().default(sql`now()`),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
     // DB内は64bit整数。限定APIは10進文字列で返し、JS Numberへ変換しない。
-    revision: bigint('revision', { mode: 'bigint' }).notNull().default(0n),
+    revision: bigint('revision', { mode: 'bigint' }).notNull().default(sql`0`),
   },
   (table) => [
     check('skill_sheets_revision_nonnegative', sql`${table.revision} >= 0`),
