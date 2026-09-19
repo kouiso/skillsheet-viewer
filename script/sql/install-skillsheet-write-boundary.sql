@@ -3,10 +3,15 @@
 BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
+-- これらのカラム・制約は drizzle migration 0010 が正本として発行する（#344）。
+-- migration 適用済みの DB へこの install を流しても失敗しないよう冪等にしてある。
 ALTER TABLE public.skill_sheets ALTER COLUMN revision TYPE bigint;
 ALTER TABLE public.skill_sheets ALTER COLUMN revision SET DEFAULT 0;
-ALTER TABLE public.skill_sheets ADD CONSTRAINT skill_sheets_revision_nonnegative CHECK (revision >= 0);
-ALTER TABLE public.skillsheet_state ADD COLUMN deleted_sheet_ids uuid[] NOT NULL DEFAULT '{}';
+DO $$ BEGIN
+  ALTER TABLE public.skill_sheets ADD CONSTRAINT skill_sheets_revision_nonnegative CHECK (revision >= 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+ALTER TABLE public.skillsheet_state ADD COLUMN IF NOT EXISTS deleted_sheet_ids uuid[] NOT NULL DEFAULT '{}';
 
 CREATE ROLE skillsheet_document_writer NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 -- Neon等で OWNER TO を通すため、インストーラーへメンバーシップを付与する。

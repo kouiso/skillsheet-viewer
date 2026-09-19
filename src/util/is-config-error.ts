@@ -23,10 +23,19 @@ const UNDEFINED_TABLE_SQLSTATE = '42P01';
 // そのまま接続処理まで進んで ERR_INVALID_URL が throw されていた（Issue #195）。
 const INVALID_URL_CODE = 'ERR_INVALID_URL';
 
+// 文書境界（skillsheet_private.*）の未整備を示す SQLSTATE。
+// 42501 insufficient_privilege: 境界関数が UNMAPPED_PRINCIPAL / OWNER_MISMATCH を
+// 投げるときのコードであり、runtime role への EXECUTE 未付与でも発生する。
+// 42883 undefined_function: 境界関数自体が未 install（install-skillsheet-*-boundary.sql
+// 未実行）のときに発生する。どちらも「待っても直らない」設定不備（#345）。
+const INSUFFICIENT_PRIVILEGE_SQLSTATE = '42501';
+const UNDEFINED_FUNCTION_SQLSTATE = '42883';
+
 export type ConfigErrorKind =
   | 'db-missing-env'
   | 'db-malformed-url'
   | 'db-table-missing'
+  | 'db-boundary-missing'
   | 'github-missing-env'
   | 'github-auth-failed';
 
@@ -67,6 +76,9 @@ export function classifyConfigError(err: unknown): ConfigErrorKind | null {
   const codes = collectErrorCodes(err);
   if (codes.includes(UNDEFINED_TABLE_SQLSTATE) || /relation .* does not exist/.test(err.message)) {
     return 'db-table-missing';
+  }
+  if (codes.includes(INSUFFICIENT_PRIVILEGE_SQLSTATE) || codes.includes(UNDEFINED_FUNCTION_SQLSTATE)) {
+    return 'db-boundary-missing';
   }
   if (codes.includes(INVALID_URL_CODE)) return 'db-malformed-url';
   return null;
