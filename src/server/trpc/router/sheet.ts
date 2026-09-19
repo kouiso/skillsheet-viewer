@@ -1,8 +1,8 @@
 import { TRPCError } from '@trpc/server';
-import { revalidateTag } from 'next/cache';
 import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
 import { createDocumentService, DocumentError } from '@/db/document-service';
 import { getCachedDbSheet, getCachedDbSheetById, toStaleSheet } from '@/server/sheet-cache';
+import { invalidateDbSheetCache } from '@/server/sheet-service';
 
 import { editorProcedure, router, viewerProcedure } from '../init';
 import {
@@ -12,19 +12,6 @@ import {
   saveSheetInputSchema,
   sheetIdInputSchema,
 } from '../schema';
-
-// Route Handler は Server Action ではないため next/cache の updateTag は使えない
-// （Next.js 16 公式: "It cannot be used in Route Handlers"）。tRPC mutation は必ず
-// Route Handler 経由で実行されるため、代わりに revalidateTag(tag, { expire: 0 }) で
-// 即時失効させる。同じ問題を maintenance.revalidate が解決しており、
-// { expire: 0 } を指定しないと即時失効が保証されない（本番で無効化されない不具合実績あり）。
-function invalidateDbSheetCache(): void {
-  try {
-    revalidateTag('db-sheet', { expire: 0 });
-  } catch {
-    console.warn('Document committed; cache invalidation pending');
-  }
-}
 
 function documents() {
   return createDocumentService(getDb(), getOwnerId());
@@ -37,6 +24,8 @@ async function documentCall<T>(action: () => Promise<T>): Promise<T> {
     return await action();
   } catch (error) {
     if (error instanceof DocumentError) {
+      // サーバ側の障害（権限・境界契約・owner 設定）はクライアントエラーとして報告しない。
+      // BAD_REQUEST に潰すと deploy 破壊が「クライアントの入力ミス」に見えて監視をすり抜ける（#349）。
       const code =
         error.code === 'CONFLICT'
           ? 'CONFLICT'
@@ -44,7 +33,15 @@ async function documentCall<T>(action: () => Promise<T>): Promise<T> {
             ? 'NOT_FOUND'
             : ['UNEDITABLE_DOCUMENT', 'INVALID_STATE'].includes(error.code)
               ? 'PRECONDITION_FAILED'
-              : 'BAD_REQUEST';
+              : [
+                    'ACCESS_DENIED',
+                    'INVALID_DB_RESPONSE',
+                    'SNAPSHOT_ID_MISMATCH',
+                    'OWNER_REQUIRED',
+                    'UNREADABLE_DOCUMENT',
+                  ].includes(error.code)
+                ? 'INTERNAL_SERVER_ERROR'
+                : 'BAD_REQUEST';
       throw new TRPCError({ code, message: error.code });
     }
     throw error;
@@ -52,7 +49,10 @@ async function documentCall<T>(action: () => Promise<T>): Promise<T> {
 }
 
 export const sheetRouter = router({
-  list: viewerProcedure.query(async () => ({ sheets: await navigation(), stale: false })),
+  // navigation() は builderState と同じヘルパー。documentCall を通さないと
+  // DocumentError がここだけ未マッピングの INTERNAL_SERVER_ERROR になり、
+  // 同一障害でエラー契約が割れる（#349）。
+  list: viewerProcedure.query(async () => documentCall(async () => ({ sheets: await navigation(), stale: false }))),
 
   builderState: editorProcedure.input(builderStateInputSchema).query(async ({ input }) => {
     return documentCall(async () => {

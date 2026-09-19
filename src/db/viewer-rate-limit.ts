@@ -42,6 +42,14 @@ export interface RateLimitState {
  * ロック時にはログにも出るため。必要なのは「同じ送り元か」の判定だけで、IP 自体は要らない。
  */
 export function clientKeyFromHeaders(headers: Headers | null | undefined): string {
+  // 前段が XFF/x-real-ip を上書きしてくれる環境だけが送り元を識別できる。
+  // Vercel は同ヘッダを自分で書き換えるため詐称は届かない。それ以外の環境では
+  // TRUSTED_PROXY=1 で運用者が信頼プロキシを明示した場合に限り信用する。
+  // 無条件に信用すると、ヘッダを毎回変えて試行キーを分散させることで
+  // VIEWER_CODE 総当たりのロックを回避できる（#351）。識別できない環境では
+  // 全員を UNKNOWN_KEY へ畳み、そのキー単位の制限がグローバル上限として働く。
+  const trustedProxy = process.env.VERCEL !== undefined || process.env.TRUSTED_PROXY === '1';
+  if (!trustedProxy) return UNKNOWN_KEY;
   const forwarded = headers?.get('x-forwarded-for');
   const first = forwarded?.split(',')[0]?.trim();
   const real = first || headers?.get('x-real-ip')?.trim();

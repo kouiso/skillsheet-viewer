@@ -84,7 +84,11 @@ const SHEET_LIST_STALE_TIME_MS = 60_000;
 // conflict は終端（同一セッション中は自動保存を再開しない）。
 // error は非競合の失敗（unauthorized / ネットワーク等）。同一内容での自動リトライは行わず、
 // 新しい編集が入ったときだけ再試行する（失敗ループでサーバを叩き続けない）。
-type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error';
+type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'conflict' | 'error' | 'invalid';
+
+// 入力バリデーション起因の自動保存失敗をネットワーク等の一時的失敗と区別する印。
+// 手動保存も同じ検証で止まるため、「保存ボタンで再試行」の案内は誤った指示になる（#353）。
+class AutosaveValidationError extends Error {}
 
 interface BuilderClientProps {
   initialBlocks: Block[];
@@ -160,7 +164,6 @@ const BuilderClient = ({
   // 本文と版の読取時点がずれ得た）。文字列0も有効で、文書未作成はIDの欠落で区別する。
   const savedRevisionRef = useRef<string>(initialRevision);
   const [newSheetTemplateId, setNewSheetTemplateId] = useState(TEMPLATES[0].id);
-  const savedRef = useRef(false);
   const createOperationRef = useRef<{
     key: string;
     sheetId: string;
@@ -382,12 +385,11 @@ const BuilderClient = ({
         expectedRevision: savedRevisionRef.current,
       };
       if (validateDocumentBlocks(payload.blocks).some((issue) => issue.code === 'PERIOD_PROJECTION_MISMATCH'))
-        throw new Error('文書の入力内容を確認してください');
+        throw new AutosaveValidationError();
       const result = await saveWithReadback(payload, saveMutation.mutateAsync, (sheetId) =>
         utils.sheet.builderState.fetch({ sheetId }, { staleTime: 0 }),
       );
       if (!mountedRef.current) return;
-      savedRef.current = true;
       // 応答がネットワーク上で逆順到着しても版を後退させない（古い応答で最新版を
       // 上書きすると次回保存が誤 Conflict する）。版はサーバ採番で単調増加。
       // 版が欠けた応答（古いサーバ等）では現在値を維持する（NaN化防止）。
@@ -416,8 +418,9 @@ const BuilderClient = ({
         // 失敗（unauthorized・ネットワークエラー等）は dirty のまま error にする。失敗した
         // スナップショットを記録し、同一内容での自動リトライは行わない
         // （新しい編集が入ったときだけ再試行）。
+        // バリデーション起因は invalid — 「保存ボタンで再試行」ではなく入力の確認を促す（#353）。
         failedSnapshotRef.current = savedSnapshot;
-        setAutosaveStatus('error');
+        setAutosaveStatus(err instanceof AutosaveValidationError ? 'invalid' : 'error');
       }
     } finally {
       saveInFlightRef.current = false;
@@ -438,7 +441,11 @@ const BuilderClient = ({
     if (!isDirty || autosaveStatus === 'conflict' || blockedItemIds.size > 0) return;
     // 失敗直後の status 遷移（saving → error）だけでタイマーを再armしない。
     // 失敗時と同一内容のままなら再試行せず、新しい編集で snapshot が変わったときだけ再デバウンスする。
-    if (autosaveStatus === 'error' && snapshot(items, title) === failedSnapshotRef.current) return;
+    if (
+      (autosaveStatus === 'error' || autosaveStatus === 'invalid') &&
+      snapshot(items, title) === failedSnapshotRef.current
+    )
+      return;
     const timer = setTimeout(() => {
       void runAutosave();
     }, AUTOSAVE_DEBOUNCE_MS);
@@ -549,7 +556,10 @@ const BuilderClient = ({
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.type === 'project');
       if (idx === -1) return [...prev, { id: newId(), type: 'project', data }];
-      return prev.map((i) => (i.type === 'project' ? { ...i, data } : i));
+      // 文書契約上 project ブロックは複数あり得るが、このエディタが読むのは先頭だけ。
+      // 全ブロックへ同じ data を複写すると2件目以降の内容が消えるため、
+      // 読んでいる先頭ブロックだけを更新する（#353）。
+      return prev.map((i, j) => (j === idx && i.type === 'project' ? { ...i, data } : i));
     });
   };
 
@@ -601,6 +611,19 @@ const BuilderClient = ({
   const handleDeleteSheet = (sheetId: string, sheetTitle: string) => {
     startSheetOp(async () => {
       try {
+        // アクティブシートの削除は実行中の保存と直列化する。保存の飛行中に
+        // savedRevisionRef を読むと、保存完了でサーバ側の版が進み CAS が誤 Conflict し、
+        // 自分自身の保存を「別セッションの更新競合」と誤診断する（#353）。
+        // 待ちは上限付き — 超えたら保存を諦めず完了を促す。
+        if (sheetId === activeSheetId) {
+          for (let i = 0; i < 100 && saveInFlightRef.current && mountedRef.current; i++) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+          }
+          if (saveInFlightRef.current) {
+            toast.error('保存が実行中です。完了後に再度お試しください。');
+            return;
+          }
+        }
         let expectedRevision = savedRevisionRef.current;
         let confirmedTitle = sheetTitle;
         if (sheetId !== activeSheetId) {
@@ -706,7 +729,6 @@ const BuilderClient = ({
           utils.sheet.builderState.fetch({ sheetId }, { staleTime: 0 }),
         );
         if (!mountedRef.current) return;
-        savedRef.current = true;
         // R01: 次回の競合判定基準にはサーバーが返した版を使う。応答の逆順到着で
         // 版を後退させないよう単調増加を守る（版が欠けた応答では現状維持）。
         if (isRevision(result.revision)) {
@@ -775,11 +797,18 @@ const BuilderClient = ({
                 dotClass: 'bg-destructive',
                 textClass: 'text-destructive',
               }
-            : isDirty
-              ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
-              : autosaveStatus === 'saved'
-                ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
-                : null;
+            : autosaveStatus === 'invalid'
+              ? {
+                  // バリデーション起因: 手動保存も同じ検証で止まるので再試行は案内しない（#353）
+                  label: '入力内容を確認してください — 保存できません',
+                  dotClass: 'bg-destructive',
+                  textClass: 'text-destructive',
+                }
+              : isDirty
+                ? { label: '未保存の変更', dotClass: 'bg-[#d4a017]', textClass: 'text-faint' }
+                : autosaveStatus === 'saved'
+                  ? { label: '保存済み（自動）', dotClass: 'bg-accent-text', textClass: 'text-faint' }
+                  : null;
 
   return (
     <div className="min-h-screen">
@@ -824,7 +853,10 @@ const BuilderClient = ({
           指定したシートが見つかりません。一覧から対象を選び直してください。
         </p>
       )}
-      {loadFailure && (
+      {/* 汎用バナーは「読めなかった」系（config/unknown）だけに出す。
+          not-found/uneditable/invalid-state は上の個別メッセージが既に状態を説明しており、
+          ここにも「読み込めませんでした…再読み込み」を出すと文言が矛盾して二重表示になる（#353） */}
+      {(loadFailure === 'config' || loadFailure === 'unknown') && (
         <div
           role="alert"
           className="border-b border-danger/40 bg-danger-soft px-4 py-2 text-center text-sm text-danger"

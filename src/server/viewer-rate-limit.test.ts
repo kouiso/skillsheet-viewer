@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_FAILURES } from '@/db/viewer-rate-limit';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clientKeyFromHeaders, MAX_FAILURES, UNKNOWN_KEY } from '@/db/viewer-rate-limit';
 
 import {
   checkViewerLoginRateLimit,
@@ -93,5 +93,42 @@ describe('閲覧コードの回数制限（DB へ届かない場合のプロセ�
     // ロック（15分）と集計窓（10分）の両方を越えた時点。
     const later = now + 16 * 60 * 1000;
     await expect(checkViewerLoginRateLimit(key, later)).resolves.toMatchObject({ locked: false });
+  });
+});
+
+describe('clientKeyFromHeaders（送り元キーの信頼境界 #351）', () => {
+  const req = (xff: string) => new Headers({ 'x-forwarded-for': xff });
+  let saved: Record<string, string | undefined>;
+  beforeEach(() => {
+    saved = { VERCEL: process.env.VERCEL, TRUSTED_PROXY: process.env.TRUSTED_PROXY };
+    delete process.env.VERCEL;
+    delete process.env.TRUSTED_PROXY;
+  });
+  afterEach(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+
+  it('信頼プロキシ未設定の環境では XFF を無視して UNKNOWN_KEY へ畳む', () => {
+    // XFF を毎回変えて試行キーを分散させ、総当たりロックを回避する攻撃を防ぐ。
+    expect(clientKeyFromHeaders(req('1.1.1.1'))).toBe(UNKNOWN_KEY);
+    expect(clientKeyFromHeaders(req('2.2.2.2'))).toBe(UNKNOWN_KEY);
+  });
+
+  it('Vercel 環境では XFF の先頭をハッシュしたキーになる', () => {
+    process.env.VERCEL = '1';
+    const a = clientKeyFromHeaders(req('1.1.1.1, 10.0.0.1'));
+    const b = clientKeyFromHeaders(req('2.2.2.2'));
+    expect(a).toMatch(/^ip:[0-9a-f]{32}$/);
+    expect(b).toMatch(/^ip:[0-9a-f]{32}$/);
+    expect(a).not.toBe(b);
+    expect(clientKeyFromHeaders(req('1.1.1.1, 10.0.0.2'))).toBe(a);
+  });
+
+  it('TRUSTED_PROXY=1 の非 Vercel 環境でも XFF を使う', () => {
+    process.env.TRUSTED_PROXY = '1';
+    expect(clientKeyFromHeaders(req('1.1.1.1'))).toMatch(/^ip:[0-9a-f]{32}$/);
   });
 });

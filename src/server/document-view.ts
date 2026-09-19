@@ -1,5 +1,5 @@
 import 'server-only';
-import { type Block, blocksToMarkdown, isBlockInput } from '@/db/block';
+import { type Block, blocksToMarkdown, filterVisibleProjectData, isBlockInput } from '@/db/block';
 import type { Database } from '@/db/client';
 import { currentMonthKey } from '@/db/derived-display';
 import { createDocumentService, DocumentError } from '@/db/document-service';
@@ -21,11 +21,17 @@ export async function readViewerDocument(
   // 未対応keyはrawに保持する。解釈できないtype/壊れた本文を落として部分成功にしない。
   if (!result.snapshot.blocks.every(isBlockInput)) throw new DocumentError('UNREADABLE_DOCUMENT');
   const blocks = result.snapshot.blocks as Block[];
+  // 閲覧面へ返す blocks から hidden 指定の会社・案件を除く。content(markdown)・xlsx・
+  // クライアント描画では除外されていたのに、この JSON だけ素通しになっていた（#342）。
+  // 編集者向けの全件取得は builderState / MCP get_sheet 側の別経路に残る。
+  const visibleBlocks = blocks.map((block) =>
+    block.type === 'project' ? { ...block, data: filterVisibleProjectData(block.data) } : block,
+  );
   return {
     title: result.snapshot.title,
-    content: blocksToMarkdown(blocks, referenceMonth),
+    content: blocksToMarkdown(visibleBlocks, referenceMonth),
     referenceMonth,
-    blocks,
+    blocks: visibleBlocks,
     revision: result.snapshot.revision,
   };
 }

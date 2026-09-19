@@ -38,6 +38,48 @@ describe('viewer document boundary', () => {
     arrange({ status: 'INVALID_STATE' });
     await expect(readViewerDocument({} as never, 'owner-a', null)).rejects.toMatchObject({ code: 'INVALID_STATE' });
   });
+  it('excludes hidden companies/items from the returned blocks', async () => {
+    const item = (over: Record<string, unknown>) => ({
+      id: 'i',
+      companyId: 'c1',
+      title: '案件',
+      scope: '',
+      period: '',
+      role: '',
+      team: '',
+      duties: '',
+      acquired: '',
+      comment: '',
+      tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+      process: [],
+      ...over,
+    });
+    const blocks = [
+      {
+        id,
+        type: 'project',
+        order: 0,
+        data: {
+          companies: [
+            { id: 'c1', name: '公開会社', kind: '', period: '', note: '' },
+            { id: 'c2', name: '非公開会社', kind: '', period: '', note: '', hidden: true },
+          ],
+          items: [
+            item({ id: 'i1', title: '公開案件' }),
+            item({ id: 'i2', title: '非公開案件', hidden: true }),
+            item({ id: 'i3', companyId: 'c2', title: '非公開会社の案件' }),
+          ],
+        },
+      },
+    ];
+    arrange({ status: 'OK', snapshot: { title: 'T', revision: '0', blocks } });
+    const result = await readViewerDocument({} as never, 'owner-a', id);
+    const data = (result.blocks[0] as { data: { companies: { id: string }[]; items: { id: string }[] } }).data;
+    expect(data.companies.map((c) => c.id)).toEqual(['c1']);
+    expect(data.items.map((i) => i.id)).toEqual(['i1']);
+    expect(result.content).not.toContain('非公開会社');
+    expect(result.content).not.toContain('非公開案件');
+  });
   it('refuses partial success when a block cannot be interpreted', async () => {
     arrange({
       status: 'OK',

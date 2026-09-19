@@ -58,7 +58,14 @@ export interface SheetWriteResult {
 // MCP route も必ず Route Handler 経由なので、revalidateTag(tag, { expire: 0 }) で
 // 即時失効させる（{ expire: 0 } なしだと即時失効が保証されない実績がある）。
 export function invalidateDbSheetCache(): void {
-  revalidateTag('db-sheet', { expire: 0 });
+  // 文書のコミット後に呼ぶ。ここで throw すると「書込みは成功したのに失敗と報告」になり、
+  // 呼び出し側の再試行が revision CONFLICT を起こす（#349）。失敗しても握りつぶし、
+  // 古いキャッシュは次回の自然失効に任せる。
+  try {
+    revalidateTag('db-sheet', { expire: 0 });
+  } catch {
+    console.warn('Document committed; cache invalidation pending');
+  }
 }
 
 function documents() {
@@ -99,25 +106,65 @@ export async function getOwnerSheet(sheetId: string): Promise<DocumentSnapshot> 
 
 // RawDocumentBlock.data は unknown。文書境界の検証（isBlockInput）を通った値だけが
 // ここへ来るので、type 判別後の data は各ブロック型へ安全にキャストできる。
-function findProjectBlock(sheet: DocumentSnapshot): RawDocumentBlock & { data: ProjectBlockData } {
-  const block = sheet.blocks.find((b) => b.type === 'project');
-  if (!block) {
-    throw new SheetServiceError('NOT_FOUND', 'project ブロックがシートに存在しません');
-  }
-  return block as RawDocumentBlock & { data: ProjectBlockData };
+// 同型ブロックは複数あり得る（contract は型の一意性を要求しない）ため、
+// 「先頭の一致」ではなく対象エンティティを含むブロックを特定して操作する（#357）。
+function projectBlocks(sheet: DocumentSnapshot): (RawDocumentBlock & { data: ProjectBlockData })[] {
+  return sheet.blocks.filter((b) => b.type === 'project') as (RawDocumentBlock & { data: ProjectBlockData })[];
 }
 
-function findStatsBlock(sheet: DocumentSnapshot): RawDocumentBlock & { data: { items: StatItem[] } } {
-  const block = sheet.blocks.find((b) => b.type === 'stats');
+/** 指定 id の案件を含む project ブロックを返す。 */
+function findProjectBlockByItemId(
+  sheet: DocumentSnapshot,
+  itemId: string,
+): RawDocumentBlock & { data: ProjectBlockData } {
+  const block = projectBlocks(sheet).find((b) => b.data.items.some((i) => i.id === itemId));
   if (!block) {
-    throw new SheetServiceError('NOT_FOUND', 'stats ブロックがシートに存在しません');
+    throw new SheetServiceError('NOT_FOUND', `指定された案件が見つかりません: ${itemId}`);
   }
-  return block as RawDocumentBlock & { data: { items: StatItem[] } };
+  return block;
 }
 
-/** ブロック列のうち 1 ブロックの data だけを差し替える（id/order は保持する）。 */
-function replaceBlockData(blocks: RawDocumentBlock[], type: string, data: unknown): RawDocumentBlock[] {
-  return blocks.map((b) => (b.type === type ? { ...b, data } : b));
+/** 指定 id の会社を含む project ブロックを返す。 */
+function findProjectBlockByCompanyId(
+  sheet: DocumentSnapshot,
+  companyId: string,
+): RawDocumentBlock & { data: ProjectBlockData } {
+  const block = projectBlocks(sheet).find((b) => b.data.companies.some((c) => c.id === companyId));
+  if (!block) {
+    throw new SheetServiceError('NOT_FOUND', `指定された会社が見つかりません: ${companyId}`);
+  }
+  return block;
+}
+
+/**
+ * index と expectedLabel が一致する stats ブロックを返す。
+ * 複数 stats ブロックがある場合、両方の条件に合致したブロックだけを対象にする
+ * （index だけだと別ブロックの同位置を誤爆するため）。
+ */
+function findStatsBlockByIndex(
+  sheet: DocumentSnapshot,
+  index: number,
+  expectedLabel: string,
+): RawDocumentBlock & { data: { items: StatItem[] } } {
+  const blocks = sheet.blocks.filter((b) => b.type === 'stats') as (RawDocumentBlock & {
+    data: { items: StatItem[] };
+  })[];
+  const block = blocks.find((b) => b.data.items[index]?.label === expectedLabel);
+  if (!block) {
+    if (blocks.length === 0) {
+      throw new SheetServiceError('NOT_FOUND', 'stats ブロックがシートに存在しません');
+    }
+    throw new SheetServiceError(
+      'NOT_FOUND',
+      `index ${index} に expectedLabel "${expectedLabel}" の項目が見つかりません`,
+    );
+  }
+  return block;
+}
+
+/** ブロック列のうち指定 id の 1 ブロックの data だけを差し替える（id/order は保持する）。 */
+function replaceBlockData(blocks: RawDocumentBlock[], blockId: string, data: unknown): RawDocumentBlock[] {
+  return blocks.map((b) => (b.id === blockId ? { ...b, data } : b));
 }
 
 /**
@@ -165,62 +212,62 @@ export async function searchProjects(query: string, sheetId?: string): Promise<P
   const hits: ProjectSearchHit[] = [];
 
   for (const sheet of sheets) {
-    const projectBlock = sheet.blocks.find((b) => b.type === 'project');
-    if (!projectBlock) continue;
-    const data = projectBlock.data as ProjectBlockData;
+    for (const projectBlock of projectBlocks(sheet)) {
+      const data = projectBlock.data;
 
-    const companyById = new Map(data.companies.map((c) => [c.id, c]));
+      const companyById = new Map(data.companies.map((c) => [c.id, c]));
 
-    for (const item of data.items) {
-      if (item.title === query) {
-        hits.push({
-          sheetId: sheet.sheetId,
-          projectId: item.id,
-          companyId: item.companyId,
-          matchedOn: 'project',
-          projectTitle: item.title,
-          companyName: companyById.get(item.companyId)?.name ?? '',
-          hidden: item.hidden === true,
-        });
+      for (const item of data.items) {
+        if (item.title === query) {
+          hits.push({
+            sheetId: sheet.sheetId,
+            projectId: item.id,
+            companyId: item.companyId,
+            matchedOn: 'project',
+            projectTitle: item.title,
+            companyName: companyById.get(item.companyId)?.name ?? '',
+            hidden: item.hidden === true,
+          });
+        }
+        const techHit = flattenTechValues(item.tech).includes(query);
+        if (techHit) {
+          hits.push({
+            sheetId: sheet.sheetId,
+            projectId: item.id,
+            companyId: item.companyId,
+            matchedOn: 'tech',
+            projectTitle: item.title,
+            companyName: companyById.get(item.companyId)?.name ?? '',
+            hidden: item.hidden === true,
+          });
+        }
       }
-      const techHit = flattenTechValues(item.tech).includes(query);
-      if (techHit) {
-        hits.push({
-          sheetId: sheet.sheetId,
-          projectId: item.id,
-          companyId: item.companyId,
-          matchedOn: 'tech',
-          projectTitle: item.title,
-          companyName: companyById.get(item.companyId)?.name ?? '',
-          hidden: item.hidden === true,
-        });
-      }
-    }
 
-    for (const company of data.companies) {
-      if (company.name !== query) continue;
-      const members = data.items.filter((i) => i.companyId === company.id);
-      if (members.length === 0) {
-        hits.push({
-          sheetId: sheet.sheetId,
-          projectId: null,
-          companyId: company.id,
-          matchedOn: 'company',
-          projectTitle: null,
-          companyName: company.name,
-          hidden: company.hidden === true,
-        });
-      }
-      for (const item of members) {
-        hits.push({
-          sheetId: sheet.sheetId,
-          projectId: item.id,
-          companyId: company.id,
-          matchedOn: 'company',
-          projectTitle: item.title,
-          companyName: company.name,
-          hidden: company.hidden === true || item.hidden === true,
-        });
+      for (const company of data.companies) {
+        if (company.name !== query) continue;
+        const members = data.items.filter((i) => i.companyId === company.id);
+        if (members.length === 0) {
+          hits.push({
+            sheetId: sheet.sheetId,
+            projectId: null,
+            companyId: company.id,
+            matchedOn: 'company',
+            projectTitle: null,
+            companyName: company.name,
+            hidden: company.hidden === true,
+          });
+        }
+        for (const item of members) {
+          hits.push({
+            sheetId: sheet.sheetId,
+            projectId: item.id,
+            companyId: company.id,
+            matchedOn: 'company',
+            projectTitle: item.title,
+            companyName: company.name,
+            hidden: company.hidden === true || item.hidden === true,
+          });
+        }
       }
     }
   }
@@ -294,11 +341,8 @@ export async function updateProjectItem(input: {
   }
 
   return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
-    const projectBlock = findProjectBlock(sheet);
-    const item = projectBlock.data.items.find((i) => i.id === input.projectId);
-    if (!item) {
-      throw new SheetServiceError('NOT_FOUND', `指定された案件が見つかりません: ${input.projectId}`);
-    }
+    const projectBlock = findProjectBlockByItemId(sheet, input.projectId);
+    const item = projectBlock.data.items.find((i) => i.id === input.projectId) as ProjectItem;
 
     const before: Record<string, unknown> = {};
     const after: Record<string, unknown> = {};
@@ -340,7 +384,7 @@ export async function updateProjectItem(input: {
       companies: projectBlock.data.companies,
       items: projectBlock.data.items.map((i) => (i.id === input.projectId ? next : i)),
     };
-    return { blocks: replaceBlockData(sheet.blocks, 'project', nextData), targetId: input.projectId, changes };
+    return { blocks: replaceBlockData(sheet.blocks, projectBlock.id, nextData), targetId: input.projectId, changes };
   });
 }
 
@@ -368,11 +412,8 @@ export async function updateCompany(input: {
   }
 
   return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
-    const projectBlock = findProjectBlock(sheet);
-    const company = projectBlock.data.companies.find((c) => c.id === input.companyId);
-    if (!company) {
-      throw new SheetServiceError('NOT_FOUND', `指定された会社が見つかりません: ${input.companyId}`);
-    }
+    const projectBlock = findProjectBlockByCompanyId(sheet, input.companyId);
+    const company = projectBlock.data.companies.find((c) => c.id === input.companyId) as CompanyInfo;
 
     const next: CompanyInfo = { ...company };
     for (const key of patchKeys) {
@@ -393,7 +434,7 @@ export async function updateCompany(input: {
       companies: projectBlock.data.companies.map((c) => (c.id === input.companyId ? next : c)),
       items: projectBlock.data.items,
     };
-    return { blocks: replaceBlockData(sheet.blocks, 'project', nextData), targetId: input.companyId, changes };
+    return { blocks: replaceBlockData(sheet.blocks, projectBlock.id, nextData), targetId: input.companyId, changes };
   });
 }
 
@@ -419,14 +460,8 @@ export async function updateStatsItem(input: {
   }
 
   return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
-    const statsBlock = findStatsBlock(sheet);
-    const target = statsBlock.data.items[input.index];
-    if (!target || target.label !== input.expectedLabel) {
-      throw new SheetServiceError(
-        'NOT_FOUND',
-        `index ${input.index} に expectedLabel "${input.expectedLabel}" の項目が見つかりません`,
-      );
-    }
+    const statsBlock = findStatsBlockByIndex(sheet, input.index, input.expectedLabel);
+    const target = statsBlock.data.items[input.index] as StatItem;
 
     const next: StatItem = { ...target };
     for (const key of patchKeys) {
@@ -437,7 +472,11 @@ export async function updateStatsItem(input: {
       .map((field) => ({ field, before: target[field], after: next[field] }));
 
     const nextData = { items: statsBlock.data.items.map((i, idx) => (idx === input.index ? next : i)) };
-    return { blocks: replaceBlockData(sheet.blocks, 'stats', nextData), targetId: `stats:${input.index}`, changes };
+    return {
+      blocks: replaceBlockData(sheet.blocks, statsBlock.id, nextData),
+      targetId: `stats:${input.index}`,
+      changes,
+    };
   });
 }
 
@@ -454,10 +493,12 @@ export async function addProjectItem(input: {
   item: NewProjectItem;
 }): Promise<SheetWriteResult> {
   return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
-    const projectBlock = findProjectBlock(sheet);
     const companyId = input.item.companyId ?? '';
-    if (companyId !== '' && !projectBlock.data.companies.some((c) => c.id === companyId)) {
-      throw new SheetServiceError('NOT_FOUND', `指定された会社が見つかりません: ${companyId}`);
+    // 会社指定がある場合はその会社が属するブロックへ追加する（別ブロックへ入れると
+    // companyId の参照が切れる）。未指定なら先頭の project ブロックへ入れる。
+    const projectBlock = companyId !== '' ? findProjectBlockByCompanyId(sheet, companyId) : projectBlocks(sheet)[0];
+    if (!projectBlock) {
+      throw new SheetServiceError('NOT_FOUND', 'project ブロックがシートに存在しません');
     }
 
     const newItem: ProjectItem = {
@@ -486,7 +527,7 @@ export async function addProjectItem(input: {
       items: [...projectBlock.data.items, newItem],
     };
     return {
-      blocks: replaceBlockData(sheet.blocks, 'project', nextData),
+      blocks: replaceBlockData(sheet.blocks, projectBlock.id, nextData),
       targetId: newItem.id,
       changes: [{ field: 'items', before: null, after: newItem }],
     };
@@ -504,8 +545,6 @@ export async function reorderProjectItems(input: {
   projectIds: string[];
 }): Promise<SheetWriteResult> {
   return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
-    const projectBlock = findProjectBlock(sheet);
-    const existingIds = projectBlock.data.items.map((i) => i.id);
     const seen = new Set<string>();
     const duplicates: string[] = [];
     for (const id of input.projectIds) {
@@ -515,11 +554,31 @@ export async function reorderProjectItems(input: {
     if (duplicates.length > 0) {
       throw new SheetServiceError('BAD_REQUEST', `projectIds に重複があります: ${duplicates.join(', ')}`);
     }
-    const existingSet = new Set(existingIds);
-    const unknownIds = input.projectIds.filter((id) => !existingSet.has(id));
+
+    // 並び替えはブロック単位の操作なので、指定 ID がどのブロックに属するかを特定する。
+    const ownerBlockByItemId = new Map<string, RawDocumentBlock & { data: ProjectBlockData }>();
+    for (const block of projectBlocks(sheet)) {
+      for (const item of block.data.items) ownerBlockByItemId.set(item.id, block);
+    }
+    const unknownIds = input.projectIds.filter((id) => !ownerBlockByItemId.has(id));
     if (unknownIds.length > 0) {
       throw new SheetServiceError('BAD_REQUEST', `未知の案件 ID が含まれています: ${unknownIds.join(', ')}`);
     }
+
+    const blocks = projectBlocks(sheet);
+    const targetBlocks = new Set(input.projectIds.map((id) => ownerBlockByItemId.get(id) as (typeof blocks)[number]));
+    if (targetBlocks.size > 1) {
+      throw new SheetServiceError(
+        'BAD_REQUEST',
+        'projectIds が複数の project ブロックにまたがっています。並び替えはブロック単位で行ってください',
+      );
+    }
+    const projectBlock = targetBlocks.size === 1 ? [...targetBlocks][0] : blocks[0];
+    if (!projectBlock) {
+      throw new SheetServiceError('NOT_FOUND', 'project ブロックがシートに存在しません');
+    }
+
+    const existingIds = projectBlock.data.items.map((i) => i.id);
     const requestedSet = new Set(input.projectIds);
     const missingIds = existingIds.filter((id) => !requestedSet.has(id));
     if (missingIds.length > 0) {
@@ -535,7 +594,7 @@ export async function reorderProjectItems(input: {
 
     const nextData: ProjectBlockData = { companies: projectBlock.data.companies, items: orderedItems };
     return {
-      blocks: replaceBlockData(sheet.blocks, 'project', nextData),
+      blocks: replaceBlockData(sheet.blocks, projectBlock.id, nextData),
       targetId: 'items',
       changes: orderChanged ? [{ field: 'items.order', before: existingIds, after: input.projectIds }] : [],
     };

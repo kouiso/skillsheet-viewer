@@ -15,11 +15,9 @@ function safeEqual(a: string, b: string): boolean {
 
 function getProvidedSecret(request: Request | null): string {
   if (!request) return '';
-  return (
-    request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ??
-    new URL(request.url).searchParams.get('secret') ??
-    ''
-  );
+  // 秘密値は Authorization ヘッダのみで受け取る。クエリの ?secret= はブラウザ履歴・
+  // アクセスログ・Referer に残りやすいため受理しない（#351）。
+  return request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
 }
 
 export const maintenanceRouter = router({
