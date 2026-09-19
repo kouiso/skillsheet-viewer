@@ -31,6 +31,8 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
+          # --baseline で差分ゲートにするため base commit を含む全履歴が要る。
+          fetch-depth: 0
 
       # 依存脆弱性は security-scan.yml の pnpm audit と security-audit.yml の audit-ci が
       # 見ているため、ここは SAST に専念する。
@@ -39,8 +41,19 @@ jobs:
       # --config auto は metrics=off と併用できずエラーになるため、private 化に
       # 備えて明示的なルールパック指定に変更している。
       #
-      # --error は付けていない。導入時点でこのルールセットは既存コードに対して
-      # 21件の findings（ERROR severity 1件を含む）を出すため、即座に付けると
-      # 本PRと無関係な既存コードでCIが赤くなる。まず findings を triage
-      # （修正 or nosemgrep/.semgrepignoreで除外）してから、別PRでハードゲート化する。
-      - run: semgrep scan --config p/default --metrics=off
+      # --error --baseline: 導入時点で既存コードに 21件の findings（ERROR 1件を含む）
+      # があるため全件ゲートにはできない。代わりに「この変更で新たに出た findings
+      # のみ fail させる」diff ゲートにし、悪化だけを止める（#348）。
+      # 既存 findings のトリアージ（修正 or nosemgrep）が済んだら --baseline を
+      # 外して全件ゲートに格上げする。
+      - name: Semgrep scan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE_SHA" ]; then
+            # workflow_dispatch 等で比較元が取れない場合は findings 報告のみ（fail させない）。
+            semgrep scan --config p/default --metrics=off
+          else
+            git fetch --no-tags origin "$BASE_SHA"
+            semgrep scan --config p/default --metrics=off --error --baseline "$BASE_SHA"
+          fi
