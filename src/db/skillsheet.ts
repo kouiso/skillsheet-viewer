@@ -21,5 +21,3 @@ export interface SheetSummary {
   title: string;
   updatedAt: Date;
 }
-
-export const TITLE = 'エンジニアスキルシート';

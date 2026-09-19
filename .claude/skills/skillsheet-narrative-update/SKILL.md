@@ -1,6 +1,6 @@
 ---
 name: skillsheet-narrative-update
-description: Use when rewriting skill-sheet narrative fields or preparing their Neon and private Markdown synchronization. Preserve original claims separately from independent evidence, bind owner approval to exact field hashes, and use the v12 document CAS boundary. Triggers on scripts/apply-project-narrative.ts, block-write.ts, project blocks, skills blocks, and requests to rewrite project narratives.
+description: Use when rewriting skill-sheet narrative fields or preparing their Neon and private Markdown synchronization. Preserve original claims separately from independent evidence, bind owner approval to exact field hashes, and use the v12 document CAS boundary. Triggers on script/apply-project-narrative.ts, block-write.ts, project blocks, skills blocks, and requests to rewrite project narratives.
 ---
 
 # 案件本文の書き換えと DB 反映
@@ -50,7 +50,7 @@ Vercelのproject/deploy/alias/SHAとNeonのproject/branch/database/owner/sheet�
 `read_snapshot`でsheetId/title/blocks/revision/validationを一体取得する。
 revisionは10進文字列、0も有効。保存はsheetIdとexpectedRevisionの完全一致CASを必須にする。
 不明type・壊れたJSON・未対応key・期間投影不一致はrawを保持して編集不可にし、削って検査を通さない。
-`src/db/blocks`の型と意味往復、`document-contract`の検査を通し、本人入力の本文・期間を勝手に正規化しない。
+`src/db/block`の型と意味往復、`document-contract`の検査を通し、本人入力の本文・期間を勝手に正規化しない。
 
 旧`block-write`やタイトル照合のwriterが停止されていれば、停止を解除して使わない。
 文書サービス・限定DB関数・承認journalへの移行が済むまで反映は未完了として扱う。

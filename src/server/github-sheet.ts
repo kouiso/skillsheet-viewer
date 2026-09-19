@@ -5,6 +5,7 @@
 import 'server-only';
 
 import { Buffer } from 'node:buffer';
+import { getGitHubSeedConfig } from '@/db/github-seed';
 
 export interface SheetMeta {
   path: string;
@@ -39,17 +40,15 @@ export class SheetNotFoundError extends Error {
   }
 }
 
+// env の解決自体は seed 経路と同じ getGitHubSeedConfig に一本化（二重実装で
+// 片方だけ更新される drift を防ぐ）。branch は GitHub 保存経路だけが使うためここで読む。
 function getConfig() {
-  const token = process.env.GITHUB_TOKEN ?? process.env.VITE_GITHUB_TOKEN;
-  const owner = process.env.GITHUB_OWNER ?? process.env.VITE_GITHUB_OWNER;
-  const repo = process.env.GITHUB_REPO ?? process.env.VITE_GITHUB_REPO;
-  const branch = process.env.GITHUB_BRANCH ?? process.env.VITE_GITHUB_BRANCH ?? 'main';
-
-  if (!token || !owner || !repo) {
+  const cfg = getGitHubSeedConfig();
+  if (!cfg) {
     throw new Error('Missing required GitHub env vars: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO');
   }
-
-  return { token, owner, repo, branch };
+  const branch = process.env.GITHUB_BRANCH ?? process.env.VITE_GITHUB_BRANCH ?? 'main';
+  return { ...cfg, branch };
 }
 
 function githubHeaders(token: string): Record<string, string> {

@@ -184,7 +184,7 @@ export interface ProjectItem {
   comment: string;
   /** 案件の要約（工程の俯瞰ダッシュボードのカードに表示）。未入力時は duties にフォールバック。 */
   summary?: string;
-  /** 表示用の期間の長さ（例: "3ヶ月"）。未入力時は period から deriveDuration で導出。 */
+  /** 表示用の期間の長さ（例: "3ヶ月"）。未入力時は period から resolveDuration で導出。 */
   duration?: string;
   /** true のとき閲覧側（ビューア/PDF）で非表示にする。 */
   hidden?: boolean;

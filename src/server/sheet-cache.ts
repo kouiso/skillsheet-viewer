@@ -10,7 +10,7 @@ import { getDb } from '@/db/client';
 import { DocumentError } from '@/db/document-service';
 import { getOwnerId, SkillSheetNotFoundError } from '@/db/skillsheet';
 import { fetchSheetFile, listSheets as githubListSheets } from '@/server/github-sheet';
-import { readViewerDocument, readViewerList } from './document-view';
+import { readViewerDocument } from './document-view';
 
 // DB 正本経路（getCachedDbSheetById / getCachedDbSheet）の revalidate 間隔（秒）。
 const DB_REVALIDATE_SECONDS = 60;
@@ -67,7 +67,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
  * stale バナー付きで復活表示してしまう。
  *
  * unstable_cache 越しだと「本当に古いキャッシュを踏んだか」を外から再現しづらいため、
- * このメカニズム自体はテストのために export している（sheets-cache.test.ts 参照）。
+ * このメカニズム自体はテストのために export している（sheet-cache.test.ts 参照）。
  */
 export async function withDbHealthCheck<C extends { fetchedAt: number }>(
   cached: C,
@@ -93,15 +93,6 @@ export function toStaleSheet<T extends { fetchedAt: number }>(sheet: T): Omit<T,
   return { ...rest, stale: isDbContentStale(fetchedAt) };
 }
 
-// getCachedDbSheets と対になる、一覧向けの toStaleSheet。/view のシート一覧は
-// getCachedDbSheetById/getCachedDbSheet と同じ unstable_cache の stale-while-revalidate
-// 経路を通るにもかかわらず、DB 到達不能時に古い一覧を無期限に返し続けても画面上は
-// 気付けなかった（chatgpt-codex-connector レビュー指摘: #204 修正が /view/db・
-// /view/db/[id] のみを対象にしており、一覧の主導線 /view には及んでいなかった）。
-export function toStaleSheetList<T>(list: { sheets: T; fetchedAt: number }): { sheets: T; stale: boolean } {
-  return { sheets: list.sheets, stale: isDbContentStale(list.fetchedAt) };
-}
-
 // GitHub legacy 経路（/view/[path] 等）。標準導線からは外れているが将来削除まで温存。
 export const getCachedSheets = unstable_cache(() => githubListSheets(), ['sheets-list'], {
   tags: ['sheets'],
@@ -114,22 +105,6 @@ export const getCachedSheet = unstable_cache((path: string) => fetchSheetFile(pa
 });
 
 // --- DB 正本経路 ---
-
-// Neon DB のシート一覧（標準導線 /view が使う）。ビルダー保存後は 'db-sheet' タグで無効化。
-// fetchedAt を同梱する（Issue #204 の一覧版。chatgpt-codex-connector レビュー指摘）。
-const getCachedDbSheetsRaw = unstable_cache(
-  async (owner: string) => ({ sheets: await readViewerList(getDb(), owner), fetchedAt: Date.now() }),
-  ['db-sheets-list-v12'],
-  { tags: ['db-sheet'], revalidate: DB_REVALIDATE_SECONDS },
-);
-
-/** getCachedDbSheetsRaw の結果を、古そうなときだけ直接問い合わせで健全性確認してから返す。 */
-export async function getCachedDbSheets(): ReturnType<typeof getCachedDbSheetsRaw> {
-  const owner = getOwnerId();
-  return withDbHealthCheck(await getCachedDbSheetsRaw(owner), async () => ({
-    sheets: await readViewerList(getDb(), owner),
-  }));
-}
 
 // 指定 ID のシートを読む（/view/db/[id] が使う）。fetchedAt を同梱する（Issue #204）。
 const getCachedDbSheetByIdRaw = unstable_cache(
