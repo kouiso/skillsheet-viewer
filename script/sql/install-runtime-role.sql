@@ -53,6 +53,33 @@ BEGIN
 END
 $$;
 
+-- 同じ DATABASE_URL が認証（better-auth）と閲覧 rate-limit にも使われるため、
+-- 境界で守らない公開テーブルには通常の DML 権限が要る。境界対象の
+-- skill_sheets / blocks / skillsheet_state には一切権限を付けない —
+-- これらは SECURITY DEFINER の境界関数経由でしか触れない。
+-- real_volume_demo_fixtures は投入ツール専用なので runtime には付けない。
+DO $$
+BEGIN
+  EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', current_setting('vars.runtime_role'));
+  EXECUTE format(
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
+       public."user",
+       public.session,
+       public.account,
+       public.verification,
+       public.jwks,
+       public.viewer_login_attempt,
+       public.oauth_client,
+       public.oauth_client_assertion,
+       public.oauth_client_resource,
+       public.oauth_consent,
+       public.oauth_access_token,
+       public.oauth_refresh_token,
+       public.oauth_resource
+     TO %I', current_setting('vars.runtime_role'));
+END
+$$;
+
 -- 境界関数は SESSION_USER を principals へ引いて owner を決めるため、
 -- runtime の login_name を登録しないと全呼び出しが UNMAPPED_PRINCIPAL になる。
 INSERT INTO skillsheet_private.principals (login_name, owner_id)
