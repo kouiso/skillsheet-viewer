@@ -10,7 +10,7 @@ on:
       - "**/*.mjs"
       # ゲート自体の変更でも動作確認できるよう対象に含める。
       - ".github/workflows/semgrep.yml"
-      - "script/semgrep-diff-gate.py"
+      - "script/semgrep_diff_gate.py"
   push:
     branches: [main]
   workflow_dispatch:
@@ -48,7 +48,7 @@ jobs:
       # あるため全件ゲートにはできない。「この変更で新たに出た findings のみ
       # fail させる」diff ゲートにして悪化だけを止める（#348）。
       # --baseline は Semgrep AppSec Platform 専用で OSS の `semgrep scan` には
-      # 無いため、base/head を2回スキャンして script/semgrep-diff-gate.py で
+      # 無いため、base/head を2回スキャンして script/semgrep_diff_gate.py で
       # 多重集合差分を取る。既存 findings のトリアージ（修正 or nosemgrep）が
       # 済んだら --error 付きの全件ゲートに格上げする。
       - name: Semgrep scan
@@ -66,4 +66,4 @@ jobs:
           git fetch --no-tags origin "$BASE_SHA"
           git worktree add --detach /tmp/base-scan "$BASE_SHA"
           (cd /tmp/base-scan && semgrep scan --config p/default --metrics=off --json --output /tmp/base.json)
-          python3 "$GITHUB_WORKSPACE/script/semgrep-diff-gate.py" /tmp/base.json /tmp/head.json
+          python3 "$GITHUB_WORKSPACE/script/semgrep_diff_gate.py" /tmp/base.json /tmp/head.json
