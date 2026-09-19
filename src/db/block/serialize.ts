@@ -4,7 +4,12 @@
  * PDF(mdast→@react-pdf) も既存の描画パイプラインをそのまま再利用できる。
  */
 
-import { experienceLegend, resolveDisplayedSkillExperience, resolveDisplayedStats } from '../derived-display';
+import {
+  experienceLegend,
+  experienceSourceLabel,
+  resolveDisplayedSkillExperience,
+  resolveDisplayedStats,
+} from '../derived-display';
 import { resolveDuration } from '../duration';
 import { flattenTech, formatMonthToken, formatPeriodDisplay, normalizeProcess, PROCESS_LABELS } from '../process';
 import { sanitizeHtml, sanitizeMarkdown } from '../sanitize-html';
@@ -62,10 +67,10 @@ export function skillsBlockToMarkdown(
     const experience = context
       ? resolveDisplayedSkillExperience(s, context.projects, context.referenceMonth, context.technologies)
       : undefined;
-    const source =
-      experience?.source === 'manual' ? '本人入力' : experience?.source === 'derived' ? '案件から算出' : '未確定';
+    // viewer/PDF と同じ experienceSourceLabel を使う（ここだけ別語彙を生成すると
+    // markdown と画面で同じスキルの出所表記がずれる #354）
     const label = experience
-      ? `${experience.label || '未確定'}（${source}${experience.precision === 'partial' ? '・一部期間未確定' : ''}）`
+      ? `${experience.label || '未確定'}（${experienceSourceLabel(experience)}）`
       : s.years > 0
         ? `${s.years}年`
         : '-';
@@ -187,6 +192,15 @@ export function projectBlockToMarkdown(
     if (company?.note?.trim()) {
       lines.push('');
       lines.push(escapeMarkdownParagraph(company.note.trim()));
+    }
+    // 案件の要約（ProjectItem.summary）。MCP/エディタで書き込めるのにここで出さないと
+    // includeHidden バックアップ → 復元の往復で黙って消える（#343）。ビューアは
+    // `summary || duties` の順で本文に使うため、duties とは別節として残す。
+    if (item.summary?.trim()) {
+      lines.push('');
+      lines.push('**要約**');
+      lines.push('');
+      lines.push(asInlineMarkdown(collapseSoftBreaks(item.summary.trim())));
     }
     if (item.duties.trim()) {
       lines.push('');

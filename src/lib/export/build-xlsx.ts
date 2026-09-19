@@ -9,7 +9,9 @@ import { inflateSync } from 'node:zlib';
 import ExcelJS from 'exceljs';
 
 import { type Block, filterVisibleProjectData, type ProfileBlockData, type ProjectItem } from '@/db/block';
+import { resolveDuration } from '@/db/duration';
 import { normalizeProcess, parsePeriodToRange, sortByStartDesc } from '@/db/process';
+import { sanitizeHtml } from '@/db/sanitize-html';
 
 import { XLSX_TEMPLATE_B64 } from './xlsx-template';
 
@@ -82,24 +84,38 @@ const DESC_MIN_HEIGHT = 120;
 
 const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o ?? {}));
 
-// エディタの markdown 書き方をスプシの文面へ寄せる（'- '→'・'、'**'除去、'#'除去）
+// エディタの markdown 書き方をスプシの文面へ寄せる（'- '→'・'、'**'除去、'#'除去）。
+// viewer/PDF と同じく生HTMLタグは落とす（xlsx 側だけエスケープ無しで残ると、
+// セルに `<details>` 等の生マークアップが残って画面と食い違う）。
 const mdToSheet = (s: string | undefined): string =>
-  (s ?? '')
+  sanitizeHtml(s ?? '')
     .replace(/\*\*(.+?)\*\*/g, '$1')
     .replace(/^- /gm, '・')
     .replace(/^#+\s*/gm, '')
     .trim();
 
-const composeDesc = (i: ProjectItem): string =>
-  `≪担当業務≫\n${mdToSheet(i.duties)}\n\n≪習得スキル≫\n${mdToSheet(i.acquired)}\n\n≪コメント≫\n${mdToSheet(i.comment)}`;
+// ビューアは summary 未入力時に duties へフォールバックして表示する
+// （project-card.tsx `item.summary?.trim() || item.duties`）。xlsx も同じ優先順位で
+// 要約を出し、duties も別節として残す（消すとバックアップとしての情報量が落ちる）。
+const composeDesc = (i: ProjectItem): string => {
+  const sections: string[] = [];
+  const summary = i.summary?.trim();
+  if (summary) sections.push(`≪要約≫\n${mdToSheet(summary)}`);
+  sections.push(`≪担当業務≫\n${mdToSheet(i.duties)}`);
+  sections.push(`≪習得スキル≫\n${mdToSheet(i.acquired)}`);
+  sections.push(`≪コメント≫\n${mdToSheet(i.comment)}`);
+  return sections.join('\n\n');
+};
 
-// '13 名' → '13人'。数字を拾えないときは '-'（取り急ぎ版と同じ挙動）
-const roleCell = (i: ProjectItem): string => `役割\n${i.role}\n\n\n全体\n${(i.team.match(/\d+/) || ['-'])[0]}人`;
+// '13 名' → '13人'。数字を拾えないときは '-'（取り急ぎ版と同じ挙動）。
+// role/team も自由入力なので viewer と同じく生タグは落とす（#343）。
+const roleCell = (i: ProjectItem): string =>
+  `役割\n${sanitizeHtml(i.role)}\n\n\n全体\n${(sanitizeHtml(i.team).match(/\d+/) || ['-'])[0]}人`;
 
 const lineCount = (s: string): number =>
   s.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil([...l].length / CHARS_PER_LINE)), 0);
 
-const joinOrDash = (list: string[]): string => list.join('\n') || '-';
+const joinOrDash = (list: string[]): string => list.map(sanitizeHtml).join('\n') || '-';
 
 interface BlockStyle {
   heights: number[];
@@ -165,37 +181,47 @@ function writeBlock(
   ws.getCell(r, COL.NO).value = no;
 }
 
-/** 期間文字列から開始セル・終了セル・月数数式の3点を作る。解釈不能なら素の文字列に倒す。 */
-function periodCells(item: ProjectItem, r: number): { start: unknown; end: unknown; duration: unknown } {
+/** 期間文字列から開始セル・終了セル・月数の3点を作る。解釈不能なら素の文字列に倒す。 */
+function periodCells(
+  item: ProjectItem,
+  referenceMonth: number | undefined,
+): { start: unknown; end: unknown; duration: unknown } {
+  // 月数は Excel 数式ではなく viewer/PDF と同じ resolveDuration のラベルを静的に書く。
+  // DATEDIF(...,TODAY()) は開くたび値が変わり、逆転期間で #NUM! を出し、
+  // 本人入力の item.duration も無視していた（#343）。
+  const duration = resolveDuration(item.period, item.duration, referenceMonth).label;
   const range = parsePeriodToRange(item.period);
   if (!range) {
-    return { start: item.period || null, end: null, duration: null };
+    return { start: item.period || null, end: null, duration: duration || null };
   }
   const [sy, sm] = range.start.split('-').map(Number);
   const start = new Date(Date.UTC(sy, sm - 1, 1));
   if (range.ongoing) {
-    return { start, end: '現在', duration: { formula: `DATEDIF(B${r},TODAY(),"M")+1` } };
+    return { start, end: '現在', duration };
   }
   // 終了月なし（'2024.1' 等）は end が '' で返る。そのまま年月へ分解すると
-  // Invalid Date をセルへ書き込むので、終了セルと月数セルは空にする。
+  // Invalid Date をセルへ書き込むので、終了セルは空にする。
   if (!range.end) {
-    return { start, end: null, duration: null };
+    return { start, end: null, duration };
   }
   const [ey, em] = range.end.split('-').map(Number);
   const end = new Date(Date.UTC(ey, em, 0)); // 末日（月末）に揃える
-  return { start, end, duration: { formula: `DATEDIF(B${r},G${r},"M")+1` } };
+  return { start, end, duration };
 }
 
-function itemValues(item: ProjectItem, r: number): unknown[] {
-  const { start, end, duration } = periodCells(item, r);
-  const { done } = normalizeProcess(item.process);
+function itemValues(item: ProjectItem, referenceMonth: number | undefined): unknown[] {
+  const { start, end, duration } = periodCells(item, referenceMonth);
+  const { done, other } = normalizeProcess(item.process);
   const vals = new Array(BLOCK_MERGES.length).fill(null);
   vals[1] = start;
   vals[2] = '-';
   vals[3] = end;
   vals[4] = duration;
-  vals[5] = item.title;
-  vals[6] = composeDesc(item);
+  vals[5] = sanitizeHtml(item.title);
+  // 7工程の表外ラベル（other）は ● 列に置き場がないので業務内容の末尾へ添える。
+  // 入れないと自由入力の工程名が xlsx から消える（#343）。
+  const desc = composeDesc(item);
+  vals[6] = other.length > 0 ? `${desc}\n\n≪担当工程（その他）≫\n${other.map(mdToSheet).join('\n')}` : desc;
   vals[7] = null; // 役割/規模ブロックの1行目は空欄（テンプレ踏襲）
   vals[8] = roleCell(item);
   vals[9] = joinOrDash(item.tech.lang);
@@ -222,8 +248,10 @@ const toArrayBuffer = (u8: Uint8Array): ArrayBuffer =>
 /**
  * スキルシートのブロック列から応募用 xlsx を生成する。
  * 非表示（hidden）の会社・案件はビューア/PDF と同じく出力しない。
+ * referenceMonth は継続中案件の月数を viewer/PDF と同じ基準月で確定させるためのもの
+ * （省略時は「未確定」— resolveDuration と同じ扱い）。
  */
-export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
+export async function buildSkillSheetXlsx(blocks: Block[], referenceMonth?: number): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.load(toArrayBuffer(inflateSync(Buffer.from(XLSX_TEMPLATE_B64, 'base64'))));
   const ws = wb.worksheets[0];
@@ -236,8 +264,14 @@ export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
     if (top >= FIRST_ROW) ws.unMergeCells(key);
   }
 
-  const project = blocks.find((b): b is Extract<Block, { type: 'project' }> => b.type === 'project');
-  const items = project ? sortByStartDesc(filterVisibleProjectData(project.data).items, (i) => i.period) : [];
+  // project ブロックは複数置ける（会社・時期で分割する運用）。find だと2枚目以降が
+  // xlsx から消えるので全ブロックの案件を連結する（#343）。
+  const items = sortByStartDesc(
+    blocks
+      .filter((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')
+      .flatMap((b) => filterVisibleProjectData(b.data).items),
+    (i) => i.period,
+  );
 
   items.forEach((it, idx) => {
     const r = FIRST_ROW + idx * BLOCK_ROWS;
@@ -245,7 +279,7 @@ export async function buildSkillSheetXlsx(blocks: Block[]): Promise<Buffer> {
     const desc = composeDesc(it);
     const heights = [...style.heights];
     heights[2] = Math.max(DESC_MIN_HEIGHT, Math.ceil(lineCount(desc) * HEIGHT_PER_LINE));
-    writeBlock(ws, r, { ...style, heights }, idx + 1, itemValues(it, r), {
+    writeBlock(ws, r, { ...style, heights }, idx + 1, itemValues(it, referenceMonth), {
       first: idx === 0,
       last: idx === items.length - 1,
     });

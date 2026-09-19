@@ -347,7 +347,10 @@ describe('印刷経路: 稼働月数はビュートグル「稼働月数」に�
   const ALL: PrintViewKey[] = ['skills', 'process', 'projects', 'timeline', 'duration'];
 
   async function renderPages(views: PrintViewKey[] | undefined) {
-    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views }));
+    // facts（enumerateCompletenessFacts）はファイル先頭の referenceMonth を使うので、
+    // 描画側にも同じ基準月を渡す。省略すると open-ended 期間の月数が描画と facts で
+    // ずれ、説明不能な missing 失敗になる（#354）。
+    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, views, referenceMonth }));
     return extractQualityPages(buffer);
   }
   const joinTexts = (pages: Awaited<ReturnType<typeof renderPages>>) =>

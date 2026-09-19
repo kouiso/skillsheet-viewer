@@ -89,10 +89,10 @@ describe('稼働月数（ビュートグル「稼働月数」に従う）', () =
     expect(screen.getByText('（未確定）')).toBeInTheDocument();
   });
 
-  it('期間が空・解釈不能なら稼働月数も出さない（手入力の duration があっても期間無しでは出さない）', () => {
+  it('期間が空でも手入力の duration があればカードと同じく稼働月数を出す', () => {
     renderTimeline(buildItem({ period: '', duration: '9ヶ月' }));
     expect(screen.getByText('(期間未入力)')).toBeInTheDocument();
-    expect(screen.queryByText('（9ヶ月）')).not.toBeInTheDocument();
+    expect(screen.getByText('（9ヶ月）')).toBeInTheDocument();
   });
 
   it('手入力の duration があれば導出値より優先する', () => {

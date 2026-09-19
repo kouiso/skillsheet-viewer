@@ -94,8 +94,9 @@ it('固定月Markdownは全案件ブロックの重複月を統合し、非表�
   const referenceMonth = 2026 * 12 + 8;
   const server = blocksToMarkdown(blocks, referenceMonth);
   expect(assembleMarkdown(blocks.map(blockToItem), { referenceMonth })).toBe(server);
-  expect(server).toContain('0年4ヶ月（案件から算出）');
-  expect(server).toContain('0年0ヶ月（案件から算出）');
+  // 出所表記は viewer/PDF と同じ experienceSourceLabel の語彙（#354 で統一）
+  expect(server).toContain('0年4ヶ月（案件算出）');
+  expect(server).toContain('0年0ヶ月（案件算出）');
   expect(server).toContain('2年（本人入力）');
   expect(server).toContain('独立した習熟度');
   expect(server).toContain('2026-09基準');

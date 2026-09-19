@@ -47,6 +47,7 @@ import {
   companyLabelOf,
   dedupeRoles,
   formatProcessForPrint,
+  rendersProjectCards,
   stripDecorativeHeading,
 } from './print-view-model';
 
@@ -442,8 +443,10 @@ export function enumerateCompletenessFacts(
     pushFact(facts, 'stats', 'page1', '統計のラベル', label);
   }
 
-  // --- 会社・案件（'projects' ビューが OFF だとセクションごと出ない） ---
-  if (on('projects')) {
+  // --- 会社・案件（'projects'/'timeline' 両方 OFF だとセクションごと出ない。
+  // timeline-only でも案件カードは描かれるので、描画側と同じ rendersProjectCards で
+  // 判定しないと timeline-only 出力が facts 0 件で assertComplete を素通りする（#354）） ---
+  if (rendersProjectCards(views)) {
     const techById = new Map(visible.items.map((item) => [item.id, item.tech]));
 
     for (const group of groups) {
@@ -780,8 +783,9 @@ export function buildCompletenessReport(
 ): CompletenessReport & { durationConflicts: { blockId: string; projectId: string }[] } {
   if (!Number.isSafeInteger(referenceMonth) || referenceMonth < 0) throw new Error('INVALID_REFERENCE_MONTH');
   const facts = enumerateCompletenessFacts(blocks, views, referenceMonth);
-  const extraNoise = views.includes('projects') ? buildContinuationHeaderNoise(blocks, referenceMonth) : [];
-  const durationConflicts = views.includes('projects')
+  // timeline-only でも案件は描かれるので noise/conflicts も rendersProjectCards で判定（#354）
+  const extraNoise = rendersProjectCards(views) ? buildContinuationHeaderNoise(blocks, referenceMonth) : [];
+  const durationConflicts = rendersProjectCards(views)
     ? blocks.flatMap((block) =>
         block.type === 'project'
           ? filterVisibleProjectData(block.data)

@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react';
 import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@/db/block';
+import { durationFromRange } from '@/db/duration';
 import {
-  durationFromRange,
   formatPeriodRange,
   labelsForProcessIndex,
   normalizeProcess,
