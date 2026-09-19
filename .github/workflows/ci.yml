@@ -150,13 +150,14 @@ jobs:
         if: matrix.check-type == 'e2e'
         env:
           DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
-          PGOPTIONS: -c vars.allow_existing_role=on
         run: |
+          # allow_existing_role は psql 変数で渡す。Neon pooler は startup
+          # parameter を通さないため PGOPTIONS では届かない。
           if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM information_schema.schemata WHERE schema_name='skillsheet_private'" | grep -q 1; then
-            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-read-boundary.sql
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v allow_existing_role=on -f script/sql/install-skillsheet-read-boundary.sql
           fi
           if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname='skillsheet_private' AND p.proname='replace_sheet'" | grep -q 1; then
-            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-write-boundary.sql
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v allow_existing_role=on -f script/sql/install-skillsheet-write-boundary.sql
           fi
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<SQL
           GRANT USAGE ON SCHEMA skillsheet_private TO CURRENT_USER;
