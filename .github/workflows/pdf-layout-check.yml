@@ -72,7 +72,7 @@ jobs:
 
       - name: Record dump evidence
         # M07 の完了条件（接続先識別・owner一致・件数・スナップショット）を
-        # 非秘密の識別子だけで実行ログへ残す。内容は dump-blocks.ts が
+        # 非秘密の識別子だけで実行ログへ残す。内容は dump-block.ts が
         # 非秘密値だけを書く evidence ファイルで、本文・認証情報は入らない。
         run: cat "$RUNNER_TEMP/blocks.evidence"
 

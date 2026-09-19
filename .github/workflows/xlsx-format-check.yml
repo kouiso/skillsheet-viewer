@@ -39,14 +39,48 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate target sheet
+        env:
+          XLSX_CHECK_DATABASE_URL: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+          XLSX_CHECK_SHEET_ID: ${{ vars.XLSX_CHECK_SHEET_ID }}
+        run: |
+          if [[ -z "$XLSX_CHECK_DATABASE_URL" ]]; then
+            echo '::error::XLSX_CHECK_DATABASE_URL must be configured.'
+            exit 1
+          fi
+          if [[ ! "$XLSX_CHECK_SHEET_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo '::error::XLSX_CHECK_SHEET_ID must be configured with a sheet UUID.'
+            exit 1
+          fi
+
       - name: Dump blocks from database
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        # 書き出し先を RUNNER_TEMP に置く。実在の案件本文を含むので、
-        # 成果物としてアップロードしない（このリポジトリは public）。
-        run: pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/blocks.json"
+          DATABASE_URL: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+          XLSX_CHECK_SHEET_ID: ${{ vars.XLSX_CHECK_SHEET_ID }}
+          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
+        # 本文やDBエラーは非公開の一時ファイルに限定する。成果物へはアップロードしない。
+        # シートは --sheet-id で明示する（正本の全件 dump はしない。pdf-layout-check と同じ方式 #348）。
+        run: |
+          umask 077
+          status=0
+          pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$XLSX_CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/xlsx-dump.log" 2>&1 || status=$?
+          echo "Database dump finished (exit $status)."
+          exit "$status"
+
+      - name: Record dump evidence
+        run: cat "$RUNNER_TEMP/blocks.evidence"
 
       - name: XLSX format check against real data
         env:
           REAL_BLOCKS_JSON: ${{ runner.temp }}/blocks.json
-        run: pnpm exec vitest run --config vitest.config.pdf.ts src/lib/export/xlsx-format-check.node.test.tsx
+        # assertion の失敗文には実経歴が含まれうるため、公開ログへ転送しない。
+        run: |
+          umask 077
+          status=0
+          pnpm exec vitest run --config vitest.config.pdf.ts src/lib/export/xlsx-format-check.node.test.tsx > "$RUNNER_TEMP/xlsx-check.log" 2>&1 || status=$?
+          echo "XLSX format check finished (exit $status)."
+          exit "$status"
+
+      - name: Remove private data and logs
+        if: always()
+        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/xlsx-dump.log" "$RUNNER_TEMP/xlsx-check.log"
