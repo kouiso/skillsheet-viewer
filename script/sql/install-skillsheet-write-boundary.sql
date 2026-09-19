@@ -15,7 +15,14 @@ ALTER TABLE public.skillsheet_state ADD COLUMN IF NOT EXISTS deleted_sheet_ids u
 
 -- role は cluster 全域・schema は DB 単位。同一 cluster の別 DB（例: e2e 専用
 -- DB）へ install すると role だけが既に存在する。その場合だけ
--- PGOPTIONS='-c vars.allow_existing_role=on' で既存 role を再利用する。
+-- -v allow_existing_role=on で既存 role を再利用する。
+-- Neon pooler は startup parameter を通さないため PGOPTIONS ではなく
+-- psql 変数 → SET LOCAL で渡す。
+\if :{?allow_existing_role}
+\else
+  \set allow_existing_role off
+\endif
+SET LOCAL vars.allow_existing_role = :'allow_existing_role';
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'skillsheet_document_writer') THEN
