@@ -1,6 +1,6 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowLeft, Download, FileDown, FileMinus, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -84,6 +84,8 @@ function DigestDownloadMenu({
           disabled={digestLoading}
           aria-busy={digestLoading}
           aria-label={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
+          // Popover とは別に、ホバーで用途が分かるネイティブ tooltip（#355）
+          title={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
           className="min-h-11 min-w-11"
         >
           {digestLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileMinus />}
@@ -195,6 +197,7 @@ export function ViewerTopbar({
   reserveEditSlot = false,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
+  const reduceMotion = useReducedMotion();
 
   const editButton = canEdit ? (
     <Tooltip>
@@ -211,9 +214,10 @@ export function ViewerTopbar({
 
   const viewToggleFieldset = (
     <fieldset
-      // min-w-0: flex item の既定 min-width:auto のままだと overflow-x-auto が効かず、
-      // 中身の最小幅ぶんフィールドセット自体がページを押し広げて #143 相当の横スクロールが再発する。
-      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto -mx-4 border-0 p-0 px-4 sm:w-auto sm:flex-wrap sm:overflow-visible sm:mx-0 sm:px-0"
+      // min-w-0 + flex-wrap: 横スクロール（overflow-x-auto）だと 4 個目以降のピルが
+      // 右端で見切れて存在に気づかなかったため、SP では2行折返しにする（#355）。
+      // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
+      className="m-0 flex w-full min-w-0 flex-wrap items-center gap-1.5 border-0 p-0 sm:w-auto"
     >
       <legend className="sr-only">表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
@@ -331,7 +335,8 @@ export function ViewerTopbar({
 
   return (
     <motion.header
-      initial={{ y: -100 }}
+      // 前庭障害の読み手へページ全体のスライドインを掛けない（#355）
+      initial={reduceMotion ? false : { y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
       // design: 背景は下地を 88% 残した色 + blur 8px（カード色ではなくページ地の色を敷く）
@@ -360,7 +365,7 @@ export function ViewerTopbar({
             <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">
               {name || 'エンジニアスキルシート'}
             </span>
-            {company && <span className="min-w-0 truncate font-mono text-[11.5px] text-faint">{company}</span>}
+            {company && <span className="min-w-0 truncate font-mono text-[12px] text-muted-foreground">{company}</span>}
           </Link>
 
           {renderActionIcons('flex shrink-0 items-center gap-2 sm:hidden', true)}
