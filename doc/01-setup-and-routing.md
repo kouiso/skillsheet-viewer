@@ -68,7 +68,7 @@ pnpm install         # 依存を導入
 pnpm dev             # 開発サーバー起動（next dev）
 pnpm build           # 本番ビルド
 pnpm type-check      # 型チェック
-pnpm test            # テスト（vitest / jsdom + node の2本）
+pnpm test            # テスト（vitest / jsdom + node[DB・スクリプト] + node[PDF] の3本）
 pnpm db:generate     # Drizzle マイグレーション生成
 pnpm db:migrate      # マイグレーション適用
 ```
@@ -98,6 +98,8 @@ Next.js App Router では `app/` 配下のディレクトリ構造がそのま�
 | `/api/logout` | `app/api/logout/route.ts` | 互換 Route Handler | `auth.logout` procedure への旧クライアント用アダプタ |
 | `/api/revalidate` | `app/api/revalidate/route.ts` | 互換 Route Handler | `maintenance.revalidate` procedure への運用用アダプタ |
 | `/api/trpc/[trpc]` | `app/api/trpc/[trpc]/route.ts` | Route Handler | tRPC の HTTP エンドポイント（`fetchRequestHandler`）。画面の読み書き・閲覧認証・権限状態を集約 |
+| `/api/mcp` | `app/api/mcp/route.ts` | Route Handler | MCP サーバー（doc/06 参照。`MCP_ENABLED` 未設定なら 404） |
+| `/api/sheet/export-xlsx` | `app/api/sheet/export-xlsx/route.ts` | Route Handler | シートの xlsx エクスポート |
 
 `[path]` や `[id]` は動的セグメントで、`params` は `Promise` として渡る（`const { id } = await params`）。
 

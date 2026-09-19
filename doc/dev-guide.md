@@ -132,8 +132,9 @@
 
 ## 依存の脆弱性対応
 
-CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ、**high 以上**でビルドを落とす。
-1本目は本番依存のみ、2本目は devDependencies も含む。
+CI は2系統の監査を走らせ、**high 以上**でビルドを落とす。
+`.github/workflows/security-scan.yml` が `pnpm audit --prod`（本番依存のみ）、
+`.github/workflows/security-audit.yml` が `audit-ci`（`audit-ci.jsonc` の設定）を実行する。
 
 直接依存の更新で直せない推移的依存は、ルート `package.json` の `pnpm.overrides` で寄せる。
 現在入っている override とその理由は次の通り。上流が追いついたら削除してよい。
@@ -141,10 +142,10 @@ CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ�
 | override | 理由 |
 | --- | --- |
 | `postcss: ^8.5.23` | `next` が `postcss` を `8.4.31` で完全固定するため、next を上げても GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 が残る |
-| `sharp: ^0.35.3` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
+| `sharp: ^0.35.4` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
 | `brace-expansion@>=3: ^5.0.9` | GHSA-mh99-v99m-4gvg の修正版。3.0.0 以上にだけ適用する。5.0.8 は GHSA-mh99-v99m-4gvg の緩和が不完全で別途 GHSA-rgw5-rvv9-x895（CVE-2026-69152）の対象になるため 5.0.9 まで上げる |
 | `test-exclude: ^8.0.0` | 7.x は minimatch 9 → brace-expansion 2.x を引き、2.x 系には GHSA-mh99-v99m-4gvg の修正版が無い。8.0.0 は minimatch 10 → brace-expansion 5 になる |
-| `fast-uri@3: ^3.1.5` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6。3.1.4 は別途 GHSA-7p8r-x3mc-p8w7（CVE-2026-18446）の対象になるため 3.1.5 まで上げる |
+| `fast-uri@3: ^3.1.7` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6。3.1.4 は別途 GHSA-7p8r-x3mc-p8w7（CVE-2026-18446）の対象になるため 3.1.7 まで上げる |
 
 `brace-expansion` を全系統まとめて `^5.0.8` に寄せてはいけない。`require('brace-expansion')`
 の戻り値は 3.0.0 で関数から object へ変わっており、それを関数として呼ぶ minimatch 3.x / 9.x が
