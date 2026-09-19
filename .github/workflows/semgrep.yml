@@ -54,6 +54,9 @@ jobs:
             # workflow_dispatch 等で比較元が取れない場合は findings 報告のみ（fail させない）。
             semgrep scan --config p/default --metrics=off
           else
+            # semgrep コンテナの実効ユーザーと checkout 所有者が違うため、
+            # safe.directory を通さないと fetch が dubious ownership で落ちる。
+            git config --global --add safe.directory "$GITHUB_WORKSPACE"
             git fetch --no-tags origin "$BASE_SHA"
             semgrep scan --config p/default --metrics=off --error --baseline "$BASE_SHA"
           fi
