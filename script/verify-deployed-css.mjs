@@ -83,17 +83,30 @@ if (expected.size === 0) {
   process.exit(1);
 }
 
-const html = await fetchText(`${baseUrl}${PAGE_PATH}`);
-const hrefs = [...new Set([...html.matchAll(/href="([^"]+\.css[^"]*)"/g)].map((m) => new URL(m[1], baseUrl).href))];
-if (hrefs.length === 0) {
-  console.error(`${baseUrl}${PAGE_PATH} の HTML に CSS リンクがありません`);
-  process.exit(1);
+// デプロイ直後は CDN の伝播ラグで旧 HTML/CSS が返りうるため、欠落時は数回待って
+// 再試行し、伝播中の誤検知（false negative）を防ぐ。
+const ATTEMPTS = 3;
+const RETRY_DELAY_MS = 15_000;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+let missing = [];
+for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+  const html = await fetchText(`${baseUrl}${PAGE_PATH}`);
+  const hrefs = [...new Set([...html.matchAll(/href="([^"]+\.css[^"]*)"/g)].map((m) => new URL(m[1], baseUrl).href))];
+  if (hrefs.length === 0) throw new Error(`${baseUrl}${PAGE_PATH} の HTML に CSS リンクがありません`);
+
+  const deployed = normalizeCss((await Promise.all(hrefs.map(fetchText))).join('\n'));
+  missing = [...expected].filter((decl) => !deployed.includes(decl));
+  console.log(
+    `${baseUrl}: ${hrefs.length} CSS ファイル / ${expected.size} センチネルトークンを照合 (attempt ${attempt}/${ATTEMPTS})`,
+  );
+  if (missing.length === 0) break;
+  if (attempt < ATTEMPTS) {
+    console.log(`${missing.length} 件不足 — ${RETRY_DELAY_MS / 1000}s 後に再試行します`);
+    await sleep(RETRY_DELAY_MS);
+  }
 }
 
-const deployed = normalizeCss((await Promise.all(hrefs.map(fetchText))).join('\n'));
-
-const missing = [...expected].filter((decl) => !deployed.includes(decl));
-console.log(`${baseUrl}: ${hrefs.length} CSS ファイル / ${expected.size} センチネルトークンを照合`);
 if (missing.length > 0) {
   console.error(`配信 CSS に存在しないトークンが ${missing.length} 件あります:`);
   for (const decl of missing) console.error(`  ${decl}`);
