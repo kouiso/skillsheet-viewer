@@ -297,7 +297,7 @@ test('viewer: auth, list, detail, PDF download, theme and viewports', async ({ b
           .filter((r) => r.w > 0 && r.h > 0 && (r.w < 44 || r.h < 44)),
       );
       if (smallTargets.length > 0) {
-        console.warn(`small tap targets ${theme}/${viewport.name}:`, smallTargets.slice(0, 5));
+        console.warn(`small tap targets ${theme}/${viewport.name}: ${JSON.stringify(smallTargets.slice(0, 5))}`);
       }
     }
   }
