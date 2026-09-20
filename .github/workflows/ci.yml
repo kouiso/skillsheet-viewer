@@ -39,6 +39,13 @@ jobs:
       fail-fast: false
       matrix:
         check-type: [lint, typecheck, test, build, e2e]
+    # e2e は共有 DB（skillsheet_e2e）を実行冒頭で drop+create するため、別 ref の
+    # run と同時に走ると互いの DB を消し合う。check-type=e2e だけ共通グループへ
+    # 入れて全 run で直列化し、他の脚は run_id で一意化して並行を維持する。
+    # （待機枠は1つだけ: さらに新しい実行が来ると古い待機はキャンセルされる）
+    concurrency:
+      group: ${{ matrix.check-type == 'e2e' && 'e2e-shared-db' || format('ci-{0}-{1}', matrix.check-type, github.run_id) }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
@@ -93,6 +100,17 @@ jobs:
             echo '::error::E2E_DATABASE_URL secret is not configured. Create a dedicated Neon branch/DB for e2e and set it — never the canonical DATABASE_URL (#346).'
             exit 1
           fi
+
+      # e2e DB は永続なため、実行ごとの残り（user/session/sheet/principals）を
+      # 溜めないよう、毎回まっさらへ戻してから migrate する（#360）。標準経路は
+      # DROP DATABASE + CREATE DATABASE で、接続 role に CREATEDB が無い環境では
+      # スキーマリセットへ自動フォールバックする。dbname が *_e2e で無い URL は
+      # スクリプト側で拒否するため、正本 DB への誤実行は起きない。
+      - name: Reset E2E database
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+        run: pnpm exec tsx script/reset-e2e-db.ts
 
       - name: Migrate database
         if: matrix.check-type == 'e2e'
