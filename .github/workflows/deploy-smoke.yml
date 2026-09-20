@@ -7,6 +7,11 @@ on:
   # Vercel の GitHub 連携が発行する deployment_status イベント（本番成功時のみ）。
   deployment_status:
   workflow_dispatch:
+    inputs:
+      base_url:
+        description: '検証対象のデプロイ URL（省略時は本番 URL）'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -19,7 +24,7 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.deployment_status.state == 'success' &&
-       contains(toLower(github.event.deployment_status.environment), 'production'))
+       contains(github.event.deployment_status.environment, 'production'))
     steps:
       # デプロイ対象コミットの globals.css と照合するため、その sha でチェックアウトする。
       # 供給網対策でタグではなく commit へ固定する（ci.yml と同じ方針）。
@@ -34,5 +39,8 @@ jobs:
 
       - name: Verify deployed CSS tokens
         env:
-          DEPLOYED_BASE_URL: ${{ vars.PRODUCTION_URL || 'https://skill-sheet-snowy.vercel.app' }}
+          # 手動入力 > デプロイ対象の環境 URL > リポジトリ変数 > 既定の本番 URL
+          DEPLOYED_BASE_URL: >-
+            ${{ inputs.base_url || github.event.deployment_status.environment_url
+            || vars.PRODUCTION_URL || 'https://skill-sheet-snowy.vercel.app' }}
         run: node script/verify-deployed-css.mjs
