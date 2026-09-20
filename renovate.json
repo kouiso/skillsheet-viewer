@@ -9,6 +9,7 @@
   "labels": ["renovate"],
   "rangeStrategy": "bump",
   "separateMajorMinor": true,
+  "minimumReleaseAge": "7 days",
   "packageRules": [
     {
       "matchUpdateTypes": ["major"],
@@ -23,6 +24,7 @@
     {
       "groupName": "型定義パッケージ",
       "matchPackageNames": ["@types/**"],
+      "minimumReleaseAge": "7 days",
       "automerge": true
     },
     {
@@ -30,6 +32,7 @@
       "matchDepTypes": ["dependencies"],
       "groupName": "本番環境依存関係（minor/patch）",
       "groupSlug": "production-dependencies",
+      "minimumReleaseAge": "7 days",
       "automerge": true
     },
     {
@@ -37,6 +40,7 @@
       "matchDepTypes": ["devDependencies"],
       "groupName": "開発環境依存関係（minor/patch）",
       "groupSlug": "dev-dependencies",
+      "minimumReleaseAge": "7 days",
       "automerge": true
     },
     {
@@ -48,6 +52,7 @@
     {
       "matchPackageNames": ["next", "react", "react-dom"],
       "matchUpdateTypes": ["major"],
+      "minimumReleaseAge": "7 days",
       "automerge": false,
       "groupName": "コアフレームワーク major アップデート",
       "labels": ["renovate", "major-update", "needs-review"]
