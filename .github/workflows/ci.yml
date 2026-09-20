@@ -39,6 +39,13 @@ jobs:
       fail-fast: false
       matrix:
         check-type: [lint, typecheck, test, build, e2e]
+    # e2e は共有 DB（skillsheet_e2e）を実行冒頭で drop+create するため、別 ref の
+    # run と同時に走ると互いの DB を消し合う。check-type=e2e だけ共通グループへ
+    # 入れて全 run で直列化し、他の脚は run_id で一意化して並行を維持する。
+    # （待機枠は1つだけ: さらに新しい実行が来ると古い待機はキャンセルされる）
+    concurrency:
+      group: ${{ matrix.check-type == 'e2e' && 'e2e-shared-db' || format('ci-{0}-{1}', matrix.check-type, github.run_id) }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 

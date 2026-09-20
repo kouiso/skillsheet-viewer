@@ -139,6 +139,17 @@ async function main(): Promise<void> {
   const pool = new Pool({ connectionString: databaseUrl, max: 1 });
   try {
     await resetSchemas(pool);
+  } catch (error) {
+    // 「DROP は通ったが CREATE が権限不足」という組合せ（owner だが CREATEDB
+    // 無し等）では e2e DB が既に存在しない。そのまま接続エラーだけを返すと
+    // 原因が読めないため、復旧手順を含むエラーに置き換える。
+    if ((error as { code?: string }).code === '3D000') {
+      throw new Error(
+        `e2e DB "${dbName}" が存在しません。DROP 後の CREATE DATABASE に失敗した可能性があります —— 接続 role に CREATEDB を付与するか、DB を手動で作り直してください`,
+        { cause: error },
+      );
+    }
+    throw error;
   } finally {
     await pool.end();
   }
