@@ -12,6 +12,7 @@ on:
       - "Security Scan"
       - "Semgrep"
       - "TruffleHog Secret Scan"
+      - "Deploy Smoke"
     types: [completed]
     branches: [main, develop]
 

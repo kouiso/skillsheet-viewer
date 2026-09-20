@@ -1,0 +1,46 @@
+name: Deploy Smoke
+
+# 本番デプロイ完了後に、配信 CSS がソースのデザイントークンと一致するか照合する。
+# Turbopack 永続ビルドキャッシュの cross-build 復元で新 JS + 旧 CSS の混在が
+# 配信されたことがあるため（#361）、同種の事故を自動検知する。
+on:
+  # Vercel の GitHub 連携が発行する deployment_status イベント（本番成功時のみ）。
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: '検証対象のデプロイ URL（省略時は本番 URL）'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deployed-css:
+    name: Deployed CSS matches globals.css
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.deployment_status.state == 'success' &&
+       contains(github.event.deployment_status.environment, 'production'))
+    steps:
+      # デプロイ対象コミットの globals.css と照合するため、その sha でチェックアウトする。
+      # 供給網対策でタグではなく commit へ固定する（ci.yml と同じ方針）。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.deployment.sha || github.sha }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          # mise.toml の TOML は node-version-file で解釈できないため手動同期（ci.yml と同じ）
+          node-version: '22.21.1'
+
+      - name: Verify deployed CSS tokens
+        env:
+          # 手動入力 > デプロイ対象の環境 URL > リポジトリ変数 > 既定の本番 URL
+          DEPLOYED_BASE_URL: >-
+            ${{ inputs.base_url || github.event.deployment_status.environment_url
+            || vars.PRODUCTION_URL || 'https://skill-sheet-snowy.vercel.app' }}
+        run: node script/verify-deployed-css.mjs

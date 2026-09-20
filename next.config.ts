@@ -12,6 +12,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: import.meta.dirname,
   },
+  experimental: {
+    // Vercel はデプロイ間で .next/cache を復元するが、Turbopack の永続ビルドキャッシュは
+    // 別コミット由来のキャッシュ復元で古いモジュール出力が残る invalidation gap があり、
+    // 本番に新 JS + 旧 CSS の混在ビルドが配信された（#361）。上流でも未修正
+    // （vercel/next.js Discussion #87283）。修正版へ上げるまで無効化する。
+    // dev 側の turbopackFileSystemCacheForDev は同一環境内での再利用なので維持する。
+    turbopackFileSystemCacheForBuild: false,
+  },
   // ws の任意依存の解決がバンドル時に壊れ、DB接続が切断される。
   // PDF renderer と合わせてNodeの解決に任せる。ドライバ本体も外部化しないと
   // ローカルの wss プロキシ設定（neonConfig.wsProxy）がバンドル内の別インスタンスに届かない。
