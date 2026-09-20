@@ -80,6 +80,16 @@ Sentry/PostHog（監視・計測。任意）は `NEXT_PUBLIC_SENTRY_DSN` / `NEXT
 
 `DATABASE_URL` はランタイム専用で、ビルド時には注入されない。DB を読むページは先頭で `connection()`（`next/server`）を呼び、`next build` の静的評価を避けてそのコンポーネント単位で動的レンダリングする（[01](01-setup-and-routing.md) 参照）。`env.ts` の `assertServerEnv()` もビルドフェーズ（`NEXT_PHASE === 'phase-production-build'`）では検証を no-op にして、secrets 未注入のビルドを壊さない。
 
+### Turbopack 永続ビルドキャッシュの無効化（#361、2026-09）
+
+Vercel はデプロイ間で `.next/cache` を復元してビルドを高速化するが、`next@16.3.4` でデフォルト有効の `experimental.turbopackFileSystemCacheForBuild`（Turbopack 永続ビルドキャッシュ）には、**別コミット由来のキャッシュ復元でソース変更を反映しない古いモジュール出力が残る invalidation gap** がある。本番デプロイで「新 JS + 旧 CSS」の混在ビルドが配信された（globals.css の `--border` が旧値のまま）。
+
+- 上流でも未修正（vercel/next.js Discussion #87283 に同一症状の報告。関連: #97709）。
+- 恒久対応として `next.config.ts` で `experimental.turbopackFileSystemCacheForBuild: false` を設定し、コード側で無効化している（prod / preview / ローカル共通。env 設定の変更に左右されない）。dev 側の `turbopackFileSystemCacheForDev` は同一環境内での再利用のため対象外。
+- 応急処置として production env に設定済みの `VERCEL_FORCE_NO_BUILD_CACHE=1` は、そのまま残す（二重ガード。ビルドキャッシュ全体を捨てるためビルドは遅くなるが、上流修正版へ上げて config を戻す際に併せて再評価する）。
+- 再発検知: `.github/workflows/deploy-smoke.yml` が本番デプロイ成功（`deployment_status`）のたびに `script/verify-deployed-css.mjs` を実行し、配信 CSS が globals.css の `:root` / `.dark` トークンを全件含むか照合する。手動では `pnpm verify:deployed-css`（`DEPLOYED_BASE_URL` または引数で対象変更可）。失敗は既存の CI Failure Slack Notify で通知される。
+- Next.js バージョンアップ時は、該当の invalidation gap が修正されたか（Discussion #87283・リリースノート）を確認してから `turbopackFileSystemCacheForBuild` の再有効化を判断する。
+
 ---
 
 ## まとめ
