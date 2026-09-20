@@ -94,6 +94,17 @@ jobs:
             exit 1
           fi
 
+      # e2e DB は永続なため、実行ごとの残り（user/session/sheet/principals）を
+      # 溜めないよう、毎回まっさらへ戻してから migrate する（#360）。標準経路は
+      # DROP DATABASE + CREATE DATABASE で、接続 role に CREATEDB が無い環境では
+      # スキーマリセットへ自動フォールバックする。dbname が *_e2e で無い URL は
+      # スクリプト側で拒否するため、正本 DB への誤実行は起きない。
+      - name: Reset E2E database
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+        run: pnpm exec tsx script/reset-e2e-db.ts
+
       - name: Migrate database
         if: matrix.check-type == 'e2e'
         env:
