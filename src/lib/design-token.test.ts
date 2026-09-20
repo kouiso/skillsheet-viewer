@@ -6,9 +6,11 @@ import { DESIGN_TOKENS_LIGHT } from './design-token';
 // globals.css の :root ブロックから CSS 変数値を抽出し、design-token.ts の値と
 // 機械的に一致させる。乖離があれば PDF と Web の配色がズレていることを CI で検出する。
 function extractRootVar(css: string, name: string): string {
-  const match = css.match(new RegExp(`:root\\s*{[^}]*--${name}:\\s*(#[0-9a-fA-F]{3,8})`, 's'));
-  if (!match) throw new Error(`--${name} not found in :root block`);
-  return match[1].toLowerCase();
+  const root = /:root\s*{([^}]*)}/s.exec(css);
+  for (const decl of (root?.[1] ?? '').matchAll(/--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})/g)) {
+    if (decl[1] === name) return decl[2].toLowerCase();
+  }
+  throw new Error(`--${name} not found in :root block`);
 }
 
 describe('design-token vs globals.css :root', () => {
