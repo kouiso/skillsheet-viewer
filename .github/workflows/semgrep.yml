@@ -10,7 +10,6 @@ on:
       - "**/*.mjs"
       # ゲート自体の変更でも動作確認できるよう対象に含める。
       - ".github/workflows/semgrep.yml"
-      - "script/semgrep_diff_gate.py"
   push:
     branches: [main]
   workflow_dispatch:
@@ -34,8 +33,6 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
-          # 差分ゲートで base commit を worktree として出すため全履歴が要る。
-          fetch-depth: 0
 
       # 依存脆弱性は security-scan.yml の pnpm audit と security-audit.yml の audit-ci が
       # 見ているため、ここは SAST に専念する。
@@ -44,26 +41,8 @@ jobs:
       # --config auto は metrics=off と併用できずエラーになるため、private 化に
       # 備えて明示的なルールパック指定に変更している。
       #
-      # 差分ゲート: 導入時点で既存コードに 21件の findings（ERROR 1件を含む）が
-      # あるため全件ゲートにはできない。「この変更で新たに出た findings のみ
-      # fail させる」diff ゲートにして悪化だけを止める（#348）。
-      # --baseline は Semgrep AppSec Platform 専用で OSS の `semgrep scan` には
-      # 無いため、base/head を2回スキャンして script/semgrep_diff_gate.py で
-      # 多重集合差分を取る。既存 findings のトリアージ（修正 or nosemgrep）が
-      # 済んだら --error 付きの全件ゲートに格上げする。
+      # 既存 findings のトリアージ（#362）が済んだため全件ゲート。--error で
+      # findings が1件でもあれば exit 1 になる。無効化するときは修正を優先し、
+      # やむを得ない場合のみ理由コメント付きの nosemgrep を使う。
       - name: Semgrep scan
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: |
-          # semgrep コンテナの実効ユーザーと checkout 所有者が違うため、
-          # safe.directory を通さないと fetch/worktree が dubious ownership で落ちる。
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          semgrep scan --config p/default --metrics=off --json --output /tmp/head.json
-          if [ -z "$BASE_SHA" ]; then
-            # workflow_dispatch 等で比較元が取れない場合は findings 報告のみ（fail させない）。
-            exit 0
-          fi
-          git fetch --no-tags origin "$BASE_SHA"
-          git worktree add --detach /tmp/base-scan "$BASE_SHA"
-          (cd /tmp/base-scan && semgrep scan --config p/default --metrics=off --json --output /tmp/base.json)
-          python3 "$GITHUB_WORKSPACE/script/semgrep_diff_gate.py" /tmp/base.json /tmp/head.json
+        run: semgrep scan --config p/default --metrics=off --error

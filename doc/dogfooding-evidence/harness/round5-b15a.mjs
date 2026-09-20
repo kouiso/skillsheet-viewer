@@ -41,7 +41,8 @@ for (const [name, url] of [
 }
 
 // サーバー側の生レスポンスも見る（ブラウザを介さない値）
-const raw = await fetch(`${BASE}/view/skillsheet.md`, { redirect: 'manual' }).catch((e) => ({
+// BASE はローカル検証用のループバック (127.0.0.1) のみを指すため平文 HTTP で問題ない。
+const raw = await fetch(`${BASE}/view/skillsheet.md`, { redirect: 'manual' }).catch((e) => ({ // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
   status: `fetch failed: ${e.message}`,
 }));
 out.rawFetchStatus = raw.status;
