@@ -1,6 +1,6 @@
 # 開発ガイド
 
-すべてのコマンドはリポジトリルートで実行します（pnpm workspaces モノレポ）。
+すべてのコマンドはリポジトリルートで実行します。
 
 ## コマンド
 
@@ -20,10 +20,10 @@
   | 設定 | 環境 | 対象 |
   | --- | --- | --- |
   | `vitest.config.ts` | jsdom | 画面（`app/` `src/` の `*.test.ts(x)`） |
-  | `vitest.config.node.ts` | node | `src/db/**` と `scripts/**` |
+  | `vitest.config.node.ts` | node | `src/db/**` と `script/**` |
   | `vitest.config.pdf.ts` | node | `*.node.test.tsx`（PDF の実バイト描画） |
 
-  `src/db` と `scripts` はサーバ／CLI で動くコードなので、jsdom に混ぜない。混ぜると
+  `src/db` と `script` はサーバ／CLI で動くコードなので、jsdom に混ぜない。混ぜると
   `window` / `document` が生えたうえブラウザ用 setup まで読み込まれ、本番と違う分岐を
   通っても緑のままになる。
 - `pnpm test:watch` - 監視モードでテスト実行
@@ -33,7 +33,7 @@
 
 - `pnpm lint` - Biome でコードをチェック（`biome check`）
 - `pnpm format` - Biome でフォーマット（`biome format --write`）
-- `pnpm type-check` - TypeScript 型チェック（全パッケージ）
+- `pnpm type-check` - TypeScript 型チェック
 
 ### DB（Drizzle）
 
@@ -48,18 +48,18 @@
 .
 ├── app/                 # ルーティング（App Router: page.tsx / layout.tsx / route.ts）
 ├── src/
-│   ├── components/      # コンポーネント（PDF 含む）
+│   ├── component/       # コンポーネント（PDF 含む）
 │   │   └── ui/          # shadcn/ui ベースの UI 部品
 │   ├── context/         # React Context
 │   ├── db/              # Drizzle ORM + Neon（スキルシートの正本）
-│   ├── hooks/           # カスタムフック
+│   ├── hook/            # カスタムフック
 │   ├── lib/             # 認証クライアント・tRPC クライアントなどの共通設定
 │   ├── server/          # サーバー専用ロジック（認証ゲート・セッション・tRPC router）
 │   │   └── trpc/        # tRPC: context / init / router / server caller
 │   └── util/            # ユーティリティ関数
 ├── drizzle/             # マイグレーション（drizzle.config.ts はルート）
 ├── e2e/                 # Playwright の E2E
-├── scripts/             # CLI スクリプトと CI 用チェッカー
+├── script/              # CLI スクリプトと CI 用チェッカー
 └── public/              # 静的ファイル（フォント等）
 ```
 
@@ -76,7 +76,10 @@
 - 例外はツール・フレームワークが名前を規定しているものだけ。現時点では
   Next.js の動的ルート（`[id]`）、drizzle の生成物、`README.md` 等の全大文字慣習、
   ドットファイル、配布フォント・素材の原名
-- **この規約は `scripts/check-naming.sh` が機械的に検査する。**
+- `app/` 配下では Next.js の予約ファイル名（`page` `layout` `template` `loading`
+  `error` `not-found` 等）をデータモジュールに使わない。default export が無いまま
+  セグメントファイルとして読み込まれ、build が落ちる
+- **この規約は `script/check-naming.sh` が機械的に検査する。**
   `task naming` でローカル確認でき、CI（`.github/workflows/ci.yml` の naming ジョブ）でも必ず走る。
   例外を増やすときは同スクリプトの `is_exempt()` に理由付きで追加する（無言で足さない）
 - サーバー専用モジュール（`src/server` や `src/db`）は Client Component から import しない
@@ -95,7 +98,7 @@
 ### スタイリング
 
 - Tailwind CSS v4 + shadcn/ui（Radix UI）を使用
-- 共通 UI 部品は `src/components/ui` に集約
+- 共通 UI 部品は `src/component/ui` に集約
 
 ## 監視・計測（Sentry / PostHog）
 
@@ -103,7 +106,7 @@
 
 - `@sentry/*` / `posthog-js` をアプリコードから直接 import しない。必ず
   `src/lib/observability/capture.ts`（`captureError` / `captureWarning` / `track`）を経由する
-  （`pnpm lint` が `scripts/check-telemetry-imports.mjs` で機械的に強制する）。
+  （`pnpm lint` が `script/check-telemetry-import.mjs` で機械的に強制する）。
 - 送信するイベントのプロパティに自由記述の `string` を書かない。enum・数値・真偽値のみ
   （`src/lib/observability/event.ts` の閉じた判別共用体を参照。シート名・ファイル名が
   「書けてしまう」余地を型から消すための制約）。
@@ -129,8 +132,9 @@
 
 ## 依存の脆弱性対応
 
-CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ、**high 以上**でビルドを落とす。
-1本目は本番依存のみ、2本目は devDependencies も含む。
+CI は2系統の監査を走らせ、**high 以上**でビルドを落とす。
+`.github/workflows/security-scan.yml` が `pnpm audit --prod`（本番依存のみ）、
+`.github/workflows/security-audit.yml` が `audit-ci`（`audit-ci.jsonc` の設定）を実行する。
 
 直接依存の更新で直せない推移的依存は、ルート `package.json` の `pnpm.overrides` で寄せる。
 現在入っている override とその理由は次の通り。上流が追いついたら削除してよい。
@@ -138,10 +142,10 @@ CI（`.github/workflows/security-scan.yml`）は `pnpm audit` を2本走らせ�
 | override | 理由 |
 | --- | --- |
 | `postcss: ^8.5.23` | `next` が `postcss` を `8.4.31` で完全固定するため、next を上げても GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 が残る |
-| `sharp: ^0.35.3` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
+| `sharp: ^0.35.4` | `next` の optionalDependencies が `^0.34.5` で GHSA-f88m-g3jw-g9cj の修正版 0.35.0 に届かない。本アプリは `next/image` を使っていないため影響範囲は画像最適化のみ |
 | `brace-expansion@>=3: ^5.0.9` | GHSA-mh99-v99m-4gvg の修正版。3.0.0 以上にだけ適用する。5.0.8 は GHSA-mh99-v99m-4gvg の緩和が不完全で別途 GHSA-rgw5-rvv9-x895（CVE-2026-69152）の対象になるため 5.0.9 まで上げる |
 | `test-exclude: ^8.0.0` | 7.x は minimatch 9 → brace-expansion 2.x を引き、2.x 系には GHSA-mh99-v99m-4gvg の修正版が無い。8.0.0 は minimatch 10 → brace-expansion 5 になる |
-| `fast-uri@3: ^3.1.5` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6。3.1.4 は別途 GHSA-7p8r-x3mc-p8w7（CVE-2026-18446）の対象になるため 3.1.5 まで上げる |
+| `fast-uri@3: ^3.1.7` | GHSA-v2hh-gcrm-f6hx / GHSA-4c8g-83qw-93j6。3.1.4 は別途 GHSA-7p8r-x3mc-p8w7（CVE-2026-18446）の対象になるため 3.1.7 まで上げる |
 
 `brace-expansion` を全系統まとめて `^5.0.8` に寄せてはいけない。`require('brace-expansion')`
 の戻り値は 3.0.0 で関数から object へ変わっており、それを関数として呼ぶ minimatch 3.x / 9.x が

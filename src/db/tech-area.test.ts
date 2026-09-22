@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectTech } from './blocks';
+import type { ProjectTech } from './block';
 import { deriveTechAreas, projectAreaText, resolveProjectArea } from './tech-area';
 
 const tech = (partial: Partial<ProjectTech>): ProjectTech => ({

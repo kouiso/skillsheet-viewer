@@ -7,10 +7,12 @@ on:
       - "Merge Quality Gate"
       - "PR Labeler"
       - "PDF Layout Check"
+      - "XLSX Format Check"
       - "Security Audit"
       - "Security Scan"
       - "Semgrep"
       - "TruffleHog Secret Scan"
+      - "Deploy Smoke"
     types: [completed]
     branches: [main, develop]
 

@@ -45,7 +45,7 @@ betterAuth({
 
 要点:
 
-- **単一オーナー運用**。`disableSignUp: true` で公開サインアップ endpoint（`/api/auth/sign-up/email`）を塞ぎ、第三者が自己登録して編集者になる権限昇格を防ぐ。オーナーアカウントは `SKILLSHEET_OWNER_ID` に対応する既存アカウントを利用する（ブートストラップ手順は `SETUP.md`）。
+- **単一オーナー運用**。`disableSignUp: true` で公開サインアップ endpoint（`/api/auth/sign-up/email`）を塞ぎ、第三者が自己登録して編集者になる権限昇格を防ぐ。オーナーアカウントは `SKILLSHEET_OWNER_ID` に対応する既存アカウントを利用する（ブートストラップ手順は `setup.md`）。
 - `getAuth()` は遅延シングルトン。`DATABASE_URL` はリクエスト時にしか無いため、`next build` の静的解析で初期化されないようにしている。
 
 ### エンドポイントとログイン画面
@@ -153,6 +153,20 @@ export async function requireViewer(): Promise<void> {
 - (a) 有効な HMAC 閲覧 cookie があるか、(b) Better Auth の編集者としてログイン済みなら閲覧を許可する。
 - どちらも満たさなければ `/viewer-auth` へリダイレクト（`redirect()` は内部で例外を投げるため、許可時のみ正常 return する）。
 - 呼び出し元は `app/view/layout.tsx`（`/view` 配下を一括保護）。
+
+---
+
+### Remote MCP（Issue #305、MCP_ENABLED 環境のみ）
+
+`POST /api/mcp` に Remote MCP サーバーを載せている。認証は Better Auth の OAuth 2.1
+Provider（`jwt()` + `mcp()` + `cimd()` プラグイン）による Bearer token で、
+閲覧 cookie・Better Auth セッション cookie は使わない。
+
+- トークンの `sub` が `SKILLSHEET_OWNER_ID` と一致する場合のみ許可（他者は 403）。
+- スコープは `skillsheet:read` / `skillsheet:write` の 2 種で権限分離する。
+- 詳細は [06 Remote MCP](06-remote-mcp.md) を参照。
+
+---
 
 ---
 

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  classifyPeriod,
   deriveCompanyPeriod,
-  deriveDuration,
-  durationFromRange,
   flattenTech,
+  flattenTechEntries,
   formatMonthToken,
   formatPeriodDisplay,
   formatPeriodRange,
@@ -76,32 +76,6 @@ describe('labelsForProcessIndex', () => {
   it('曖昧な「テスト」は含まれない（トグルOFFで消える対象にしない）', () => {
     expect(labelsForProcessIndex(4)).not.toContain('テスト');
     expect(labelsForProcessIndex(5)).not.toContain('テスト');
-  });
-});
-
-describe('deriveDuration', () => {
-  it('開始・終了とも判明していれば月数から算出する', () => {
-    expect(deriveDuration('2025.1 — 2025.4')).toBe('4ヶ月');
-  });
-
-  it('終端が「現在」なら継続中', () => {
-    expect(deriveDuration('2025.11 — 現在')).toBe('継続中');
-  });
-
-  it('period が空文字の場合は継続中ではなく空文字を返す（レガシーデータの誤表示防止）', () => {
-    expect(deriveDuration('')).toBe('');
-  });
-
-  it('period が undefined/非文字列でも例外にならず空文字を返す', () => {
-    // @ts-expect-error 型上は string だが、レガシーデータ由来の非文字列混入を想定する。
-    expect(deriveDuration(undefined)).toBe('');
-  });
-
-  it('終了が単に未記載（開始のみ）の period は継続中とみなさず空文字を返す', () => {
-    // 継続中チェック OFF のまま終了月未入力の案件（"2020.06"）や単年レガシー（"2020"）を
-    // 「継続中」と誤表示しない。「継続中」は "現在" 終端の明示があるときだけ。
-    expect(deriveDuration('2020.06')).toBe('');
-    expect(deriveDuration('2020')).toBe('');
   });
 });
 
@@ -180,6 +154,34 @@ describe('flattenTech', () => {
   });
 });
 
+describe('flattenTechEntries', () => {
+  it('各技術名が属するバケットを返す', () => {
+    const tech = { lang: ['TS'], fw: ['Next.js'], db: [], infra: ['AWS'], tools: ['VSCode'], collab: ['Slack'] };
+    expect(flattenTechEntries(tech)).toEqual([
+      { name: 'TS', bucket: 'lang' },
+      { name: 'Next.js', bucket: 'fw' },
+      { name: 'AWS', bucket: 'infra' },
+      { name: 'VSCode', bucket: 'tools' },
+      { name: 'Slack', bucket: 'collab' },
+    ]);
+  });
+
+  it('同名が複数バケットにまたがるときは TECH_BUCKET_ORDER で先のバケットを採用する', () => {
+    const tech = { lang: [], fw: [], db: [], infra: ['Docker'], tools: ['Docker'], collab: [] };
+    expect(flattenTechEntries(tech)).toEqual([{ name: 'Docker', bucket: 'infra' }]);
+  });
+
+  it('「該当なし」プレースホルダと非文字列は除外する', () => {
+    const tech = { lang: ['TS', '-', '  '], fw: [], db: [], infra: [], tools: [], collab: [] };
+    expect(flattenTechEntries(tech)).toEqual([{ name: 'TS', bucket: 'lang' }]);
+  });
+
+  it('tech が undefined でも例外にならない', () => {
+    // @ts-expect-error レガシーデータ由来の欠損を想定する。
+    expect(flattenTechEntries(undefined)).toEqual([]);
+  });
+});
+
 describe('sortByStartDesc', () => {
   it('start 降順（新しい順）に並べ、null は末尾へ安定ソートする', () => {
     const items = [{ p: '2020.1' }, { p: '2025.1' }, { p: '不明' }, { p: '2023.1' }];
@@ -233,8 +235,8 @@ describe('formatPeriodDisplay', () => {
     expect(formatPeriodDisplay('2020-04-15〜2023-03-20')).toBe('2020.04〜2023.03');
   });
 
-  it('区切りありで終了空 = 進行中（「現在」が付く）', () => {
-    expect(formatPeriodDisplay('2020.04〜')).toBe('2020.04〜現在');
+  it('区切りありで終了空 = 終了未記載（「現在」は補わない。R02: 明示継続と区別）', () => {
+    expect(formatPeriodDisplay('2020.04〜')).toBe('2020.04〜');
   });
 
   it('区切りなし単独トークンには「〜現在」を付けない（回帰防止）', () => {
@@ -291,10 +293,9 @@ describe('parseTokenToDate', () => {
   });
 });
 
-describe('parseStart/deriveDuration（ISO日付トークン対応の回帰防止）', () => {
+describe('parseStart（ISO日付トークン対応の回帰防止）', () => {
   it('ISO日付トークンを含む期間を既存の月精度トークンと同じ精度で解釈する', () => {
     expect(parseStart('2020-04-15 — 2023-03-20')).toBeCloseTo(2020 + 3 / 12);
-    expect(deriveDuration('2020-04-15 — 2023-03-20')).toBe('3年');
   });
 });
 
@@ -314,25 +315,6 @@ describe('formatPeriodRange', () => {
 
   it('end が不正/空なら開始のみ表示する', () => {
     expect(formatPeriodRange('2020-06', '', false)).toBe('2020.06');
-  });
-});
-
-describe('durationFromRange', () => {
-  it('開始・終了から両端含む月数を導出する', () => {
-    expect(durationFromRange('2020-06', '2021-08', false)).toBe('1年3ヶ月');
-    expect(durationFromRange('2025-01', '2025-04', false)).toBe('4ヶ月');
-  });
-
-  it('ongoing=true のときは「継続中」', () => {
-    expect(durationFromRange('2024-01', '', true)).toBe('継続中');
-  });
-
-  it('start が不正なら空文字', () => {
-    expect(durationFromRange('', '2021-08', false)).toBe('');
-  });
-
-  it('ongoing=false で終了月が未入力なら「継続中」ではなく空文字（継続中はチェック時のみ）', () => {
-    expect(durationFromRange('2020-06', '', false)).toBe('');
   });
 });
 
@@ -404,5 +386,78 @@ describe('parsePeriodBounds: 精度と終端の扱い（レビュー指摘の回
 
   it('両端とも月まで書かれていれば月精度ありにする', () => {
     expect(parsePeriodBounds('2020.01 — 2020.03')).toMatchObject({ precise: true, openEnded: false });
+  });
+});
+
+describe('classifyPeriod（R02: 経験月へ計上してよいのは valid のみ）', () => {
+  // 基準月キー: year*12 + monthIndex（periodMonthKeys と同じ約束）。
+  // 2026 年 9 月 = 2026*12 + 8 = 24320。
+  const REF = 2026 * 12 + 8;
+
+  it('通常の期間は valid', () => {
+    expect(classifyPeriod('2025.11 — 2026.07', REF).status).toBe('valid');
+  });
+
+  it('明示の「現在」終端は valid（openEnded）', () => {
+    const c = classifyPeriod('2025.9 — 現在', REF);
+    expect(c.status).toBe('valid');
+    expect(c.bounds?.openEnded).toBe(true);
+  });
+
+  it('月 13 は範囲外として invalid（1ヶ月として混入しない）', () => {
+    expect(classifyPeriod('2020.13 — 2020.14', REF).status).toBe('invalid');
+    expect(classifyPeriod('2020.01 — 2020.13', REF).status).toBe('invalid');
+  });
+
+  it('開始 > 終了の逆転は invalid（黙って並び替えて計上しない）', () => {
+    expect(classifyPeriod('2023.03 — 2020.04', REF).status).toBe('invalid');
+  });
+
+  it('開始が基準月より未来は planned（実績月へ加えない）', () => {
+    expect(classifyPeriod('2030.01 — 2030.12', REF).status).toBe('planned');
+  });
+
+  it('未来開始＋「現在」終端も planned（現在に引き戻して計上しない）', () => {
+    expect(classifyPeriod('2030.01 — 現在', REF).status).toBe('planned');
+  });
+
+  it('終了未記載（末尾空）は unknown — 「現在」と推測しない', () => {
+    expect(classifyPeriod('2020.04〜', REF).status).toBe('unknown');
+    expect(classifyPeriod('2020.04', REF).status).toBe('unknown');
+  });
+
+  it('年のみの表記は unknown（1ヶ月として確定しない）', () => {
+    expect(classifyPeriod('2020', REF).status).toBe('unknown');
+    expect(classifyPeriod('2020 — 2021', REF).status).toBe('unknown');
+  });
+
+  it('解釈不能な文字列は unknown', () => {
+    expect(classifyPeriod('在籍期間不明', REF).status).toBe('unknown');
+    expect(classifyPeriod('', REF).status).toBe('unknown');
+  });
+
+  it('日付らしい形だが値が壊れた終端は invalid', () => {
+    expect(classifyPeriod('2020.01 — 2020.99', REF).status).toBe('invalid');
+  });
+
+  it('同月開始・同月終了は valid（1ヶ月として数えてよい）', () => {
+    expect(classifyPeriod('2020.04 — 2020.04', REF).status).toBe('valid');
+  });
+});
+
+describe('実在日と原文の精度', () => {
+  const ref = 2026 * 12 + 8;
+  it.each(['2023-02-29', '2024-02-30', '2026-04-31', '1900-02-29'])('実在しない%sを集計しない', (day) => {
+    expect(classifyPeriod(`${day} — 現在`, ref).status).toBe('invalid');
+  });
+  it.each(['2024-02-29', '2000-02-29'])('閏年の%sは受理する', (day) => {
+    expect(classifyPeriod(`${day} — 現在`, ref).status).toBe('valid');
+  });
+  it('同月内の日付逆転も拒否する', () => {
+    expect(classifyPeriod('2026-04-30 — 2026-04-01', ref).status).toBe('invalid');
+  });
+  it('年だけの開始と曖昧な現在表現を確定期間にしない', () => {
+    expect(classifyPeriod('2020 — 現在', ref).status).toBe('unknown');
+    expect(classifyPeriod('2020.01 — 現在か不明', ref).status).toBe('unknown');
   });
 });

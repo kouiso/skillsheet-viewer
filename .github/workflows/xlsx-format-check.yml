@@ -1,0 +1,86 @@
+name: XLSX Format Check
+
+# xlsx の書式はテンプレ複写・結合・罫線で構成され、コード変更でも DB 本文変化でも
+# 崩れうる。PR の CI は fixture しか見ないため原理的に捕まらない。
+# ここだけが実データを引いて崩れを見張る経路（pdf-layout-check.yml の xlsx 版）。
+# 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（この workflow 名で登録済み）。
+on:
+  schedule:
+    # JST 06:00。朝いちで気づけるようにする。
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
+jobs:
+  xlsx-format-check:
+    name: XLSX format check (real data)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          # 後続の pnpm install / tsx / vitest が実行する第三者コードへ
+          # Git 認証情報を渡さない。この job は push しない。
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          # ci.yml と同じ理由で mise.toml を読めないため、バージョンを手動で同期させる。
+          node-version: '22.21.1'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate target sheet
+        env:
+          XLSX_CHECK_DATABASE_URL: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+          XLSX_CHECK_SHEET_ID: ${{ vars.XLSX_CHECK_SHEET_ID }}
+        run: |
+          if [[ -z "$XLSX_CHECK_DATABASE_URL" ]]; then
+            echo '::error::XLSX_CHECK_DATABASE_URL must be configured.'
+            exit 1
+          fi
+          if [[ ! "$XLSX_CHECK_SHEET_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo '::error::XLSX_CHECK_SHEET_ID must be configured with a sheet UUID.'
+            exit 1
+          fi
+
+      - name: Dump blocks from database
+        env:
+          DATABASE_URL: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+          XLSX_CHECK_SHEET_ID: ${{ vars.XLSX_CHECK_SHEET_ID }}
+          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
+        # 本文やDBエラーは非公開の一時ファイルに限定する。成果物へはアップロードしない。
+        # シートは --sheet-id で明示する（正本の全件 dump はしない。pdf-layout-check と同じ方式 #348）。
+        run: |
+          umask 077
+          status=0
+          pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$XLSX_CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/xlsx-dump.log" 2>&1 || status=$?
+          echo "Database dump finished (exit $status)."
+          exit "$status"
+
+      - name: Record dump evidence
+        run: cat "$RUNNER_TEMP/blocks.evidence"
+
+      - name: XLSX format check against real data
+        env:
+          REAL_BLOCKS_JSON: ${{ runner.temp }}/blocks.json
+        # assertion の失敗文には実経歴が含まれうるため、公開ログへ転送しない。
+        run: |
+          umask 077
+          status=0
+          pnpm exec vitest run --config vitest.config.pdf.ts src/lib/export/xlsx-format-check.node.test.tsx > "$RUNNER_TEMP/xlsx-check.log" 2>&1 || status=$?
+          echo "XLSX format check finished (exit $status)."
+          exit "$status"
+
+      - name: Remove private data and logs
+        if: always()
+        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/xlsx-dump.log" "$RUNNER_TEMP/xlsx-check.log"

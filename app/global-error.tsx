@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-import { ConfigErrorNotice } from '@/components/config-error-notice';
+import { ConfigErrorNotice } from '@/component/config-error-notice';
 import { captureError, captureWarning } from '@/lib/observability/capture';
 import { THEME_INIT_SCRIPT } from '@/lib/theme-init-script';
 
@@ -36,7 +36,7 @@ function shouldReportConfigError(): boolean {
  * 同期的に throw しうるのは `assertServerEnv()`（必須環境変数の欠落）だけだが
  * （レビュー指摘: このファイルが無いと、DATABASE_URL 等の未設定時に
  * `/view` 系の isConfigError() 分岐にすら到達せず、素の Next.js デフォルト
- * エラー画面になっていた）、`<Providers>`（app/providers.tsx、Client Component）が
+ * エラー画面になっていた）、`<Providers>`（app/provider.tsx、Client Component）が
  * ハイドレーション中に本物のバグで throw した場合もこの境界が拾う。両者の区別は
  * `err.digest` の有無で行う: Server Component 側の throw は Next.js が本番ビルドで
  * message を伏せて digest だけを付与するため（メッセージ文字列比較はここでは使えない
@@ -67,7 +67,7 @@ export default function GlobalError({ error: err }: { error: Error & { digest?: 
   }, [err]);
 
   return (
-    <html lang="ja">
+    <html lang="ja" data-scroll-behavior="smooth">
       <head>
         {/* layout.tsx と同じ FOUC 防止スクリプト。Providers 抜きでも配色だけは揃える。 */}
         {/* biome-ignore lint/security/noDangerouslySetInnerHtml: 定数スクリプト。外部入力を含まない。 */}

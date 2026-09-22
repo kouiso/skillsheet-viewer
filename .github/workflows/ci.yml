@@ -26,17 +26,26 @@ jobs:
       # 供給網対策でタグではなく commit へ固定する（タグは上流で付け替えられる）。v4 の実体。
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check file and directory naming
-        run: ./scripts/check-naming.sh
+        run: ./script/check-naming.sh
 
   node:
     name: Node (${{ matrix.check-type }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # e2e はヘッドレス + playwright の2段構成で単体テストが最大 3 分あるため 15 分だと
+    # 途中で打ち切られ、失敗詳細と証跡（trace）が残らない。完了まで待てるよう脚だけ延長する。
+    timeout-minutes: ${{ matrix.check-type == 'e2e' && 30 || 15 }}
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     strategy:
       fail-fast: false
       matrix:
         check-type: [lint, typecheck, test, build, e2e]
+    # e2e は共有 DB（skillsheet_e2e）を実行冒頭で drop+create するため、別 ref の
+    # run と同時に走ると互いの DB を消し合う。check-type=e2e だけ共通グループへ
+    # 入れて全 run で直列化し、他の脚は run_id で一意化して並行を維持する。
+    # （待機枠は1つだけ: さらに新しい実行が来ると古い待機はキャンセルされる）
+    concurrency:
+      group: ${{ matrix.check-type == 'e2e' && 'e2e-shared-db' || format('ci-{0}-{1}', matrix.check-type, github.run_id) }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
@@ -79,10 +88,34 @@ jobs:
         if: matrix.check-type == 'build'
         run: pnpm run build
 
+      # e2e は正本の共有 DB を直撃してはいけない（#346）。migrate・行作成・
+      # principals 張替えを本番 DB へ打つと本番データを壊すため、専用の
+      # Neon branch/DB を指す E2E_DATABASE_URL を必須にする。
+      - name: Require dedicated E2E database
+        if: matrix.check-type == 'e2e'
+        env:
+          E2E_DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+        run: |
+          if [ -z "$E2E_DATABASE_URL" ]; then
+            echo '::error::E2E_DATABASE_URL secret is not configured. Create a dedicated Neon branch/DB for e2e and set it — never the canonical DATABASE_URL (#346).'
+            exit 1
+          fi
+
+      # e2e DB は永続なため、実行ごとの残り（user/session/sheet/principals）を
+      # 溜めないよう、毎回まっさらへ戻してから migrate する（#360）。標準経路は
+      # DROP DATABASE + CREATE DATABASE で、接続 role に CREATEDB が無い環境では
+      # スキーマリセットへ自動フォールバックする。dbname が *_e2e で無い URL は
+      # スクリプト側で拒否するため、正本 DB への誤実行は起きない。
+      - name: Reset E2E database
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+        run: pnpm exec tsx script/reset-e2e-db.ts
+
       - name: Migrate database
         if: matrix.check-type == 'e2e'
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
         run: pnpm run db:migrate
 
       - name: Install Playwright browsers
@@ -93,21 +126,107 @@ jobs:
         if: matrix.check-type == 'e2e'
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
-      - name: Headless browser E2E
+      # 編集者系テストは /builder のオーナーゲート（session.user.id === SKILLSHEET_OWNER_ID）
+      # を通る必要がある。シークレットの E2E ユーザーと SKILLSHEET_OWNER_ID が食い違うと
+      # /builder が /login へリダイレクトし、ボタン待ちのテストが全てタイムアウトまで
+      # ハングする（実際に 2026-09-14 に e2e 全体が赤化した）。対処として、CI 実行ごとに
+      # e2e 専用ユーザーを provision し、その user.id を SKILLSHEET_OWNER_ID として
+      # GITHUB_ENV 経由で後続ステップに渡す。シークレットの値には依存しない。
+      - name: Provision E2E owner
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          E2E_EMAIL: e2e-owner@example.test
+          # 捨て用アカウントの平文既定値。公開リポジトリに置く値なので
+          # 専用 e2e DB 上の一時ユーザーのみに使う（#348）。secret 側に
+          # E2E_PASSWORD を置けばそちらが優先される。
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD || 'E2e-test-pass-99' }}
+        run: |
+          OWNER_ID=$(pnpm exec tsx script/bootstrap-owner.ts --email="$E2E_EMAIL" --password="$E2E_PASSWORD" --name="E2E Owner" | tail -n 1 | tr -d '[:space:]')
+          test -n "$OWNER_ID"
+          {
+            echo "SKILLSHEET_OWNER_ID=$OWNER_ID"
+            echo "E2E_EMAIL=$E2E_EMAIL"
+            echo "E2E_PASSWORD=$E2E_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      # 文書境界（skillsheet_private スキーマ＋関数）は drizzle migration の外側にある
+      # 管理SQLで、e2e のアプリ経路はこれを通る。e2e DB は永続なので install は
+      # スキーマ/関数が未設置のときだけ流す。判定を role ではなく schema/function
+      # 存在で見るのは、role が cluster 全域で共有される一方 schema は DB 単位の
+      # ため —— 同一 Neon プロジェクトの別 DB では「role はあるが schema は無い」
+      # 状態になり得る。そのケースで install が既存 role に止まらないよう
+      # vars.allow_existing_role を渡す。
+      # 接続 role への権限と principals 対応は毎回揃える
+      # —— e2e の owner は実行ごとに作り直されるため、login→owner の写像は固定できない。
+      # membership（reader/writer role への GRANT ... TO）は付けない: NOINHERIT でも
+      # SET ROLE が可能になり、境界関数を迂回した直接テーブル DML が通るため
+      # （install-skillsheet-read-boundary.sql の注記と同じ方針。本番 runtime も
+      # USAGE+EXECUTE のみ）。必要なのは schema USAGE と関数 EXECUTE だけ。
+      - name: Install document boundary
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+        run: |
+          # allow_existing_role は psql 変数で渡す。Neon pooler は startup
+          # parameter を通さないため PGOPTIONS では届かない。
+          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM information_schema.schemata WHERE schema_name='skillsheet_private'" | grep -q 1; then
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v allow_existing_role=on -f script/sql/install-skillsheet-read-boundary.sql
+          fi
+          if ! psql "$DATABASE_URL" -Atc "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname='skillsheet_private' AND p.proname='replace_sheet'" | grep -q 1; then
+            psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -v allow_existing_role=on -f script/sql/install-skillsheet-write-boundary.sql
+          fi
+          # schema・関数・principals の owner は boundary role であり、接続ユーザーは
+          # install 末尾で membership を剥がされる。GRANT/INSERT は SET ROLE で
+          # owner になってから SESSION_USER（= 接続ユーザー）へ付与する。
+          # membership はこのステップ内で貸して返す（cluster 全域に残さない）。
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<SQL
+          GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER;
+          SET ROLE skillsheet_document_reader;
+          GRANT USAGE ON SCHEMA skillsheet_private TO SESSION_USER;
+          GRANT EXECUTE ON FUNCTION
+            skillsheet_private.read_snapshot(uuid, text),
+            skillsheet_private.list_sheets(text)
+          TO SESSION_USER;
+          INSERT INTO skillsheet_private.principals (login_name, owner_id)
+            VALUES (SESSION_USER, '$SKILLSHEET_OWNER_ID')
+            ON CONFLICT (login_name) DO UPDATE SET owner_id = EXCLUDED.owner_id;
+          SET ROLE skillsheet_document_writer;
+          GRANT EXECUTE ON FUNCTION
+            skillsheet_private.replace_sheet(uuid, text, text, jsonb, text),
+            skillsheet_private.create_sheet(uuid, text, jsonb, text),
+            skillsheet_private.delete_sheet(uuid, text, text)
+          TO SESSION_USER;
+          RESET ROLE;
+          REVOKE skillsheet_document_reader, skillsheet_document_writer FROM CURRENT_USER;
+          SQL
+
+      - name: Playwright E2E
         if: matrix.check-type == 'e2e'
         env:
           BETTER_AUTH_URL: http://127.0.0.1:3210
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
           BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
-          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
-          E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
-          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
-          REVALIDATE_SECRET: ${{ vars.REVALIDATE_SECRET }}
-        run: |
-          pnpm run test:e2e
-          pnpm run test:e2e:playwright
+          # secrets.* へ置く（vars.* は秘密管理の対象外で、マスクも権限分離も効かない #348）
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+        # playwright は起動時に test-results/ 全体を消去する。headless-e2e の証跡
+        # （test-results/e2e）が先に書かれていると消されるため、playwright を先に流す。
+        run: pnpm run test:e2e:playwright
+
+      # Playwright が失敗しても headless E2E まで止めない（証跡 artifact を残すため）。
+      - name: Headless browser E2E
+        if: matrix.check-type == 'e2e' && always()
+        env:
+          BETTER_AUTH_URL: http://127.0.0.1:3210
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
+          VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
+          BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+        run: pnpm run test:e2e
 
       - name: Upload E2E evidence
         if: matrix.check-type == 'e2e' && always()

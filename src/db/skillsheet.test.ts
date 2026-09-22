@@ -1,13 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './blocks';
+import { type Block, blocksToMarkdown, splitMarkdownIntoBlocks } from './block';
 import { getGitHubSeedConfig, isGitHubSeedConfigured } from './skillsheet';
 
-// 注意: skillsheet.ts の getOwnerId は export されておらず（module-private）、
-// getSkillSheet/saveSkillSheetBlocks 経由でしか到達できない。これらは getDb() で
-// 実 DB へ接続するため、ネットワーク/DB なしの単体テストでは到達不能。
-// よってここでは到達可能な純粋関数（blocks.ts の split/join）の決定的な
-// round-trip を検証する。env は決定性のため明示セットするが、DB へは接続しない。
+// split/joinとGitHub設定の純粋関数を検証する。文書操作はdocument-serviceの試験で扱う。
 beforeEach(() => {
   process.env.SESSION_SECRET = 'test-session-secret-deadbeef';
   process.env.SKILLSHEET_OWNER_ID = 'test-owner-id';

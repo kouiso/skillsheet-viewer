@@ -8,6 +8,8 @@ on:
       - "**/*.tsx"
       - "**/*.js"
       - "**/*.mjs"
+      # ゲート自体の変更でも動作確認できるよう対象に含める。
+      - ".github/workflows/semgrep.yml"
   push:
     branches: [main]
   workflow_dispatch:
@@ -39,8 +41,8 @@ jobs:
       # --config auto は metrics=off と併用できずエラーになるため、private 化に
       # 備えて明示的なルールパック指定に変更している。
       #
-      # --error は付けていない。導入時点でこのルールセットは既存コードに対して
-      # 21件の findings（ERROR severity 1件を含む）を出すため、即座に付けると
-      # 本PRと無関係な既存コードでCIが赤くなる。まず findings を triage
-      # （修正 or nosemgrep/.semgrepignoreで除外）してから、別PRでハードゲート化する。
-      - run: semgrep scan --config p/default --metrics=off
+      # 既存 findings のトリアージ（#362）が済んだため全件ゲート。--error で
+      # findings が1件でもあれば exit 1 になる。無効化するときは修正を優先し、
+      # やむを得ない場合のみ理由コメント付きの nosemgrep を使う。
+      - name: Semgrep scan
+        run: semgrep scan --config p/default --metrics=off --error

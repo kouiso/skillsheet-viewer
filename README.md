@@ -24,23 +24,25 @@
 - **テスト**: Vitest
 - **ランタイム / パッケージ管理**: mise（Node 22.x）/ pnpm
 
-## モノレポ構成
+## プロジェクト構成
+
+リポジトリルートがそのまま Next.js のプロジェクトルート（パッケージは 1 つだけ）。
 
 ```
 .
-├── apps/
-│   └── web/                 # Next.js 16 アプリ（App Router）
-│       ├── app/             # ルーティング（page.tsx / layout.tsx / route.ts）
-│       └── src/
-│           ├── component/   # 機能コンポーネント（Markdown ビューア・PDF 等）
-│           ├── components/  # shadcn/ui ベースの UI 部品
-│           ├── context/     # React Context
-│           ├── hooks/       # カスタムフック
-│           ├── lib/         # 認証クライアント・環境変数検証など
-│           ├── server/      # サーバー専用ロジック（認証ゲート・セッション・キャッシュ）
-│           └── util/        # ユーティリティ関数
-└── packages/
-    └── db/                  # Drizzle ORM + Neon（スキルシートの正本 / Better Auth テーブル）
+├── app/                 # ルーティング（App Router: page.tsx / layout.tsx / route.ts）
+├── src/
+│   ├── component/       # コンポーネント（Markdown ビューア・PDF・UI 部品）
+│   ├── context/         # React Context
+│   ├── db/              # Drizzle ORM + Neon（スキルシートの正本 / Better Auth テーブル）
+│   ├── hook/            # カスタムフック
+│   ├── lib/             # 認証クライアント・tRPC クライアント・環境変数検証など
+│   ├── server/          # サーバー専用ロジック（認証ゲート・セッション・tRPC router）
+│   └── util/            # ユーティリティ関数
+├── drizzle/             # マイグレーション（drizzle.config.ts はルート）
+├── e2e/                 # Playwright の E2E
+├── script/              # CLI スクリプトと CI 用チェッカー
+└── public/              # 静的ファイル（フォント等）
 ```
 
 ## クイックスタート
@@ -48,9 +50,8 @@
 すべてのコマンドはリポジトリルートで実行します。
 
 ```bash
-# 1. ランタイムの用意（mise で Node 22.x を固定 / pnpm を有効化）
+# 1. ランタイムの用意（mise で Node 22.x と pnpm を固定）
 mise install
-corepack enable
 
 # 2. 依存インストール
 pnpm install
@@ -66,7 +67,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-詳細な手順・環境変数・デプロイは [SETUP.md](./SETUP.md) を参照してください。
+詳細な手順・環境変数・デプロイは [setup.md](./setup.md) を参照してください。
 
 ### アクセス経路
 
@@ -82,7 +83,7 @@ pnpm dev
 | `pnpm start` | ビルド後のサーバー起動 |
 | `pnpm lint` | Biome でチェック（`biome check .`） |
 | `pnpm format` | Biome でフォーマット（`biome format --write .`） |
-| `pnpm type-check` | 全パッケージの型チェック |
+| `pnpm type-check` | TypeScript 型チェック |
 | `pnpm test` | 全テスト（Vitest） |
 | `pnpm test:e2e` | 本番ビルドを Chrome/Chromium で検証し、`test-results/e2e/` に証跡を保存 |
 | `pnpm db:generate` | スキーマからマイグレーション生成（Drizzle） |
@@ -99,7 +100,7 @@ pnpm dev
 
 | ドキュメント | 内容 |
 |------------|------|
-| [doc/01-setup-and-routing.md](./doc/01-setup-and-routing.md) | セットアップとルーティング（App Router / RSC / モノレポ） |
+| [doc/01-setup-and-routing.md](./doc/01-setup-and-routing.md) | セットアップとルーティング（App Router / RSC） |
 | [doc/02-authentication.md](./doc/02-authentication.md) | 認証の 2 系統（Better Auth 編集者 & HMAC 閲覧コード） |
 | [doc/03-github-api.md](./doc/03-github-api.md) | データ層（Drizzle / Neon、ブロック保存、GitHub シード副系統） |
 | [doc/04-markdown-display.md](./doc/04-markdown-display.md) | Markdown 表示（rehype パイプライン）と PDF 出力 |

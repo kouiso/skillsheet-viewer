@@ -1,4 +1,4 @@
-import type { CompanyInfo, ProjectItem } from './blocks';
+import type { CompanyInfo, ProjectItem } from './block';
 
 export const UNKNOWN_COMPANY_NAME = '所属不明';
 

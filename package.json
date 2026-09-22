@@ -17,15 +17,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "biome check . --error-on-warnings && node scripts/check-jsdom-pdf-assertions.mjs && node scripts/check-telemetry-imports.mjs && ./scripts/check-naming.sh",
+    "lint": "biome check . --error-on-warnings && node script/check-jsdom-pdf-assertion.mjs && node script/check-telemetry-import.mjs && ./script/check-naming.sh",
     "format": "biome format --write .",
     "type-check": "tsc --noEmit",
     "test": "vitest run && vitest run --config vitest.config.node.ts && vitest run --config vitest.config.pdf.ts",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage && vitest run --config vitest.config.node.ts --coverage && vitest run --config vitest.config.pdf.ts --coverage",
     "test:playwright": "NODE_OPTIONS=--conditions=react-server playwright test",
-    "test:e2e": "pnpm build && node scripts/headless-e2e.mjs",
+    "test:e2e": "pnpm build && node script/headless-e2e.mjs",
     "test:e2e:playwright": "pnpm build && pnpm test:playwright",
+    "verify:deployed-css": "node script/verify-deployed-css.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "db:generate": "drizzle-kit generate",
@@ -34,10 +35,14 @@
     "env:encrypt": "tmp=$(mktemp .env.enc.tmp.XXXXXX) && sops -e --input-type dotenv --output-type dotenv --filename-override .env.enc .env > \"$tmp\" && mv \"$tmp\" .env.enc"
   },
   "dependencies": {
-    "@better-auth/core": "^1.6.25",
+    "@better-auth/cimd": "1.7.3",
+    "@better-auth/core": "^1.7.3",
+    "@better-auth/mcp": "1.7.3",
+    "@better-auth/oauth-provider": "1.7.3",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@modelcontextprotocol/server": "2.0.0",
     "@neondatabase/serverless": "^1.1.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-popover": "^1.1.19",
@@ -51,14 +56,17 @@
     "@trpc/client": "^11.18.0",
     "@trpc/react-query": "^11.18.0",
     "@trpc/server": "^11.18.0",
-    "better-auth": "^1.6.22",
+    "better-auth": "^1.7.3",
+    "better-call": "1.4.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.2",
+    "exceljs": "^4.4.0",
     "framer-motion": "^11.15.0",
     "lucide-react": "^1.17.0",
-    "next": "^16.2.11",
+    "mcp-handler": "2.1.1",
+    "next": "^16.3.4",
     "posthog-js": "^1.424.1",
     "react": "^19.2.0",
     "react-day-picker": "^10.0.1",
@@ -84,7 +92,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
-    "@next/bundle-analyzer": "^16.2.11",
+    "@next/bundle-analyzer": "^16.3.4",
     "@playwright/test": "^1.51.1",
     "@storybook/addon-docs": "^10.5.4",
     "@storybook/nextjs-vite": "^10.5.4",
@@ -100,6 +108,7 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^5.0.4",
     "@vitest/coverage-v8": "^3.0.9",
+    "audit-ci": "^7.1.0",
     "drizzle-kit": "^0.31.10",
     "jsdom": "^27.0.1",
     "pdfjs-dist": "4.10.38",
@@ -117,9 +126,9 @@
       "unrs-resolver"
     ],
     "overrides": {
-      "next>sharp": ">=0.35.0",
+      "next>sharp": ">=0.35.4",
       "postcss": "^8.5.23",
-      "sharp": "^0.35.3",
+      "sharp": "^0.35.4",
       "brace-expansion@>=3": "^5.0.9",
       "test-exclude": "^8.0.0",
       "fast-uri@3": "^3.1.7",
@@ -127,7 +136,7 @@
       "browserslist": "^4.28.7"
     },
     "patchedDependencies": {
-      "@react-pdf/textkit@6.3.0": "patches/@react-pdf__textkit@6.3.0.patch"
+      "@react-pdf/textkit@6.3.0": "patch/@react-pdf__textkit@6.3.0.patch"
     }
   }
 }

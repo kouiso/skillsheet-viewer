@@ -262,7 +262,7 @@
 
 | ID | 内容 | 主な箇所 |
 |---|---|---|
-| X-1 (#153) | `SETUP.md` のオーナーアカウント作成手順が `TODO（親エージェントが最終補記）` のまま。新規環境で `/login` を通せず、単一オーナー運用のブートストラップができない | `SETUP.md` |
+| X-1 (#153) | `setup.md` のオーナーアカウント作成手順が `TODO（親エージェントが最終補記）` のまま。新規環境で `/login` を通せず、単一オーナー運用のブートストラップができない | `setup.md` |
 | X-2 (#153) | #113「Claude Design 準拠の全画面監査」は `createConsoleDemoSheet()` の合成デモシートで実施されており、実データ（32 案件）でしか出ない L-1 の横スクロールを取り逃していた。判定基準も「横スクロール無し + `console.error` ゼロ」のみで、表示内容の正しさを見ていない | #113 / #114 の監査手順 |
 | X-3 (#158) | 「ダッシュボード（プロフィール・統計・案件）」テンプレートで作成すると、定義されている profile / stats / project の 3 ブロックが保存されずスキル 1 ブロックだけになる。`createSheet()` がテンプレート由来の初期ブロックにも `isBlockInputEmpty` のフィルタを掛けており、空の枠として置かれた 3 つが落ちる。ユーザーへの通知は無い | `packages/db` の `createSheet()` / `templates.ts` の `console-dashboard` |
 | X-4 (#159) | `?next=` のオープンリダイレクト対策が `/\` で回避できる。`next.startsWith('/') && !next.startsWith('//')` の判定は `/\/evil.example.com` を通してしまい、ブラウザが `\` を `/` と解釈して外部へ遷移する。`/login` と `/viewer-auth` の両方に同じ判定式がある | `login/page.tsx:33` / `viewer-auth/page.tsx:34` |

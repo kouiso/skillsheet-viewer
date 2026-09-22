@@ -1,0 +1,211 @@
+import { isValidElement } from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import type { Block } from '@/db/block';
+import { buildPrintDigestDocument } from './pdf/digest-document';
+import { buildPrintSkillSheetDocument } from './pdf/print-document';
+import { createSkillSheetPdf } from './pdf-export';
+
+// 構造化経路は描く前に案件セクションを測る（@react-pdf/layout）。jsdom では動かせないので、
+// 「呼ばれること・引数・戻り値がそのまま返ること」だけをモックで見る。
+vi.mock('./pdf/print-document', () => ({
+  buildPrintSkillSheetDocument: vi.fn(async () => ({ type: 'structured-document' })),
+}));
+
+// 要約版も同じく測りに行くのでモックする。実描画は digest-document.node.test.tsx が担う。
+vi.mock('./pdf/digest-document', () => ({
+  buildPrintDigestDocument: vi.fn(async () => ({ type: 'digest-document' })),
+}));
+
+// @react-pdf/renderer のモック
+vi.mock('@react-pdf/renderer', async () => {
+  const actual = await vi.importActual<typeof import('@react-pdf/renderer')>('@react-pdf/renderer');
+  return {
+    ...actual,
+    Font: {
+      register: vi.fn(),
+    },
+  };
+});
+
+describe('createSkillSheetPdf', () => {
+  const mockTitle = 'テストスキルシート';
+  const mockContent = `
+# 見出し1
+
+これはテスト段落です。
+
+## 見出し2
+
+- リスト項目1
+- リスト項目2
+- リスト項目3
+
+### 見出し3
+
+\`\`\`javascript
+const test = 'code';
+\`\`\`
+
+> これは引用です
+
+---
+
+**太字テキスト**と*イタリックテキスト*
+  `.trim();
+
+  it('構造化ブロックがあれば印刷デザインの factory に渡し、その戻り値を返す', async () => {
+    const blocks: Block[] = [
+      { id: 'b1', type: 'profile', order: 0, data: { name: 'テスト太郎' } } as Block,
+      { id: 'b2', type: 'project', order: 1, data: { companies: [], items: [] } } as Block,
+    ];
+    const element = await createSkillSheetPdf({
+      title: mockTitle,
+      content: mockContent,
+      blocks,
+      views: ['projects'],
+      referenceMonth: 202609,
+    });
+    expect(buildPrintSkillSheetDocument).toHaveBeenCalledWith({
+      title: mockTitle,
+      blocks,
+      views: ['projects'],
+      referenceMonth: 202609,
+    });
+    expect(element).toEqual({ type: 'structured-document' });
+  });
+
+  it('描けないブロック（markdown）を含むときはレガシー経路に倒す', async () => {
+    vi.mocked(buildPrintSkillSheetDocument).mockClear();
+    const blocks: Block[] = [{ id: 'b3', type: 'markdown', order: 0, data: { markdown: '# x' } } as Block];
+    const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent, blocks });
+    expect(buildPrintSkillSheetDocument).not.toHaveBeenCalled();
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should render PDF document with title', async () => {
+    const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle empty content', async () => {
+    const element = await createSkillSheetPdf({ title: mockTitle, content: '' });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle content with only headings', async () => {
+    const headingContent = `
+# Heading 1
+## Heading 2
+### Heading 3
+    `.trim();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: headingContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle content with lists', async () => {
+    const listContent = `
+- Item 1
+- Item 2
+- Item 3
+
+1. Numbered item 1
+2. Numbered item 2
+    `.trim();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: listContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle content with code blocks', async () => {
+    const codeContent = `
+\`\`\`javascript
+const hello = 'world';
+console.log(hello);
+\`\`\`
+    `.trim();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: codeContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle content with blockquotes', async () => {
+    const quoteContent = `
+> This is a quote
+> Multiple lines
+    `.trim();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: quoteContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle content with horizontal rules', async () => {
+    const hrContent = `
+Some text
+
+---
+
+More text
+    `.trim();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: hrContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle content with inline markdown', async () => {
+    const inlineContent = `
+This is **bold** and *italic* text.
+This is \`inline code\`.
+This is [a link](https://example.com).
+    `.trim();
+    const element = await createSkillSheetPdf({ title: mockTitle, content: inlineContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle complex mixed content', async () => {
+    const element = await createSkillSheetPdf({ title: mockTitle, content: mockContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should render with special characters in title', async () => {
+    const specialTitle = 'スキルシート_テスト & Special <Characters> 123';
+    const element = await createSkillSheetPdf({ title: specialTitle, content: mockContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('should handle very long content', async () => {
+    const longContent = Array(100).fill('これは長いテキストです。').join('\n\n');
+    const element = await createSkillSheetPdf({ title: mockTitle, content: longContent });
+    expect(isValidElement(element)).toBe(true);
+  });
+
+  it('edition=digest は要約版 factory に渡し、その戻り値を返す', async () => {
+    vi.mocked(buildPrintDigestDocument).mockClear();
+    vi.mocked(buildPrintSkillSheetDocument).mockClear();
+    const blocks: Block[] = [
+      { id: 'b1', type: 'profile', order: 0, data: { name: 'テスト太郎' } } as Block,
+      { id: 'b2', type: 'project', order: 1, data: { companies: [], items: [] } } as Block,
+    ];
+    const element = await createSkillSheetPdf({
+      title: mockTitle,
+      content: mockContent,
+      blocks,
+      views: ['projects'],
+      referenceMonth: 202609,
+      edition: 'digest',
+    });
+    // 要約版はビュートグルを効かせないので views は渡さない（タイトルも生のまま —
+    // 「（要約版）」の付与は buildPrintDigestDocument 側の仕事）。
+    expect(buildPrintDigestDocument).toHaveBeenCalledWith({
+      title: mockTitle,
+      blocks,
+      referenceMonth: 202609,
+    });
+    expect(buildPrintSkillSheetDocument).not.toHaveBeenCalled();
+    expect(element).toEqual({ type: 'digest-document' });
+  });
+
+  it('edition=digest で markdown を含むシートはレガシー経路へ落とさず失敗にする', async () => {
+    vi.mocked(buildPrintDigestDocument).mockClear();
+    const blocks: Block[] = [{ id: 'b3', type: 'markdown', order: 0, data: { markdown: '# x' } } as Block];
+    await expect(
+      createSkillSheetPdf({ title: mockTitle, content: mockContent, blocks, edition: 'digest' }),
+    ).rejects.toThrow('digest edition requires structured blocks');
+    expect(buildPrintDigestDocument).not.toHaveBeenCalled();
+  });
+});

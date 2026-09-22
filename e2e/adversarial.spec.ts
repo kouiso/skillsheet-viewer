@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { deleteSheet, getSkillSheetById, listSheets } from '@/db';
-import { createRealVolumeDemoSheet } from '@/db/fixtures';
+import { createRealVolumeDemoSheet } from '@/db/fixture';
 import { authFile, login } from './auth';
+import { deleteSheet, getSkillSheetById, listSheets } from './document-fixture';
 
 test.use({ storageState: authFile });
 

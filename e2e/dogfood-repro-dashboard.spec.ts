@@ -2,8 +2,8 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { deleteSheet, listSheets } from '@/db';
 import { authFile, login } from './auth';
+import { deleteSheet, listSheets } from './document-fixture';
 
 const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
 

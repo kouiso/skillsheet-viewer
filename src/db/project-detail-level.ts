@@ -9,7 +9,7 @@
  * 全件空なので使えない（DB 実測）。この結果は DB に保存しない — 表示のための集計軸である。
  */
 
-import type { ProjectItem } from './blocks';
+import type { ProjectItem } from './block';
 import { parsePeriodBounds } from './process';
 
 /** 詳細版にする「直近」の幅（ヶ月）。 */
@@ -42,10 +42,8 @@ export function isLeadRole(role: string): boolean {
   if (typeof role !== 'string') return false;
   if (LEAD_ROLE_WORDS.some((word) => role.includes(word))) return true;
   const normalized = role.toUpperCase();
-  return LEAD_ROLE_ABBREVIATIONS.some((token) =>
-    // 前後がラテン文字・数字でなければ独立した語とみなす（`PM & PL` `PMO→PL` は拾う）。
-    new RegExp(`(^|[^A-Z0-9])${token}([^A-Z0-9]|$)`).test(normalized),
-  );
+  // 前後がラテン文字・数字でなければ独立した語とみなす（`PM & PL` `PMO→PL` は拾う）。
+  return normalized.split(/[^A-Z0-9]+/).some((word) => LEAD_ROLE_ABBREVIATIONS.some((token) => token === word));
 }
 
 /** period から稼働月数を返す（両端を含む）。解釈できなければ null。 */

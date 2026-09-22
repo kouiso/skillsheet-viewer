@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type Page, test } from '@playwright/test';
-import { createSheet, deleteSheet, listSheets } from '@/db';
 import { authFile, login } from './auth';
+import { createSheet, deleteSheet, listSheets } from './document-fixture';
 
 test.use({ storageState: authFile });
 
@@ -136,7 +136,7 @@ test.describe('builder autosave', () => {
         await expect(inputB).toHaveValue(`${companyName} updated`);
         await waitForAutosave(pageB, '保存済み（自動）');
 
-        // セッション A でさらに編集すると expectedUpdatedAt が古いため競合
+        // セッション A でさらに編集すると expectedRevision が古いため競合
         await pageA.bringToFront();
         const inputA2 = pageA.getByRole('textbox', { name: '会社名' });
         await inputA2.fill(`${companyName} conflict`);

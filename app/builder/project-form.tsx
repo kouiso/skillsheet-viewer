@@ -1,9 +1,9 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@/db/blocks';
+import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech } from '@/db/block';
+import { durationFromRange } from '@/db/duration';
 import {
-  durationFromRange,
   formatPeriodRange,
   labelsForProcessIndex,
   normalizeProcess,
@@ -11,7 +11,7 @@ import {
   parsePeriodToRange,
 } from '@/db/process';
 
-import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constants';
+import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constant';
 import { GrowTextarea } from './grow-textarea';
 import { MonthDatePicker } from './month-date-picker';
 import { ScopePicker } from './scope-picker';
@@ -153,28 +153,30 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
     return [...new Set([...TECH_SUGGESTIONS[key], ...used])];
   };
 
-  // ── 期間：月入力の初期値は periodStart 優先、無ければレガシー period のパース ──
+  // 未存在の編集投影だけを期間原文から復元する。編集中の明示的な空欄は保持する。
   const parsedLegacy = useMemo(() => parsePeriodToRange(p.period), [p.period]);
   const hasMonthFields = p.periodStart !== undefined;
-  const start = hasMonthFields ? (p.periodStart ?? '') : (parsedLegacy?.start ?? '');
-  const end = hasMonthFields ? (p.periodEnd ?? '') : (parsedLegacy?.end ?? '');
-  const ongoing = hasMonthFields ? (p.ongoing ?? false) : (parsedLegacy?.ongoing ?? false);
+  const start = p.periodStart ?? parsedLegacy?.start ?? '';
+  const end = p.periodEnd ?? parsedLegacy?.end ?? '';
+  const ongoing = p.ongoing ?? parsedLegacy?.ongoing ?? false;
   // レガシー文字列がパース不能（"2020年頃" 等）：月入力は空のまま、元の文字列を注記表示して温存する
   const legacyUnparsable = !hasMonthFields && parsedLegacy === null && p.period.trim().length > 0;
+  const projectionMismatch =
+    parsedLegacy !== null &&
+    (start !== parsedLegacy.start || end !== parsedLegacy.end || ongoing !== parsedLegacy.ongoing);
 
   const commitPeriod = (nextStart: string, nextEnd: string, nextOngoing: boolean) => {
     const formatted = formatPeriodRange(nextStart, nextEnd, nextOngoing);
-    // 終了月が開始月より前（逆転）の間はエラー表示のみとし、レガシー period/duration へは
+    // 終了月が開始月より前（逆転）の間はエラー表示のみとし、period 原文へは
     // 書き戻さない（編集途中の逆転状態を自動保存が拾って閲覧側へ露出させない）。
     const reversed = Boolean(nextStart && nextEnd && !nextOngoing && nextEnd < nextStart);
     onPatch({
       periodStart: nextStart,
       periodEnd: nextEnd,
       ongoing: nextOngoing,
-      // start が不正で組み立て不能（''）の間はレガシー period/duration を温存する
-      ...(formatted && !reversed
-        ? { period: formatted, duration: durationFromRange(nextStart, nextEnd, nextOngoing) }
-        : {}),
+      // duration は本人入力の原文なので日付変更で上書きしない。
+      // start が不正で組み立て不能（''）の間は period を温存する
+      ...(formatted && !reversed ? { period: formatted } : {}),
     });
   };
 
@@ -317,6 +319,11 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               </label>
               {durationBadge && <span className={`dur-badge${ongoing ? ' live' : ''}`}>{durationBadge}</span>}
             </div>
+            {projectionMismatch && (
+              <p role="alert" className="hint">
+                期間の日付と保存済みの期間が一致していないため保存できません。開始月・終了月・継続中を確認してください。
+              </p>
+            )}
             {legacyUnparsable && (
               <p className="hint">旧形式の期間「{p.period}」を保持中 — 月を選択すると新形式で上書きされます</p>
             )}

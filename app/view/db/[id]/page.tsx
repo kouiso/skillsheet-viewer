@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
 
-import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/components/view-error';
-import { currentMonthKey } from '@/db/derived-display';
+import { configErrorNoticeOrRethrow, notFoundOnTrpcCodes } from '@/component/view-error';
 import { createServerCaller } from '@/server/trpc/caller';
 import { requireViewer } from '@/server/viewer-gate';
 
@@ -52,7 +51,8 @@ export default async function DbSheetByIdPage({ params }: Props) {
         source="db"
         canEdit={canEdit}
         stale={sheet.stale}
-        referenceMonth={currentMonthKey()}
+        referenceMonth={sheet.referenceMonth}
+        sheetId={id}
       />
     );
   } catch (err) {

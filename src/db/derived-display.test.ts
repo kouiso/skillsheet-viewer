@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectItem, ProjectTech } from './blocks';
+import type { ProjectItem, ProjectTech } from './block';
 import {
+  currentMonthKey,
   deriveSkillExperienceMonths,
   normalizeTechnologyCandidates,
   resolveCompanyPeriod,
   resolveDisplayedSkillExperience,
   resolveDisplayedStats,
   technologyNamesMatch,
+  technologyNamesRelated,
 } from './derived-display';
 
 const EMPTY_TECH: ProjectTech = { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] };
@@ -41,15 +43,17 @@ describe('resolveDisplayedStats', () => {
         projects,
       ),
     ).toEqual([
-      { value: '2', unit: '年', label: 'エンジニア歴' },
+      { value: '2', unit: '年', label: 'エンジニア歴（算出可能分）' },
       { value: '3', unit: '案件', label: '参画プロジェクト数' },
       { value: '4', unit: '名', label: 'なんとか歴' },
     ]);
   });
 
-  it('月を1件も読めない場合、経験年数は手入力へ戻す', () => {
+  it('月を1件も読めない場合、手入力へ戻さず未確定とする', () => {
     const stats = [{ value: '8', unit: '年', label: '経験年数' }];
-    expect(resolveDisplayedStats(stats, [project('p1', '不明'), project('p2', '2020')])).toEqual(stats);
+    expect(resolveDisplayedStats(stats, [project('p1', '不明'), project('p2', '2020')])).toEqual([
+      { value: '—', unit: '年', label: '経験年数（算出可能分）' },
+    ]);
   });
 
   it('案件ブロックが無ければ手入力値を維持する', () => {
@@ -94,7 +98,9 @@ describe('技術名の完全一致', () => {
       new Set(['typescript/javascript', 'typescript', 'javascript']),
     );
     expect(technologyNamesMatch('Python', 'Python 3.13')).toBe(true);
-    expect(technologyNamesMatch('CI/CD (GitHub Actions)', 'GitHub Actions')).toBe(true);
+    // 括弧注釈との一致は同一ではなく関連（経験集計は関連判定で行う）
+    expect(technologyNamesMatch('CI/CD (GitHub Actions)', 'GitHub Actions')).toBe(false);
+    expect(technologyNamesRelated('CI/CD (GitHub Actions)', 'GitHub Actions')).toBe(true);
   });
 
   it('JavaとJavaScript、ReactとReact Nativeを誤って一致させない', () => {
@@ -102,6 +108,77 @@ describe('技術名の完全一致', () => {
     expect(technologyNamesMatch('React', 'React Native')).toBe(false);
     expect(technologyNamesMatch('C', 'C++')).toBe(false);
     expect(technologyNamesMatch('C++', 'C++')).toBe(true);
+  });
+
+  it('Nest.js / NestJS の表記揺れを同一技術として扱い経験月数を取りこぼさない', () => {
+    // 監査で確認された実データ7件（2026-09 基準）。現行は Nest.js だけの24か月に
+    // なっていた。原文の表記は保持し、照合だけを正規化する（issue M01）。
+    const items = [
+      project('p1', '2025.11 — 2026.07', { fw: ['Nest.js'] }),
+      project('p2', '2025.01 — 2025.02', { fw: ['NestJS'] }),
+      project('p3', '2024.04 — 2024.07', { fw: ['Nest.js'] }),
+      project('p4', '2023.08 — 2024.06', { fw: ['Nest.js'] }),
+      project('p5', '2023.11 — 2024.03', { fw: ['Nest.js'] }),
+      project('p6', '2023.05 — 2023.07', { fw: ['Nest.js'] }),
+      project('p7', '2025.09 — 2026.09', { fw: ['NestJS'] }),
+    ];
+    expect(technologyNamesMatch('Nest.js', 'NestJS')).toBe(true);
+    expect(deriveSkillExperienceMonths('Nest.js', items)).toBe(30);
+    expect(deriveSkillExperienceMonths('NestJS', items)).toBe(30);
+  });
+
+  it('別名辞書は React / React Native のような関連技術を同一視しない', () => {
+    expect(technologyNamesMatch('React', 'React Native')).toBe(false);
+    expect(technologyNamesMatch('Next.js', 'Next.js 14')).toBe(true);
+  });
+
+  it('括弧内注釈どうしでは一致させない（PostgreSQL (RDS) ≠ MySQL (RDS)）', () => {
+    // 本体名が違うのに注釈 (RDS) が同じだけで経験を統合すると水増しになる（再レビュー指摘）
+    expect(technologyNamesMatch('PostgreSQL (RDS)', 'MySQL (RDS)')).toBe(false);
+    expect(technologyNamesRelated('PostgreSQL (RDS)', 'MySQL (RDS)')).toBe(false);
+    // 本体名の一致は同一技術として扱う
+    expect(technologyNamesMatch('PostgreSQL (RDS)', 'PostgreSQL')).toBe(true);
+    // 本体↔注釈の一致は「同一」ではなく「関連」。経験月数は関連で集計する
+    expect(technologyNamesMatch('RDS', 'MySQL (RDS)')).toBe(false);
+    expect(technologyNamesRelated('RDS', 'MySQL (RDS)')).toBe(true);
+    expect(technologyNamesMatch('Vue.js (Nuxt)', 'Nuxt')).toBe(false);
+    expect(technologyNamesRelated('Vue.js (Nuxt)', 'Nuxt')).toBe(true);
+  });
+
+  it('末尾バージョンは除去して本体名で一致させる', () => {
+    expect(technologyNamesMatch('Next.js', 'Next.js 14')).toBe(true);
+    expect(technologyNamesMatch('Laravel', 'Laravel 8')).toBe(true);
+    // 「N系」はバージョン表記なので版除去側で処理する（実データ "Laravel 8系"）
+    expect(technologyNamesMatch('Laravel', 'Laravel 8系')).toBe(true);
+    expect(normalizeTechnologyCandidates('Next.js 14')).toContain('next.js');
+  });
+
+  it('Hooks 単体スキルは各FWの (Hooks) 注釈と関連付き、FW どうしは無関係のまま（仕様固定）', () => {
+    // 単体「Hooks」スキルは汎用技術名として、React/Vue どちらの (Hooks) 注釈案件も経験に数える。
+    // 同一技術ではないので一致判定は false、経験集計の関連判定だけ true。
+    expect(technologyNamesMatch('Hooks', 'React (Hooks)')).toBe(false);
+    expect(technologyNamesRelated('Hooks', 'React (Hooks)')).toBe(true);
+    expect(technologyNamesRelated('Hooks', 'Vue (Hooks)')).toBe(true);
+    // 括弧注釈どうしでは一致・関連ともにしない（React (Hooks) ≠ Vue (Hooks)）
+    expect(technologyNamesMatch('React (Hooks)', 'Vue (Hooks)')).toBe(false);
+    expect(technologyNamesRelated('React (Hooks)', 'Vue (Hooks)')).toBe(false);
+    // 集計は両FWの案件を重複なく月で数える
+    const items = [
+      project('p1', '2020.01 — 2020.06', { fw: ['React (Hooks)'] }),
+      project('p2', '2020.05 — 2020.12', { fw: ['Vue (Hooks)'] }),
+    ];
+    expect(deriveSkillExperienceMonths('Hooks', items)).toBe(12);
+    expect(deriveSkillExperienceMonths('React (Hooks)', items)).toBe(6);
+    expect(deriveSkillExperienceMonths('Vue (Hooks)', items)).toBe(8);
+  });
+
+  it('実データで同一技術と確認できた別名だけを統合する', () => {
+    // K8S / Prisma ORM / Sanity CMS は実データの表記揺れ（M01 と同種の過小算出）
+    expect(technologyNamesMatch('Kubernetes', 'K8S')).toBe(true);
+    expect(technologyNamesMatch('Prisma', 'Prisma ORM')).toBe(true);
+    expect(technologyNamesMatch('Sanity CMS (GROQ)', 'Sanity v4')).toBe(true);
+    // 逆方向も一致する
+    expect(technologyNamesMatch('K8S', 'Kubernetes')).toBe(true);
   });
 
   it('一致案件の月を重複なく集計する', () => {
@@ -121,6 +198,8 @@ describe('技術名の完全一致', () => {
       months: 12,
       label: '1年',
       derived: false,
+      source: 'manual',
+      precision: 'complete',
     });
   });
 
@@ -134,11 +213,121 @@ describe('技術名の完全一致', () => {
     ).toBe(84);
   });
 
-  it('固定月が無い継続中案件は手入力へ戻す', () => {
+  it('固定月が無い継続中案件を手入力へ戻さない', () => {
     expect(
       resolveDisplayedSkillExperience({ name: 'React Native', years: 1 }, [
         project('p1', '2019.10 — 現在', { fw: ['React Native'] }),
       ]),
-    ).toEqual({ months: 12, label: '1年', derived: false });
+    ).toEqual({ months: 0, label: '未確定', derived: true, source: 'unavailable', precision: 'partial' });
   });
+});
+
+describe('期間の集計対象（R02: 不正・未来・未記載は経験月へ入れない）', () => {
+  const REF = 2026 * 12 + 8; // 2026-09 固定
+
+  it('月 13 の期間は 0 ヶ月（1ヶ月として混入しない）', () => {
+    const items = [project('p1', '2020.13 — 2020.14', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('開始 > 終了の逆転期間は 0 ヶ月（並び替えて計上しない）', () => {
+    const items = [project('p1', '2023.03 — 2020.04', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('未来開始の期間は 0 ヶ月（予定は実績月にしない）', () => {
+    const items = [project('p1', '2030.01 — 2030.12', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('終了未記載（末尾空）は 0 ヶ月（継続中と推測しない）', () => {
+    const items = [project('p1', '2020.04〜', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('年のみの期間は 0 ヶ月（1ヶ月として確定しない）', () => {
+    const items = [project('p1', '2020', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(0);
+  });
+
+  it('明示の「現在」終端は基準月まで数える', () => {
+    // 2025.11〜2026.09 = 11ヶ月
+    const items = [project('p1', '2025.11 — 現在', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(11);
+  });
+
+  it('終了が基準月より未来の進行形期間は基準月で切る', () => {
+    // 2025.01〜2030.12 → 2025.01〜2026.09 = 21ヶ月
+    const items = [project('p1', '2025.01 — 2030.12', { lang: ['TypeScript'] })];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(21);
+  });
+
+  it('不正期間が混在しても valid な期間だけを数える', () => {
+    const items = [
+      project('p1', '2020.01 — 2020.03', { lang: ['TypeScript'] }), // valid 3ヶ月
+      project('p2', '2020.13 — 2020.15', { lang: ['TypeScript'] }), // invalid
+      project('p3', '2030.01 — 2030.06', { lang: ['TypeScript'] }), // planned
+      project('p4', '2020.04〜', { lang: ['TypeScript'] }), // unknown
+    ];
+    expect(deriveSkillExperienceMonths('TypeScript', items, REF)).toBe(3);
+  });
+
+  it('逆転期間は会社期間の導出にも混入しない', () => {
+    const items = [project('p1', '2023.03 — 2020.04'), project('p2', '2021.01 — 2021.12')];
+    expect(resolveCompanyPeriod({ id: 'c1', name: '会社', kind: '', period: '', note: '' }, items)).toBe(
+      '2021.01 — 2021.12',
+    );
+  });
+});
+
+describe('Asia/Tokyoの固定基準月', () => {
+  it('UTCでは前月でも日本の月初から新しい月を使う', () => {
+    expect(currentMonthKey(new Date('2026-08-31T14:59:59Z'))).toBe(2026 * 12 + 7);
+    expect(currentMonthKey(new Date('2026-08-31T15:00:00Z'))).toBe(2026 * 12 + 8);
+  });
+  it('日本の年越しでも同じ月キー規則を使う', () => {
+    expect(currentMonthKey(new Date('2026-12-31T15:00:00Z'))).toBe(2027 * 12);
+  });
+});
+
+it('未来の該当案件を手入力実績に置換しない', () => {
+  expect(
+    resolveDisplayedSkillExperience(
+      { name: 'React', years: 8 },
+      [project('planned', '2030.01 — 2030.12', { fw: ['React'] })],
+      2026 * 12 + 8,
+    ),
+  ).toMatchObject({ months: 0, source: 'derived', precision: 'complete' });
+});
+it('算出可能な案件と不明案件が混在すれば算出可能分とする', () => {
+  expect(
+    resolveDisplayedSkillExperience(
+      { name: 'React', years: 8 },
+      [project('known', '2020.01 — 2020.12', { fw: ['React'] }), project('unknown', '不明', { fw: ['React'] })],
+      2026 * 12 + 8,
+    ),
+  ).toMatchObject({ months: 12, source: 'derived', precision: 'partial' });
+});
+
+it('非表示案件だけの技術を手入力へ戻さず、非表示情報を結果に出さない', () => {
+  expect(resolveDisplayedSkillExperience({ name: 'React', years: 9 }, [], 2026 * 12 + 8, ['React'])).toEqual({
+    months: 0,
+    label: '0年0ヶ月',
+    derived: true,
+    source: 'derived',
+    precision: 'complete',
+  });
+  expect(
+    resolveDisplayedSkillExperience({ name: 'React', years: 9 }, [], 2026 * 12 + 8, ['React Native']),
+  ).toMatchObject({ months: 108, source: 'manual' });
+});
+
+it('表示案件なし・予定のみの総経験0を本人入力へ戻さない', () => {
+  const stats = [{ value: '8', unit: '年', label: '経験年数' }];
+  for (const projects of [[], [project('planned', '2030.01 — 2030.12')]]) {
+    expect(resolveDisplayedStats(stats, projects, 2026 * 12 + 8)).toEqual([
+      { value: '0', unit: '年', label: '経験年数' },
+    ]);
+  }
+  expect(stats[0].value).toBe('8');
 });

@@ -52,8 +52,10 @@
   /* destructive ボタンの hover も同じ opacity-90 問題があったため、既存の
      --destructive-strong をそのまま流用する（新規の色を増やさない）。 */
   --destructive-hover: #b91c1c;
-  --border: #dce3e4;
-  --input: #dce3e4;
+  /* #dce3e4 は白カード上で ~1.3:1 と輪郭が知覚できなかった（#347）。
+     カード・レーン・入力欄の境界線として認識できる 3:1 前後の濃さへ引き上げる。 */
+  --border: #c4cdce;
+  --input: #71858c;
   --ring: #0d9488;
   --radius: 0.25rem;
 
@@ -82,8 +84,10 @@
      2026-08-08: bg 4.55:1 は AA ギリギリのため、余裕を持たせるため bg 5.20:1 / card 5.55:1 へ
      再調整（--muted-foreground とのコントラスト差を保ちつつ視認性を上げる）。 */
   --faint: #5f6a71;
-  --track: #e6ecec;
-  --chip-bg: #eef3f3;
+  /* 未充填バー・技術タグの塗り。旧値は白カード上で ~1.05-1.13:1 と「無い」ように
+     見えたため、輪郭線（--border）と塗りの視認階層が逆転しない範囲で一段濃くする（#347）。 */
+  --track: #d5dede;
+  --chip-bg: #dde5e5;
   --chip-text: #34424a;
   --accent-text: #08665e;
   --accent-soft: #ddf0ed;
@@ -137,7 +141,7 @@
      opacity を使わず不透明のまま 7.05:1 を確保する。 */
   --destructive-hover: #f87171;
   --border: #232d33;
-  --input: #1d262b;
+  --input: #71858c;
   --ring: #14b8a6;
 
   /* ハンドオフ redesign2（console.dark）のトークン語彙。 */
@@ -229,15 +233,24 @@
   --font-mono: var(--font-ibm-mono), 'IBM Plex Mono', 'Fira Code', 'Consolas', 'Monaco', monospace;
 }
 
-/* 枠線の既定色。レイヤ外の `*` セレクタなので、Tailwind の `border-*` ユーティリティより
-   後段に置かれて勝ってしまう。枠線の色をユーティリティで変えたい箇所は、
-   インラインの style={{ borderColor }} で指定すること（目次の行で実際に踏んだ）。 */
-* {
-  border-color: var(--border);
+/* 部品ごとの枠線色を優先できるよう既定色はbaseレイヤーに置く。 */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
 }
 
-html {
-  scroll-behavior: smooth;
+@media (prefers-reduced-motion: no-preference) {
+  /* 前庭障害・乗り物酔いしやすい読み手へ慣性スクロールを掛けない（#355）。 */
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
 body {
@@ -342,15 +355,18 @@ body {
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
 }
 .markdown-content a {
-  color: var(--primary);
-  text-decoration: none;
+  /* --primary はライト背景で 3.74:1 と AA(4.5)未達（監査実測）。--primary-dark は
+     ライト 5.8:1・ダーク（#0d9488 on #0a0d0f）も約5:1で両テーマ AA を満たす。 */
+  color: var(--primary-dark);
+  /* 色だけの識別は本文との差が 2.65:1（3:1 未満）のためリンクと判別できない。
+     常時下線を引き、hover には色変化だけ残す（#355）。 */
+  text-decoration: underline;
+  text-underline-offset: 2px;
   font-weight: 500;
-  border-bottom: 1px solid transparent;
   transition: all 0.2s ease;
 }
 .markdown-content a:hover {
-  border-bottom-color: var(--primary);
-  color: var(--primary-dark);
+  color: var(--primary);
 }
 .markdown-content img {
   max-width: 100%;
@@ -381,7 +397,8 @@ body {
 /* --- Console ダッシュボード用コンポーネントクラス（トークン参照・ライト/ダーク共通） --- */
 .kicker {
   font-family: var(--font-mono);
-  font-size: 11px;
+  /* 採用担当が最初にスキャンする情報まで 11px 級に落ちていた（#347）。 */
+  font-size: 12px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent-text);
@@ -425,7 +442,8 @@ body {
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
-  font-size: 11px;
+  /* 技術名は採用担当が最初に読む主要データ。11px では読み飛ばされる（#347）。 */
+  font-size: 12px;
   line-height: 1.4;
   padding: 2px 8px;
   border-radius: var(--radius-md);
@@ -523,4 +541,14 @@ body {
   .animate-spin {
     animation: none;
   }
+}
+
+/* キーボード操作の位置を示すフォーカス輪郭（#355）。
+   .chip/.softbtn/会社ジャンプリンクは :focus-visible 未指定で、Tab 移動しても
+   現在地が見えなかった。ring 色は既存のフォーカス表示と同じ --ring を使う。 */
+.chip:focus-visible,
+.softbtn:focus-visible,
+.company-jump-nav a:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }

@@ -53,7 +53,7 @@ pnpm --version # 10.33.0
 | `app/` | App Router のルーティング（画面・API） |
 | `src/` | コンポーネント・サーバー処理・ユーティリティ |
 | `src/db/` | Drizzle スキーマ、ブロックモデル、DB アクセス層 |
-| `scripts/` | CLI スクリプトと CI 用チェッカー |
+| `script/` | CLI スクリプトと CI 用チェッカー |
 | `drizzle/` | マイグレーション（`drizzle.config.ts` はルート） |
 | `e2e/` | Playwright の E2E |
 
@@ -68,12 +68,12 @@ pnpm install         # 依存を導入
 pnpm dev             # 開発サーバー起動（next dev）
 pnpm build           # 本番ビルド
 pnpm type-check      # 型チェック
-pnpm test            # テスト（vitest / jsdom + node の2本）
+pnpm test            # テスト（vitest / jsdom + node[DB・スクリプト] + node[PDF] の3本）
 pnpm db:generate     # Drizzle マイグレーション生成
 pnpm db:migrate      # マイグレーション適用
 ```
 
-環境変数のセットアップ手順は `SETUP.md` を参照。必須変数（`DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`）は `src/lib/env.ts` の `assertServerEnv()` が起動時に検証し、欠けていれば全欠落を列挙して即座に throw する。
+環境変数のセットアップ手順は `setup.md` を参照。必須変数（`DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`）は `src/lib/env.ts` の `assertServerEnv()` が起動時に検証し、欠けていれば全欠落を列挙して即座に throw する。
 
 ---
 
@@ -98,6 +98,8 @@ Next.js App Router では `app/` 配下のディレクトリ構造がそのま�
 | `/api/logout` | `app/api/logout/route.ts` | 互換 Route Handler | `auth.logout` procedure への旧クライアント用アダプタ |
 | `/api/revalidate` | `app/api/revalidate/route.ts` | 互換 Route Handler | `maintenance.revalidate` procedure への運用用アダプタ |
 | `/api/trpc/[trpc]` | `app/api/trpc/[trpc]/route.ts` | Route Handler | tRPC の HTTP エンドポイント（`fetchRequestHandler`）。画面の読み書き・閲覧認証・権限状態を集約 |
+| `/api/mcp` | `app/api/mcp/route.ts` | Route Handler | MCP サーバー（doc/06 参照。`MCP_ENABLED` 未設定なら 404） |
+| `/api/sheet/export-xlsx` | `app/api/sheet/export-xlsx/route.ts` | Route Handler | シートの xlsx エクスポート |
 
 `[path]` や `[id]` は動的セグメントで、`params` は `Promise` として渡る（`const { id } = await params`）。
 
@@ -108,7 +110,7 @@ Next.js App Router では `app/` 配下のディレクトリ構造がそのま�
 - `assertServerEnv()` を呼び、必須サーバー環境変数の存在をフェイルファストで検証。
 - `next/font/google` で IBM Plex Sans JP / IBM Plex Mono を読み込み CSS 変数化。
 - ハイドレーション前に `localStorage` のテーマ設定を `<html>` の `.dark` クラスへ反映するインラインスクリプトを注入（テーマの FOUC 防止）。
-- `Providers`（`app/providers.tsx`）で全体をラップ。
+- `Providers`（`app/provider.tsx`）で全体をラップ。
 
 ### RSC とデータ取得（tRPC server caller）
 
@@ -125,7 +127,7 @@ export default async function SheetsListPage() {
 }
 ```
 
-サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。ビルダーのような書き込み系クライアントコンポーネントは `@trpc/react-query` の `trpc.sheet.*.useMutation()` / `useQuery()`（`src/lib/trpc-client.ts`、`app/providers.tsx` の `TRPCReactProvider`）を使い、HTTP 経由で `/api/trpc/[trpc]` を叩く。認可・入力検証（zod）・エラーコード（`TRPCError`）は procedure 側（`src/server/trpc/router/*.ts`）に集約されており、ページ側やクライアントコンポーネント側での再検証は行わない。
+サーバーで取得したデータを props でクライアントコンポーネント（`*-client.tsx`）へ渡す、というのが本プロジェクトの基本パターンである。ビルダーのような書き込み系クライアントコンポーネントは `@trpc/react-query` の `trpc.sheet.*.useMutation()` / `useQuery()`（`src/lib/trpc-client.ts`、`app/provider.tsx` の `TRPCReactProvider`）を使い、HTTP 経由で `/api/trpc/[trpc]` を叩く。認可・入力検証（zod）・エラーコード（`TRPCError`）は procedure 側（`src/server/trpc/router/*.ts`）に集約されており、ページ側やクライアントコンポーネント側での再検証は行わない。
 
 ### /view 配下の閲覧ゲート（レイアウトによる保護）
 

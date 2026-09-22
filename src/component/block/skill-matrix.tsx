@@ -1,0 +1,90 @@
+'use client';
+
+import type { ProjectItem, SkillsBlockData } from '@/db/block';
+import { experienceSourceLabel, resolveDisplayedSkillExperience } from '@/db/derived-display';
+import { sanitizeHtml } from '@/db/sanitize-html';
+
+interface SkillMatrixProps {
+  data: SkillsBlockData;
+  /** シート内に推しがある場合だけ、推しの視覚表現を有効にする。 */
+  hasFeatured?: boolean;
+  projectItems?: ProjectItem[];
+  recordedTechnologies?: string[];
+  referenceMonth?: number;
+  className?: string;
+}
+
+// 経験年数からバー幅を算出する（8年で上限クランプ、下限フロア8%で小さい正の値も潰れない）。
+function getMonthsBarPercent(months: number): number {
+  const ratio = Math.min(months / (8 * 12), 1);
+  return Math.max(ratio * 100, 8);
+}
+
+export const SkillMatrix = ({
+  data,
+  hasFeatured = false,
+  projectItems = [],
+  recordedTechnologies,
+  referenceMonth,
+  className = 'mb-6',
+}: SkillMatrixProps) => {
+  if (data.skills.length === 0) return null;
+
+  return (
+    <div className={className}>
+      {data.category && (
+        // design の見出しは「名前 — 罫線 — 件数」。kicker（ティールの英字）はページ見出し専用。
+        <div className="mb-3 flex items-center gap-3">
+          <h3 className="text-[15px] font-semibold text-foreground">{data.category}</h3>
+          <span className="h-px flex-1 bg-border" />
+          <span className="font-mono text-[11px] text-faint">{data.skills.length}</span>
+        </div>
+      )}
+      <div className="grid gap-y-[11px]">
+        {data.skills.map((skill, i) => {
+          const experience = resolveDisplayedSkillExperience(skill, projectItems, referenceMonth, recordedTechnologies);
+          const isFeatured = hasFeatured && skill.featured === true;
+          const barColor = isFeatured ? 'var(--primary)' : hasFeatured ? 'var(--faint)' : undefined;
+          return (
+            // 名前 / 習熟度(★) / バー / 年数 の4列。習熟度は PDF（表形式）と同じ情報量になるよう、
+            // ホバー不要で常時可視のテキストとして表示する（issue #142）。
+            // 名前列は truncate（1行省略）だと 320px 幅で実効幅が約50pxまで縮み、
+            // 一般的な技術名すら読めなくなる（issue #197）。items-center → items-start は
+            // 折り返しが発生しない限り単一行時の見た目に影響しない（行高＝内容高のため）。
+            //
+            // 右 3 列は必要最小限まで詰める。3 分割グリッドの 1 列（実測 283px）から
+            // 44+72+64px と gap 12px×3 を引くと名前列が 69px しか残らず、`Kubernetes`
+            // `Firestore` `Terraform` のような 1 語が語中で折れて 2〜3 行になっていた
+            // （実測 1280px 幅）。level は 2 文字（12px×2）、バーは目盛りではなく相対量の
+            // 目安、年数は `4年10ヶ月`（mono 11px で約 53px）が入れば足りる。
+            // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_32px_44px_58px] items-start gap-1.5">
+              <span
+                className={`min-w-0 break-words text-sm ${isFeatured ? 'font-semibold text-primary-dark' : 'text-foreground'}`}
+                title={sanitizeHtml(skill.name)}
+              >
+                {sanitizeHtml(skill.name)}
+              </span>
+              <span className="truncate text-center text-xs text-foreground" title={skill.level}>
+                {skill.level}
+              </span>
+              <span className="barTrack" title="経験月数（8年で上限）">
+                <span
+                  className="barFill block"
+                  style={{
+                    width: `${experience.months > 0 ? getMonthsBarPercent(experience.months) : 0}%`,
+                    backgroundColor: barColor,
+                  }}
+                />
+              </span>
+              <span className="whitespace-nowrap text-right font-mono text-[12px] text-foreground">
+                {experience.label || <span className="text-faint">—</span>}
+                <span className="block text-[12px] text-muted-foreground">{experienceSourceLabel(experience)}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};

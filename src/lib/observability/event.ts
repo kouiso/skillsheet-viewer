@@ -5,15 +5,17 @@
  * 「書けてしまう」自由文字列を型から締め出す。新しいイベントを足すときも、
  * プロパティ型に `string` を書きたくなったら enum に変換できないか先に考えること。
  */
+import type { ExportEdition } from '@/lib/export/edition';
+
 export type ViewKind = 'markdown' | 'dashboard';
 export type SheetSource = 'db' | 'github';
-// src/components/viewer-topbar.tsx の ViewKey と同じ値。型を直接 import すると
-// components → lib/observability の依存方向が逆転するので、値の集合だけを複製する
+// src/component/viewer-topbar.tsx の ViewKey と同じ値。型を直接 import すると
+// component → lib/observability の依存方向が逆転するので、値の集合だけを複製する
 // （viewer-topbar.tsx 側を変えたらここも変えること。両者が一致するかは event.test.ts の
 // 型テストが検査する）。
-export type ViewToggleKey = 'skills' | 'process' | 'projects' | 'timeline';
-export type PdfResult = 'success' | 'failure';
-export type PdfFailureReason = 'TypeError' | 'RangeError' | 'FetchError' | 'Error' | 'unknown';
+export type ViewToggleKey = 'skills' | 'process' | 'projects' | 'timeline' | 'duration';
+export type ExportResult = 'success' | 'failure';
+export type ExportFailureReason = 'TypeError' | 'RangeError' | 'FetchError' | 'Error' | 'unknown';
 export type SecondsBucket = '0-5' | '5-15' | '15-30' | '30-60' | '60+';
 export type ViewerAuthOutcome = 'success' | 'invalid_code' | 'rate_limited' | 'error';
 
@@ -34,5 +36,18 @@ export type ObservabilityEvent =
   | { name: 'sheet_viewed'; layout: ViewKind; source: SheetSource; blockCount: number }
   | { name: 'sheet_read_depth'; depthPercent: 25 | 50 | 75 | 100; secondsBucket: SecondsBucket }
   | { name: 'sheet_view_toggled'; view: ViewToggleKey; enabled: boolean }
-  | { name: 'pdf_exported'; result: PdfResult; durationBucket: SecondsBucket; reason?: PdfFailureReason }
+  | {
+      name: 'pdf_exported';
+      edition: ExportEdition;
+      result: ExportResult;
+      durationBucket: SecondsBucket;
+      reason?: ExportFailureReason;
+    }
+  | {
+      name: 'excel_exported';
+      edition: ExportEdition;
+      result: ExportResult;
+      durationBucket: SecondsBucket;
+      reason?: ExportFailureReason;
+    }
   | { name: 'viewer_auth_submitted'; outcome: ViewerAuthOutcome };

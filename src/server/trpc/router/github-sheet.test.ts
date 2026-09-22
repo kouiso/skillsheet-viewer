@@ -5,15 +5,14 @@ vi.mock('next/cache', async (importOriginal) => {
   return { ...actual, revalidateTag: vi.fn() };
 });
 
-vi.mock('@/server/sheets-cache', () => ({
+vi.mock('@/server/sheet-cache', () => ({
   getCachedSheet: vi.fn(),
   getCachedSheets: vi.fn(),
-  getCachedDbSheets: vi.fn(),
   getCachedDbSheetById: vi.fn(),
   getCachedDbSheet: vi.fn(),
 }));
 
-import { getCachedSheet, getCachedSheets } from '@/server/sheets-cache';
+import { getCachedSheet, getCachedSheets } from '@/server/sheet-cache';
 
 import { createCallerFactory } from '../init';
 import { createTestContext } from '../test-context';
@@ -61,7 +60,7 @@ describe('githubSheet.byPath', () => {
   });
 
   it('存在しないファイルは SheetNotFoundError を NOT_FOUND に変換する', async () => {
-    const { SheetNotFoundError } = await import('@/server/github-sheets');
+    const { SheetNotFoundError } = await import('@/server/github-sheet');
     getCachedSheetMock.mockRejectedValue(new SheetNotFoundError('not-found.md'));
     const caller = callerAsViewer();
     await expect(caller.githubSheet.byPath({ path: 'not-found.md' })).rejects.toMatchObject({

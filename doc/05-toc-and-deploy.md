@@ -12,7 +12,7 @@
 
 目次は正規表現ではなく **描画済み DOM から見出しを抽出**する。`rehype-slug`（[04](04-markdown-display.md)）が付与した id をそのまま利用できるため、目次のリンク先と本文アンカーが確実に一致する。
 
-`src/components/skill-sheet-viewer.tsx` の `useEffect` が本文コンテナ（`contentRef`）配下を走査する。
+`src/component/skill-sheet-viewer.tsx` の `useEffect` が本文コンテナ（`contentRef`）配下を走査する。
 
 ```tsx
 // skill-sheet-viewer.tsx（抜粋・要約）
@@ -33,7 +33,7 @@ observer.observe(container, { childList: true, subtree: true });
 
 ### アクティブ見出しの追跡（IntersectionObserver）
 
-現在スクロール位置にある見出しは `src/hooks/use-active-heading.ts` の `useActiveHeading` が `IntersectionObserver` で追跡する。
+現在スクロール位置にある見出しは `src/hook/use-active-heading.ts` の `useActiveHeading` が `IntersectionObserver` で追跡する。
 
 ```ts
 // use-active-heading.ts（抜粋）
@@ -48,7 +48,7 @@ const observer = new IntersectionObserver(
 
 ### 表示（TableOfContents コンポーネント）
 
-`src/components/table-of-contents.tsx` が目次 UI を描画する。
+`src/component/table-of-contents.tsx` が目次 UI を描画する。
 
 - **デスクトップ**: `sticky top-16` の左サイドバー（幅 `SIDEBAR_WIDTH = 280`）。`position: fixed` ＋固定 margin ではなく flex で隣接させ、折りたたみ時・印刷時にメインが自動で幅を詰める。折りたたみボタンを備える。
 - **モバイル**（`max-width: 899px`）: 右下の FAB と、左から出る Sheet（Radix Dialog）で表示。項目クリックで自動的に閉じる。
@@ -72,13 +72,23 @@ const observer = new IntersectionObserver(
 
 ### 環境変数
 
-Vercel のプロジェクト設定に、`SETUP.md` に列挙した変数を登録する。必須は `DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`（`assertServerEnv()` が起動時に検証）。GitHub シード副系統を使う場合のみ `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_REPO` などを追加する。
+Vercel のプロジェクト設定に、`setup.md` に列挙した変数を登録する。必須は `DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` / `SKILLSHEET_OWNER_ID`（`assertServerEnv()` が起動時に検証）。GitHub シード副系統を使う場合のみ `GITHUB_TOKEN` / `GITHUB_OWNER` / `GITHUB_REPO` などを追加する。
 
 Sentry/PostHog（監視・計測。任意）は `NEXT_PUBLIC_SENTRY_DSN` / `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST` を Production・Preview に、`SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN`（source map アップロード用）は **ビルド環境にのみ**登録する。「Enable access to System Environment Variables」を ON にしないと、キルスイッチが読む `NEXT_PUBLIC_VERCEL_ENV` が空になり無効化されたままになる。詳細は [doc/observability.md](observability.md)。
 
 ### ランタイム DB 依存の動的化
 
 `DATABASE_URL` はランタイム専用で、ビルド時には注入されない。DB を読むページは先頭で `connection()`（`next/server`）を呼び、`next build` の静的評価を避けてそのコンポーネント単位で動的レンダリングする（[01](01-setup-and-routing.md) 参照）。`env.ts` の `assertServerEnv()` もビルドフェーズ（`NEXT_PHASE === 'phase-production-build'`）では検証を no-op にして、secrets 未注入のビルドを壊さない。
+
+### Turbopack 永続ビルドキャッシュの無効化（#361、2026-09）
+
+Vercel はデプロイ間で `.next/cache` を復元してビルドを高速化するが、`next@16.3.4` でデフォルト有効の `experimental.turbopackFileSystemCacheForBuild`（Turbopack 永続ビルドキャッシュ）には、**別コミット由来のキャッシュ復元でソース変更を反映しない古いモジュール出力が残る invalidation gap** がある。本番デプロイで「新 JS + 旧 CSS」の混在ビルドが配信された（globals.css の `--border` が旧値のまま）。
+
+- 上流でも未修正（vercel/next.js Discussion #87283 に同一症状の報告。関連: #97709）。
+- 恒久対応として `next.config.ts` で `experimental.turbopackFileSystemCacheForBuild: false` を設定し、コード側で無効化している（prod / preview / ローカル共通。env 設定の変更に左右されない）。dev 側の `turbopackFileSystemCacheForDev` は同一環境内での再利用のため対象外。
+- 応急処置として production env に設定済みの `VERCEL_FORCE_NO_BUILD_CACHE=1` は、そのまま残す（二重ガード。ビルドキャッシュ全体を捨てるためビルドは遅くなるが、上流修正版へ上げて config を戻す際に併せて再評価する）。
+- 再発検知: `.github/workflows/deploy-smoke.yml` が本番デプロイ成功（`deployment_status`）のたびに `script/verify-deployed-css.mjs` を実行し、配信 CSS が globals.css の `:root` / `.dark` トークンを全件含むか照合する。手動では `pnpm verify:deployed-css`（`DEPLOYED_BASE_URL` または引数で対象変更可）。失敗は既存の CI Failure Slack Notify で通知される。
+- Next.js バージョンアップ時は、該当の invalidation gap が修正されたか（Discussion #87283・リリースノート）を確認してから `turbopackFileSystemCacheForBuild` の再有効化を判断する。
 
 ---
 
@@ -109,6 +119,33 @@ Sentry/PostHog（監視・計測。任意）は `NEXT_PUBLIC_SENTRY_DSN` / `NEXT
 
 baseline の具体手順（確認用 SQL・登録 SQL・hash の出し方・推奨運用）は次のドキュメントにまとめてある:
 
-- `drizzle/MIGRATION-BASELINE.md`
+- `drizzle/migration-baseline.md`
 
 baseline 後は、新規・既存どちらも `pnpm db:migrate` を通常のデプロイ手順として実行できる（新しいマイグレーションがある場合のみ適用される）。破壊的操作を含むため、本番 DB への実行前は Neon ブランチ等でバックアップを取ること。
+
+### 文書境界・runtime role の適用順序（P0-3）
+
+`skillsheet_private.*` の文書境界と runtime の最小権限化は、`pnpm db:migrate` とは別の SQL で適用する。新規環境へのセットアップ順序は次の通り。この順序を崩すと `UNMAPPED_PRINCIPAL` / `ACCESS_DENIED` で全 read/write が止まる。
+
+1. `pnpm db:migrate`（テーブル・カラム・制約の正本）
+2. `psql -f script/sql/install-skillsheet-read-boundary.sql`（reader role・principals 表・read 関数）
+3. `psql -f script/sql/install-skillsheet-write-boundary.sql`（writer role・write 関数）
+4. `psql -f script/sql/install-runtime-role.sql`（runtime LOGIN role・EXECUTE 付与・principals 登録。`-v runtime_role=... -v runtime_password=... -v owner_id=<SKILLSHEET_OWNER_ID>` が必須）
+5. `DATABASE_URL` を runtime role の接続文字列へ切り替えて redeploy
+
+境界の健全性は `script/verify-document-db.sh` でまとめて検証できる（隔離クラスタを立てて migration → install → CAS・権限・restore まで実走する）。
+
+### e2e 専用 DB の運用（#346 / #360）
+
+CI の e2e は本番と同じ Neon プロジェクト内の**別データベース** `skillsheet_e2e` を使う。接続文字列は GitHub secret の `E2E_DATABASE_URL` に置き、workflow では `DATABASE_URL` へコピーして各ステップに渡す（正本 `DATABASE_URL` / `neondb` を e2e が触ることはない）。ローカルでは `.env.e2e` の `E2E_DATABASE_URL` で切り替える（`playwright.config.ts` が `DATABASE_URL` を上書きする）。
+
+e2e 実行ごとに `bootstrap-owner.ts` が一時オーナーを作成し `skillsheet_private.principals` の写像を張り替えるため、行・セッション・シートが蓄積する。これを消すため、ci.yml の `Migrate database` 直前に **`Reset E2E database`** ステップが入る。
+
+- `pnpm exec tsx script/reset-e2e-db.ts` が標準経路として **DROP DATABASE + CREATE DATABASE** を実行する（extension・grant・`drizzle.__drizzle_migrations` を含む全状態を消去）。DROP は対象 DB へ接続したまま打てないため、同一エンドポイントの保守 DB（`neondb` → `postgres` → `template1` の順で最初に繋がるもの）経由で発行する。保守 DB 内のデータには触れない。
+- 接続 role に CREATEDB が無い等で DB 単位の作り直しができない場合は、`public` / `drizzle` / `skillsheet_private` の DROP CASCADE + `public` 再作成へ自動フォールバックする。本アプリのオブジェクトはすべてスキーマ配下のため結果は同等。
+- 誤爆防止として、URL の dbname が `*_e2e` で終わらない場合はスクリプトが拒否する（`neondb` / `postgres` / `template*` は常に拒否）。
+- リセット後は schema 不在になるため、続く `Install document boundary` ステップは「完全 install」経路を通る。boundary role（`skillsheet_document_reader/writer`）は cluster 全域で共有され残るため、install SQL には `-v allow_existing_role=on` を渡して既存 role を再利用する（role は共有・schema は DB 単位、という非対称への対応）。
+- boundary install 後の権限付与は、workflow 内で一時的に `GRANT skillsheet_document_reader/writer TO CURRENT_USER` → `SET ROLE` → `GRANT USAGE/EXECUTE` + `principals` upsert → `REVOKE`（membership の貸し出しと返却）という経路を取る。接続ユーザーへの直接 membership は残さない（SET ROLE 迂回による境界関数 bypass を防ぐため）。
+- `skillsheet_e2e` は全 PR/実行で共有の1本なので、ci.yml の e2e 脚は job レベルの `concurrency`（`e2e-shared-db` グループ）で直列化する。同時実行すると互いが相手の DB を drop して両方失敗する。待機枠は1つのため、立て続けに来た実行は古い待機側がキャンセルされる（re-run で復帰）。
+
+Neon branch を毎回作る案（案A）は `NEON_API_KEY` secret が未設定のため未採用。branch は親のデータを copy-on-write で引き継ぐため、残渣を抱えた DB を派生させるだけになり、真に fresh な DB には branch 上で別 DB を作る必要がある。API key を用意しても管理コストが上がるだけで、現行の drop+create と効果は変わらない。
