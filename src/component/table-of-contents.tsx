@@ -34,7 +34,10 @@ interface TocListProps {
 
 const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps) => (
   <ul className="flex flex-1 list-none flex-col gap-px overflow-y-auto p-0">
-    {headings.map((heading) => {
+    {headings.map((heading, index) => {
+      const duplicates = headings.filter((item) => item.text === heading.text);
+      const occurrence = headings.slice(0, index + 1).filter((item) => item.text === heading.text).length;
+      const label = duplicates.length > 1 ? `${heading.text} (${occurrence}/${duplicates.length})` : heading.text;
       const isActive = heading.id === activeId;
       return (
         <li key={heading.id}>
@@ -42,10 +45,10 @@ const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps
             type="button"
             onClick={() => onHeadingClick(heading.id)}
             aria-current={isActive ? 'true' : undefined}
-            title={collapsed ? heading.text : undefined}
+            title={collapsed ? label : undefined}
             // 折りたたむと文字を描かないので、title だけでは支援技術に名前が伝わらない。
             // 見出しの文字を常に名前として与える。
-            aria-label={collapsed ? heading.text : undefined}
+            aria-label={collapsed ? label : undefined}
             // globals.css の `* { border-color: var(--border) }` はレイヤ外なので
             // Tailwind の border-* ユーティリティより後段になる。枠線の色だけインラインで指定する。
             style={{
@@ -70,7 +73,7 @@ const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps
                 isActive ? 'size-1.5 bg-primary' : 'size-[5px] bg-faint',
               )}
             />
-            {!collapsed && <span className="truncate">{heading.text}</span>}
+            {!collapsed && <span className="truncate">{label}</span>}
           </button>
         </li>
       );
@@ -88,20 +91,22 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
     if (isMobile) setMobileOpen(false);
   };
 
-  // モバイル: 右下FAB + Sheet（左から）
+  // モバイル: 本文と重ならない操作行 + Sheet（左から）
   if (isMobile) {
     return (
       <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-        <SheetTrigger asChild>
-          <Button
-            size="icon"
-            variant="outline"
-            className="no-print fixed bottom-4 right-4 z-50 size-11 rounded-full bg-card text-accent-text shadow-[0_6px_20px_-10px_rgba(0,0,0,0.4)] hover:border-primary"
-            aria-label="目次を開く"
-          >
-            <MenuIcon />
-          </Button>
-        </SheetTrigger>
+        <div className="no-print flex justify-end px-4 pt-4">
+          <SheetTrigger asChild>
+            <Button
+              size="icon"
+              variant="outline"
+              className="size-11 rounded-full bg-card text-accent-text shadow-[0_6px_20px_-10px_rgba(0,0,0,0.4)] hover:border-primary"
+              aria-label="目次を開く"
+            >
+              <MenuIcon />
+            </Button>
+          </SheetTrigger>
+        </div>
         <SheetContent side="left" className="flex w-72 flex-col gap-4 px-[22px] py-7">
           {/* スクリーンリーダー向けに Dialog の Title/Description を提供（Radix のa11y要件・警告回避） */}
           <div className="sr-only">
@@ -133,7 +138,7 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
           onClick={() => setIsCollapsed((v) => !v)}
           aria-label={isCollapsed ? '目次を開く' : '目次を折りたたむ'}
           aria-expanded={!isCollapsed}
-          className="grid size-11 shrink-0 place-items-center rounded-[var(--radius)] border border-border bg-card font-mono text-[11px] text-faint transition-all duration-150 hover:border-primary hover:text-accent-text"
+          className="grid size-11 shrink-0 place-items-center rounded-[var(--radius)] border border-border bg-card font-mono text-[12px] text-faint transition-all duration-150 hover:border-primary hover:text-accent-text"
         >
           {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
         </button>

@@ -84,7 +84,7 @@ const DbSheetsListClient = ({
                 <li key={sheet.id} className="px-4 py-3">
                   <button
                     type="button"
-                    className="w-full text-left"
+                    className="min-h-11 w-full text-left"
                     onClick={() => router.push(`/view/db/${encodeURIComponent(sheet.id)}`)}
                   >
                     <p className="truncate font-medium">{sheet.title}</p>

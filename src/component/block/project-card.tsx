@@ -107,7 +107,7 @@ export const ProjectCard = ({
       <div className="flex min-w-0 flex-col gap-3">
         <div className="flex min-w-0 flex-col gap-2">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <span className="rounded-[var(--radius)] bg-primary-dark px-1.5 py-px font-mono text-[11px] text-on-accent">
+            <span className="rounded-[var(--radius)] bg-primary-dark px-1.5 py-px font-mono text-[12px] text-on-accent">
               {String(no).padStart(2, '0')}
             </span>
             <span className="font-mono text-[12px] text-muted-foreground">{periodDisplay || '—'}</span>
