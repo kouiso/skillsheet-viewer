@@ -358,3 +358,16 @@ describe('SkillSheetViewer', () => {
     expect(lightbox.getAttribute('data-src')).toContain('/uploads/b.png');
   });
 });
+
+it('単独リンクだけを操作領域の拡張対象にし、本文内リンクは維持する', () => {
+  render(
+    <SkillSheetViewer
+      skillSheet={{
+        title: 'テスト',
+        content: '[単独 **強調** と `コード`](https://example.com)\n\n前文 [本文内](https://example.com) 後文',
+      }}
+    />,
+  );
+  expect(screen.getByRole('link', { name: '単独 強調 と コード' }).parentElement).toHaveClass('standalone-link');
+  expect(screen.getByRole('link', { name: '本文内' }).parentElement).not.toHaveClass('standalone-link');
+});

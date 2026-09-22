@@ -68,3 +68,11 @@ describe('InlineMarkdown', () => {
     warn.mockRestore();
   });
 });
+
+it('単独リンクの箇条書きだけを操作領域の拡張対象にする', () => {
+  render(
+    <InlineMarkdown content={'- [資料 **強調**](https://example.com)\n- 前文 [本文内](https://example.com) 後文'} />,
+  );
+  expect(screen.getByRole('link', { name: '資料 強調' }).closest('li')).toHaveClass('standalone-link');
+  expect(screen.getByRole('link', { name: '本文内' }).closest('li')).not.toHaveClass('standalone-link');
+});

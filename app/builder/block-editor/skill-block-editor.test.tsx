@@ -14,7 +14,10 @@ describe('SkillsBlockEditor', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('checkbox', { name: 'スキル1を推しにする' }));
+    const checkbox = screen.getByRole('checkbox', { name: 'スキル1を推しにする' });
+    const label = checkbox.closest('label');
+    expect(label).not.toBeNull();
+    fireEvent.click(label as HTMLLabelElement);
     expect(onChange).toHaveBeenCalledWith('言語', [{ name: 'TypeScript', years: 3, level: '実務経験あり' }]);
   });
 });
