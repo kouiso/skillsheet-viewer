@@ -48,9 +48,9 @@ export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompan
   return (
     <nav aria-label="会社別ジャンプ" className="company-jump-nav mb-5">
       <details>
-        <summary className="cursor-pointer py-1.5 text-[13px] leading-normal text-muted-foreground">
+        <summary className="min-h-11 cursor-pointer py-3 text-[13px] leading-normal text-muted-foreground">
           会社から探す
-          <span className="ml-2 font-mono text-[11px]">{items.length} 社</span>
+          <span className="ml-2 font-mono text-[12px]">{items.length} 社</span>
         </summary>
         <div className="flex flex-wrap gap-1.5 pt-1">
           {items.map((item) => (
@@ -60,8 +60,8 @@ export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompan
               className="inline-flex min-h-11 items-baseline gap-1.5 whitespace-nowrap rounded border border-border-strong bg-card px-2.5 py-2 text-[13px] leading-normal text-foreground hover:border-primary hover:text-accent-text"
             >
               <span>{item.name}</span>
-              {item.qual ? <span className="font-mono text-[11px] text-muted-foreground">{item.qual}</span> : null}
-              <span className="font-mono text-[11px] text-muted-foreground">{item.count}</span>
+              {item.qual ? <span className="font-mono text-[12px] text-muted-foreground">{item.qual}</span> : null}
+              <span className="font-mono text-[12px] text-muted-foreground">{item.count}</span>
             </a>
           ))}
         </div>
