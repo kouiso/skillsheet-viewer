@@ -89,7 +89,7 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
   const renderMeta = () =>
     metaEntries.length > 0 ? (
       // 狭い画面では項目ごとに1行を使い、長い技術名や担当業務の折り返し幅を確保する。
-      <dl className="grid grid-cols-1 gap-y-2 text-sm text-faint sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px] sm:gap-y-1 sm:font-mono sm:text-xs">
+      <dl className="grid grid-cols-1 gap-y-2 text-sm text-muted-foreground sm:flex sm:flex-wrap sm:items-baseline sm:gap-x-[18px] sm:gap-y-1 sm:font-mono sm:text-xs">
         {metaEntries.map(([key, value], i) => (
           <div key={key} className="flex min-w-0 items-baseline gap-1.5">
             {i > 0 && (

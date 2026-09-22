@@ -59,20 +59,23 @@
   --ring: #0d9488;
   --radius: 0.25rem;
 
-  /* Console: 影なし（ヘアライン境界のみ）— キーは保持し見た目上シャドウ無しの値へ remap。
-     以前は none だったが、Tailwind v4 の box-shadow は
+  /* 影の段階。値は必ず有効な <shadow> を書くこと（裸の none は不可）。
+     Tailwind v4 の box-shadow は
      `var(--tw-inset-shadow), ..., var(--tw-ring-shadow), var(--tw-shadow)` という
      カンマ区切りリストとして合成される。CSS の <shadow># はリストの要素ごとに
      <shadow> でなければならず、リストの1要素が裸の none だとリスト全体が invalid になり
      宣言ごと無視される。shadow-elevation-* を持つボタン（デフォルト/gradient/secondary
      variant）で focus-visible:ring-2 が一切描画されなかった原因はこれ（#156）。
-     0 0 #0000（透明・オフセット/ぼかし0）は見た目は none と同じ「影なし」だが、
-     文法上は有効な <shadow> なのでリストが壊れない。 */
-  --elevation-1: 0 0 #0000;
-  --elevation-2: 0 0 #0000;
-  --elevation-3: 0 0 #0000;
-  --elevation-4: 0 0 #0000;
-  --elevation-8: 0 0 #0000;
+
+     以前は全段を `0 0 #0000`（＝透明。文法上は有効だが見た目は影なし）に倒し、カードの
+     まとまりを `--border` 1 本だけで表していた。実データ（19社/32案件）を並べると
+     カードが背景に溶けて塊の境目が読み取れないため、ヘアラインは残したまま、ごく薄い
+     影を戻す。色は前景トークン #10171a の rgb をそのまま使い、新しい色トークンは増やさない。 */
+  --elevation-1: 0 1px 2px -1px rgba(16, 23, 26, 0.1);
+  --elevation-2: 0 1px 3px -1px rgba(16, 23, 26, 0.1), 0 2px 8px -4px rgba(16, 23, 26, 0.08);
+  --elevation-3: 0 2px 6px -2px rgba(16, 23, 26, 0.12), 0 6px 16px -8px rgba(16, 23, 26, 0.1);
+  --elevation-4: 0 4px 10px -3px rgba(16, 23, 26, 0.14), 0 10px 24px -12px rgba(16, 23, 26, 0.12);
+  --elevation-8: 0 8px 20px -6px rgba(16, 23, 26, 0.16), 0 18px 40px -20px rgba(16, 23, 26, 0.14);
 
   /* ハンドオフ redesign2（console.light）のトークン語彙。既存トークンとは別名で追加し非破壊。 */
   --surface2: #f0f3f3;
@@ -158,6 +161,13 @@
   --accent-soft: #0c2320;
   --on-accent: #03110f;
   --border-strong: #526771;
+
+  /* 暗背景では前景色の影は見えないので、黒を濃いめに置く。段階の設計はライトと同じ。 */
+  --elevation-1: 0 1px 2px -1px rgba(0, 0, 0, 0.5);
+  --elevation-2: 0 1px 3px -1px rgba(0, 0, 0, 0.55), 0 2px 8px -4px rgba(0, 0, 0, 0.45);
+  --elevation-3: 0 2px 6px -2px rgba(0, 0, 0, 0.6), 0 6px 16px -8px rgba(0, 0, 0, 0.5);
+  --elevation-4: 0 4px 10px -3px rgba(0, 0, 0, 0.62), 0 10px 24px -12px rgba(0, 0, 0, 0.55);
+  --elevation-8: 0 8px 20px -6px rgba(0, 0, 0, 0.66), 0 18px 40px -20px rgba(0, 0, 0, 0.6);
 
   --danger: #e9695c;
   --danger-soft: #2a1715;

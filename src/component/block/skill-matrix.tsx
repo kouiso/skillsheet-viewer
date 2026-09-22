@@ -37,7 +37,7 @@ export const SkillMatrix = ({
         <div className="mb-3 flex items-center gap-3">
           <h3 className="text-[15px] font-semibold text-foreground">{data.category}</h3>
           <span className="h-px flex-1 bg-border" />
-          <span className="font-mono text-[11px] text-faint">{data.skills.length}</span>
+          <span className="font-mono text-[12px] text-muted-foreground">{data.skills.length}</span>
         </div>
       )}
       <div className="grid gap-y-[11px]">
@@ -78,7 +78,7 @@ export const SkillMatrix = ({
                 />
               </span>
               <span className="whitespace-nowrap text-right font-mono text-[12px] text-foreground">
-                {experience.label || <span className="text-faint">—</span>}
+                {experience.label || <span className="text-muted-foreground">—</span>}
                 <span className="block text-[12px] text-muted-foreground">{experienceSourceLabel(experience)}</span>
               </span>
             </div>

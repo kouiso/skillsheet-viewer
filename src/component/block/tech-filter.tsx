@@ -167,7 +167,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
               // biome-ignore lint/a11y/useSemanticElements: listbox 内の optgroup 相当の分類には role="group" が正しい。fieldset はフォーム部品で option のコンテナとして不適切
               <div key={group.bucket} role="group" aria-label={group.label}>
                 {/* 見出しは視覚用。スクリーンリーダーには group の aria-label で伝え、二重読み上げを避ける。 */}
-                <div aria-hidden="true" className="px-3 pb-0.5 pt-2 text-[11px] font-medium text-faint">
+                <div aria-hidden="true" className="px-3 pb-0.5 pt-2 text-[12px] font-medium text-muted-foreground">
                   {group.label}
                 </div>
                 {group.items.map(({ tech, index }) => (
@@ -187,7 +187,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
                     onMouseEnter={() => setHi(index)}
                   >
                     <span>{tech.name}</span>
-                    <span className="font-mono text-[11px] text-faint">{tech.count}</span>
+                    <span className="font-mono text-[12px] text-muted-foreground">{tech.count}</span>
                   </button>
                 ))}
               </div>
@@ -208,7 +208,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
               className="chip max-w-[220px] gap-1.5 on"
             >
               <span className="overflow-hidden text-ellipsis">{tech.name}</span>
-              <span className="text-[11px]">{tech.count}</span>
+              <span className="text-[12px]">{tech.count}</span>
             </button>
           ))}
         </div>
