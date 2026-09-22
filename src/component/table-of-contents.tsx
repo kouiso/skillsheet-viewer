@@ -133,7 +133,7 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
           onClick={() => setIsCollapsed((v) => !v)}
           aria-label={isCollapsed ? '目次を開く' : '目次を折りたたむ'}
           aria-expanded={!isCollapsed}
-          className="grid size-11 shrink-0 place-items-center rounded-[var(--radius)] border border-border bg-card font-mono text-[11px] text-faint transition-all duration-150 hover:border-primary hover:text-accent-text"
+          className="grid size-11 shrink-0 place-items-center rounded-[var(--radius)] border border-border bg-card font-mono text-[12px] text-muted-foreground transition-all duration-150 hover:border-primary hover:text-accent-text"
         >
           {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
         </button>

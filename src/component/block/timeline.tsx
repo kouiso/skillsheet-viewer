@@ -30,7 +30,7 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
 
   return (
     // design: カードで包み、レールを left:6px / 幅2px、項目間 18px にする。
-    <div className="relative rounded-[var(--radius-lg)] border border-border bg-card p-7 pl-[26px]">
+    <div className="relative rounded-[var(--radius-lg)] border border-border bg-card p-7 pl-[26px] shadow-elevation-1">
       <div className="absolute bottom-7 left-[6px] top-7 w-0.5 bg-border" />
       <div className="flex flex-col gap-[18px]">
         {sorted.map((item) => {
@@ -56,7 +56,7 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
               <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
                 <span className="font-mono text-[12px] text-accent-text sm:min-w-[132px]">
                   {periodDisplay || '(期間未入力)'}
-                  {duration && <span className="text-faint">（{duration}）</span>}
+                  {duration && <span className="text-muted-foreground">（{duration}）</span>}
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[14.5px] font-semibold text-foreground">
