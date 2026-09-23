@@ -118,6 +118,18 @@ const MarkdownContent = memo(function MarkdownContent({ content, blockId, onImag
         remarkPlugins={MARKDOWN_REMARK_PLUGINS}
         rehypePlugins={rehypePlugins}
         components={{
+          p({ node, children, ...props }) {
+            const content = node?.children.filter((child) => child.type !== 'text' || child.value.trim() !== '');
+            const standaloneLink = content?.length === 1 && content[0].type === 'element' && content[0].tagName === 'a';
+            return (
+              <p
+                {...props}
+                className={standaloneLink ? `${props.className ?? ''} standalone-link`.trim() : props.className}
+              >
+                {children}
+              </p>
+            );
+          },
           code(props) {
             const { className, children, ...rest } = props;
             const isBlock = /language-/.test(className ?? '') || /\n/.test(String(children));
@@ -358,7 +370,7 @@ const SkillSheetViewer = ({
   }, []);
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col min-[900px]:flex-row">
       {/* 目次（左サイドバー）— 比較モード、または構造化ダッシュボードで見出しが無い場合は非表示 */}
       {mounted && !compareMode && (!blocks || headings.length > 0) && (
         <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />
@@ -402,7 +414,7 @@ const SkillSheetViewer = ({
                           283px しかなく、スキル名の列が 1 語を語中で折るほど狭かったため
                           （skill-matrix.tsx の列幅コメント参照）。列の最小幅 240px は
                           この gap でも 3 列を保つ（1280px 幅で実測）。 */}
-                      <div className="grid gap-x-6 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
+                      <div className="grid gap-x-6 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 shadow-elevation-1 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
                         {group.blocks.map((block) => (
                           <SkillMatrix
                             key={block.id}

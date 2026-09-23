@@ -81,3 +81,18 @@ describe('TableOfContents（デスクトップ表示）', () => {
     expect(screen.getByRole('button', { name: '深い見出し' }).className).toContain('pl-[26px]');
   });
 });
+
+it('同名の目次を区別し、折畳み後も名前と移動先を維持する', async () => {
+  const user = userEvent.setup();
+  const { props } = renderToc({
+    headings: [
+      { id: 'first', text: '受託', level: 2 },
+      { id: 'second', text: '受託', level: 2 },
+    ],
+  });
+  await user.click(screen.getByRole('button', { name: '受託 (2/2)' }));
+  expect(props.onHeadingClick).toHaveBeenLastCalledWith('second');
+  await user.click(screen.getByRole('button', { name: '目次を折りたたむ' }));
+  await user.click(screen.getByRole('button', { name: '受託 (1/2)' }));
+  expect(props.onHeadingClick).toHaveBeenLastCalledWith('first');
+});

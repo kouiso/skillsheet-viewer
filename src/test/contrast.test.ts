@@ -19,7 +19,7 @@ function hexToRgb(hex: string): [number, number, number] {
 
 function srgbChannelToLinear(channel: number): number {
   const c = channel / 255;
-  return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
 function relativeLuminance(hex: string): number {
@@ -115,3 +115,38 @@ describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () =>
     expect(contrastRatio(dark.borderStrong, dark.card)).toBeGreaterThanOrEqual(AA_NON_TEXT);
   });
 });
+
+for (const [theme, block] of [
+  ['light', lightBlock],
+  ['dark', darkBlock],
+] as const) {
+  describe(`${theme}の補助文字の視認性`, () => {
+    for (const surface of [
+      'background',
+      'card',
+      'popover',
+      'muted',
+      'surface2',
+      'surface3',
+      'accent',
+      'accent-soft',
+      'chip-bg',
+      'track',
+      'danger-soft',
+      'warn-soft',
+    ]) {
+      it(`faintとmutedは${surface}上で6対1以上`, () => {
+        for (const token of ['faint', 'muted-foreground']) {
+          expect(contrastRatio(extractToken(block, token), extractToken(block, surface))).toBeGreaterThanOrEqual(6);
+        }
+      });
+    }
+    it('faintはmutedより背景とのコントラストを抑え、両者の明度を区別する', () => {
+      const faint = extractToken(block, 'faint');
+      const muted = extractToken(block, 'muted-foreground');
+      const background = extractToken(block, 'background');
+      expect(contrastRatio(faint, background)).toBeLessThan(contrastRatio(muted, background));
+      expect(contrastRatio(faint, muted)).toBeGreaterThanOrEqual(1.15);
+    });
+  });
+}

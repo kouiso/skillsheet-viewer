@@ -56,7 +56,7 @@ export function CompanyLane({ companyPeriod, items }: { companyPeriod: string; i
   const lane = buildCompanyLane(companyPeriod, items);
   if (!lane) return null;
   return (
-    <div className="flex max-w-full min-w-0 flex-col gap-2 rounded-[var(--radius-lg)] border border-border bg-card px-4 py-3">
+    <div className="flex max-w-full min-w-0 flex-col gap-2 rounded-[var(--radius-lg)] border border-border bg-card px-4 py-3 shadow-elevation-1">
       <div className="flex flex-col gap-1.5">
         {lane.rows.map((row) => (
           <div

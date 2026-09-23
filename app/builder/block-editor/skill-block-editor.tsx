@@ -94,13 +94,15 @@ export const SkillsBlockEditor = ({
                   />
                 </td>
                 <td className="border border-border p-1 text-center">
-                  <input
-                    type="checkbox"
-                    checked={s.featured === true}
-                    onChange={(e) => setSkill(i, 'featured', e.target.checked)}
-                    aria-label={`スキル${i + 1}を推しにする`}
-                    className="size-5 accent-primary"
-                  />
+                  <label className="inline-flex size-11 cursor-pointer items-center justify-center">
+                    <input
+                      type="checkbox"
+                      checked={s.featured === true}
+                      onChange={(e) => setSkill(i, 'featured', e.target.checked)}
+                      aria-label={`スキル${i + 1}を推しにする`}
+                      className="size-5 accent-primary"
+                    />
+                  </label>
                 </td>
                 <td className="border border-border p-1 text-center">
                   <button

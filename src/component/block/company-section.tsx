@@ -94,7 +94,7 @@ export function CompanySection({
           {name}
         </h2>
         {kind ? (
-          <span className="rounded bg-accent-soft px-2 py-0.5 text-[11px] leading-normal text-accent-text">{kind}</span>
+          <span className="rounded bg-accent-soft px-2 py-0.5 text-[12px] leading-normal text-accent-text">{kind}</span>
         ) : null}
         {tenure ? <span className="font-mono text-[12px] leading-normal text-foreground">{tenure}</span> : null}
         <span className="font-mono text-[12px] leading-normal text-muted-foreground">{countLabel}</span>

@@ -32,12 +32,17 @@ interface InlineMarkdownProps {
  */
 export function InlineMarkdown({ content, className, linksTabbable = true }: InlineMarkdownProps) {
   return (
-    <div className={className}>
+    <div className={['inline-markdown', className].filter(Boolean).join(' ')}>
       <ReactMarkdown
         remarkPlugins={MARKDOWN_REMARK_PLUGINS}
         rehypePlugins={REHYPE_PLUGINS}
         components={{
           p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+          li: ({ node, children }) => {
+            const content = node?.children.filter((child) => child.type !== 'text' || child.value.trim() !== '');
+            const standaloneLink = content?.length === 1 && content[0].type === 'element' && content[0].tagName === 'a';
+            return <li className={standaloneLink ? 'standalone-link' : undefined}>{children}</li>;
+          },
           ul: ({ children }) => <ul className="mb-2 list-disc space-y-1 pl-5 last:mb-0">{children}</ul>,
           ol: ({ children }) => <ol className="mb-2 list-decimal space-y-1 pl-5 last:mb-0">{children}</ol>,
           strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
