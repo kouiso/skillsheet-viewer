@@ -1,0 +1,5 @@
+DRY-RUN STATUS: OK (re-verified this run, no --write)
+Command: pnpm exec tsx script/unwrap-emphasis.ts
+CHANGED_ITEMS 9
+BACKUP path present in log (local /tmp)
+Note: PR body previously claimed CHANGED_ITEMS 12→9 and field-level 13→10; current dry-run shows CHANGED_ITEMS 9 (data may have drifted).

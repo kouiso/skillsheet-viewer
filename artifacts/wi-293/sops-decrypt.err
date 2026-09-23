@@ -1,0 +1,13 @@
+Failed to get the data key required to decrypt the SOPS file.
+
+Group 0: FAILED
+  age189u2nwxqs9emdc0jhueu0873pes2qeqfgwujy07xyue5wdmrw9nqxw8zh6: FAILED
+    - | failed to create reader for decrypting sops data key with
+      | age: no identity matched any of the recipients. Did not find
+      | keys in locations 'SOPS_AGE_SSH_PRIVATE_KEY_FILE',
+      | '/Users/kouiso/.ssh/id_rsa', 'SOPS_AGE_KEY',
+      | 'SOPS_AGE_KEY_FILE', and 'SOPS_AGE_KEY_CMD'.
+
+Recovery failed because no master key was able to decrypt the file. In
+order for SOPS to recover the file, at least one key has to be successful,
+but none were.

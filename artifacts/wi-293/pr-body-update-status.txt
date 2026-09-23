@@ -1,0 +1,13 @@
+PR #332 body update: FAILED / BLOCKED
+
+Attempted: gh pr edit 332 --body-file <intended>
+Error: GraphQL: Resource not accessible by integration (updatePullRequest)
+
+Auth: GH_TOKEN was claude-code-automation-ritmo-inc[bot] (integration token without pull-request write).
+After diagnostic unset of GH_TOKEN, token was not recoverable in this shell session; no user gh login on hosts.yml.
+No 1Password/op used.
+
+Intended body (Closes #293 / Closes #292 + Evidence section) saved at:
+  /Users/kouiso/worktrees/skillsheet-wi-293-20260915/artifacts/wi-293/pr-332-body-intended.md
+
+Remote PR body NOT updated (still "close #293", no Evidence section from this run).

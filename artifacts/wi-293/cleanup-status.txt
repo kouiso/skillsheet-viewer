@@ -1,0 +1,4 @@
+EXIT_FOCUSED= Test Files  1 passed (1)       Tests  14 passed (14)    Start at  04:39:04    Duration  244ms (transform 19ms, setup 0ms, collect 15ms, tests 2ms, environment 0ms, prepare 41ms)  
+EXIT_TYPECHECK=> skillsheet-viewer@1.0.0 type-check /Users/kouiso/worktrees/skillsheet-wi-293-20260915 > tsc --noEmit  
+HEAD=75a515d1019ce2ca70e1b0a1557c93836d9b8a43
+FILES=src/db/text.test.ts src/db/text.ts 
