@@ -414,7 +414,7 @@ const SkillSheetViewer = ({
                           283px しかなく、スキル名の列が 1 語を語中で折るほど狭かったため
                           （skill-matrix.tsx の列幅コメント参照）。列の最小幅 240px は
                           この gap でも 3 列を保つ（1280px 幅で実測）。 */}
-                      <div className="grid gap-x-6 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
+                      <div className="grid gap-x-6 gap-y-7 rounded-[var(--radius-lg)] border border-border bg-card p-4 shadow-elevation-1 sm:p-5 [grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))]">
                         {group.blocks.map((block) => (
                           <SkillMatrix
                             key={block.id}

@@ -26,7 +26,7 @@ export function ProcessOverview({ items }: ProcessOverviewProps) {
         return (
           <div
             key={label}
-            className="flex flex-col items-center gap-2.5 rounded-[var(--radius-lg)] border border-border bg-card px-3 py-4 text-center"
+            className="flex flex-col items-center gap-2.5 rounded-[var(--radius-lg)] border border-border bg-card px-3 py-4 text-center shadow-elevation-1"
           >
             {/* 語中で折れて孤立1文字が残っていた問題（#152 S-5）。process-stepper.tsx と
                 同じ break-keep + 「・」直後のみ <wbr /> で折り返す。 */}
