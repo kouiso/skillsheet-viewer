@@ -394,13 +394,15 @@
   color: var(--accent-text);
 }
 .btn.primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  /* 13px/600 の on-accent 文字は素の --primary だとライトで 3.74:1 しか出んので、濃い方に載せる */
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
   color: var(--on-accent);
 }
 .btn.primary:hover {
-  background: var(--accent-text);
-  color: #fff;
+  /* ダークテーマの --accent-text は #5eead4 で、旧来の白文字だと 1.48:1 まで落ちとった */
+  background: var(--primary-hover);
+  color: var(--on-accent);
 }
 .btn.primary:disabled {
   opacity: 0.45;
