@@ -922,7 +922,7 @@ const BuilderClient = ({
         className="no-print sticky top-0 z-20 border-b border-border bg-[color-mix(in_srgb,var(--card)_90%,transparent)] backdrop-blur-md"
       >
         <div
-          className={`mx-auto flex items-center justify-between gap-2 px-4 py-3.5 sm:px-7 ${
+          className={`mx-auto flex flex-col items-stretch justify-between gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:px-7 ${
             activeTab === 'project' ? 'max-w-none' : 'max-w-6xl'
           }`}
         >
@@ -930,7 +930,7 @@ const BuilderClient = ({
             <h1 className="min-w-0 truncate text-lg font-bold">スキルシートビルダー</h1>
             {/* 案件エディタの breadcrumb（会社 / 案件NN） */}
             {activeTab === 'project' && projectCrumb && (
-              <span className="hidden truncate font-mono text-[11.5px] text-faint md:inline">
+              <span className="hidden truncate font-mono text-[12px] text-faint md:inline">
                 {projectCrumb.companyName || '(会社名未入力)'} / 案件{' '}
                 {projectCrumb.visibleNo > 0 ? String(projectCrumb.visibleNo).padStart(2, '0') : '（非表示）'}
               </span>
@@ -976,7 +976,7 @@ const BuilderClient = ({
               <span
                 data-slot="autosave-indicator"
                 role="status"
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-[11px] ${autosaveIndicator.textClass}`}
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-[12px] ${autosaveIndicator.textClass}`}
               >
                 <span aria-hidden className={`size-[7px] rounded-full ${autosaveIndicator.dotClass}`} />
                 {autosaveIndicator.label}
@@ -998,14 +998,14 @@ const BuilderClient = ({
             <Button
               variant="outline"
               size="default"
-              className="hidden h-11 sm:inline-flex"
+              className="h-11"
               onClick={handleExport}
               disabled={loadFailure !== null}
             >
               <Download className="mr-1.5 size-4" />
               バックアップ
             </Button>
-            <Button asChild variant="ghost" className="hidden h-11 px-3 sm:inline-flex">
+            <Button asChild variant="ghost" className="h-11 px-3">
               <Link
                 href="/view"
                 className="text-muted-foreground hover:text-foreground"

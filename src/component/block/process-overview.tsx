@@ -30,7 +30,7 @@ export function ProcessOverview({ items }: ProcessOverviewProps) {
           >
             {/* 語中で折れて孤立1文字が残っていた問題（#152 S-5）。process-stepper.tsx と
                 同じ break-keep + 「・」直後のみ <wbr /> で折り返す。 */}
-            <span className="min-h-[30px] break-keep text-[11.5px] leading-tight text-muted-foreground">
+            <span className="min-h-[30px] break-keep text-[12px] leading-tight text-muted-foreground">
               <ProcessLabelParts label={label} />
             </span>
             <div className="relative size-[46px]">
@@ -53,7 +53,7 @@ export function ProcessOverview({ items }: ProcessOverviewProps) {
                 {doneCount}
               </span>
             </div>
-            <span className="font-mono text-[11px] text-faint">/{total}</span>
+            <span className="font-mono text-[12px] text-faint">/{total}</span>
           </div>
         );
       })}
