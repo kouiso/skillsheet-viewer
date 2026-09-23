@@ -51,7 +51,7 @@ export function SectionHead({ kicker, title, right, idSuffix }: SectionHeadProps
           {title}
         </h2>
       </div>
-      {right && <span className="shrink-0 pb-1 font-mono text-[11.5px] text-faint">{right}</span>}
+      {right && <span className="shrink-0 pb-1 font-mono text-[12px] text-faint">{right}</span>}
     </div>
   );
 }
