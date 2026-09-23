@@ -30,7 +30,7 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
 
   return (
     // design: カードで包み、レールを left:6px / 幅2px、項目間 18px にする。
-    <div className="relative rounded-[var(--radius-lg)] border border-border bg-card p-7 pl-[26px]">
+    <div className="relative rounded-[var(--radius-lg)] border border-border bg-card p-7 pl-[26px] shadow-elevation-1">
       <div className="absolute bottom-7 left-[6px] top-7 w-0.5 bg-border" />
       <div className="flex flex-col gap-[18px]">
         {sorted.map((item) => {

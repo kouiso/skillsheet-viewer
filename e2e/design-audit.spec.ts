@@ -17,6 +17,9 @@ let viewSheetId = '';
 const viewports = [
   { name: 'sp-narrow', width: 320, height: 800 },
   { name: 'sp', width: 375, height: 812 },
+  // iPhone 12 以降の論理幅。375 と 768 の間が空いていて、実機で出る折り返し崩れや
+  // 横スクロールを CI が見ていなかった。
+  { name: 'sp-390', width: 390, height: 844 },
   { name: 'tablet', width: 768, height: 1024 },
   { name: 'desktop', width: 1280, height: 800 },
 ] as const;
