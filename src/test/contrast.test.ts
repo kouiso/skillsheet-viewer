@@ -67,6 +67,9 @@ const light = {
   muted: extractToken(lightBlock, 'muted'),
   track: extractToken(lightBlock, 'track'),
   borderStrong: extractToken(lightBlock, 'border-strong'),
+  onAccent: extractToken(lightBlock, 'on-accent'),
+  primaryDark: extractToken(lightBlock, 'primary-dark'),
+  primaryHover: extractToken(lightBlock, 'primary-hover'),
 };
 
 const dark = {
@@ -78,6 +81,9 @@ const dark = {
   muted: extractToken(darkBlock, 'muted'),
   track: extractToken(darkBlock, 'track'),
   borderStrong: extractToken(darkBlock, 'border-strong'),
+  onAccent: extractToken(darkBlock, 'on-accent'),
+  primaryDark: extractToken(darkBlock, 'primary-dark'),
+  primaryHover: extractToken(darkBlock, 'primary-hover'),
 };
 
 const AA_NORMAL_TEXT = 4.5;
@@ -113,6 +119,15 @@ describe('globals.css のコントラスト比（WCAG AA 回帰防止）', () =>
   it('dark: --border-strong が --background / --card に対し 非テキスト 3:1 を満たす', () => {
     expect(contrastRatio(dark.borderStrong, dark.background)).toBeGreaterThanOrEqual(AA_NON_TEXT);
     expect(contrastRatio(dark.borderStrong, dark.card)).toBeGreaterThanOrEqual(AA_NON_TEXT);
+  });
+
+  // .btn.primary（editor.css）が --on-accent を載せる背景。#198 が bg-primary(素)×白文字で
+  // 4回再発したので、載せ先自体をここで両テーマとも縛る。
+  it('light/dark: --on-accent が --primary-dark / --primary-hover に対し AA(4.5:1) を満たす', () => {
+    expect(contrastRatio(light.onAccent, light.primaryDark)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(light.onAccent, light.primaryHover)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(dark.onAccent, dark.primaryDark)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
+    expect(contrastRatio(dark.onAccent, dark.primaryHover)).toBeGreaterThanOrEqual(AA_NORMAL_TEXT);
   });
 });
 

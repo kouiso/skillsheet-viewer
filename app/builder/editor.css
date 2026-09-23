@@ -394,13 +394,15 @@
   color: var(--accent-text);
 }
 .btn.primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  /* 13px/600 の on-accent 文字は素の --primary だとライトで 3.74:1 しか出んので、濃い方に載せる */
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
   color: var(--on-accent);
 }
 .btn.primary:hover {
-  background: var(--accent-text);
-  color: #fff;
+  /* ダークテーマの --accent-text は #5eead4 で、旧来の白文字だと 1.48:1 まで落ちとった */
+  background: var(--primary-hover);
+  color: var(--on-accent);
 }
 .btn.primary:disabled {
   opacity: 0.45;
@@ -450,8 +452,9 @@
 .fsec-head .num {
   font-family: var(--font-mono);
   font-size: 12px;
+  /* 12px の白文字は --primary 上で 3.74:1 しか出んので、濃い方の緑に載せる（両テーマ 5.1:1 以上） */
   color: var(--on-accent);
-  background: var(--primary);
+  background: var(--primary-dark);
   width: 22px;
   height: 22px;
   border-radius: 6px;
@@ -917,8 +920,9 @@
 .pv-no {
   font-family: var(--font-mono);
   font-size: 12px;
+  /* 見出し番号と同じ理由で濃い緑に載せる */
   color: var(--on-accent);
-  background: var(--primary);
+  background: var(--primary-dark);
   border-radius: 6px;
   padding: 1px 7px;
 }
