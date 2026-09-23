@@ -1,0 +1,38 @@
+WI-293 acceptance note (logic/tests) — evidence only, not a GO/完了 declaration
+
+HEAD: cf5997b6b12c2a4853133a490c704defad638c6b
+Worktree: /Users/kouiso/worktrees/skillsheet-wi-293-20260915
+Branch: fix/bold-heading-keep
+Shared checkout /Users/kouiso/ghq/kouiso/skillsheet-viewer was NOT switched.
+
+1) whole-line bold-only heading lines are kept
+   - src/db/text.ts unwrapEmphasis: if a line is bold-only AND prev/next are
+     empty or out-of-bounds (independent paragraph), the line is returned unchanged.
+   - Test: 「行全体が太字だけの行は太字のまま残す」
+     unwrapEmphasis('**バックエンド**\n\n本文') === '**バックエンド**\n\n本文'
+
+2) inline bold is unwrapped
+   - Same function: non-heading lines replace /\*\*([^*]+)\*\*/ with $1 and strip stray **.
+   - Tests:
+     - 「対になった ** だけ外す」 → 出来るできないを指摘し
+     - 「小見出し行のある本文でも、文中の太字は外す」
+       → **バックエンド** kept; 途中の**強調** → 途中の強調
+     - 「前後に空行が無く本文に接続する太字行は外す」
+       → 導入\n**見出し**\n本文 → 導入\n見出し\n本文
+     - 「行頭の太字でも後ろに本文が続く行は外す」
+       → **見出し** 続きの文 → 見出し 続きの文
+
+3) Commands / exit codes (Node 22.22.2 via mise path)
+   - pnpm exec vitest run --config vitest.config.node.ts src/db/text.test.ts → EXIT 0 (14 passed)
+   - pnpm run type-check → EXIT 0
+   - pnpm test → EXIT 0 (all vitest configs green)
+
+4) Dry-run 13→10 / CHANGED_ITEMS 12→9
+   - script/unwrap-emphasis.ts exists (default dry-run; --write mutates DB — NOT run).
+   - Blocker: no .env / DATABASE_URL in worktree; sops decrypt of .env.enc failed
+     (age identity missing). Prior PR body claim retained as unverified in this run.
+
+Unrelated files on branch vs origin/main (noted, not expanded):
+  .github/workflows/ci.yml
+  e2e/pdf-print-view.spec.ts
+  (plus in-scope) src/db/text.ts src/db/text.test.ts
