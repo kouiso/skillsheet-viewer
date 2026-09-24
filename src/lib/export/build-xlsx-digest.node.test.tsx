@@ -7,6 +7,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import ExcelJS from 'exceljs';
 import { describe, expect, it } from 'vitest';
 import type { Block, CompanyInfo, ProjectItem } from '@/db/block';
+import { filterVisibleProjectData } from '@/db/block';
 
 import { buildSkillSheetXlsxDigest } from './build-xlsx-digest';
 import { digestTitle } from './edition';
@@ -160,20 +161,13 @@ describe('buildSkillSheetXlsxDigest', () => {
     const ws = wb.worksheets[0];
     console.log(`[xlsx-digest:real] bytes=${buf.length} rows=${ws.rowCount} sheet=${ws.name}`);
 
-    // 期待件数は本番データ側の増減に追従させるため、入力から導出する
+    // 期待件数は本番データ側の増減に追従させるため、出力側と同じ
+    // filterVisibleProjectData を block 単位で適用して入力から導出する
     // （固定値にすると経歴の追加で定期チェックが誤報する）。
-    const projectParts = blocks
-      .filter((b) => b.type === 'project')
-      .map((b) => b.data as { companies: CompanyInfo[]; items: ProjectItem[] });
-    const visibleCompanies = new Set(
-      projectParts
-        .flatMap((d) => d.companies)
-        .filter((c) => !c.hidden)
-        .map((c) => c.id),
-    );
-    const visibleItems = projectParts
-      .flatMap((d) => d.items)
-      .filter((i) => !i.hidden && visibleCompanies.has(i.companyId));
+    const visibleParts = blocks
+      .filter((b): b is Extract<Block, { type: 'project' }> => b.type === 'project')
+      .map((b) => filterVisibleProjectData(b.data));
+    const visibleItems = visibleParts.flatMap((d) => d.items);
     const expectedProjects = visibleItems.length;
     const expectedHeadings = new Set(visibleItems.map((i) => i.companyId)).size;
 
