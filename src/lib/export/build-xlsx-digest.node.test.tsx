@@ -150,7 +150,7 @@ describe('buildSkillSheetXlsxDigest', () => {
     expect(ws.getCell('A3').value).toBe('No');
   });
 
-  it.skipIf(!REAL_BLOCKS_JSON)('実データ（19 社・33 案件）で見出しと行が全件並ぶ', async () => {
+  it.skipIf(!REAL_BLOCKS_JSON)('実データで見出しと行が全件並ぶ', async () => {
     const blocks = JSON.parse(readFileSync(REAL_BLOCKS_JSON as string, 'utf-8')) as Block[];
     const title = 'エンジニアスキルシート';
     const buf = await buildSkillSheetXlsxDigest(blocks, title);
@@ -160,7 +160,24 @@ describe('buildSkillSheetXlsxDigest', () => {
     const ws = wb.worksheets[0];
     console.log(`[xlsx-digest:real] bytes=${buf.length} rows=${ws.rowCount} sheet=${ws.name}`);
 
-    // 全文版と同じ並びのはず: 19 社見出し + 33 案件行 + タイトル/氏名/列見出し 3 行。
+    // 期待件数は本番データ側の増減に追従させるため、入力から導出する
+    // （固定値にすると経歴の追加で定期チェックが誤報する）。
+    const projectParts = blocks
+      .filter((b) => b.type === 'project')
+      .map((b) => b.data as { companies: CompanyInfo[]; items: ProjectItem[] });
+    const visibleCompanies = new Set(
+      projectParts
+        .flatMap((d) => d.companies)
+        .filter((c) => !c.hidden)
+        .map((c) => c.id),
+    );
+    const visibleItems = projectParts
+      .flatMap((d) => d.items)
+      .filter((i) => !i.hidden && visibleCompanies.has(i.companyId));
+    const expectedProjects = visibleItems.length;
+    const expectedHeadings = new Set(visibleItems.map((i) => i.companyId)).size;
+
+    // 全文版と同じ並びのはず: 見出し行 + 案件行 + タイトル/氏名/列見出し 3 行。
     const headings: string[] = [];
     let projectRows = 0;
     ws.eachRow((row, n) => {
@@ -169,9 +186,9 @@ describe('buildSkillSheetXlsxDigest', () => {
       else headings.push(String(row.getCell(1).value ?? ''));
     });
     console.log(`[xlsx-digest:real] headings=${headings.length} projects=${projectRows}`);
-    expect(projectRows).toBe(33);
-    expect(headings.length).toBe(19);
-    // 通し番号が 1..33 で連番であること。
+    expect(projectRows).toBe(expectedProjects);
+    expect(headings.length).toBe(expectedHeadings);
+    // 通し番号が 1..N で連番であること。
     const numbers = Array.from({ length: projectRows }, (_, i) => i + 1);
     const seen: number[] = [];
     ws.eachRow((row, n) => {
