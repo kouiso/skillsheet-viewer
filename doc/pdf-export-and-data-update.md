@@ -23,12 +23,13 @@ node -e '
 const u = new URL(require("fs").readFileSync(".conn", "utf8").trim());
 const d = decodeURIComponent;
 process.stdout.write(["[sheet]", `host=${u.hostname}`, `port=${u.port || 5432}`, `dbname=${d(u.pathname.slice(1))}`,
-  `user=${d(u.username)}`, `password=${d(u.password)}`, "sslmode=require", ""].join("\n"));
+  `user=${d(u.username)}`, `password=${d(u.password)}`, "sslmode=verify-full", ""].join("\n"));
 ' > .pg_service.conf
 export PGSERVICEFILE="$PWD/.pg_service.conf"
 ```
 
-以降は `psql service=sheet` でつながる。
+以降は `psql service=sheet` でつながる。`sslmode=require` は証明書もホスト名も検証しない。Neon の証明書は
+公開 CA 発行なので、OS 標準の CA ストアがあれば `verify-full` で追加設定は要らない。
 
 ## PDF を出す（ローカルで印刷コードを直接呼ぶ）
 
