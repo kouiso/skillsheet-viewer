@@ -18,7 +18,7 @@ alwaysApply: true
 | 知りたいこと | 在処 |
 | --- | --- |
 | 本番 URL | https://skill-sheet-snowy.vercel.app（Vercel プロジェクト `skillsheet-viewer`。main へのマージがそのまま本番に出る） |
-| 閲覧コード | Vercel の環境変数 `VIEWER_CODE`（Production）。ダッシュボードの Settings → Environment Variables で値を表示できる。このリポジトリは公開なので値は書かない |
+| 閲覧コード | Vercel の環境変数 `VIEWER_CODE`（Production）。値は `script/dev-local-stack.sh` のローカル既定値と同じ `view123`。局長の裁定（2026-09-24）により現時点ではパスワード相当として扱わない。変えるときは Vercel の `VIEWER_CODE` を更新する |
 | 編集者ログイン（`/login`） | 1Password で「skillsheet-viewer prod owner」を検索して出る項目 |
 | 本番 DB | Neon プロジェクト `cool-boat-26004396` の `main` ブランチ。接続文字列は Neon MCP の `get_connection_string` か、1Password の「skillsheet-viewer Neon DATABASE_URL」 |
 | ローカル用 `.env` | `.env.enc`（SOPS / age）。鍵は 1Password の「skillsheet-viewer SOPS age key」 |
