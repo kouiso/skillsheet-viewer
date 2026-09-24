@@ -55,7 +55,7 @@ DO $$
 BEGIN
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I', current_setting('vars.check_role'));
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I', current_setting('vars.check_role'));
-  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA skillsheet_private FROM %I', current_setting('vars.check_role'));
+  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM %I', current_setting('vars.check_role'));
 END
 $$;
 
@@ -78,14 +78,36 @@ BEGIN
 END
 $$;
 
--- schema・関数の owner は reader role。GRANT は owner として行う必要があるため、
--- 接続ユーザーへ membership を一時貸出して SET ROLE で通す（ci.yml の e2e 脚と同じ
--- 経路）。既存 membership が set_option=false でも WITH SET TRUE で借り直し、
--- 終わりに剥がして cluster 全域に残さない。
-GRANT skillsheet_document_reader TO CURRENT_USER WITH SET TRUE;
+-- skillsheet_private 側の除去と付与は owner（reader/writer）として行う必要が
+-- あるため、接続ユーザーへ membership を一時貸出して SET ROLE で通す
+-- （ci.yml の e2e 脚と同じ経路）。既存 membership が set_option=false でも
+-- WITH SET TRUE で借り直し、終わりに剥がして cluster 全域に残さない。
+-- 関数の REVOKE は owner ごとに分けて当てる（他 owner の関数は permission
+-- denied でスクリプト全体が止まる）— writer 側に write 系 / checked_blocks の
+-- EXECUTE が残っていても落としきる。
+GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
+SET ROLE skillsheet_document_writer;
+DO $$
+BEGIN
+  EXECUTE format(
+    'REVOKE ALL PRIVILEGES ON FUNCTION
+       skillsheet_private.replace_sheet(uuid, text, text, jsonb, text),
+       skillsheet_private.create_sheet(uuid, text, jsonb, text),
+       skillsheet_private.delete_sheet(uuid, text, text),
+       skillsheet_private.checked_blocks(jsonb)
+     FROM %I', current_setting('vars.check_role'));
+END
+$$;
+RESET ROLE;
 SET ROLE skillsheet_document_reader;
 DO $$
 BEGIN
+  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA skillsheet_private FROM %I', current_setting('vars.check_role'));
+  EXECUTE format(
+    'REVOKE ALL PRIVILEGES ON FUNCTION
+       skillsheet_private.read_snapshot(uuid, text),
+       skillsheet_private.list_sheets(text)
+     FROM %I', current_setting('vars.check_role'));
   EXECUTE format('GRANT USAGE ON SCHEMA skillsheet_private TO %I', current_setting('vars.check_role'));
   EXECUTE format(
     'GRANT EXECUTE ON FUNCTION
@@ -95,7 +117,7 @@ BEGIN
 END
 $$;
 RESET ROLE;
-REVOKE skillsheet_document_reader FROM CURRENT_USER;
+REVOKE skillsheet_document_reader, skillsheet_document_writer FROM CURRENT_USER;
 
 -- 境界関数は SESSION_USER を principals へ引いて owner を決めるため、
 -- check の login_name を登録しないと全呼び出しが UNMAPPED_PRINCIPAL になる。
