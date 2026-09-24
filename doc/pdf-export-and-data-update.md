@@ -3,6 +3,25 @@
 URL・閲覧コード・ログイン・DB の在処は `CLAUDE.md` の「PDF 出力・閲覧・本番データ更新の在処」にある。
 ここには手順だけを書く。接続文字列やパスワードはこのファイルにもコミットにも書かない。
 
+## 本番 DB へのつなぎ方（下の 2 つの手順で共通）
+
+接続文字列もデータもコマンドの引数には書かない。引数は同じ端末の別ユーザーから `ps` で見える。
+接続文字列を権限 600 の `.conn` に置き、psql のサービスファイルに変換して使う。
+`.conn` と `.pg_service.conf` はコミットせず、作業が終わったら消す。
+
+```sh
+umask 077
+node -e '
+const u = new URL(require("fs").readFileSync(".conn", "utf8").trim());
+const d = decodeURIComponent;
+process.stdout.write(["[sheet]", `host=${u.hostname}`, `port=${u.port || 5432}`, `dbname=${d(u.pathname.slice(1))}`,
+  `user=${d(u.username)}`, `password=${d(u.password)}`, "sslmode=require", ""].join("\n"));
+' > .pg_service.conf
+export PGSERVICEFILE="$PWD/.pg_service.conf"
+```
+
+以降は `psql service=sheet` でつながる。
+
 ## PDF を出す（ローカルで印刷コードを直接呼ぶ）
 
 `pnpm dev` も `pnpm build` も、ブラウザからの書き出しも要らない。アプリの PDF 出力と同じ
@@ -10,12 +29,10 @@ URL・閲覧コード・ログイン・DB の在処は `CLAUDE.md` の「PDF 出
 
 ### 1. ブロックを JSON に書き出す
 
-接続文字列は権限 600 のファイル（例: `.conn`）に置き、使い終わったら消す。
-シート ID は `public.skill_sheets` で確認する。
+シート ID は `public.skill_sheets` で確認する。ブロックが 0 件でも `[]` が出るよう `COALESCE` で包んである。
 
 ```sh
-umask 077
-psql "$(cat .conn)" -tA -c "SELECT json_agg(json_build_object('id',id,'type',type,'order',\"order\",'data',data) ORDER BY \"order\") FROM public.blocks WHERE sheet_id='<シート ID>'" > blocks.json
+psql service=sheet -tA -c "SELECT COALESCE(json_agg(json_build_object('id',id,'type',type,'order',\"order\",'data',data) ORDER BY \"order\"), '[]'::json) FROM public.blocks WHERE sheet_id='<シート ID>'" > blocks.json
 ```
 
 CI の実データ検査（`.github/workflows/pdf-layout-check.yml`）は、同じ用途に `script/dump-block.ts` を使っている。
@@ -39,6 +56,7 @@ import PDF_FONT_FAMILY from '@/component/pdf/constant';
 import { splitForHyphenation } from '@/component/pdf/font';
 import { buildPrintSkillSheetDocument } from '@/component/pdf/print-document';
 import { BOLD_TTF, REGULAR_TTF } from '@/component/pdf/test-font-path';
+import { currentMonthKey } from '@/db/derived-display';
 
 const [, , blocksPath, outPath] = process.argv;
 Font.register({
@@ -52,8 +70,9 @@ Font.register({
 });
 Font.registerHyphenationCallback(splitForHyphenation);
 const blocks = JSON.parse(readFileSync(blocksPath, 'utf8'));
-// 経験年数の基準月。year * 12 + (month - 1)。2026-09 なら 2026 * 12 + 8。
-const referenceMonth = 2026 * 12 + 8;
+// 経験年数の基準月。アプリと同じく東京時間の当月にする。
+// 過去の月の版を出し直すときだけ year * 12 + (month - 1) を直接入れる（2026年9月なら 2026 * 12 + 8）。
+const referenceMonth = currentMonthKey();
 const doc = await buildPrintSkillSheetDocument({ title: 'エンジニアスキルシート', blocks, views: undefined, referenceMonth });
 await renderToFile(doc, outPath);
 ```
@@ -75,15 +94,17 @@ pnpm exec tsx --tsconfig tsconfig.render.json render-print-pdf.tsx blocks.json o
 2. 1 トランザクションで書く。変えるブロックごとに `md5(data::text)` が変更前の値と一致する行だけを更新し（CAS）、
    `skill_sheets.revision` を「現在の版 → +1」で上げる。どちらかの更新行数がずれたら例外を投げて全部戻す。
    別の編集が先に入っていたら、何も書かずに止まる。
-3. psql の `:'変数'` は `DO $$ … $$` の中では展開されない。新しい data はいったん一時テーブルに入れ、
+3. 新しい data は `apply.sql` の中で `` \set new_1 `cat new-1.json` `` として読む（引数に JSON を出さない）。
+   psql の `:'変数'` は `DO $$ … $$` の中では展開されないので、いったん一時テーブルに入れ、
    DO ブロックからはそのテーブルを読む。
 4. 本番の前に、同じ SQL の `COMMIT;` を `ROLLBACK;` に替えて一度流し、通ることを確かめる。
 5. 書いたあと読み戻し、手元の JSON と全ブロックが一致することを確かめてから PDF を出す。
 
 ```sql
+-- 変えるブロックの数だけ \set と INSERT の行を足す。pre は変更前の md5(data::text)
+\set new_1 `cat new-1.json`
 BEGIN;
 CREATE TEMP TABLE nd(id uuid, d jsonb, pre text) ON COMMIT DROP;
--- 変えるブロックの数だけ行を足す。pre は変更前の md5(data::text)
 INSERT INTO nd VALUES ('<ブロック ID>'::uuid, :'new_1'::jsonb, '<変更前の md5>');
 DO $$
 DECLARE v bigint; n int;
@@ -103,5 +124,5 @@ COMMIT;
 ```
 
 ```sh
-psql "$(cat .conn)" -v ON_ERROR_STOP=1 -v new_1="$(cat new-1.json)" -f apply.sql
+psql service=sheet -v ON_ERROR_STOP=1 -f apply.sql
 ```
