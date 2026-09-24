@@ -36,11 +36,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # 同じ追跡キーの「issue を探す→Devin を呼ぶ→issue を作る」と「成功で閉じる」を 1 本ずつ流す。
-    # 並行すると両方が「issue なし」と判定して Devin を二重に呼ぶため。待機は 1 本だけで、
-    # さらに後続が来ると待機中のものは取り消されるが、同じキーの最新の結果は必ず処理される。
+    # 並行すると両方が「issue なし」と判定して Devin を二重に呼ぶため。既定の queue: single だと
+    # 待機中の失敗通知が後続に置き換えられて消えるので、queue: max で到着順に全部処理する。
     concurrency:
       group: ci-failure-${{ github.event.workflow_run.name }}-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.event }}
       cancel-in-progress: false
+      queue: max
     # branches フィルタは実行元のブランチ名しか見ないため、fork の main から来た PR の実行も通ってしまう。
     # 本リポジトリ上の push / schedule 等の実行だけを「main が壊れた」と扱い、外部の PR から
     # Devin を起動させたり、追跡 issue を開閉させたりしない。
@@ -350,11 +351,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     # 同じ追跡キーの「issue を探す→Devin を呼ぶ→issue を作る」と「成功で閉じる」を 1 本ずつ流す。
-    # 並行すると両方が「issue なし」と判定して Devin を二重に呼ぶため。待機は 1 本だけで、
-    # さらに後続が来ると待機中のものは取り消されるが、同じキーの最新の結果は必ず処理される。
+    # 並行すると両方が「issue なし」と判定して Devin を二重に呼ぶため。既定の queue: single だと
+    # 待機中の失敗通知が後続に置き換えられて消えるので、queue: max で到着順に全部処理する。
     concurrency:
       group: ci-failure-${{ github.event.workflow_run.name }}-${{ github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.event }}
       cancel-in-progress: false
+      queue: max
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.name != github.workflow &&
