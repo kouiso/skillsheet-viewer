@@ -48,8 +48,7 @@ const SPACED_NAMES =
   '確認した画面は UI 案と DB 案と CI 案と QA 案で、それぞれの設定を同じ手順で読み込んでから差分を一覧にまとめて共有しました。';
 
 /** 最後の行が「た。」だけになりやすい和文。 */
-const RUNT_PRONE =
-  'チームで使う手順書を見直して重複していた項目を整理し、確認の手間を少なくした。';
+const RUNT_PRONE = 'チームで使う手順書を見直して重複していた項目を整理し、確認の手間を少なくした。';
 
 const SWEEP_WIDTHS = Array.from({ length: 36 }, (_, i) => 100 + i * 10);
 
@@ -158,17 +157,29 @@ describe('和文の段落の改行位置', () => {
 
   describe('直しで崩れないこと（いじわるの例）', () => {
     const HAZARDS: { name: string; text: string; widths: number[]; fontSize?: number }[] = [
-      { name: '濁点が分かれた仮名（NFD）', text: 'か\u3099いこ\u3099を使うテス\u3099トの手順を決めました。', widths: SWEEP_WIDTHS },
+      {
+        name: '濁点が分かれた仮名（NFD）',
+        text: 'か\u3099いこ\u3099を使うテス\u3099トの手順を決めました。',
+        widths: SWEEP_WIDTHS,
+      },
       { name: '補助面の漢字', text: '\u{2000B}\u{20B9F}の字を含む名前を表に並べて点検した。', widths: SWEEP_WIDTHS },
       {
         name: '長い URL',
         text: '資料は https://example.com/docs/very/long/path/segment/that/keeps/going/index.html に置きました。',
         widths: SWEEP_WIDTHS,
       },
-      { name: '空白の無い技術名の連結', text: '使った言語はTypeScript/JavaScript/Pythonの三つです。', widths: SWEEP_WIDTHS },
+      {
+        name: '空白の無い技術名の連結',
+        text: '使った言語はTypeScript/JavaScript/Pythonの三つです。',
+        widths: SWEEP_WIDTHS,
+      },
       { name: '括弧で囲んだ英字', text: '外部の「OpenAI」や「Example」の仕組みを比べました。', widths: SWEEP_WIDTHS },
       { name: '最小幅の表の欄', text: '試作〜検収・点検（全段階）', widths: [44, 50, 60, 70], fontSize: 9 },
-      { name: '句点の直後の半角ピリオド', text: '設定を書き換えた。.config の中身も同じ手順で揃えた。', widths: SWEEP_WIDTHS },
+      {
+        name: '句点の直後の半角ピリオド',
+        text: '設定を書き換えた。.config の中身も同じ手順で揃えた。',
+        widths: SWEEP_WIDTHS,
+      },
     ];
 
     it.each(HAZARDS)('$name: はみ出さず、文字を失わず、禁則を守る', async ({ text, widths, fontSize }) => {
