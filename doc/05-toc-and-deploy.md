@@ -138,9 +138,11 @@ baseline 後は、新規・既存どちらも `pnpm db:migrate` を通常のデ�
 （`-v check_role=... -v check_password=... -v owner_id=<SKILLSHEET_OWNER_ID>` が必須）。
 権限は `skillsheet_private` の USAGE と read_snapshot / list_sheets の EXECUTE のみで、
 public テーブル・write 系関数・境界 role への membership は一切付けない。
+旧 role からの rename や手作業で残った権限・membership・属性は再実行のたび宣言値へ除去する
+（付与だけでなく除去も冪等）ため、秘密のローテーションと権限監査を兼ねて定期的に流してよい。
 これを忘れると principals 未登録の `UNMAPPED_PRINCIPAL` で定期チェックだけが常時失敗する。
 
-境界の健全性は `script/verify-document-db.sh` でまとめて検証できる（隔離クラスタを立てて migration → install → CAS・権限・restore まで実走する）。
+境界の健全性は `script/verify-document-db.sh` でまとめて検証できる（隔離クラスタを立てて migration → install → CAS・権限・restore まで実走する）。install 系 SQL は `GRANT ... WITH SET` 句を使うため、対象 DB も検証用の隔離クラスタも PostgreSQL 16 以上が前提になる。
 
 ### e2e 専用 DB の運用（#346 / #360）
 

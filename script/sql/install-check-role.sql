@@ -13,6 +13,13 @@
 -- check role は reader/writer の member にしない（membership は SET ROLE を許し、
 -- 境界関数を迂回した直接テーブル操作を可能にするため）。USAGE + EXECUTE のみで、
 -- 読取系の公開関数以外には触れない。public テーブルの DML 権限も一切付けない。
+-- PostgreSQL 16+ 前提（GRANT ... WITH SET 句を境界 install 側でも使うため同じ下限を置く）。
+--
+-- 既存 role には前時代の GRANT 残骸（public テーブルへの直接 SELECT など）や
+-- INHERIT 属性・membership が残りうる。ALTER ROLE では属性しか正規化できず、
+-- 付与済みの権限は消えないため、毎回「宣言した状態へ収束」させる —— 属性・
+-- 直読み権限・membership を除去してから必要最小限を付与し直す（付与だけでなく
+-- 除去も冪等にするのがこのファイルの役目）。
 --
 -- $$ 内では psql 変数が展開されないため、一度カスタム GUC へ入れて
 -- current_setting() で読む。
@@ -32,14 +39,51 @@ BEGIN
       current_setting('vars.check_role'), current_setting('vars.check_password')
     );
   ELSE
+    -- SUPERUSER / REPLICATION / BYPASSRLS は superuser でないと ALTER できない
+    -- （NOSUPERUSER と書いても弾かれる）。管理可能な属性だけ宣言値へ収束する。
     EXECUTE format(
-      'ALTER ROLE %I PASSWORD %L',
+      'ALTER ROLE %I LOGIN NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
       current_setting('vars.check_role'), current_setting('vars.check_password')
     );
   END IF;
 END
 $$;
 
+-- 宣言に反する直読み権限を除去（旧版で付与された public テーブルの SELECT 等）。
+-- public schema 自体の USAGE は PUBLIC 経由でどうせ残るため、防御層はテーブル権限側。
+DO $$
+BEGIN
+  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I', current_setting('vars.check_role'));
+  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I', current_setting('vars.check_role'));
+  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA skillsheet_private FROM %I', current_setting('vars.check_role'));
+END
+$$;
+
+-- check role への・からの membership をすべて除去（SET ROLE による境界迂回を防ぐ）。
+-- 既存のものだけ剥がす: 無関係な role への REVOKE は権限不足で失敗しうる。
+DO $$
+DECLARE
+  m record;
+BEGIN
+  FOR m IN
+    SELECT r.rolname AS role, me.rolname AS member
+    FROM pg_auth_members am
+    JOIN pg_roles r ON r.oid = am.roleid
+    JOIN pg_roles me ON me.oid = am.member
+    WHERE r.rolname = current_setting('vars.check_role')
+       OR me.rolname = current_setting('vars.check_role')
+  LOOP
+    EXECUTE format('REVOKE %I FROM %I', m.role, m.member);
+  END LOOP;
+END
+$$;
+
+-- schema・関数の owner は reader role。GRANT は owner として行う必要があるため、
+-- 接続ユーザーへ membership を一時貸出して SET ROLE で通す（ci.yml の e2e 脚と同じ
+-- 経路）。既存 membership が set_option=false でも WITH SET TRUE で借り直し、
+-- 終わりに剥がして cluster 全域に残さない。
+GRANT skillsheet_document_reader TO CURRENT_USER WITH SET TRUE;
+SET ROLE skillsheet_document_reader;
 DO $$
 BEGIN
   EXECUTE format('GRANT USAGE ON SCHEMA skillsheet_private TO %I', current_setting('vars.check_role'));
@@ -50,6 +94,8 @@ BEGIN
      TO %I', current_setting('vars.check_role'));
 END
 $$;
+RESET ROLE;
+REVOKE skillsheet_document_reader FROM CURRENT_USER;
 
 -- 境界関数は SESSION_USER を principals へ引いて owner を決めるため、
 -- check の login_name を登録しないと全呼び出しが UNMAPPED_PRINCIPAL になる。

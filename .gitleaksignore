@@ -2,6 +2,8 @@
 # 過去コミット含めて誤検知しないよう、fingerprint 単位で ignore する。
 # fingerprint は <commit_sha>:<file>:<rule>:<line> で一意に決まるため、
 # 実値の流出ではないと確認できた行のみ列挙すること。
+# 行番号が動くと指紋も変わるため、将来同一値を再検知したら新しい fingerprint を
+# ここへ追加する（まとめてワイルドカード化しないのは、実値の流出を見落とさないため）。
 0cbfe956d40210b66a5b9f38b4da2b5cf44fc260:.claude/skills/api-design/SKILL.md:generic-api-key:306
 e1e6f231cb7b55ce5ec0257430d5ab8c29e090c6:.claude/skills/api-design/SKILL.md:generic-api-key:306
 8fbb390c508f2ac8c4d1412c8c21878bf37e228c:AUTHENTICATION_TEST_REPORT.md:generic-api-key:38
