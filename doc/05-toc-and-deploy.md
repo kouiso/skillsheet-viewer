@@ -133,6 +133,13 @@ baseline 後は、新規・既存どちらも `pnpm db:migrate` を通常のデ�
 4. `psql -f script/sql/install-runtime-role.sql`（runtime LOGIN role・EXECUTE 付与・principals 登録。`-v runtime_role=... -v runtime_password=... -v owner_id=<SKILLSHEET_OWNER_ID>` が必須）
 5. `DATABASE_URL` を runtime role の接続文字列へ切り替えて redeploy
 
+定期チェック（PDF Layout Check / XLSX Format Check）を載せる環境では、上記に加えて
+`psql -f script/sql/install-check-role.sql` でチェック用 LOGIN role を用意する
+（`-v check_role=... -v check_password=... -v owner_id=<SKILLSHEET_OWNER_ID>` が必須）。
+権限は `skillsheet_private` の USAGE と read_snapshot / list_sheets の EXECUTE のみで、
+public テーブル・write 系関数・境界 role への membership は一切付けない。
+これを忘れると principals 未登録の `UNMAPPED_PRINCIPAL` で定期チェックだけが常時失敗する。
+
 境界の健全性は `script/verify-document-db.sh` でまとめて検証できる（隔離クラスタを立てて migration → install → CAS・権限・restore まで実走する）。
 
 ### e2e 専用 DB の運用（#346 / #360）
