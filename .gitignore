@@ -88,3 +88,9 @@ playwright/.auth/
 tmp-*.mts
 tmp-*.ts
 .dbg/
+
+# doc/pdf-export-and-data-update.md の手順で手元に置く接続情報と台本（コミットさせない）
+.conn
+.pg_service.conf
+render-print-pdf.tsx
+tsconfig.render.json
