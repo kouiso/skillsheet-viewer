@@ -22,6 +22,25 @@
 4. 実装の中身を知るには: [01-setup-and-routing.md](./01-setup-and-routing.md) から
    [05-toc-and-deploy.md](./05-toc-and-deploy.md) まで順に読む
 
+## 本番環境と接続先
+
+「PDF を出して」「中身を直して」と頼まれたら、最初にここを見る。依頼者にログインやボタン操作を頼まない。
+在処を探し回って時間を失った事故があったので、答えを先に置いておく。
+
+| 知りたいこと | 在処 |
+| --- | --- |
+| 本番 URL | https://skill-sheet-snowy.vercel.app（Vercel プロジェクト `skillsheet-viewer`。main へのマージがそのまま本番に出る） |
+| 閲覧コード | Vercel の環境変数 `VIEWER_CODE`（Production）。値は `script/dev-local-stack.sh` のローカル既定値と同じ `view123`。局長の裁定（2026-09-24）により現時点ではパスワード相当として扱わない。変えるときは Vercel の `VIEWER_CODE` を更新する |
+| 編集者ログイン（`/login`） | 1Password で「skillsheet-viewer prod owner」を検索して出る項目 |
+| 本番 DB | Neon プロジェクト `cool-boat-26004396` の `main` ブランチ。接続文字列は Neon MCP の `get_connection_string` か、1Password の「skillsheet-viewer Neon DATABASE_URL」 |
+| ローカル用 `.env` | `.env.enc`（SOPS / age）。鍵は 1Password の「skillsheet-viewer SOPS age key」 |
+
+DB のパスワード・トークン・age 鍵・メールアドレスなど値そのものはここにもコミットにも書かない。上の表はすべて
+1Password の項目名か Neon MCP の呼び出しだけを指す。
+
+PDF の最短経路（ローカルで印刷コードを直接呼ぶ。数秒で終わる）と、本番 DB のブロックを直す手順（退避ブランチ + CAS）は
+[doc/pdf-export-and-data-update.md](./pdf-export-and-data-update.md) にある。
+
 ## 技術スタック
 
 - **構成**: リポジトリルート1本の Next.js アプリ（DB 層は `src/db`）

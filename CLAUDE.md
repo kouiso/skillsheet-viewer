@@ -13,17 +13,8 @@ alwaysApply: true
 ## PDF 出力・閲覧・本番データ更新の在処
 
 「PDF を出して」「中身を直して」と頼まれたら、最初にここを見る。依頼者にログインやボタン操作を頼まない。
-在処を探し回って時間を失った事故があったので、答えを先に置いておく。
-
-| 知りたいこと | 在処 |
-| --- | --- |
-| 本番 URL | https://skill-sheet-snowy.vercel.app（Vercel プロジェクト `skillsheet-viewer`。main へのマージがそのまま本番に出る） |
-| 閲覧コード | Vercel の環境変数 `VIEWER_CODE`（Production）。値は `script/dev-local-stack.sh` のローカル既定値と同じ `view123`。局長の裁定（2026-09-24）により現時点ではパスワード相当として扱わない。変えるときは Vercel の `VIEWER_CODE` を更新する |
-| 編集者ログイン（`/login`） | 1Password で「skillsheet-viewer prod owner」を検索して出る項目 |
-| 本番 DB | Neon プロジェクト `cool-boat-26004396` の `main` ブランチ。接続文字列は Neon MCP の `get_connection_string` か、1Password の「skillsheet-viewer Neon DATABASE_URL」 |
-| ローカル用 `.env` | `.env.enc`（SOPS / age）。鍵は 1Password の「skillsheet-viewer SOPS age key」 |
-
-PDF の最短経路（ローカルで印刷コードを直接呼ぶ。数秒で終わる）と、本番 DB のブロックを直す手順（退避ブランチ + CAS）は
+本番 URL・閲覧コード・編集者ログイン・本番 DB の在処は [doc/onboarding.md](doc/onboarding.md) の
+「本番環境と接続先」にまとめてある。PDF の最短経路と本番 DB のブロックを直す手順は
 [doc/pdf-export-and-data-update.md](doc/pdf-export-and-data-update.md) にある。
 
 ## プロジェクト技術スタック
