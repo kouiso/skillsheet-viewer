@@ -96,3 +96,60 @@ jobs:
             echo "::error::Slack API error: ${ERROR}"
             exit 1
           fi
+
+  mention-devin:
+    name: Mention Devin on first failure per commit
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.name != github.workflow
+    # 同一コミットで複数ワークフローが同時に落ちても Devin への mention は1回だけにする。
+    # concurrency で直列化した上で actions/cache のヒット有無を判定材料にする（並行実行によるレース回避）。
+    concurrency:
+      group: devin-mention-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    steps:
+      - name: Restore per-commit dedupe marker
+        id: dedupe
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: devin-mention-marker
+          key: devin-mention-${{ github.event.workflow_run.head_sha }}
+
+      - name: Mention Devin in Slack
+        if: steps.dedupe.outputs.cache-hit != 'true'
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
+          DEVIN_USER_ID: ${{ vars.SLACK_DEVIN_USER_ID }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          COMMIT_URL="${SERVER_URL}/${REPOSITORY}/commit/${COMMIT_SHA}"
+          MESSAGE=$(printf '<@%s>\n!megaplan\nCI failure on %s: %s\ncommit: %s (%s)\nlog: %s' \
+            "$DEVIN_USER_ID" "$HEAD_BRANCH" "$WORKFLOW_NAME" "$COMMIT_URL" "$SHORT_SHA" "$RUN_URL")
+
+          PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg text "$MESSAGE" \
+            '{channel: $channel, text: $text}')
+
+          RESPONSE=$(curl -sf -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD") || true
+
+          if [ -z "$RESPONSE" ]; then
+            echo "::error::Slack API request failed (network error or empty response)"
+            exit 1
+          fi
+
+          if ! echo "$RESPONSE" | jq -e '.ok == true' > /dev/null; then
+            ERROR=$(echo "$RESPONSE" | jq -r '.error // "unknown_error"')
+            echo "::error::Slack API error: ${ERROR}"
+            exit 1
+          fi
+
+          mkdir -p "$(dirname devin-mention-marker)" 2>/dev/null || true
+          echo "$RESPONSE" > devin-mention-marker
