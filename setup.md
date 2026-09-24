@@ -59,6 +59,7 @@ cp .env.example .env
 **入れてよい値・漏れたときの手順**（このリポジトリは公開で、`.env.enc` は git 履歴に恒久的に残る）:
 
 - `.env.enc` に入れるのは**ローカル開発用の値だけ**。本番（Vercel）の `DATABASE_URL` / `SESSION_SECRET` / `VIEWER_CODE` / `BETTER_AUTH_SECRET` は入れない（本番値は Vercel の環境変数だけに置く）。
+  - 例外: `VIEWER_CODE` は本番値もローカル既定値と同じ `view123` で、[doc/onboarding.md](doc/onboarding.md) の「本番環境と接続先」に理由付きで書いてある。他の3つ（`DATABASE_URL` / `SESSION_SECRET` / `BETTER_AUTH_SECRET`）は引き続き秘匿値として扱う。
 - age 秘密鍵が漏れた（漏れたかもしれない）ときは、`.env.enc` を消しても履歴から復号できるので、**中の全値をローテーションする**のが唯一の対処。鍵の再生成と `.sops.yaml` の recipient 更新はその後。
 
 ```bash
