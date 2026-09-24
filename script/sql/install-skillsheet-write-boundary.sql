@@ -33,6 +33,9 @@ BEGIN
 END
 $$;
 -- Neon等で OWNER TO を通すため、インストーラーへメンバーシップを付与する。
+-- 既存 membership が set_option=false だと素の GRANT は何も更新せず
+-- OWNER TO / SET ROLE が "must be able to SET ROLE" で落ちるため SET を明示する
+-- （WITH SET 句は PostgreSQL 16+ の構文）。
 GRANT skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
 -- reader所有の read_snapshot/principals への GRANT を通すため、reader membership も必要。
 GRANT skillsheet_document_reader TO CURRENT_USER WITH SET TRUE;

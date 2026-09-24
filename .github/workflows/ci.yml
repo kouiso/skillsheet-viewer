@@ -182,7 +182,7 @@ jobs:
           # owner になってから SESSION_USER（= 接続ユーザー）へ付与する。
           # membership はこのステップ内で貸して返す（cluster 全域に残さない）。
           psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<SQL
-          GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER;
+          GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
           SET ROLE skillsheet_document_reader;
           GRANT USAGE ON SCHEMA skillsheet_private TO SESSION_USER;
           GRANT EXECUTE ON FUNCTION
