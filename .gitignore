@@ -94,3 +94,8 @@ tmp-*.ts
 .pg_service.conf
 render-print-pdf.tsx
 tsconfig.render.json
+# 同じ手順で作る中間ファイル（本番シートの個人データそのものを含む）
+blocks.json
+out.pdf
+new-*.json
+apply.sql

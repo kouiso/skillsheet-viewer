@@ -11,6 +11,14 @@ URL・閲覧コード・ログイン・DB の在処は [doc/onboarding.md](./onb
 
 ```sh
 umask 077
+op read 'op://RITMO/skillsheet-viewer Neon DATABASE_URL/password' > .conn
+```
+
+アイテム名は [doc/onboarding.md](./onboarding.md) の表にある「skillsheet-viewer Neon DATABASE_URL」。
+シークレットのフィールド名は `password`（値は出さずにアイテムの構造だけ確認済み）。
+
+```sh
+umask 077
 node -e '
 const u = new URL(require("fs").readFileSync(".conn", "utf8").trim());
 const d = decodeURIComponent;
@@ -26,6 +34,17 @@ export PGSERVICEFILE="$PWD/.pg_service.conf"
 
 `pnpm dev` も `pnpm build` も、ブラウザからの書き出しも要らない。アプリの PDF 出力と同じ
 `buildPrintSkillSheetDocument` を `tsx` で呼ぶので、出てくる PDF はアプリから書き出したものと同じ組版になる。
+
+**前提（この2つを満たさないシートには使わない）**: アプリ側の `createSkillSheetPdf`
+（`src/component/pdf-export.tsx`）はブロックが profile/skills/stats/project 以外（markdown・table・
+experience 等）を含むと、この構造描画ではなく旧 markdown 経路にフォールバックする。下のスクリプトは
+常に構造描画を使うため、対象外のブロック型が混じると markdown/table/experience ブロックが黙って
+描かれない。また `generateSkillSheetPdfBlob`（`src/lib/generate-skillsheet-pdf.ts`）が行う案件期間の
+矛盾チェック（`PdfDurationConflictError`）も、下のスクリプトは呼ばない。案件の参画期間の月数を
+誤って出す可能性があるので、使う前に対象シートのブロックが上の4種のみであることと、期間の矛盾が
+無いことを確認する。
+タイトルはスクリプト側で `エンジニアスキルシート` に固定している（アプリは `skill_sheets.title` を渡す）。
+影響は PDF メタデータの Title のみ（`pdfinfo` で確認済み）で、本文の組版には出ない。
 
 ### 1. ブロックを JSON に書き出す
 
@@ -91,14 +110,21 @@ pnpm exec tsx --tsconfig tsconfig.render.json render-print-pdf.tsx blocks.json o
 
 1. 退避する。Neon で `main` から `backup-before-<内容>-<日付>` ブランチを切る。ブランチ数の上限で切れないときは、
    対象シートの `public.blocks` と `public.skill_sheets` の行を JSON に書き出して残す（戻すときはその JSON を同じ手順で書く）。
-2. 1 トランザクションで書く。変えるブロックごとに `md5(data::text)` が変更前の値と一致する行だけを更新し（CAS）、
+2. 下の SQL の `apply.sql` が要る値（各ブロックの変更前 `md5(data::text)` と現在の版）を読む。
+
+   ```sql
+   SELECT id, "order", md5(data::text) FROM public.blocks WHERE sheet_id='<シート ID>' ORDER BY "order";
+   SELECT revision FROM public.skill_sheets WHERE id='<シート ID>';
+   ```
+
+3. 1 トランザクションで書く。変えるブロックごとに `md5(data::text)` が変更前の値と一致する行だけを更新し（CAS）、
    `skill_sheets.revision` を「現在の版 → +1」で上げる。どちらかの更新行数がずれたら例外を投げて全部戻す。
    別の編集が先に入っていたら、何も書かずに止まる。
-3. 新しい data は `apply.sql` の中で `` \set new_1 `cat new-1.json` `` として読む（引数に JSON を出さない）。
+4. 新しい data は `apply.sql` の中で `` \set new_1 `cat new-1.json` `` として読む（引数に JSON を出さない）。
    psql の `:'変数'` は `DO $$ … $$` の中では展開されないので、いったん一時テーブルに入れ、
    DO ブロックからはそのテーブルを読む。
-4. 本番の前に、同じ SQL の `COMMIT;` を `ROLLBACK;` に替えて一度流し、通ることを確かめる。
-5. 書いたあと読み戻し、手元の JSON と全ブロックが一致することを確かめてから PDF を出す。
+5. 本番の前に、同じ SQL の `COMMIT;` を `ROLLBACK;` に替えて一度流し、通ることを確かめる。
+6. 書いたあと読み戻し、手元の JSON と全ブロックが一致することを確かめてから PDF を出す。
 
 ```sql
 -- 変えるブロックの数だけ \set と INSERT の行を足す。pre は変更前の md5(data::text)

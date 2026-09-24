@@ -12,7 +12,6 @@ alwaysApply: true
 
 ## PDF 出力・閲覧・本番データ更新の在処
 
-「PDF を出して」「中身を直して」と頼まれたら、最初にここを見る。依頼者にログインやボタン操作を頼まない。
 本番 URL・閲覧コード・編集者ログイン・本番 DB の在処は [doc/onboarding.md](doc/onboarding.md) の
 「本番環境と接続先」にまとめてある。PDF の最短経路と本番 DB のブロックを直す手順は
 [doc/pdf-export-and-data-update.md](doc/pdf-export-and-data-update.md) にある。
