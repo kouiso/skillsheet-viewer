@@ -10,6 +10,12 @@ alwaysApply: true
 - PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。
 - コメントはインラインの「なぜそうしたか」を重視し、JSDoc/docstring を全関数に付けることは求めない。パッケージ境界を越える公開 API には必要に応じて docstring を書く。
 
+## PDF 出力・閲覧・本番データ更新の在処
+
+本番 URL・閲覧コード・編集者ログイン・本番 DB の在処は [doc/onboarding.md](doc/onboarding.md) の
+「本番環境と接続先」にまとめてある。PDF の最短経路と本番 DB のブロックを直す手順は
+[doc/pdf-export-and-data-update.md](doc/pdf-export-and-data-update.md) にある。
+
 ## プロジェクト技術スタック
 
 このプロジェクトは以下の技術スタックを使用しています:
