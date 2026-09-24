@@ -124,6 +124,15 @@ const NO_LINE_START = new Set(
 const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{'].join(''));
 
 /**
+ * 行頭禁則の判定。半角の「.」は英数字が続くときは語の先頭（`.htaccess`・`.NET` など）なので、
+ * 行頭に置いてよい。禁則のままだと「。」と「.」の間で改行できず、前の行に余白が残る。
+ */
+function isNoLineStart(ch: string, following: string | undefined): boolean {
+  if (ch === '.' && following !== undefined && /^[0-9A-Za-z]$/.test(following)) return false;
+  return NO_LINE_START.has(ch);
+}
+
+/**
  * 非 CJK の連なりを、必要なときだけ改行可能な塊へ切り分ける。
  *
  * MAX_UNBREAKABLE_RUN 以下の語（＝通常の英単語）はそのまま返すので、ふつうの英文の
@@ -192,8 +201,8 @@ export function splitForHyphenation(word: string): string[] {
    * 句点や閉じ括弧だけが次行の頭に落ちる（実測: 「クエリ最適化」→改行→「。」）。
    * 提出書類として明確に体裁の崩れなので、マーカーを挟む側で防ぐ。
    */
-  const canBreakBefore = (next: string, prev: string = prevChar): boolean =>
-    !NO_LINE_START.has(next) && !NO_LINE_END.has(prev);
+  const canBreakBefore = (next: string, prev: string, following: string | undefined): boolean =>
+    !isNoLineStart(next, following) && !NO_LINE_END.has(prev);
   const flush = (): void => {
     if (!buffer) return;
     const chunks = splitLongRun(buffer);
@@ -203,14 +212,17 @@ export function splitForHyphenation(word: string): string[] {
         // 境界なので禁則も見る。すでに BREAK_MARKER が積まれているケース、または
         // 禁則で塞がれているケースは二重に挟まない／挟んではいけない。
         // 内部の分割点（i>0）は同じ非CJKの連なりの中の強制改行なので禁則の対象外。
-        const boundaryOk = i > 0 || canBreakBefore(chunks[i][0], preBufferChar);
+        const head = Array.from(chunks[i]);
+        const boundaryOk = i > 0 || canBreakBefore(head[0], preBufferChar, head[1]);
         if (boundaryOk && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
       }
       parts.push(chunks[i]);
     }
     buffer = '';
   };
-  for (const ch of word) {
+  const chars = Array.from(word);
+  for (let k = 0; k < chars.length; k++) {
+    const ch = chars[k];
     if (isCombiningOrVariationSelector(ch)) {
       // 直前の基底文字がどちらに格納されていても（ASCII連なりの buffer か、
       // CJK単独文字として直接 push された parts か）、そこへ結合するだけで
@@ -227,7 +239,12 @@ export function splitForHyphenation(word: string): string[] {
     if (!isCjk(ch)) {
       // 直前と同じマーカーを二重に積まない（splitLongRun の内部分割でも同じ判定を使う）のに加え、
       // 禁則（次に来る文字が行頭禁則、または直前の文字が行末禁則）にも当たらないことを確認する。
-      if (prevWasCjk && parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch)) {
+      if (
+        prevWasCjk &&
+        parts.length > 0 &&
+        parts[parts.length - 1] !== BREAK_MARKER &&
+        canBreakBefore(ch, prevChar, chars[k + 1])
+      ) {
         parts.push(BREAK_MARKER);
       }
       if (!buffer) preBufferChar = prevChar;
@@ -237,7 +254,7 @@ export function splitForHyphenation(word: string): string[] {
       continue;
     }
     flush();
-    if (parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch)) {
+    if (parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch, prevChar, chars[k + 1])) {
       parts.push(BREAK_MARKER);
     }
     parts.push(ch);
