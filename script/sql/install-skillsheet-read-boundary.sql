@@ -27,7 +27,10 @@ $$;
 
 -- Neon等で AUTHORIZATION / OWNER TO を通すため、インストーラーへメンバーシップを付与する。
 -- runtime へ membership を広げる用途ではない（管理接続限定の前提条件）。
-GRANT skillsheet_document_reader TO CURRENT_USER;
+-- 既存 membership が set_option=false だと素の GRANT は何も更新せず
+-- CREATE SCHEMA AUTHORIZATION が "must be able to SET ROLE" で落ちるため、
+-- SET を明示する。
+GRANT skillsheet_document_reader TO CURRENT_USER WITH SET TRUE;
 
 CREATE SCHEMA skillsheet_private AUTHORIZATION skillsheet_document_reader;
 REVOKE ALL ON SCHEMA skillsheet_private FROM PUBLIC;

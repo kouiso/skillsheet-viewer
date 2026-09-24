@@ -33,9 +33,9 @@ BEGIN
 END
 $$;
 -- Neon等で OWNER TO を通すため、インストーラーへメンバーシップを付与する。
-GRANT skillsheet_document_writer TO CURRENT_USER;
+GRANT skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
 -- reader所有の read_snapshot/principals への GRANT を通すため、reader membership も必要。
-GRANT skillsheet_document_reader TO CURRENT_USER;
+GRANT skillsheet_document_reader TO CURRENT_USER WITH SET TRUE;
 GRANT USAGE ON SCHEMA public TO skillsheet_document_writer;
 GRANT USAGE, CREATE ON SCHEMA skillsheet_private TO skillsheet_document_writer;
 GRANT SELECT ON skillsheet_private.principals TO skillsheet_document_writer;
