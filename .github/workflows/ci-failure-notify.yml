@@ -1,5 +1,11 @@
 name: CI Failure Slack Notify
 
+# 監視対象の workflow が main / develop で落ちたら Slack へ通知し、続けて Devin を呼ぶ。
+# 夜間の実データ検査（PDF / XLSX）は DB 本文の変化だけでも落ちるため、コードの差分を待たずに
+# Devin へ調査を渡す。ただし同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
+# 食い潰す（09-20 / 09-22 に実際に起動失敗した）ので、未解決の失敗を workflow×ブランチ×起動契機
+# ごとに open issue 1 本で持ち、issue が無い時だけ Devin を呼ぶ。同じ契機で次に成功したら issue を
+# 閉じ、次の失敗で再び呼べる状態へ戻す。
 on:
   workflow_run:
     workflows:
@@ -16,21 +22,41 @@ on:
     types: [completed]
     branches: [main, develop]
 
+# 失敗状態を issue で持つための権限だけを足す。この workflow は依存を install せず、第三者コードを動かさない。
+permissions:
+  contents: read
+  issues: write
+
+env:
+  TRACKING_LABEL: ci-failure
+
 jobs:
   notify-failure:
     name: Notify Slack on failure
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.name != github.workflow
+    timeout-minutes: 10
+    # branches フィルタは実行元のブランチ名しか見ないため、fork の main から来た PR の実行も通ってしまう。
+    # 本リポジトリ上の push / schedule 等の実行だけを「main が壊れた」と扱い、外部の PR から
+    # Devin を起動させたり、追跡 issue を開閉させたりしない。
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.name != github.workflow &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      !startsWith(github.event.workflow_run.event, 'pull_request')
+    env:
+      WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      RUN_EVENT: ${{ github.event.workflow_run.event }}
+      RUN_URL: ${{ github.event.workflow_run.html_url }}
+      COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+      SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
     steps:
+      # 失敗通知は Slack だけに依存させる。issue API の障害で通知まで止めないよう、最初に送る。
       - name: Send Slack notification
+        id: slack
         env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_CHANNEL_ID: ${{ vars.SLACK_CHANNEL_ID }}
-          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
           ACTOR: ${{ github.event.workflow_run.actor.login }}
-          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
           SERVER_URL: ${{ github.server_url }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -83,7 +109,7 @@ jobs:
 
           RESPONSE=$(curl -sf -X POST "https://slack.com/api/chat.postMessage" \
             -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
-            -H "Content-Type: application/json" \
+            -H "Content-Type: application/json; charset=utf-8" \
             -d "$PAYLOAD") || true
 
           if [ -z "$RESPONSE" ]; then
@@ -96,3 +122,245 @@ jobs:
             echo "::error::Slack API error: ${ERROR}"
             exit 1
           fi
+
+          echo "ts=$(echo "$RESPONSE" | jq -r '.ts')" >> "$GITHUB_OUTPUT"
+
+      # 検索に失敗しても number は空になり、Devin を呼ぶ側へ倒れる（黙って呼ばないより重複の方がまし）。
+      - name: Find open failure issue
+        id: tracking
+        continue-on-error: true
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
+        with:
+          script: |
+            // 起動契機を鍵に含める。Security Scan は schedule だけ落ちて push は通るため、
+            // 契機を混ぜると push の成功で「復旧」扱いになり、毎週 Devin を呼び直してしまう。
+            const title = `[CI失敗] ${process.env.WORKFLOW_NAME} (${process.env.HEAD_BRANCH}, ${process.env.RUN_EVENT})`;
+            core.setOutput('title', title);
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: process.env.TRACKING_LABEL,
+              per_page: 100,
+            });
+            const found = issues.find((issue) => !issue.pull_request && issue.title === title);
+            core.setOutput('number', found ? String(found.number) : '');
+            core.setOutput('url', found ? found.html_url : '');
+
+      # devin-slack-trigger.yml と同じく、チャンネル直下へ Devin 宛てに投稿する（bot 投稿で Devin が
+      # 起動した実績があるのはこの形）。1 行目は、人が Devin に計画から任せる時と同じ「<@Devin> !megaplan」。
+      - name: Mention Devin
+        id: devin
+        if: steps.tracking.outputs.number == ''
+        env:
+          DEVIN_USER_ID: ${{ vars.SLACK_DEVIN_USER_ID }}
+          NOTIFY_TS: ${{ steps.slack.outputs.ts }}
+        run: |
+          if [ -z "$DEVIN_USER_ID" ]; then
+            echo "::error::vars.SLACK_DEVIN_USER_ID is not configured, so Devin cannot be mentioned."
+            exit 1
+          fi
+
+          PERMALINK=$(curl -sf -G "https://slack.com/api/chat.getPermalink" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            --data-urlencode "channel=${SLACK_CHANNEL_ID}" \
+            --data-urlencode "message_ts=${NOTIFY_TS}" | jq -r '.permalink // empty') || true
+
+          TEXT=$(printf '%s\n%s\n%s\n%s\n%s\n%s' \
+            "<@${DEVIN_USER_ID}> !megaplan" \
+            "${WORKFLOW_NAME} が ${HEAD_BRANCH} ブランチで失敗しました（${RUN_EVENT}）。" \
+            "run: ${RUN_URL}" \
+            "commit: ${COMMIT_SHA}" \
+            "notification: ${PERMALINK:-（リンク取得失敗）}" \
+            "Please find the root cause and fix it. First, create a plan and share it before implementing. Never put real career text from the database into logs, commits, PRs, or fixtures (this repository is public). Think in English, respond in Japanese.")
+
+          PAYLOAD=$(jq -n \
+            --arg channel "$SLACK_CHANNEL_ID" \
+            --arg text "$TEXT" \
+            '{channel: $channel, text: $text}')
+
+          RESPONSE=$(curl -sf -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$PAYLOAD") || true
+
+          if [ -z "$RESPONSE" ]; then
+            echo "::error::Slack API request failed (network error or empty response)"
+            exit 1
+          fi
+
+          if ! echo "$RESPONSE" | jq -e '.ok == true' > /dev/null; then
+            ERROR=$(echo "$RESPONSE" | jq -r '.error // "unknown_error"')
+            echo "::error::Slack API error: ${ERROR}"
+            exit 1
+          fi
+
+          echo "ts=$(echo "$RESPONSE" | jq -r '.ts')" >> "$GITHUB_OUTPUT"
+
+      # 投稿が通っても Devin 側で起動に失敗することがある（同時セッション上限など）。その返信は
+      # スレッドに後から付くので、少し待って読む。失敗なら issue を作らず、次の失敗で呼び直せるようにする。
+      - name: Check Devin started
+        id: started
+        if: steps.devin.outcome == 'success'
+        env:
+          DEVIN_USER_ID: ${{ vars.SLACK_DEVIN_USER_ID }}
+          MENTION_TS: ${{ steps.devin.outputs.ts }}
+        run: |
+          status=unknown
+          for _ in 1 2 3 4 5 6; do
+            sleep 15
+            REPLIES=$(curl -sf -G "https://slack.com/api/conversations.replies" \
+              -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+              --data-urlencode "channel=${SLACK_CHANNEL_ID}" \
+              --data-urlencode "ts=${MENTION_TS}") || true
+            if [ -z "$REPLIES" ] || ! echo "$REPLIES" | jq -e '.ok == true' > /dev/null; then
+              echo "::warning::Could not read the Devin thread ($(echo "$REPLIES" | jq -r '.error // "no response"' 2>/dev/null)). Treating the start as unconfirmed."
+              break
+            fi
+            # messages[0] は親（bot の依頼文）なので、2 件目以降の Devin の返信だけを見る。
+            DEVIN_TEXT=$(echo "$REPLIES" | jq -r --arg devin "$DEVIN_USER_ID" '[.messages[1:][] | select(.user == $devin) | .text] | join("\n")')
+            if echo "$DEVIN_TEXT" | grep -qiE 'Failed to create Devin|Failed to start'; then
+              status=failed
+              break
+            fi
+            if [ -n "$DEVIN_TEXT" ]; then
+              status=started
+              break
+            fi
+          done
+          echo "Devin start status: ${status}"
+          echo "status=${status}" >> "$GITHUB_OUTPUT"
+
+      - name: Report Devin start failure
+        if: steps.started.outputs.status == 'failed'
+        env:
+          MENTION_TS: ${{ steps.devin.outputs.ts }}
+        run: |
+          TEXT="Devin の起動に失敗したため、追跡 issue は作っていません。次にこの workflow が失敗した時にもう一度 Devin を呼びます。すぐ動かしたい場合は、空きができてからこのスレッドで Devin をメンションしてください。"
+          PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg thread_ts "$MENTION_TS" --arg text "$TEXT" \
+            '{channel: $channel, thread_ts: $thread_ts, text: $text}')
+          RESPONSE=$(curl -sf -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$PAYLOAD") || true
+          if [ -z "$RESPONSE" ] || ! echo "$RESPONSE" | jq -e '.ok == true' > /dev/null; then
+            echo "::error::Slack API error: $(echo "$RESPONSE" | jq -r '.error // "no response"' 2>/dev/null)"
+            exit 1
+          fi
+
+      - name: Open failure issue
+        if: steps.devin.outcome == 'success' && steps.started.outputs.status != 'failed'
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
+        env:
+          TITLE: ${{ steps.tracking.outputs.title }}
+          DEVIN_STATUS: ${{ steps.started.outputs.status }}
+        with:
+          script: |
+            const label = process.env.TRACKING_LABEL;
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+              await github.rest.issues.createLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+                color: 'd73a4a',
+                description: 'main / develop の workflow 失敗を追跡する（ci-failure-notify.yml が開閉する）',
+              });
+            }
+            const started = process.env.DEVIN_STATUS === 'started'
+              ? 'Devin の起動を確認した。'
+              : 'Devin の返信を 90 秒以内に確認できなかった。Slack で Devin が動いているか確かめること。';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: process.env.TITLE,
+              labels: [label],
+              body: [
+                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗し、Slack で Devin に調査を依頼した。${started}`,
+                '',
+                `- run: ${process.env.RUN_URL}`,
+                `- commit: ${process.env.COMMIT_SHA}`,
+                '',
+                'この issue が open の間は、同じ workflow が同じ契機で再び失敗しても Devin を呼ばない（同時セッション上限を守るため）。',
+                '同じ契機で次に成功すると自動で close される。Devin が動いていない時は、この issue を手で close すると次の失敗で再び呼ばれる。',
+              ].join('\n'),
+            });
+
+      - name: Record recurrence
+        if: steps.tracking.outputs.number != ''
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
+        env:
+          ISSUE_NUMBER: ${{ steps.tracking.outputs.number }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.ISSUE_NUMBER),
+              body: `再発: ${process.env.RUN_URL}（commit ${process.env.COMMIT_SHA}）`,
+            });
+
+      # Devin を呼ばなかった理由を通知スレッドに残す。黙って呼ばないと、人間には依頼が漏れたのか
+      # 対応中なのか区別がつかない。
+      - name: Point thread at open issue
+        if: steps.tracking.outputs.number != ''
+        env:
+          THREAD_TS: ${{ steps.slack.outputs.ts }}
+          ISSUE_URL: ${{ steps.tracking.outputs.url }}
+        run: |
+          TEXT="前回からの未解決の失敗なので Devin は呼び直していません（対応状況: <${ISSUE_URL}|issue>）。Devin が動いていない場合は issue を close すると、次の失敗で再び呼びます。"
+          PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg thread_ts "$THREAD_TS" --arg text "$TEXT" \
+            '{channel: $channel, thread_ts: $thread_ts, text: $text}')
+          RESPONSE=$(curl -sf -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer ${SLACK_BOT_TOKEN}" \
+            -H "Content-Type: application/json; charset=utf-8" \
+            -d "$PAYLOAD") || true
+          if [ -z "$RESPONSE" ] || ! echo "$RESPONSE" | jq -e '.ok == true' > /dev/null; then
+            echo "::error::Slack API error: $(echo "$RESPONSE" | jq -r '.error // "no response"' 2>/dev/null)"
+            exit 1
+          fi
+
+  close-on-recovery:
+    name: Close failure issue on recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.name != github.workflow &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      !startsWith(github.event.workflow_run.event, 'pull_request')
+    steps:
+      - name: Close open failure issue
+        uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
+        env:
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+        with:
+          script: |
+            const title = `[CI失敗] ${process.env.WORKFLOW_NAME} (${process.env.HEAD_BRANCH}, ${process.env.RUN_EVENT})`;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: process.env.TRACKING_LABEL,
+              per_page: 100,
+            });
+            for (const issue of issues.filter((i) => !i.pull_request && i.title === title)) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `復旧: ${process.env.RUN_URL} が成功した。`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'completed',
+              });
+            }
