@@ -1,0 +1,7 @@
+# ドキュメント中のダミー値（sk_live_abc123… と截断された Firebase キー）を
+# 過去コミット含めて誤検知しないよう、fingerprint 単位で ignore する。
+# fingerprint は <commit_sha>:<file>:<rule>:<line> で一意に決まるため、
+# 実値の流出ではないと確認できた行のみ列挙すること。
+0cbfe956d40210b66a5b9f38b4da2b5cf44fc260:.claude/skills/api-design/SKILL.md:generic-api-key:306
+e1e6f231cb7b55ce5ec0257430d5ab8c29e090c6:.claude/skills/api-design/SKILL.md:generic-api-key:306
+8fbb390c508f2ac8c4d1412c8c21878bf37e228c:AUTHENTICATION_TEST_REPORT.md:generic-api-key:38
