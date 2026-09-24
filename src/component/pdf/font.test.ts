@@ -130,6 +130,16 @@ describe('splitForHyphenation の禁則処理', () => {
     expect(splitForHyphenation('最適化')).toEqual(['最', BREAK_MARKER, '適', BREAK_MARKER, '化']);
   });
 
+  it('句点の直後の半角ピリオドは、英数字が続くときは行頭候補になる（語の先頭の「.」）', () => {
+    expect(lineStartCandidates('しました。.config')).toContain('.');
+    expect(lineStartCandidates('実装.NET')).toContain('.');
+  });
+
+  it('英数字が続かない半角ピリオドは、従来どおり行頭候補にしない', () => {
+    expect(lineStartCandidates('実装.')).not.toContain('.');
+    expect(lineStartCandidates('実装.。')).not.toContain('.');
+  });
+
   it('禁則を入れても結合すると元の語に戻る', () => {
     for (const word of ['最適化。', '課金・演出', '（例）', 'React連携。', '実装)']) {
       expect(splitForHyphenation(word).join('')).toBe(word);
