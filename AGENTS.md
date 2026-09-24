@@ -3,6 +3,11 @@
 ## Overview
 skillsheet-viewer - kouiso プロジェクト
 
+## PDF 出力・閲覧・本番データ更新
+本番 URL・閲覧コード・編集者ログイン・本番 DB の在処は `CLAUDE.md` の「PDF 出力・閲覧・本番データ更新の在処」、
+PDF をローカルで出す手順と本番 DB のブロックを直す手順は `doc/pdf-export-and-data-update.md` にある。
+依頼者にログインやボタン操作を頼む前に、必ずここを見る。
+
 ## Development
 
 ### Language & Frameworks

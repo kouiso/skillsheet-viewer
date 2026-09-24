@@ -10,6 +10,22 @@ alwaysApply: true
 - PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。
 - コメントはインラインの「なぜそうしたか」を重視し、JSDoc/docstring を全関数に付けることは求めない。パッケージ境界を越える公開 API には必要に応じて docstring を書く。
 
+## PDF 出力・閲覧・本番データ更新の在処
+
+「PDF を出して」「中身を直して」と頼まれたら、最初にここを見る。依頼者にログインやボタン操作を頼まない。
+在処を探し回って時間を失った事故があったので、答えを先に置いておく。
+
+| 知りたいこと | 在処 |
+| --- | --- |
+| 本番 URL | https://skill-sheet-snowy.vercel.app（Vercel プロジェクト `skillsheet-viewer`。main へのマージがそのまま本番に出る） |
+| 閲覧コード | Vercel の環境変数 `VIEWER_CODE`（Production）。ダッシュボードの Settings → Environment Variables で値を表示できる。このリポジトリは公開なので値は書かない |
+| 編集者ログイン（`/login`） | 1Password の項目「skillsheet-viewer prod owner (kouiso@ritmo.co.jp)」 |
+| 本番 DB | Neon プロジェクト `cool-boat-26004396` の `main` ブランチ。接続文字列は Neon MCP の `get_connection_string` か、1Password の「skillsheet-viewer Neon DATABASE_URL」 |
+| ローカル用 `.env` | `.env.enc`（SOPS / age）。鍵は 1Password の「skillsheet-viewer SOPS age key」 |
+
+PDF の最短経路（ローカルで印刷コードを直接呼ぶ。数秒で終わる）と、本番 DB のブロックを直す手順（退避ブランチ + CAS）は
+[doc/pdf-export-and-data-update.md](doc/pdf-export-and-data-update.md) にある。
+
 ## プロジェクト技術スタック
 
 このプロジェクトは以下の技術スタックを使用しています:
