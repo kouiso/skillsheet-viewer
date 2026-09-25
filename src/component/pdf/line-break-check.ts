@@ -137,6 +137,8 @@ const TRACK_LEFT_PT = 1.5;
 const TRACK_SIZE_PT = 0.5;
 /** 「段落の区切り」とみなす行間の、段内標準行間からの超過分（pt）。ブロック間 gap=4pt を拾う。 */
 const PARA_PITCH_OVER_PT = 3;
+/** label:value の行はベースラインがこれくらいずれて並ぶ（セル行の判定幅）。 */
+const CELL_Y_PT = 4;
 /** ページ下端の枠に接しているとみなす範囲（ページ跨ぎ判定用）。 */
 const PAGE_EDGE_SLACK_LINES = 1.6;
 
@@ -161,6 +163,11 @@ interface ExtractLine {
   allBold: boolean;
   /** 箇条書きの記号だけの行。本文の段落には組み込まず、段落頭の検出にだけ使う。 */
   isMarker: boolean;
+  /**
+   * 同じ高さ（元の 1 行分）から複数の段に切れた側の行 = 表のセル。
+   * 段落には組み込まない（label:value の行や技術チップの並びは段落ではない）。
+   */
+  cell: boolean;
 }
 
 interface Track {
@@ -176,6 +183,12 @@ interface ParagraphBlock {
   lines: ExtractLine[];
   /** ページを跨いで同じ段落が続くとき、後続ページ側の行数。 */
   spillLines: number;
+  /**
+   * 段落ではなく表の列（label:value の列・技術チップの列）とみなしたもの。
+   * 段落なら末尾行以外はほぼ同じ右端まで届くので、最終行以外の半分以上が
+   * ブロック右端より 2 字以上手前で終わる塊は段落の規則を当てない対象とする。
+   */
+  tabular: boolean;
 }
 
 function visibleChars(text: string): number {
@@ -252,13 +265,16 @@ function toLines(
   }
   const lines: ExtractLine[] = [];
   const sortedRows = [...rows.entries()].sort((a, b) => b[0] - a[0]);
+  const rowStart = new Map<number, number>();
   for (const [y, row] of sortedRows) {
     const sorted = [...row].sort((a, b) => a.x - b.x);
     // 1 行の中の段分割: item 間に欄間ほどの隙間がある所で切る。
     let segment: LineCheckItem[] = [];
     let prevRight = 0;
+    let segmentCount = 0;
     const flush = (): void => {
       if (segment.length === 0) return;
+      segmentCount += 1;
       let text = '';
       let cursor = segment[0].x;
       for (const item of segment) {
@@ -280,6 +296,7 @@ function toLines(
         items: segment,
         allBold,
         isMarker: MARKER_LINE.test(text.trim()) && visibleChars(text) <= 4,
+        cell: false,
       });
       segment = [];
     };
@@ -289,6 +306,23 @@ function toLines(
       prevRight = item.x + item.width;
     }
     flush();
+    rowStart.set(y, segmentCount);
+  }
+  // 同じ高さから複数の段に切れた行、およびベースラインが少しずれて並ぶ
+  // label:value の行（同じ視覚行に欄間以上の間隔で別の段があるもの）は表のセル。
+  for (const line of lines) {
+    if ((rowStart.get(line.y) ?? 1) > 1) {
+      line.cell = true;
+      continue;
+    }
+    for (const other of lines) {
+      if (other === line || Math.abs(other.y - line.y) > CELL_Y_PT) continue;
+      const gap = other.left >= line.right ? other.left - line.right : line.left - other.right;
+      if (gap > COLUMN_GAP_PT) {
+        line.cell = true;
+        break;
+      }
+    }
   }
   // lineIndex はページ内の本文行の通し番号（上から順・全段通し）。位置の提示用。
   lines
@@ -353,6 +387,8 @@ function isSameParagraph(
 ): boolean {
   // 段内の普通の行間より明確に開いている → 段落（またはブロック）の区切り。
   if (prev.y - next.y > medianPitch + PARA_PITCH_OVER_PT) return false;
+  // 太字の見出し行と本文の行は別の段落（太字は行内の全 item が主フォントと違う行にだけ立つ）。
+  if (prev.allBold !== next.allBold) return false;
   // 行頭が箇条書き記号 → 新しい項目の始まり。
   if (PARAGRAPH_HEAD.test(next.text.trimStart())) return false;
   // 同じ高さに箇条書き記号の行があれば、その本文行は項目の先頭。
@@ -362,12 +398,38 @@ function isSameParagraph(
   return true;
 }
 
+/** ページ上の最も右に届いた本文行の右端に対して、この割合すら届かない塊は段落ではなく列とみなす。 */
+const TABULAR_RIGHT_RATIO = 0.8;
+
+/**
+ * 段落として扱うべき塊か。段落なら末尾行以外の各行は折り返しの都合で
+ * ほぼ同じ右端（ブロック内の最大到達点）まで届く。label:value の列や
+ * 技術チップの列・期間や人数の値の列のように行ごとに右端がばらける塊、
+ * またはページ内の本文の右端に全く届かない幅の列は、段落の規則の対象にしない。
+ */
+function isTabularShape(lines: ExtractLine[], pageRight: number): boolean {
+  const nonLast = lines.slice(0, -1);
+  if (nonLast.length === 0) return false;
+  const blockRight = Math.max(...lines.map((line) => line.right));
+  if (blockRight < pageRight * TABULAR_RIGHT_RATIO) return true;
+  const gappy = nonLast.filter((line) => blockRight - line.right >= line.size * 2).length;
+  return gappy * 2 > nonLast.length;
+}
+
 /** 段内の行を段落（ParagraphBlock）に切る。ページを跨ぐ段落はあとで linkSpilledBlocks がつなぐ。 */
-function toBlocks(pageTracks: Track[][], markerLines: ExtractLine[][]): ParagraphBlock[] {
+function toBlocks(
+  pageTracks: Track[][],
+  markerLines: ExtractLine[][],
+  pageRight: (page: number) => number,
+): ParagraphBlock[] {
   const blocks: ParagraphBlock[] = [];
+  const close = (block: ParagraphBlock): void => {
+    block.tabular = isTabularShape(block.lines, pageRight(block.lines[0].page));
+    blocks.push(block);
+  };
   pageTracks.forEach((tracks, pageIndex) => {
     for (const track of tracks) {
-      const lines = track.lines.filter((line) => !line.isMarker);
+      const lines = track.lines.filter((line) => !line.isMarker && !line.cell);
       if (lines.length === 0) continue;
       // 段内の標準行間（連続する行の y 間隔の中央値）を測り、段落区切りの判定に使う。
       const pitches: number[] = [];
@@ -375,18 +437,18 @@ function toBlocks(pageTracks: Track[][], markerLines: ExtractLine[][]): Paragrap
       pitches.sort((a, b) => a - b);
       const medianPitch = pitches.length > 0 ? pitches[Math.floor(pitches.length / 2)] : lines[0].size * 1.75;
 
-      let current: ParagraphBlock = { lines: [lines[0]], spillLines: 0 };
+      let current: ParagraphBlock = { lines: [lines[0]], spillLines: 0, tabular: false };
       for (let i = 1; i < lines.length; i++) {
         const prev = lines[i - 1];
         const next = lines[i];
         if (isSameParagraph(prev, next, medianPitch, markerLines[pageIndex])) {
           current.lines.push(next);
         } else {
-          blocks.push(current);
-          current = { lines: [next], spillLines: 0 };
+          close(current);
+          current = { lines: [next], spillLines: 0, tabular: false };
         }
       }
-      blocks.push(current);
+      close(current);
     }
   });
   return blocks;
@@ -396,7 +458,11 @@ function toBlocks(pageTracks: Track[][], markerLines: ExtractLine[][]): Paragrap
  * ページを跨ぐ段落をつなぐ。前ページの最終ブロックがページ下端まで達していて、
  * 次ページの最上段ブロックが同じ段（左端・サイズ一致）なら同じ段落とみなす。
  */
-function linkSpilledBlocks(blocks: ParagraphBlock[], options: LineCheckOptions): ParagraphBlock[] {
+function linkSpilledBlocks(
+  blocks: ParagraphBlock[],
+  options: LineCheckOptions,
+  pageRight: (page: number) => number,
+): ParagraphBlock[] {
   const byPage = new Map<number, ParagraphBlock[]>();
   for (const block of blocks) {
     const page = block.lines[0].page;
@@ -426,6 +492,7 @@ function linkSpilledBlocks(blocks: ParagraphBlock[], options: LineCheckOptions):
       const [next] = candidates;
       block.lines.push(...next.lines);
       block.spillLines = next.lines.length;
+      block.tabular = isTabularShape(block.lines, pageRight(block.lines[0].page));
       swallowed.add(next);
     }
     merged.push(block);
@@ -458,8 +525,14 @@ export function checkLineBreakRules(
   const dominant = dominantFontName(pages);
   const pageLines = pages.map((page, i) => toLines(page, i + 1, dominant, options));
   const markerLines = pageLines.map((lines) => lines.filter((line) => line.isMarker));
+  // ページごとの「本文が届く右端」。段落でない列の見分けに使う。
+  const rightsByPage = new Map<number, number>();
+  pageLines.forEach((lines, i) => {
+    rightsByPage.set(i + 1, Math.max(0, ...lines.map((line) => line.right)));
+  });
+  const pageRight = (page: number): number => rightsByPage.get(page) ?? options.contentRight;
   const pageTracks = toTracks(pageLines);
-  const blocks = linkSpilledBlocks(toBlocks(pageTracks, markerLines), options);
+  const blocks = linkSpilledBlocks(toBlocks(pageTracks, markerLines, pageRight), options, pageRight);
 
   // 規則 6「はみ出し」: 文字の外枠が本文枠の外に出る。footer 帯は本文ではないので除く。
   pages.forEach((page, pageIndex) => {
@@ -481,6 +554,19 @@ export function checkLineBreakRules(
   for (const block of blocks) {
     const { lines } = block;
 
+    // 規則 7「1 行だけ次のページへ」: 件数だけ。失敗にはしない。
+    if (block.spillLines === 1) {
+      counts['page-spill'] += 1;
+      violations.push({
+        rule: 'page-spill',
+        page: lines[lines.length - 1].page,
+        lineIndex: lines[lines.length - 1].lineIndex,
+      });
+    }
+
+    // 表の列とみなした塊には段落向けの規則（1〜5）を当てない。
+    if (block.tabular) continue;
+
     // 規則 5「長すぎる段落」: 段落の最終行を除く字数が 137 字を超える（太字の見出しは除く）。
     const charsBeforeLast = lines.slice(0, -1).reduce((sum, line) => sum + visibleChars(line.text), 0);
     if (charsBeforeLast > options.maxParagraphChars && !lines.every((line) => line.allBold)) {
@@ -492,16 +578,6 @@ export function checkLineBreakRules(
     const lastChars = visibleChars(lines[lines.length - 1].text);
     if (lines.length >= 2 && lastChars >= 1 && lastChars <= 2) {
       add('runt-last-line', lines[lines.length - 1]);
-    }
-
-    // 規則 7「1 行だけ次のページへ」: 件数だけ。失敗にはしない。
-    if (block.spillLines === 1) {
-      counts['page-spill'] += 1;
-      violations.push({
-        rule: 'page-spill',
-        page: lines[lines.length - 1].page,
-        lineIndex: lines[lines.length - 1].lineIndex,
-      });
     }
 
     // 段落内の行境界（規則 1・2・4）を順に見る。
