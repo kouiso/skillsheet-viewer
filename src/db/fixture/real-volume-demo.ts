@@ -145,12 +145,27 @@ const PROCESS_POOLS: readonly string[][] = [
   ['要件定義', '基本設計', '実装', '運用・保守'],
 ];
 
+// #396: 案件は会社の在籍期間に収まっている必要がある（収まらないと PDF 完全性
+// ゲートがビルドを止める）。会社期間は年を跨ぐ十分な幅を持たせ、案件期間は
+// その窓の内側に生成する。
+function companyPeriod(i: number): string {
+  return i === 0 ? '2025.11 — 現在' : `${2008 + (i % 12)}.${(i % 9) + 1} — ${2008 + (i % 12) + 4}.${(i % 9) + 1}`;
+}
+
+/** 会社 c の在籍期間の内側に収まる、p 番目の案件の期間（4 か月）。 */
+function projectPeriod(c: number, p: number): string {
+  if (c === 0) return '2025.12 — 2026.03'; // Q社（2025.11 — 現在）の内側
+  const startYear = 2008 + (c % 12);
+  const startMonth = (c % 9) + 1;
+  return `${startYear + p}.${startMonth} — ${startYear + p}.${startMonth + 3}`;
+}
+
 function buildCompanies(): CompanyInfo[] {
   return COMPANY_NAMES.map((name, i) => ({
     id: newId(),
     name,
     kind: '',
-    period: i === 0 ? '2025.11 — 現在' : `${2018 + (i % 8)}.${(i % 12) + 1} — ${2018 + (i % 8)}.${((i + 3) % 12) + 1}`,
+    period: companyPeriod(i),
     note: '',
   }));
 }
@@ -171,9 +186,7 @@ function buildItems(companies: CompanyInfo[]): ProjectItem[] {
         companyId: companies[c].id,
         title: isFlagship ? 'マッチングアプリの開発' : titleTemplate,
         scope: SCOPE_TEMPLATES[idx % SCOPE_TEMPLATES.length],
-        period: isFlagship
-          ? '2025.11 — 現在'
-          : `${2018 + (idx % 8)}.${(idx % 12) + 1} — ${2018 + (idx % 8)}.${((idx + 3) % 12) + 1}`,
+        period: isFlagship ? '2025.11 — 現在' : projectPeriod(c, p),
         role: isFlagship
           ? 'フルスタックエンジニア / エンジニアリングマネージャー'
           : ROLE_TEMPLATES[idx % ROLE_TEMPLATES.length],
@@ -211,6 +224,39 @@ const projectBlock: BlockInput = { type: 'project', data: { companies, items } }
 export function buildRealVolumeDemoBlocks(): BlockInput[] {
   const nonProjectBlocks = buildConsoleDemoBlocks().filter((b) => b.type !== 'project');
   return [...nonProjectBlocks, projectBlock];
+}
+
+/**
+ * #396: 完全性チェックが開始終了の逆転を検出できるかを確認するための fixture。
+ * わざと逆転させた期間の案件を 1 件だけ含む。本デモの 32 件には混ぜない
+ * （混ぜるとデモシート自体がビルドゲートに止められる）。
+ */
+export function buildReversedPeriodFixtureBlocks(): BlockInput[] {
+  const companyId = newId();
+  return [
+    {
+      type: 'project',
+      data: {
+        companies: [{ id: companyId, name: '期間検証会社', kind: '', period: '2020.01 — 2020.12', note: '' }],
+        items: [
+          {
+            id: newId(),
+            companyId,
+            title: '期間逆転の検証案件',
+            scope: '',
+            period: '2020.06 — 2020.01',
+            role: '',
+            team: '',
+            tech: { lang: ['TypeScript'], fw: [], db: [], infra: [], tools: [], collab: [] },
+            process: [],
+            duties: '',
+            acquired: '',
+            comment: '',
+          },
+        ],
+      },
+    },
+  ];
 }
 
 export const REAL_VOLUME_DEMO_TITLE = '実データボリューム検証シート（19社/32案件）';
