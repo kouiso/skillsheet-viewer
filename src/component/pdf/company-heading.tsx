@@ -85,11 +85,20 @@ const styles = StyleSheet.create({
   note: { paddingTop: 6, paddingHorizontal: 10 },
 });
 
+/**
+ * 案件数・役割・人数を「／」でつないだ 1 行。
+ * 「／」の前は改行しない空白（U+00A0）にする。普通の空白だと「／」の前で改行でき、
+ * 区切りの「／」だけが次の行の頭に落ちる（前の項目とのつながりが読めなくなる）。
+ */
+export function companySummaryText(company: Pick<PrintCompany, 'projectCount' | 'roles' | 'teamRange'>): string {
+  return [`${company.projectCount} 案件`, company.roles, company.teamRange].filter(Boolean).join('\u00a0／ ');
+}
+
 /** 帯 + 案件数の行。会社概要は含まない（別の葉 `CompanyNote`）。 */
 export function CompanyHeadingBand({ company }: { company: PrintCompany }) {
   const isLatest = company.isLatest;
   // デザインの右端「詳細版 ×N」は出さない。内部の分類結果で、読む側には意味が無い。
-  const summary = [`${company.projectCount} 案件`, company.roles, company.teamRange].filter(Boolean).join(' ／ ');
+  const summary = companySummaryText(company);
   return (
     <View>
       <View style={[styles.band, isLatest ? styles.bandLatest : styles.bandEarlier]}>
