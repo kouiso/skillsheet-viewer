@@ -140,6 +140,21 @@ describe('splitForHyphenation の禁則処理', () => {
     expect(lineStartCandidates('実装.。')).not.toContain('.');
   });
 
+  it('改行しない空白（U+00A0）の前後には改行位置を置かない', () => {
+    // 全角の区切りの前に置いた U+00A0 の直後で切れると、区切りだけが次の行の頭に落ちる。
+    for (const word of ['合成の役割\u00a0／', '合成\u00a0Name', 'Alpha\u00a0試験']) {
+      const parts = splitForHyphenation(word);
+      parts.forEach((part, i) => {
+        if (part !== BREAK_MARKER) return;
+        expect(parts[i - 1]?.endsWith('\u00a0')).toBe(false);
+        expect(parts[i + 1]?.startsWith('\u00a0')).toBe(false);
+      });
+      expect(parts.join('')).toBe(word);
+      // 組版側は空白だけの塊で改行できるので、U+00A0 だけの塊を残さない
+      expect(parts.some((part) => part.length > 0 && part.replaceAll('\u00a0', '') === '')).toBe(false);
+    }
+  });
+
   it('禁則を入れても結合すると元の語に戻る', () => {
     for (const word of ['最適化。', '課金・演出', '（例）', 'React連携。', '実装)']) {
       expect(splitForHyphenation(word).join('')).toBe(word);
