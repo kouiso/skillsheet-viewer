@@ -186,6 +186,11 @@ describe('和文の段落の改行位置', () => {
       { name: '括弧で囲んだ英字', text: '外部の「OpenAI」や「Example」の仕組みを比べました。', widths: SWEEP_WIDTHS },
       { name: '最小幅の表の欄', text: '試作〜検収・点検（全段階）', widths: [44, 50, 60, 70], fontSize: 9 },
       {
+        name: '段落の最後が長い英字の連なりと和文 1〜2 字',
+        text: '導入:abcdefghijklmnopい。',
+        widths: [100, 105, 110, 115, 120, 130],
+      },
+      {
         name: '句点の直後の半角ピリオド',
         text: '設定を書き換えた。.config の中身も同じ手順で揃えた。',
         widths: SWEEP_WIDTHS,
