@@ -25,6 +25,7 @@ function project(overrides: Partial<PrintProject> = {}): PrintProject {
     team: '5 名',
     metaRows: [{ label: '役割', value: 'バックエンド' }],
     techGroups: [{ label: '言語', chips: [{ label: 'TypeScript', emphasis: 'solid' }] }],
+    summary: '',
     duties: '業務内容の本文。\n\n- 箇条書き 1\n- 箇条書き 2',
     acquired: '',
     comment: 'コメントの本文。',
