@@ -268,27 +268,39 @@ export function splitForHyphenation(word: string): string[] {
 }
 
 /**
- * U+00A0 の前後の塊を 1 つにつなぐ。組版側（textkit）は空白だけの塊を伸び縮みする空白として
- * 扱い、そこで改行できてしまう。長い連なりを切る所（splitLongRun）が U+00A0 の隣に
- * 改行マーカーを置くこともあるので、U+00A0 に接するマーカーも外す。
+ * U+00A0 の前後で改行しないよう、U+00A0 に接する改行マーカーを外し、U+00A0 だけの塊を
+ * 前後の塊とつなぐ（組版側の textkit は空白だけの塊を伸び縮みする空白として扱い、そこで改行する）。
+ * ただし、つないだ結果の切れない連なりが MAX_UNBREAKABLE_RUN を超える時はつながない。
+ * 長い連なりを切るマーカー（splitLongRun）を消すと、行幅を超える語になってはみ出すため。
  */
 function joinNoBreakSpace(parts: string[]): string[] {
-  const touchesNbsp = (part: string | undefined, side: 'start' | 'end'): boolean =>
-    part !== undefined &&
-    part !== BREAK_MARKER &&
-    (side === 'start' ? part.startsWith('\u00a0') : part.endsWith('\u00a0'));
-  const kept = parts.filter(
-    (part, i) => part !== BREAK_MARKER || !(touchesNbsp(parts[i - 1], 'end') || touchesNbsp(parts[i + 1], 'start')),
-  );
+  const isNbspOnly = (part: string | undefined): boolean =>
+    part !== undefined && part.length > 0 && part.replaceAll('\u00a0', '') === '';
   const out: string[] = [];
-  for (const part of kept) {
+  // out の末尾から前のマーカーまでの、切れない連なりの字数
+  const tailRun = (): number => {
+    let n = 0;
+    for (let k = out.length - 1; k >= 0 && out[k] !== BREAK_MARKER; k--) n += Array.from(out[k]).length;
+    return n;
+  };
+  // parts[i] から次のマーカーまでの、切れない連なりの字数
+  const headRun = (i: number): number => {
+    let n = 0;
+    for (let k = i; k < parts.length && parts[k] !== BREAK_MARKER; k++) n += Array.from(parts[k]).length;
+    return n;
+  };
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
     const last = out[out.length - 1];
-    if (
-      last !== undefined &&
-      last !== BREAK_MARKER &&
-      part !== BREAK_MARKER &&
-      (last.endsWith('\u00a0') || part.startsWith('\u00a0'))
-    ) {
+    if (part === BREAK_MARKER) {
+      const touches =
+        (last !== undefined && last !== BREAK_MARKER && last.endsWith('\u00a0')) ||
+        (parts[i + 1] !== undefined && parts[i + 1] !== BREAK_MARKER && parts[i + 1].startsWith('\u00a0'));
+      if (touches && tailRun() + headRun(i + 1) <= MAX_UNBREAKABLE_RUN) continue;
+      out.push(part);
+      continue;
+    }
+    if (last !== undefined && last !== BREAK_MARKER && (isNbspOnly(part) || isNbspOnly(last))) {
       out[out.length - 1] = last + part;
       continue;
     }
