@@ -103,26 +103,49 @@ export interface LineBreakCheckResult {
 
 // ---- font.ts と同じ値の規則表（ファイル冒頭のコメント参照） ----
 
-const NO_LINE_START = new Set(
-  [
-    '、。，．・：；？！',
-    'ヽヾゝゞ々ー',
-    '）〕］｝〉》」』】〙〗〟’”｠»',
-    'ぁぃぅぇぉっゃゅょゎゕゖ',
-    'ァィゥェォッャュョヮヵヶ',
-    ')]},.:;?!',
-    ' ',
-  ].join(''),
-);
 const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{', ' '].join(''));
 const BREAK_AFTER = new Set(['/', '-', '_', '.', '?', '&', '=', ':', ',', ';', '+', '~', '@', '#', '%', '|', '\\']);
 
 const ASCII_ALNUM = /^[0-9A-Za-z]$/;
 
+/** 行頭禁則として数える字（規則 4「行頭が閉じ括弧か句読点」）。
+ * font.ts の NO_LINE_START より狭く、「・」のような項目頭の記号や小書き仮名は含めない。 */
+const FORBIDDEN_HEAD = new Set(['、。，．：；！？', '）〕］｝〉》」』】〙〗〟’”｠»', ')]},.:;?!'].join(''));
+
 /** 箇条書きの行頭記号だけで構成される行（print-primitive.tsx の BulletRow が出す印と同じ集合）。 */
 const MARKER_LINE = /^(?:[-‐‑‒–—―・•‣◦]|\d{1,3}[.)])+$/;
 /** 行頭が箇条書きの開始を示す記号のとき、その行は新しい段落の先頭とみなす。 */
 const PARAGRAPH_HEAD = /^(?:[-‐‑‒–—―・•‣◦]|\d{1,3}[.)])/;
+
+/** 文・項目の末尾に来る字。これで終わる行は明示的な項目の最終行（段落の最後）とみなす。
+ * 句点・感嘆符に加えて「7名」「6ヶ月」「2021年」のような量記号・名詞止めの項目末尾も拾う。 */
+const ITEM_END_TAIL = new Set([
+  '。',
+  '！',
+  '？',
+  '）',
+  '』',
+  '」',
+  '】',
+  '名',
+  '人',
+  '月',
+  '日',
+  '年',
+  '社',
+  '件',
+  '枚',
+  '本',
+  '台',
+  '円',
+  '％',
+  '%',
+]);
+
+/** 行が項目の終わりらしい字で終わるか。 */
+function endsItemTail(line: ExtractLine): boolean {
+  return ITEM_END_TAIL.has(line.text.trimEnd().slice(-1));
+}
 
 // ---- 内部構造 ----
 
@@ -194,27 +217,33 @@ interface ParagraphBlock {
 function visibleChars(text: string): number {
   return Array.from(text.replace(/\s+/g, '')).length;
 }
-
-/** 行の実際の並びから「次の 1 切れ目単位」を切り出す（規則表：和文は 1 字、英数字は次の空白・区切り字まで）。 */
-function firstBreakUnit(text: string): string {
-  const chars = Array.from(text.trimStart());
+/** 行の実際の並びから「次の 1 切れ目単位」を切り出す（規則表：和文は 1 字、英数字は次の空白・区切り字まで）。
+ * 規則の「空白」は組版エンジンが切れる空白のこと。抽出結果の item はエンジンが
+ * 1 つの実行単位として置いたまとまりで、item の内部の半角空白は splitLongRun が
+ * NBSP で連結したまま描かれた区切れない空白（抽出時に半角空白として出てくる）と
+ * みなし、単位の中に含める。単位の幅は呼び出し側で item の実測幅から按分する。 */
+function firstBreakUnit(line: ExtractLine): string {
+  const itemText = (line.items[0]?.text ?? line.text).trim();
+  const chars = Array.from(itemText);
   if (chars.length === 0) return '';
   const [first, ...rest] = chars;
   if (!ASCII_ALNUM.test(first)) return first;
   const unit = [first];
   for (const ch of rest) {
-    if (ASCII_ALNUM.test(ch)) {
+    // 区切り字はその字までを 1 単位に含める（「foo-」で終われる単位）。
+    if (BREAK_AFTER.has(ch)) {
+      unit.push(ch);
+      break;
+    }
+    // item 内の空白（NBSP 由来のものを含む）は区切りにしない。
+    if (ASCII_ALNUM.test(ch) || ch === ' ' || ch === ' ') {
       unit.push(ch);
       continue;
     }
-    // 区切り字はその字までを 1 単位に含める（「foo-」で終われる単位）。空白・その他は区切り。
-    if (BREAK_AFTER.has(ch)) unit.push(ch);
     break;
   }
-  return unit.join('');
+  return unit.join('').trimEnd();
 }
-
-/** 単位の描画幅を、その行を構成する item の実測幅から按分で求める。 */
 function measureUnitWidth(line: ExtractLine, unit: string): number {
   let need = Array.from(unit).length;
   if (need === 0) return 0;
@@ -389,6 +418,9 @@ function isSameParagraph(
   if (prev.y - next.y > medianPitch + PARA_PITCH_OVER_PT) return false;
   // 太字の見出し行と本文の行は別の段落（太字は行内の全 item が主フォントと違う行にだけ立つ）。
   if (prev.allBold !== next.allBold) return false;
+  // 項目の終わりらしい字で終わる行は、その項目の最後の行（以降は別の項目）。
+  // ソースの改行項目はほぼ必ず句点類で閉じるので、ここで段落を切る。
+  if (endsItemTail(prev)) return false;
   // 行頭が箇条書き記号 → 新しい項目の始まり。
   if (PARAGRAPH_HEAD.test(next.text.trimStart())) return false;
   // 同じ高さに箇条書き記号の行があれば、その本文行は項目の先頭。
@@ -503,7 +535,7 @@ function linkSpilledBlocks(
 /** 行頭禁則（次の行の先頭字）。'.'は直後が英数字なら語の途中として許容する（font.ts の isNoLineStart と同じ）。 */
 function isForbiddenLineStart(first: string, second: string | undefined): boolean {
   if (first === '.' && second !== undefined && ASCII_ALNUM.test(second)) return false;
-  return NO_LINE_START.has(first);
+  return FORBIDDEN_HEAD.has(first);
 }
 
 /**
@@ -567,9 +599,9 @@ export function checkLineBreakRules(
     // 表の列とみなした塊には段落向けの規則（1〜5）を当てない。
     if (block.tabular) continue;
 
-    // 規則 5「長すぎる段落」: 段落の最終行を除く字数が 137 字を超える（太字の見出しは除く）。
-    const charsBeforeLast = lines.slice(0, -1).reduce((sum, line) => sum + visibleChars(line.text), 0);
-    if (charsBeforeLast > options.maxParagraphChars && !lines.every((line) => line.allBold)) {
+    // 規則 5「長すぎる段落」: 改行の無い段落の字数が 137 字を超える（太字の見出しは除く）。
+    const paragraphChars = lines.reduce((sum, line) => sum + visibleChars(line.text), 0);
+    if (paragraphChars > options.maxParagraphChars && !lines.every((line) => line.allBold)) {
       counts['long-paragraph'] += 1;
       violations.push({ rule: 'long-paragraph', page: lines[0].page, lineIndex: lines[0].lineIndex });
     }
@@ -580,14 +612,25 @@ export function checkLineBreakRules(
       add('runt-last-line', lines[lines.length - 1]);
     }
 
-    // 段落内の行境界（規則 1・2・4）を順に見る。
+    // 規則 4「禁則」: 行末が開き括弧、または行頭が閉じ括弧・句読点など。
+    // 行ごとに見る（段落の区切りに関係なく、開き括弧終わり・句点類始まりは常に違反）。
+    for (const line of lines) {
+      const lastChar = Array.from(line.text.trimEnd()).at(-1) ?? '';
+      const headChars = Array.from(line.text.trimStart());
+      if (
+        (lastChar !== '' && NO_LINE_END.has(lastChar)) ||
+        (headChars.length > 0 && isForbiddenLineStart(headChars[0], headChars[1]))
+      ) {
+        add('kinsoku', line);
+      }
+    }
+
+    // 段落内の行境界（規則 1・2）を順に見る。
     for (let i = 0; i + 1 < lines.length; i++) {
       const cur = lines[i];
       const next = lines[i + 1];
       const lastChar = Array.from(cur.text.trimEnd()).at(-1) ?? '';
-      const nextChars = Array.from(next.text.trimStart());
-      const nextFirst = nextChars[0] ?? '';
-      const nextSecond = nextChars[1];
+      const nextFirst = Array.from(next.text.trimStart())[0] ?? '';
 
       // 規則 1「行末の余白」: 段落の最後以外の行で右端までの余白が 2 字以上あり、
       // 次の行の最初の切れ目単位がその余白に入る。余白はその段落自身が届いている
@@ -601,18 +644,10 @@ export function checkLineBreakRules(
         const columnRight = Math.max(...lines.map((line) => line.right));
         const gap = columnRight - cur.right;
         if (gap >= cur.size * 2) {
-          const unit = firstBreakUnit(next.text);
+          const unit = firstBreakUnit(next);
           const unitWidth = measureUnitWidth(next, unit);
           if (unitWidth <= gap - 0.5) add('trailing-gap', cur);
         }
-      }
-
-      // 規則 4「禁則」: 行末が開き括弧、または行頭が閉じ括弧・句読点など。
-      if (
-        (lastChar !== '' && NO_LINE_END.has(lastChar)) ||
-        (nextFirst !== '' && isForbiddenLineStart(nextFirst, nextSecond))
-      ) {
-        add('kinsoku', cur);
       }
 
       // 規則 2「英数字の途中」: 英数字で終わる行の次の行が英数字で始まる。
