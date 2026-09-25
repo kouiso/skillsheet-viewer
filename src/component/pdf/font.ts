@@ -114,6 +114,8 @@ const NO_LINE_START = new Set(
     'ぁぃぅぇぉっゃゅょゎゕゖ',
     'ァィゥェォッャュョヮヵヶ',
     ')]},.:;?!',
+    // 改行しない空白（U+00A0）は前の語とつなぐための字なので、その直前でも直後でも改行しない
+    '\u00a0',
   ].join(''),
 );
 
@@ -121,7 +123,16 @@ const NO_LINE_START = new Set(
  * 行末に置いてはいけない文字（行末禁則）。開き括弧など。
  * ここに載っている文字の直後では改行マーカーを挟まない。
  */
-const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{'].join(''));
+const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{', '\u00a0'].join(''));
+
+/**
+ * 行頭禁則の判定。半角の「.」は英数字が続くときは語の先頭（`.htaccess`・`.NET` など）なので、
+ * 行頭に置いてよい。禁則のままだと「。」と「.」の間で改行できず、前の行に余白が残る。
+ */
+function isNoLineStart(ch: string, following: string | undefined): boolean {
+  if (ch === '.' && following !== undefined && /^[0-9A-Za-z]$/.test(following)) return false;
+  return NO_LINE_START.has(ch);
+}
 
 /**
  * 非 CJK の連なりを、必要なときだけ改行可能な塊へ切り分ける。
@@ -192,8 +203,8 @@ export function splitForHyphenation(word: string): string[] {
    * 句点や閉じ括弧だけが次行の頭に落ちる（実測: 「クエリ最適化」→改行→「。」）。
    * 提出書類として明確に体裁の崩れなので、マーカーを挟む側で防ぐ。
    */
-  const canBreakBefore = (next: string, prev: string = prevChar): boolean =>
-    !NO_LINE_START.has(next) && !NO_LINE_END.has(prev);
+  const canBreakBefore = (next: string, prev: string, following: string | undefined): boolean =>
+    !isNoLineStart(next, following) && !NO_LINE_END.has(prev);
   const flush = (): void => {
     if (!buffer) return;
     const chunks = splitLongRun(buffer);
@@ -203,14 +214,17 @@ export function splitForHyphenation(word: string): string[] {
         // 境界なので禁則も見る。すでに BREAK_MARKER が積まれているケース、または
         // 禁則で塞がれているケースは二重に挟まない／挟んではいけない。
         // 内部の分割点（i>0）は同じ非CJKの連なりの中の強制改行なので禁則の対象外。
-        const boundaryOk = i > 0 || canBreakBefore(chunks[i][0], preBufferChar);
+        const head = Array.from(chunks[i]);
+        const boundaryOk = i > 0 || canBreakBefore(head[0], preBufferChar, head[1]);
         if (boundaryOk && parts[parts.length - 1] !== BREAK_MARKER) parts.push(BREAK_MARKER);
       }
       parts.push(chunks[i]);
     }
     buffer = '';
   };
-  for (const ch of word) {
+  const chars = Array.from(word);
+  for (let k = 0; k < chars.length; k++) {
+    const ch = chars[k];
     if (isCombiningOrVariationSelector(ch)) {
       // 直前の基底文字がどちらに格納されていても（ASCII連なりの buffer か、
       // CJK単独文字として直接 push された parts か）、そこへ結合するだけで
@@ -227,7 +241,12 @@ export function splitForHyphenation(word: string): string[] {
     if (!isCjk(ch)) {
       // 直前と同じマーカーを二重に積まない（splitLongRun の内部分割でも同じ判定を使う）のに加え、
       // 禁則（次に来る文字が行頭禁則、または直前の文字が行末禁則）にも当たらないことを確認する。
-      if (prevWasCjk && parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch)) {
+      if (
+        prevWasCjk &&
+        parts.length > 0 &&
+        parts[parts.length - 1] !== BREAK_MARKER &&
+        canBreakBefore(ch, prevChar, chars[k + 1])
+      ) {
         parts.push(BREAK_MARKER);
       }
       if (!buffer) preBufferChar = prevChar;
@@ -237,7 +256,7 @@ export function splitForHyphenation(word: string): string[] {
       continue;
     }
     flush();
-    if (parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch)) {
+    if (parts.length > 0 && parts[parts.length - 1] !== BREAK_MARKER && canBreakBefore(ch, prevChar, chars[k + 1])) {
       parts.push(BREAK_MARKER);
     }
     parts.push(ch);
@@ -245,7 +264,49 @@ export function splitForHyphenation(word: string): string[] {
     prevChar = ch;
   }
   flush();
-  return parts.length > 0 ? parts : [word];
+  return parts.length > 0 ? joinNoBreakSpace(parts) : [word];
+}
+
+/**
+ * U+00A0 の前後で改行しないよう、U+00A0 に接する改行マーカーを外し、U+00A0 だけの塊を
+ * 前後の塊とつなぐ（組版側の textkit は空白だけの塊を伸び縮みする空白として扱い、そこで改行する）。
+ * ただし、つないだ結果の切れない連なりが MAX_UNBREAKABLE_RUN を超える時はつながない。
+ * 長い連なりを切るマーカー（splitLongRun）を消すと、行幅を超える語になってはみ出すため。
+ */
+function joinNoBreakSpace(parts: string[]): string[] {
+  const isNbspOnly = (part: string | undefined): boolean =>
+    part !== undefined && part.length > 0 && part.replaceAll('\u00a0', '') === '';
+  const out: string[] = [];
+  // out の末尾から前のマーカーまでの、切れない連なりの字数
+  const tailRun = (): number => {
+    let n = 0;
+    for (let k = out.length - 1; k >= 0 && out[k] !== BREAK_MARKER; k--) n += Array.from(out[k]).length;
+    return n;
+  };
+  // parts[i] から次のマーカーまでの、切れない連なりの字数
+  const headRun = (i: number): number => {
+    let n = 0;
+    for (let k = i; k < parts.length && parts[k] !== BREAK_MARKER; k++) n += Array.from(parts[k]).length;
+    return n;
+  };
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const last = out[out.length - 1];
+    if (part === BREAK_MARKER) {
+      const touches =
+        (last !== undefined && last !== BREAK_MARKER && last.endsWith('\u00a0')) ||
+        (parts[i + 1] !== undefined && parts[i + 1] !== BREAK_MARKER && parts[i + 1].startsWith('\u00a0'));
+      if (touches && tailRun() + headRun(i + 1) <= MAX_UNBREAKABLE_RUN) continue;
+      out.push(part);
+      continue;
+    }
+    if (last !== undefined && last !== BREAK_MARKER && (isNbspOnly(part) || isNbspOnly(last))) {
+      out[out.length - 1] = last + part;
+      continue;
+    }
+    out.push(part);
+  }
+  return out;
 }
 
 /**
