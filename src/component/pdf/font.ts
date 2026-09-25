@@ -114,6 +114,8 @@ const NO_LINE_START = new Set(
     'ぁぃぅぇぉっゃゅょゎゕゖ',
     'ァィゥェォッャュョヮヵヶ',
     ')]},.:;?!',
+    // 改行しない空白（U+00A0）は前の語とつなぐための字なので、その直前でも直後でも改行しない
+    '\u00a0',
   ].join(''),
 );
 
@@ -121,7 +123,7 @@ const NO_LINE_START = new Set(
  * 行末に置いてはいけない文字（行末禁則）。開き括弧など。
  * ここに載っている文字の直後では改行マーカーを挟まない。
  */
-const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{'].join(''));
+const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{', '\u00a0'].join(''));
 
 /**
  * 行頭禁則の判定。半角の「.」は英数字が続くときは語の先頭（`.htaccess`・`.NET` など）なので、
@@ -262,7 +264,31 @@ export function splitForHyphenation(word: string): string[] {
     prevChar = ch;
   }
   flush();
-  return parts.length > 0 ? parts : [word];
+  return parts.length > 0 ? joinNoBreakSpace(parts) : [word];
+}
+
+/**
+ * U+00A0 だけの塊を前後の塊とつなぐ。組版側（textkit）は空白だけの塊を伸び縮みする空白として
+ * 扱い、そこで改行できてしまう。U+00A0 は前後の語と離さないための字なので、1 つの塊にする。
+ */
+function joinNoBreakSpace(parts: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (
+      part.length > 0 &&
+      part.replaceAll('\u00a0', '') === '' &&
+      out.length > 0 &&
+      out[out.length - 1] !== BREAK_MARKER
+    ) {
+      const next = parts[i + 1];
+      out[out.length - 1] += part + (next !== undefined && next !== BREAK_MARKER ? next : '');
+      if (next !== undefined && next !== BREAK_MARKER) i++;
+      continue;
+    }
+    out.push(part);
+  }
+  return out;
 }
 
 /**
