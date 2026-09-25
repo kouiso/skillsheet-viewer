@@ -142,7 +142,13 @@ describe('splitForHyphenation の禁則処理', () => {
 
   it('改行しない空白（U+00A0）の前後には改行位置を置かない', () => {
     // 全角の区切りの前に置いた U+00A0 の直後で切れると、区切りだけが次の行の頭に落ちる。
-    for (const word of ['合成の役割\u00a0／', '合成\u00a0Name', 'Alpha\u00a0試験']) {
+    for (const word of [
+      '合成の役割\u00a0／',
+      '合成\u00a0Name',
+      'Alpha\u00a0試験',
+      '\u00a0あい',
+      'aaaaaaaaaaaaaaa\u00a0\u00a0（試験）',
+    ]) {
       const parts = splitForHyphenation(word);
       parts.forEach((part, i) => {
         if (part !== BREAK_MARKER) return;

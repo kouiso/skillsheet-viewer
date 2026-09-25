@@ -268,22 +268,28 @@ export function splitForHyphenation(word: string): string[] {
 }
 
 /**
- * U+00A0 だけの塊を前後の塊とつなぐ。組版側（textkit）は空白だけの塊を伸び縮みする空白として
- * 扱い、そこで改行できてしまう。U+00A0 は前後の語と離さないための字なので、1 つの塊にする。
+ * U+00A0 の前後の塊を 1 つにつなぐ。組版側（textkit）は空白だけの塊を伸び縮みする空白として
+ * 扱い、そこで改行できてしまう。長い連なりを切る所（splitLongRun）が U+00A0 の隣に
+ * 改行マーカーを置くこともあるので、U+00A0 に接するマーカーも外す。
  */
 function joinNoBreakSpace(parts: string[]): string[] {
+  const touchesNbsp = (part: string | undefined, side: 'start' | 'end'): boolean =>
+    part !== undefined &&
+    part !== BREAK_MARKER &&
+    (side === 'start' ? part.startsWith('\u00a0') : part.endsWith('\u00a0'));
+  const kept = parts.filter(
+    (part, i) => part !== BREAK_MARKER || !(touchesNbsp(parts[i - 1], 'end') || touchesNbsp(parts[i + 1], 'start')),
+  );
   const out: string[] = [];
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
+  for (const part of kept) {
+    const last = out[out.length - 1];
     if (
-      part.length > 0 &&
-      part.replaceAll('\u00a0', '') === '' &&
-      out.length > 0 &&
-      out[out.length - 1] !== BREAK_MARKER
+      last !== undefined &&
+      last !== BREAK_MARKER &&
+      part !== BREAK_MARKER &&
+      (last.endsWith('\u00a0') || part.startsWith('\u00a0'))
     ) {
-      const next = parts[i + 1];
-      out[out.length - 1] += part + (next !== undefined && next !== BREAK_MARKER ? next : '');
-      if (next !== undefined && next !== BREAK_MARKER) i++;
+      out[out.length - 1] = last + part;
       continue;
     }
     out.push(part);
