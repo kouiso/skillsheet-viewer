@@ -142,13 +142,7 @@ describe('splitForHyphenation の禁則処理', () => {
 
   it('改行しない空白（U+00A0）の前後には改行位置を置かない', () => {
     // 全角の区切りの前に置いた U+00A0 の直後で切れると、区切りだけが次の行の頭に落ちる。
-    for (const word of [
-      '合成の役割\u00a0／',
-      '合成\u00a0Name',
-      'Alpha\u00a0試験',
-      '\u00a0あい',
-      'aaaaaaaaaaaaaaa\u00a0\u00a0（試験）',
-    ]) {
+    for (const word of ['合成の役割\u00a0／', '合成\u00a0Name', 'Alpha\u00a0試験', '\u00a0あい']) {
       const parts = splitForHyphenation(word);
       parts.forEach((part, i) => {
         if (part !== BREAK_MARKER) return;
@@ -158,6 +152,16 @@ describe('splitForHyphenation の禁則処理', () => {
       expect(parts.join('')).toBe(word);
       // 組版側は空白だけの塊で改行できるので、U+00A0 だけの塊を残さない
       expect(parts.some((part) => part.length > 0 && part.replaceAll('\u00a0', '') === '')).toBe(false);
+    }
+  });
+
+  it('U+00A0 を含む長い連なりでも、切れない塊は MAX_UNBREAKABLE_RUN（16 字）を超えない', () => {
+    // U+00A0 に接するマーカーを全部外すと、長い連なりを切る所まで消えて行幅を超える語になる。
+    for (const word of ['試験abcdefghijklmno\u00a0pqrstuvwxyz終了。', 'aaaaaaaaaaaaaaa\u00a0\u00a0（試験）']) {
+      const parts = splitForHyphenation(word);
+      const runs = parts.join('\u0000').split(`\u0000${BREAK_MARKER}\u0000`);
+      for (const run of runs) expect(Array.from(run.replaceAll('\u0000', '')).length).toBeLessThanOrEqual(16);
+      expect(parts.join('')).toBe(word);
     }
   });
 
