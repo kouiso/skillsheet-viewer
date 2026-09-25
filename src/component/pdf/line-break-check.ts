@@ -643,7 +643,7 @@ export function checkLineBreakRules(
       if (i + 1 < lines.length - 1) {
         const columnRight = Math.max(...lines.map((line) => line.right));
         const gap = columnRight - cur.right;
-        if (gap >= cur.size * 2) {
+        if (gap >= 0) {
           const unit = firstBreakUnit(next);
           const unitWidth = measureUnitWidth(next, unit);
           if (unitWidth <= gap - 0.5) add('trailing-gap', cur);
