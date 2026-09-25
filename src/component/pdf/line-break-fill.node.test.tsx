@@ -212,6 +212,12 @@ describe('和文の段落の改行位置', () => {
         text: '試験abcdefghijklmno\u00a0pqrstuvwxyz終了。',
         widths: [100, 120, 140],
       },
+      ...['修正した。う。', '仕方がない。あ。', '実施ab。あ。'].map((text) => ({
+        name: `狭い欄で、段落の最後が句点のあとの和文 1〜2 字（${text}）`,
+        text,
+        widths: [44, 48, 52, 56],
+        fontSize: 11.5,
+      })),
       {
         name: '句点の直後の半角ピリオド',
         text: '設定を書き換えた。.config の中身も同じ手順で揃えた。',
