@@ -25,19 +25,26 @@ function buildItem(overrides: Partial<ProjectItem>): ProjectItem {
 }
 
 describe('Timeline', () => {
-  it('320px 幅では日付列を独立行に落とす（#150: min-w-[132px]がタイトル列を圧迫していた回帰防止）', () => {
+  it('320px 幅では日付列を独立行に落とす（#150 回帰防止）。sm 以上は共有グリッド列でタイトル左端を揃える（#393）', () => {
     const companyMap = new Map<string, CompanyInfo>();
     render(<Timeline items={[buildItem({})]} companyMap={companyMap} activeTech={[]} />);
 
     const period = screen.getByText('2025.11〜現在');
-    // 日付とタイトルの共通の親（flex コンテナ）が、狭幅ではまず縦積み（flex-col）で、
-    // sm 以上でだけ横並び（sm:flex-row）に切り替わることを確認する。
+    // 日付とタイトルの共通の親（行コンテナ）は、狭幅では従来どおり縦積み（#150）。
     const row = period.closest('div');
     expect(row?.className).toContain('flex-col');
-    expect(row?.className).toContain('sm:flex-row');
-    // min-w-[132px] は sm 以上でのみ効かせる（狭幅では日付列がタイトル列を圧迫しない）。
-    expect(period.className).not.toMatch(/(?<!sm:)min-w-\[132px\]/);
-    expect(period.className).toContain('sm:min-w-[132px]');
+    // sm 以上は行が親グリッドの 2 列を subgrid で引き継ぐ。日付列は最長ラベルに合う
+    // 全行共有の 1 トラックなので、タイトル列の左端が全行で一致する（#393）。
+    expect(row?.className).toContain('sm:col-span-2');
+    expect(row?.className).toContain('sm:grid');
+    expect(row?.className).toContain('sm:grid-cols-subgrid');
+    // 親グリッドの日付トラックは上限 280px の固定列。行ごとの可変幅ではない。
+    expect(row?.parentElement?.className).toContain('sm:grid-cols-[minmax(0,280px)_minmax(0,1fr)]');
+    // 日付ラベルはこの列内で折り返す（#150 の回帰防止と同じく狭幅側の圧迫を防ぐ）。
+    expect(period.className).toContain('min-w-0');
+    expect(period.className).toContain('break-words');
+    // 行個別の最小幅（旧 sm:min-w-[132px]）を置くと列幅がラベル依存に戻るため置かない。
+    expect(period.className).not.toContain('min-w-[132px]');
   });
 
   it('案件がない場合は何も描画しない', () => {
