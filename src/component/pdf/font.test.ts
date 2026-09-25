@@ -130,6 +130,41 @@ describe('splitForHyphenation の禁則処理', () => {
     expect(splitForHyphenation('最適化')).toEqual(['最', BREAK_MARKER, '適', BREAK_MARKER, '化']);
   });
 
+  it('句点の直後の半角ピリオドは、英数字が続くときは行頭候補になる（語の先頭の「.」）', () => {
+    expect(lineStartCandidates('しました。.config')).toContain('.');
+    expect(lineStartCandidates('実装.NET')).toContain('.');
+  });
+
+  it('英数字が続かない半角ピリオドは、従来どおり行頭候補にしない', () => {
+    expect(lineStartCandidates('実装.')).not.toContain('.');
+    expect(lineStartCandidates('実装.。')).not.toContain('.');
+  });
+
+  it('改行しない空白（U+00A0）の前後には改行位置を置かない', () => {
+    // 全角の区切りの前に置いた U+00A0 の直後で切れると、区切りだけが次の行の頭に落ちる。
+    for (const word of ['合成の役割\u00a0／', '合成\u00a0Name', 'Alpha\u00a0試験', '\u00a0あい']) {
+      const parts = splitForHyphenation(word);
+      parts.forEach((part, i) => {
+        if (part !== BREAK_MARKER) return;
+        expect(parts[i - 1]?.endsWith('\u00a0')).toBe(false);
+        expect(parts[i + 1]?.startsWith('\u00a0')).toBe(false);
+      });
+      expect(parts.join('')).toBe(word);
+      // 組版側は空白だけの塊で改行できるので、U+00A0 だけの塊を残さない
+      expect(parts.some((part) => part.length > 0 && part.replaceAll('\u00a0', '') === '')).toBe(false);
+    }
+  });
+
+  it('U+00A0 を含む長い連なりでも、切れない塊は MAX_UNBREAKABLE_RUN（16 字）を超えない', () => {
+    // U+00A0 に接するマーカーを全部外すと、長い連なりを切る所まで消えて行幅を超える語になる。
+    for (const word of ['試験abcdefghijklmno\u00a0pqrstuvwxyz終了。', 'aaaaaaaaaaaaaaa\u00a0\u00a0（試験）']) {
+      const parts = splitForHyphenation(word);
+      const runs = parts.join('\u0000').split(`\u0000${BREAK_MARKER}\u0000`);
+      for (const run of runs) expect(Array.from(run.replaceAll('\u0000', '')).length).toBeLessThanOrEqual(16);
+      expect(parts.join('')).toBe(word);
+    }
+  });
+
   it('禁則を入れても結合すると元の語に戻る', () => {
     for (const word of ['最適化。', '課金・演出', '（例）', 'React連携。', '実装)']) {
       expect(splitForHyphenation(word).join('')).toBe(word);

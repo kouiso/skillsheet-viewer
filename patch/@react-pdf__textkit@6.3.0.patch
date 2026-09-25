@@ -11,10 +11,125 @@ index 2eaa79173d292c08dd8117a4af0e798f0c73dfb5..c19d5c830b2785b793c28dc65e387793
 -export { type Attachment, type AttributedString, type Attributes, type Container, type Coordinate, type DecorationLine, type Fragment, type Glyph, type LayoutOptions, type Paragraph, type Position, type Rect, type Run, bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, justification, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
 +export { type Attachment, type AttributedString, type Attributes, type Container, type Coordinate, type DecorationLine, type Fragment, type Glyph, type LayoutOptions, type Paragraph, type Position, type Rect, type Run, bidiEngine as bidi, layoutEngine as default, fontSubstitution, fromFragments, isSingleCjkSyllable, justification, linebreaker, scriptItemizer, textDecoration, wordHyphenation };
 diff --git a/lib/textkit.js b/lib/textkit.js
-index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..60ec9e2b213da38126c58b7010daee9b154a011b 100644
+index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..0dd061cb064477ddfb3908e5d7c784afbe89e979 100644
 --- a/lib/textkit.js
 +++ b/lib/textkit.js
-@@ -2612,6 +2612,64 @@ const breakLines = (attributedString, nodes, breaks) => {
+@@ -118,6 +118,42 @@ const defaultHyphenate = (word) => [word];
+ const removeSoftHyphens = (word) => {
+     return word.replaceAll(SOFT_HYPHEN$1, '');
+ };
++// 段落の最後の行に最低これだけの字数を残す。1〜2 字（「た。」など）だけが最後の行に
++// 落ちるのを防ぐ。
++const LAST_LINE_MIN_CHARS = 3;
++/**
++ * 段落の末尾 LAST_LINE_MIN_CHARS 字の間にある改行マーカー（空文字列のシラブル）を外す。
++ * 本物の空白（' '）で止めるので、英単語の区切りでの改行はそのまま残る。
++ *
++ * @param syllables - 段落全体のシラブル（その場で書き換える）
++ */
++const keepLastLineMinimum = (syllables) => {
++    let visible = 0;
++    for (let i = syllables.length - 1; i >= 0 && visible < LAST_LINE_MIN_CHARS; i -= 1) {
++        const s = syllables[i];
++        if (s === '') {
++            // 末尾の改行文字の手前のマーカーは最後の行の字数に関係しないので残す。
++            if (visible > 0) {
++                // つないだ後の切れない塊（前のマーカーか空白までの連なり＋最後の行の字）が
++                // LAST_LINE_MIN_CHARS を超えるなら外さない。塊が長いと狭い欄で行幅を超え、
++                // 組版側は塊の途中の禁則を見ずに切って、行頭に「。」や「）」が落ちる。
++                // その時は 1〜2 字の最後の行を残す方がまし。
++                let run = 0;
++                for (let k = i - 1; k >= 0 && syllables[k] !== '' && syllables[k].trim() !== ''; k -= 1) {
++                    run += Array.from(syllables[k]).length;
++                }
++                if (run + visible > LAST_LINE_MIN_CHARS) break;
++                syllables.splice(i, 1);
++            }
++            continue;
++        }
++        if (s.trim() === '') {
++            if (visible > 0) break;
++            continue;
++        }
++        visible += Array.from(s).length;
++    }
++};
+ /**
+  * Wrap words of attribute string
+  *
+@@ -134,20 +170,20 @@ const wrapWords = (engines = {}, options = {}) => {
+         const fragments = [];
+         const builtinHyphenate = engines.wordHyphenation?.() || defaultHyphenate;
+         const hyphenate = options.hyphenationCallback || builtinHyphenate;
++        // 語は run ごとではなく段落全体から切り出す。run は文字の種類（漢字・かな・カタカナ・
++        // 英字）ごとに分かれるため、run ごとに hyphenate を呼ぶと、種類が変わる境目が
++        // 語の先頭と末尾になり、呼び出し側が境目に改行位置を置けなかった（和文の行末に
++        // 数文字ぶんの余白が残る）。
++        const words = attributedString.string.split(/([ ]+)/g).filter(Boolean);
++        for (let j = 0; j < words.length; j += 1) {
++            const parts = hyphenate(words[j], builtinHyphenate).map(removeSoftHyphens);
++            syllables.push(...parts);
++        }
++        keepLastLineMinimum(syllables);
+         let offset = 0;
+         for (let i = 0; i < attributedString.runs.length; i += 1) {
+-            let string = '';
+             const run = attributedString.runs[i];
+-            const words = attributedString.string
+-                .slice(run.start, run.end)
+-                .split(/([ ]+)/g)
+-                .filter(Boolean);
+-            for (let j = 0; j < words.length; j += 1) {
+-                const word = words[j];
+-                const parts = hyphenate(word, builtinHyphenate).map(removeSoftHyphens);
+-                syllables.push(...parts);
+-                string += parts.join('');
+-            }
++            const string = removeSoftHyphens(attributedString.string.slice(run.start, run.end));
+             // Modify run start and end based on removed soft hyphens.
+             const runOffset = run.end - run.start - string.length;
+             const start = run.start - offset;
+@@ -1927,7 +1963,7 @@ const skipPastGlueAndPenalty = (nodes, start) => {
+     }
+     return nodes[j - 1];
+ };
+-const getNextBreakpoint = (subnodes, widths, lineNumber) => {
++const getNextBreakpoint = (subnodes, widths, lineNumber, fillGreedy) => {
+     let position = null;
+     let minimumBadness = Infinity;
+     const sum = { width: 0, stretch: 0, shrink: 0 };
+@@ -1979,7 +2015,13 @@ const getNextBreakpoint = (subnodes, widths, lineNumber) => {
+         if (node.type === 'penalty' || node.type === 'glue') {
+             const ratio = calculateRatio(node);
+             const penalty = node.type === 'penalty' ? node.penalty : 0;
+-            const badness = 100 * Math.abs(ratio) ** 3 + penalty;
++            // 両端揃えでない行は伸ばさないので、入る所まで詰める。幅 0 の改行マーカー
++            // （和文の文字間）は伸びる量が 0 のため悪さが最大になり、行の途中の本物の空白に負けて
++            // その後ろに大きな余白が残っていた。空白もマーカーも同じ扱いにして、最後に入る
++            // 改行位置を選ぶ。行幅を越える（空白を縮めて入れる）位置は従来の計算に任せる。
++            const badness = fillGreedy && node.type === 'glue' && sum.width <= lineLength
++                ? 0
++                : 100 * Math.abs(ratio) ** 3 + penalty;
+             if (minimumBadness >= badness) {
+                 position = i;
+                 minimumBadness = badness;
+@@ -1988,13 +2030,13 @@ const getNextBreakpoint = (subnodes, widths, lineNumber) => {
+     }
+     return sum.width - sum.shrink + hyphenWidth > lineLength ? position : null;
+ };
+-const applyBestFit = (nodes, widths) => {
++const applyBestFit = (nodes, widths, fillGreedy = false) => {
+     let count = 0;
+     let lineNumber = 0;
+     let subnodes = nodes;
+     const breakpoints = [0];
+     while (subnodes.length > 0) {
+-        const breakpoint = getNextBreakpoint(subnodes, widths, lineNumber);
++        const breakpoint = getNextBreakpoint(subnodes, widths, lineNumber, fillGreedy);
+         if (breakpoint !== null) {
+             count += breakpoint;
+             breakpoints.push(count);
+@@ -2612,6 +2654,64 @@ const breakLines = (attributedString, nodes, breaks) => {
      lines.push(slice(start, attributedString.string.length, attributedString));
      return lines;
  };
@@ -79,7 +194,7 @@ index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..60ec9e2b213da38126c58b7010daee9b
  /**
   * Return Knuth & Plass nodes based on line and previously calculated syllables
   *
-@@ -2635,7 +2693,33 @@ const getNodes = (attributedString, { align }, options) => {
+@@ -2635,7 +2735,33 @@ const getNodes = (attributedString, { align }, options) => {
              acc.push(linebreak.glue(width, start, end, stretch, shrink));
          }
          else {
@@ -114,7 +229,29 @@ index 0b8b6fa636c48ef0ac9cecb27040d2bac9303ce8..60ec9e2b213da38126c58b7010daee9b
              const end = start + s.length;
              // Add box node. Box nodes are used to represent words.
              acc.push(linebreak.box(width, start, end, hyphenated));
-@@ -3106,4 +3190,4 @@ const fontSubstitution = () => ({ string, runs }) => {
+@@ -2675,6 +2801,12 @@ const linebreaker = (options) => {
+         let tolerance = options.tolerance || 4;
+         const attributes = getAttributes(attributedString);
+         const nodes = getNodes(attributedString, attributes, options);
++        // 両端揃えでない段落は、Knuth-Plass を使わず入る所まで詰める（best-fit）。
++        // Knuth-Plass は行の良さを空白の伸びだけで測るので、空白を含む和文の段落では
++        // 幅 0 の改行マーカーを選ばず、空白の手前で早く改行して行末に余白を残していた。
++        if (attributes.align !== 'justify') {
++            return breakLines(attributedString, nodes, applyBestFit(nodes, availableWidths, true).slice(1));
++        }
+         let breaks = linebreak(nodes, availableWidths, tolerance);
+         // Try again with a higher tolerance if the line breaking failed.
+         while (breaks.length === 0 && tolerance < TOLERANCE_LIMIT) {
+@@ -2682,7 +2814,7 @@ const linebreaker = (options) => {
+             breaks = linebreak(nodes, availableWidths, tolerance);
+         }
+         if (breaks.length === 0 || (breaks.length === 1 && breaks[0] === 0)) {
+-            breaks = applyBestFit(nodes, availableWidths);
++            breaks = applyBestFit(nodes, availableWidths, attributes.align !== 'justify');
+         }
+         return breakLines(attributedString, nodes, breaks.slice(1));
+     };
+@@ -3106,4 +3238,4 @@ const fontSubstitution = () => ({ string, runs }) => {
      return { string, runs: res };
  };
  
