@@ -16,6 +16,7 @@ import path from 'node:path';
 import { Document, Font, Page, renderToBuffer, StyleSheet, Text } from '@react-pdf/renderer';
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import { companySummaryText } from './company-heading';
 import PDF_FONT_FAMILY from './constant';
 import { splitForHyphenation } from './font';
 import type { QualityPage } from './print-quality';
@@ -153,6 +154,16 @@ describe('和文の段落の改行位置', () => {
       return last <= 2 ? [{ width: widths[pageIndex], last: lines[lines.length - 1].text }] : [];
     });
     expect(runts).toEqual([]);
+  });
+
+  it('会社の帯の区切り「／」が行頭に来ない', async () => {
+    const summary = companySummaryText({ projectCount: 3, roles: '合成の役割A、合成の役割B', teamRange: '5〜12 名' });
+    const widths = Array.from({ length: 40 }, (_, i) => 60 + i * 5);
+    const sweep = await renderSweep(summary, widths);
+    const heads = sweep.flatMap((lines, pageIndex) =>
+      lines.filter((line) => line.text.startsWith('／')).map((line) => `${widths[pageIndex]}: ${line.text}`),
+    );
+    expect(heads).toEqual([]);
   });
 
   describe('直しで崩れないこと（いじわるの例）', () => {
