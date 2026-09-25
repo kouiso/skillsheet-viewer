@@ -79,14 +79,21 @@ jobs:
       - name: PDF layout check against real data
         env:
           REAL_BLOCKS_JSON: ${{ runner.temp }}/blocks.json
-        # assertion の失敗文には実経歴が含まれうるため、成功時も公開ログへ転送しない。
+          # 実データ検査が規則ごとの件数を書き出す先（非公開の一時ファイル）。
+          PDF_LINE_COUNTS_JSON: ${{ runner.temp }}/line-counts.json
+        # assertion の失敗文には実経歴が含まれうるため、本文入りのログは公開しない。
+        # 公開ログへは「落ちたテスト名と規則ごとの件数」だけを出す。
         run: |
           umask 077
           status=0
-          pnpm exec vitest run --config vitest.config.pdf.ts > "$RUNNER_TEMP/pdf-layout.log" 2>&1 || status=$?
+          pnpm exec vitest run --config vitest.config.pdf.ts \
+            --reporter=default --reporter=json \
+            --outputFile.json="$RUNNER_TEMP/pdf-layout.json" \
+            > "$RUNNER_TEMP/pdf-layout.log" 2>&1 || status=$?
+          node script/print-pdf-check-summary.mjs "$RUNNER_TEMP/pdf-layout.json" "$RUNNER_TEMP/line-counts.json" || true
           echo "PDF content and raster checks finished (exit $status)."
           exit "$status"
 
       - name: Remove private data and logs
         if: always()
-        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/pdf-dump.log" "$RUNNER_TEMP/pdf-layout.log"
+        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/pdf-dump.log" "$RUNNER_TEMP/pdf-layout.log" "$RUNNER_TEMP/pdf-layout.json" "$RUNNER_TEMP/line-counts.json"
