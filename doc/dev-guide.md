@@ -28,6 +28,8 @@
   通っても緑のままになる。
 - `pnpm test:watch` - 監視モードでテスト実行
 - `pnpm test:coverage` - カバレッジ付きでテスト実行
+- dogfooding（全画面を人手で検証した記録）: [テスト仕様](dogfooding-test-spec.md) /
+  [実施結果](dogfooding-result-20260804.md) / [証跡](dogfooding-evidence/)
 
 ### コード品質
 
@@ -125,7 +127,7 @@
 
 ## 認証
 
-詳細は `prompt/prompt.md` の「認証の2系統設計」を参照。
+詳細は [setup.md の「認証の 2 系統」](../setup.md#認証の-2-系統) を参照。
 
 - 編集者ログイン: Better Auth（`src/lib/auth.ts` / `server/auth-gate.ts`）
 - 閲覧コード: HMAC + VIEWER_CODE（`server/session.ts` / `server/viewer-gate.ts`）
@@ -176,6 +178,8 @@ story の `tags: ['autodocs']` はこれを addons に入れないとドキュ�
 
 ## デバッグ
 
+トラブルシューティングは [setup.md の「トラブルシューティング」](../setup.md#トラブルシューティング) を参照。
+
 ### Next.js の Fast Refresh
 
 開発サーバー起動中はファイル保存時に自動で再描画されます。
@@ -184,26 +188,3 @@ story の `tags: ['autodocs']` はこれを addons に入れないとドキュ�
 
 - React Developer Tools でコンポーネント構造を確認
 - Network タブで API 通信を監視
-
-## トラブルシューティング
-
-### ビルド・依存エラー
-
-1. `node_modules` を削除して再インストール
-
-   ```bash
-   rm -rf node_modules
-   pnpm install
-   ```
-
-2. 型エラーの切り分け
-
-   ```bash
-   pnpm type-check
-   ```
-
-### スキルシートが表示されない
-
-- `DATABASE_URL` が正しく設定されているか確認
-- マイグレーションが適用済みか確認（`pnpm db:migrate`）
-- 閲覧時は `VIEWER_CODE` による HMAC 閲覧用セッションが有効か確認

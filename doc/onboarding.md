@@ -20,7 +20,7 @@
 3. 開発に入る前に: [dev-guide.md](./dev-guide.md)
    - コマンド一覧・プロジェクト構成・コーディング規約（命名規約は `script/check-naming.sh` が機械検査）
 4. 実装の中身を知るには: [01-setup-and-routing.md](./01-setup-and-routing.md) から
-   [05-toc-and-deploy.md](./05-toc-and-deploy.md) まで順に読む
+   [06-remote-mcp.md](./06-remote-mcp.md) まで順に読む
 
 ## 本番環境と接続先
 
