@@ -64,10 +64,7 @@ test.describe('ビューアトップバー（#397）', () => {
         return { hiddenPx };
       });
       console.log(`[397] 390px/${theme}: header=${headerBox?.height}px hidden=${overlap.hiddenPx}px`);
-      expect(
-        overlap.hiddenPx,
-        `390px/${theme}: 会社見出しがヘッダーに隠れないこと（0px）`,
-      ).toBe(0);
+      expect(overlap.hiddenPx, `390px/${theme}: 会社見出しがヘッダーに隠れないこと（0px）`).toBe(0);
 
       await page.screenshot({ path: `test-results/playwright/397-header-${theme}-sp390.png` });
     }
