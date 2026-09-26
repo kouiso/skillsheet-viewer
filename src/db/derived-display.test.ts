@@ -49,6 +49,15 @@ describe('resolveDisplayedStats', () => {
     ]);
   });
 
+  it('末尾に「数」が無い見出し「参画プロジェクト」も実枚数へ置き換える', () => {
+    // fixture の数字カードが使う表記（console-demo.ts）。「数」付き一覧だけでは
+    // 一致せず手入力値が残っていた（issue #395）。
+    const projects = [project('p1', '2020.01 — 2020.12'), project('p2', '2021.01 — 2021.12')];
+    expect(resolveDisplayedStats([{ value: '30', unit: '件', label: '参画プロジェクト' }], projects)).toEqual([
+      { value: '2', unit: '件', label: '参画プロジェクト' },
+    ]);
+  });
+
   it('月を1件も読めない場合、手入力へ戻さず未確定とする', () => {
     const stats = [{ value: '8', unit: '年', label: '経験年数' }];
     expect(resolveDisplayedStats(stats, [project('p1', '不明'), project('p2', '2020')])).toEqual([
