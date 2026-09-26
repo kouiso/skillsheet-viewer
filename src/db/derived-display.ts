@@ -2,7 +2,14 @@ import type { CompanyInfo, ProjectItem, SkillEntry, StatItem } from './block';
 import { classifyPeriod, deriveCompanyPeriod, flattenTech } from './process';
 
 const ENGINEER_EXPERIENCE_LABELS = new Set(['エンジニア歴', 'エンジニア経験', '経験年数', '実務経験']);
-const PROJECT_COUNT_LABELS = new Set(['案件数', 'プロジェクト数', '参画案件数', '参画プロジェクト数']);
+// 「参画プロジェクト」は末尾に「数」が無い実データの表記（fixture の数字カードが使う）。
+const PROJECT_COUNT_LABELS = new Set([
+  '案件数',
+  'プロジェクト数',
+  '参画案件数',
+  '参画プロジェクト数',
+  '参画プロジェクト',
+]);
 
 /** サーバーからクライアントへ渡す、月初基準の固定月キー。 */
 export function currentMonthKey(date = new Date()): number {
