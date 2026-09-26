@@ -81,18 +81,61 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
     });
   }
 
-  test('タイムラインの全タイトルの左端が揃う — 1280px', async ({ page }) => {
+  test('タイムラインの全タイトルの左端が揃い、日付列が最長ラベル幅に収まる — 1280px', async ({ page }) => {
     await openViewer(page, 1280);
-    const lefts = await page.evaluate(() => {
+    const rows = await page.evaluate(() => {
       const section = document.querySelector('#section-career-timeline')?.closest('section');
       if (!section) return null;
-      const titles = [...section.querySelectorAll<HTMLElement>('.text-\\[14\\.5px\\].font-semibold')];
-      return titles.map((el) => el.getBoundingClientRect().left);
+      // 行 = subgrid を引き継ぐコンテナ。日付 span(font-mono)とタイトル div を拾う。
+      return [...section.querySelectorAll<HTMLElement>('.sm\\:grid-cols-subgrid')].map((row) => {
+        const dateSpan = row.querySelector<HTMLElement>('span.font-mono');
+        const title = row.querySelector<HTMLElement>('.text-\\[14\\.5px\\].font-semibold');
+        if (!dateSpan || !title) return null;
+        // ラベルの本来幅（折り返しなしの max-content）は nowrap にして Range で測る。
+        // 折り返した行幅ではなく固有幅を見ないと、280px 上限で折り返す長いラベルを
+        // 「列より狭い」と誤判定してしまう。
+        const prevWhiteSpace = dateSpan.style.whiteSpace;
+        dateSpan.style.whiteSpace = 'nowrap';
+        const range = document.createRange();
+        range.selectNodeContents(dateSpan);
+        const intrinsicWidth = range.getBoundingClientRect().width;
+        dateSpan.style.whiteSpace = prevWhiteSpace;
+        return {
+          dateLeft: dateSpan.getBoundingClientRect().left,
+          dateRight: dateSpan.getBoundingClientRect().right,
+          dateContentWidth: Math.min(intrinsicWidth, 280),
+          titleLeft: title.getBoundingClientRect().left,
+        };
+      });
     });
-    expect(lefts, 'タイムラインのタイトル群が見つからない').not.toBeNull();
-    expect(lefts?.length, 'タイトルが2件以上あること').toBeGreaterThan(1);
-    const distinct = new Set((lefts ?? []).map((l) => Math.round(l)));
-    expect(distinct.size, `タイトルの左端が一意であること（実測: ${lefts?.join(', ')}）`).toBe(1);
+    expect(rows, 'タイムラインの行が見つからない').not.toBeNull();
+    const valid = (rows ?? []).filter((r): r is NonNullable<typeof r> => r !== null);
+    expect(valid.length, 'タイトルが2件以上あること').toBeGreaterThan(1);
+
+    const lefts = valid.map((r) => r.titleLeft);
+    const distinct = new Set(lefts.map((l) => Math.round(l)));
+    expect(distinct.size, `タイトルの左端が一意であること（実測: ${lefts.join(', ')}）`).toBe(1);
+
+    // F2 回帰防止: 日付ラベル右端とタイトル左端の隙間は列溝 16px（許容 >=12px）。
+    for (const [i, r] of valid.entries()) {
+      const gap = r.titleLeft - r.dateRight;
+      expect(gap, `行${i} の日付→タイトル間隔 >= 12px（実測 ${gap.toFixed(1)}px）`).toBeGreaterThanOrEqual(12);
+    }
+
+    // F1: 日付列幅（タイトル左 - 日付左 - 溝16px）= fit-content で最長ラベル幅（上限280）。
+    // minmax(0,280px) のように常に上限まで伸びないこと、かつ最長ラベルに収まること（±1px 丸め許容）。
+    const colWidths = valid.map((r) => r.titleLeft - r.dateLeft - 16);
+    const maxLabel = Math.max(...valid.map((r) => r.dateContentWidth));
+    for (const [i, w] of colWidths.entries()) {
+      expect(
+        w,
+        `行${i} の日付列幅 ${w.toFixed(1)}px が最長ラベル幅 ${maxLabel.toFixed(1)}px +1 を超えない`,
+      ).toBeLessThanOrEqual(maxLabel + 1);
+      expect(
+        w,
+        `行${i} の日付列幅 ${w.toFixed(1)}px が最長ラベル幅 ${maxLabel.toFixed(1)}px -1 を下回らない`,
+      ).toBeGreaterThanOrEqual(maxLabel - 1);
+    }
   });
 
   test('目次の項目が「…」省略で切れない — 1280px', async ({ page }) => {
