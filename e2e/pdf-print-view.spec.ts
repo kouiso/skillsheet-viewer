@@ -326,15 +326,13 @@ test('10. double-clicking the export button fires exactly one download', async (
 
   // メニュー化した現在の連打ガード: 1発目で popover が閉じ、生成中はトリガーが
   // disabled でメニューを開き直せないため2発目は発射しない。
+  // ダウンロード待機は1発目のクリック前に登録する（発火がクリック中に起きるため）。
+  const downloadPromise = page.waitForEvent('download', { timeout: 30_000 });
   await clickDownloadMenuItem(page, 'PDFダウンロード');
-  await downloadTrigger(page)
-    .click({ timeout: 2_000 })
-    .catch(() => {});
-  const retryItem = page.getByRole('button', { name: 'PDFダウンロード', exact: true });
-  if (await retryItem.isVisible()) {
-    await retryItem.click().catch(() => {});
-  }
-  await page.waitForEvent('download', { timeout: 30_000 });
+  // disabled が外れる変異ではここで red（生成中にメニューを開き直せてしまう）。
+  await expect(downloadTrigger(page)).toBeDisabled({ timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'PDFダウンロード', exact: true })).toHaveCount(0);
+  await downloadPromise;
   // 2発目が飛んでくるかどうかを見るために、もう少し待ってから数える
   // （固定 sleep だが「来ないことの確認」に使っているだけで、来る場合の検出を遅らせているわけではない）。
   await page.waitForTimeout(2_000);
