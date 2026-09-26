@@ -19,9 +19,7 @@ const LOGIN_PATH = '/api/trpc/auth.login';
 const EMPTY_STORAGE = { cookies: [], origins: [] };
 
 test.describe('/viewer-auth 初期化ゲート (#398)', () => {
-  test('hydration 前は入力欄と送信ボタンが無効で、submit を仕掛けても auth.login は飛ばない', async ({
-    browser,
-  }) => {
+  test('hydration 前は入力欄と送信ボタンが無効で、submit を仕掛けても auth.login は飛ばない', async ({ browser }) => {
     // クライアント JS チャンクを遮断して hydration が完了しない状態を作る。
     // SSR HTML 上の disabled 属性だけで「準備前」が決定的に再現できる。
     const context = await browser.newContext({ storageState: EMPTY_STORAGE });
@@ -51,9 +49,7 @@ test.describe('/viewer-auth 初期化ゲート (#398)', () => {
     }
   });
 
-  test('読み込み直後の入力→送信を 20 回連続で試しても空コードが飛ばず全て成功する', async ({
-    browser,
-  }) => {
+  test('読み込み直後の入力→送信を 20 回連続で試しても空コードが飛ばず全て成功する', async ({ browser }) => {
     // 失敗の定義（Issue の完了条件）: 空のコードが飛ぶ、または auth.login が
     // 401/429 等の失敗を返す。送信ペイロードを捕捉して入力値そのものが届くことと、
     // レスポンスが成功であることを毎回確認する。
@@ -82,9 +78,7 @@ test.describe('/viewer-auth 初期化ゲート (#398)', () => {
           page.getByRole('button', { name: '認証' }).click(),
         ]);
         expect(response.status(), `iteration ${i + 1}: auth.login must succeed`).toBe(200);
-        expect(sentCodes.at(-1), `iteration ${i + 1}: sent code must be the typed code`).toBe(
-          viewerCode,
-        );
+        expect(sentCodes.at(-1), `iteration ${i + 1}: sent code must be the typed code`).toBe(viewerCode);
         // 成功すると /view へ遷移する。「/view」は「/viewer-auth」の接頭辞でもあるため
         // 後続が ?/#/末尾 であることを要求して /viewer-auth への部分一致を除く
         // （pdf-print-view.spec.ts で同じ罠を踏んだ実測あり）。
