@@ -7,7 +7,10 @@
  * 技術チップを、簡約版はこれまで丸ごと描画しておらず、完全性検査
  * （`print-completeness.node.ts`）で 234 件の欠落として実測された。そのため 2 段構成にしている。
  *
- *  - 1 段目: デザインどおりの 1 行（期間 88pt ／ 案件名 + 一言 ／ チーム 44pt）。
+ *  - 1 段目: デザインどおりの 1 行（期間 88pt ／ 案件名 ／ チーム 44pt）。
+ *    デザインでは案件名の横に「一言」が付くが、そこへ概要の先頭 1 文を出すと
+ *    2 段目の概要ブロックと同じ文が同じページに 2 度出る（#399）し、切り詰めた
+ *    抜粋自体が `no-abbreviated-rendering` skill 違反なので、一言は出さない。
  *  - 2 段目: 期間列の幅ぶんインデントして案件名の真下に本文を流す。メタ情報（役割・
  *    技術領域・担当工程）は表ではなく 1 行の密な文字列に、技術チップは詳細版のような
  *    分類ラベル列を持たず 1 本の折り返し行にまとめる（分類は付加情報、技術名そのものが
@@ -31,9 +34,6 @@ import type { PrintProject } from './print-view-model';
 const ROW_PAD_VERTICAL = 7;
 const ROW_PAD_HORIZONTAL = 10;
 const HEAD_PAD_VERTICAL = 5;
-
-/** 案件名と技術・一言の行間（デザインの gap:2px）。 */
-const MAIN_COLUMN_GAP = 2;
 
 /** 1 つの葉に入れるチップの上限。11pt のチップが 3 段折り返しても 1 ページに十分収まる件数。 */
 const CHIPS_PER_LEAF = 18;
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     width: PRINT_SIZE.labelColCompact,
     flexShrink: 0,
   },
-  main: { flex: 1, flexDirection: 'column', gap: MAIN_COLUMN_GAP },
+  main: { flex: 1 },
   // 11.5pt はトークンの本文サイズ。ウェイトと行間だけデザイン（500 / 1.5）に寄せる。
   title: {
     ...PRINT_TYPE.body,
@@ -133,7 +133,6 @@ export function CompactRow({ project }: { project: PrintProject }) {
       <View style={styles.main}>
         {/* 詳細版と同じ通し番号。両方に出さないと、詳細版と簡約版が混ざる会社で番号が飛ぶ。 */}
         <PrintText style={styles.title}>{`${project.index}. ${project.title}`}</PrintText>
-        {project.compactNote.length > 0 && <PrintText style={styles.note}>{project.compactNote}</PrintText>}
       </View>
       <View style={styles.teamCell}>
         {project.team.length > 0 && <PrintText style={styles.teamText}>{project.team}</PrintText>}
@@ -197,8 +196,8 @@ export function compactBodyPieces(project: PrintProject): CompactBodyPiece[] {
 
   const sections = [
     { label: '概要', text: project.summary },
-    { label: '業務内容', text: project.duties },
-    { label: '習得スキル・実績', text: project.acquired },
+    { label: '担当業務', text: project.duties },
+    { label: '習得スキル', text: project.acquired },
     { label: 'コメント', text: project.comment },
   ].filter((section) => section.text.length > 0);
   for (const section of sections) {
