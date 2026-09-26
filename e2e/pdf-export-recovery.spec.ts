@@ -3,6 +3,7 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist';
 import { buildConsoleDemoBlocks } from '@/db/fixture';
 import { createSheet, deleteSheet, listSheets } from './document-fixture';
+import { clickDownloadMenuItem } from './download-menu';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const RUN_ID = randomUUID().slice(0, 8);
@@ -98,7 +99,7 @@ test('PDF 生成がフォント取得失敗のあとリロード無しで回復�
 
   // 1 回目: フォント取得だけを落とす（回線不良・5xx の再現）。
   await page.route(fontGlob, (route) => route.abort());
-  await page.getByRole('button', { name: 'PDFダウンロード' }).click();
+  await clickDownloadMenuItem(page, 'PDFダウンロード');
   await expect(page.getByText('PDFの生成に失敗しました')).toBeVisible();
 
   // 回線復旧。リロードはしない — ユーザーはリロードしろとどこにも言われていない。
@@ -106,7 +107,7 @@ test('PDF 生成がフォント取得失敗のあとリロード無しで回復�
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 60_000 }),
-    page.getByRole('button', { name: 'PDFダウンロード' }).click(),
+    clickDownloadMenuItem(page, 'PDFダウンロード'),
   ]);
   const downloadPath = await download.path();
   expect(
@@ -144,7 +145,7 @@ test('「スキルマトリクス」を OFF にすると PDF 1 ページ目か�
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 60_000 }),
-    page.getByRole('button', { name: 'PDFダウンロード' }).click(),
+    clickDownloadMenuItem(page, 'PDFダウンロード'),
   ]);
   const downloadPath = await download.path();
   if (!downloadPath) throw new Error('PDF download path is missing');

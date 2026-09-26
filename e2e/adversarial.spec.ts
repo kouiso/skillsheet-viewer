@@ -6,6 +6,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { createRealVolumeDemoSheet } from '@/db/fixture';
 import { authFile, login } from './auth';
 import { deleteSheet, getSkillSheetById, listSheets } from './document-fixture';
+import { clickDownloadMenuItem } from './download-menu';
 
 test.use({ storageState: authFile });
 
@@ -394,7 +395,7 @@ test('F. PDF stress', async ({ browser }) => {
 
   await page.goto(`/view/db/${richSheetId}`, { waitUntil: 'networkidle' });
   const downloadPromise = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'PDFダウンロード' }).click();
+  await clickDownloadMenuItem(page, 'PDFダウンロード');
   const download = await downloadPromise;
   const pdfPath = path.join(tmpDir, `stress-${RUN_ID}.pdf`);
   await download.saveAs(pdfPath);

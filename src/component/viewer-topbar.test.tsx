@@ -166,35 +166,42 @@ describe('ViewerTopbar', () => {
   });
 
   describe('PDF ダウンロードの生成中フィードバック（#191）', () => {
-    it('通常時は「PDFダウンロード」ラベルで押せる（デスクトップ側）', () => {
+    it('デスクトップでは「ダウンロード」メニュー内に PDF の選択肢が出る（#397）', async () => {
+      const user = userEvent.setup();
       renderTopbar({ onDownloadPdf: vi.fn() });
-      const buttons = getIconCopies('PDFダウンロード');
-      expect(buttons).toHaveLength(1);
-      for (const button of buttons) {
-        expect(button).toBeEnabled();
-        expect(button).toHaveAttribute('aria-busy', 'false');
+      // SP / デスクトップ双方に「ダウンロード」メニューがある。
+      const triggers = getIconCopies('ダウンロード');
+      expect(triggers).toHaveLength(2);
+      for (const trigger of triggers) {
+        expect(trigger).toBeEnabled();
+        expect(trigger).toHaveAttribute('aria-busy', 'false');
       }
-      // SP 側は「ダウンロード」メニューに畳まれている。
-      expect(getIconCopies('ダウンロード')).toHaveLength(1);
+      // デスクトップ側（DOM 順で2個目）を開くと PDF の選択肢が出る。
+      await user.click(triggers[1]);
+      expect(await screen.findByRole('button', { name: 'PDFダウンロード' })).toBeInTheDocument();
     });
 
     it('pdfLoading 中は無効化され、aria-busy と生成中ラベルで状態を伝える', () => {
       renderTopbar({ onDownloadPdf: vi.fn(), pdfLoading: true });
-      const desktop = getIconCopies('PDFを生成中');
-      expect(desktop).toHaveLength(1);
-      const sp = getIconCopies('ダウンロードを生成中');
-      expect(sp).toHaveLength(1);
-      for (const button of [...desktop, ...sp]) {
+      const buttons = getIconCopies('ダウンロードを生成中');
+      // SP / デスクトップ双方のメニューが生成中表示になる。
+      expect(buttons).toHaveLength(2);
+      for (const button of buttons) {
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('aria-busy', 'true');
       }
-      expect(screen.queryByLabelText('PDFダウンロード')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('ダウンロード')).not.toBeInTheDocument();
     });
 
-    it('onDownloadPdf 未指定なら PDF ボタン自体を出さない', () => {
-      renderTopbar();
-      expect(screen.queryByLabelText('PDFダウンロード')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('PDFを生成中')).not.toBeInTheDocument();
+    it('onDownloadPdf 未指定なら PDF の選択肢を出さない', async () => {
+      const user = userEvent.setup();
+      renderTopbar({ onDownloadExcel: vi.fn() });
+      const triggers = getIconCopies('ダウンロード');
+      await user.click(triggers[1]);
+      // メニュー内の選択肢はデスクトップ側の同名常設ボタンと区別するためポップオーバー内を探す。
+      const inPopover = (el: HTMLElement) => el.closest('[data-radix-popper-content-wrapper]') !== null;
+      expect(screen.queryAllByRole('button', { name: 'PDFダウンロード' }).filter(inPopover)).toHaveLength(0);
+      expect(screen.getAllByRole('button', { name: 'Excelダウンロード' }).some(inPopover)).toBe(true);
     });
   });
 
@@ -207,7 +214,8 @@ describe('ViewerTopbar', () => {
         expect(button).toBeEnabled();
         expect(button).toHaveAttribute('aria-busy', 'false');
       }
-      expect(getIconCopies('ダウンロード')).toHaveLength(1);
+      // SP / デスクトップ双方に「ダウンロード」メニューがある。
+      expect(getIconCopies('ダウンロード')).toHaveLength(2);
     });
 
     it('excelLoading 中は無効化され、aria-busy と生成中ラベルで状態を伝える', () => {
@@ -215,7 +223,7 @@ describe('ViewerTopbar', () => {
       const desktop = getIconCopies('Excelを生成中');
       expect(desktop).toHaveLength(1);
       const sp = getIconCopies('ダウンロードを生成中');
-      expect(sp).toHaveLength(1);
+      expect(sp).toHaveLength(2);
       for (const button of [...desktop, ...sp]) {
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('aria-busy', 'true');
@@ -239,7 +247,8 @@ describe('ViewerTopbar', () => {
         expect(button).toBeEnabled();
         expect(button).toHaveAttribute('aria-busy', 'false');
       }
-      expect(getIconCopies('ダウンロード')).toHaveLength(1);
+      // SP / デスクトップ双方に「ダウンロード」メニューがある。
+      expect(getIconCopies('ダウンロード')).toHaveLength(2);
     });
 
     it('onDownloadPdfDigest 未指定なら要約版ボタン自体を出さない', () => {
@@ -285,8 +294,9 @@ describe('ViewerTopbar', () => {
       renderTopbar({ onDownloadPdfDigest: vi.fn(), digestLoading: true });
       const desktop = getIconCopies('要約版を生成中');
       expect(desktop).toHaveLength(1);
+      // 要約版生成中はデスクトップ側の「ダウンロード」メニューも生成中になる。
       const sp = getIconCopies('ダウンロードを生成中');
-      expect(sp).toHaveLength(1);
+      expect(sp).toHaveLength(2);
       for (const button of [...desktop, ...sp]) {
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('aria-busy', 'true');

@@ -5,6 +5,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { buildConsoleDemoBlocks } from '@/db/fixture';
 import { authFile, login } from './auth';
 import { createSheet, deleteSheet, listSheets } from './document-fixture';
+import { clickDownloadMenuItem } from './download-menu';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
@@ -255,10 +256,7 @@ test('viewer: auth, list, detail, PDF download, theme and viewports', async ({ b
   await capture(page, 'C-viewer-detail-light.png');
 
   // PDF ダウンロード
-  const [download] = await Promise.all([
-    page.waitForEvent('download'),
-    page.getByRole('button', { name: 'PDFダウンロード' }).click(),
-  ]);
+  const [download] = await Promise.all([page.waitForEvent('download'), clickDownloadMenuItem(page, 'PDFダウンロード')]);
   const downloadPath = await download.path();
   expect(downloadPath).toBeTruthy();
   if (!downloadPath) {
