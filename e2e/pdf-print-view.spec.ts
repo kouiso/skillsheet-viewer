@@ -108,11 +108,12 @@ function processToggleButton(page: Page) {
 
 // #397 でデスクトップの PDF 出力も「ダウンロード」Popover メニュー内に移った。
 // 実ボタンはメニュー項目なので、エクスポートは clickDownloadMenuItem 経由で行う。
-// トリガー自体の参照（enabled 確認用）は「Excelダウンロード」等と衝突しないよう exact で取る。
+// トリガー自体の参照（enabled/disabled 確認用）は「Excelダウンロード」等と衝突しないよう全一致で取る。
 function downloadTrigger(page: Page) {
-  // 生成中は aria-label が「ダウンロードを生成中」に変わるため両状態にマッチさせる
-  // （exact なので「Excelダウンロード」「要約版をダウンロード」等は拾わない）。
-  return page.getByRole('button', { name: /ダウンロード(を生成中)?/, exact: true });
+  // 生成中は aria-label が「ダウンロードを生成中」に変わるため両状態にマッチさせる。
+  // regex では exact が全一致を強制しないため ^$ でアンカーする
+  // （「Excelダウンロード」「要約版をダウンロード」等を拾わないため）。
+  return page.getByRole('button', { name: /^ダウンロード(を生成中)?$/ });
 }
 
 function savePdfPath(label: string) {
