@@ -38,8 +38,13 @@ describe('Timeline', () => {
     expect(row?.className).toContain('sm:col-span-2');
     expect(row?.className).toContain('sm:grid');
     expect(row?.className).toContain('sm:grid-cols-subgrid');
-    // 親グリッドの日付トラックは上限 280px の固定列。行ごとの可変幅ではない。
-    expect(row?.parentElement?.className).toContain('sm:grid-cols-[minmax(0,280px)_minmax(0,1fr)]');
+    // 行の間隔は縦方向だけ。column-gap を行側に置くと subgrid の溝幅
+    // （親の sm:gap-x-4 = 16px）を上書きして日付とタイトルの間が詰まる（#393 F2）。
+    expect(row?.className).toContain('gap-y-1');
+    expect(row?.className).not.toMatch(/\bgap-1\b/);
+    // 親グリッドの日付トラックは最長ラベル幅・上限 280px の全行共有 1 列。
+    // minmax(0,280px) は空きがあれば常に 280px まで伸びるため fit-content を使う。
+    expect(row?.parentElement?.className).toContain('sm:grid-cols-[fit-content(280px)_minmax(0,1fr)]');
     // 日付ラベルはこの列内で折り返す（#150 の回帰防止と同じく狭幅側の圧迫を防ぐ）。
     expect(period.className).toContain('min-w-0');
     expect(period.className).toContain('break-words');

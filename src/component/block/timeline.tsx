@@ -33,9 +33,10 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
     <div className="relative rounded-[var(--radius-lg)] border border-border bg-card p-7 pl-[26px] shadow-elevation-1">
       <div className="absolute bottom-7 left-[6px] top-7 w-0.5 bg-border" />
       {/* sm 以上は subgrid で日付＋稼働月数の列幅を全行で揃える。
-          最長ラベルに合う固定幅になるため全タイトルの左端が一致し、
-          280px を超えるラベルだけ列内で折り返す（#393）。 */}
-      <div className="flex flex-col gap-y-[18px] sm:grid sm:grid-cols-[minmax(0,280px)_minmax(0,1fr)] sm:gap-x-4">
+          fit-content で最長ラベル幅（上限 280px）の全行共有 1 トラックになり、
+          全タイトルの左端が一致する。minmax(0,280px) だと空きがあれば常に
+          280px まで伸びて短いラベルの行に空白が残るため使わない（#393）。 */}
+      <div className="flex flex-col gap-y-[18px] sm:grid sm:grid-cols-[fit-content(280px)_minmax(0,1fr)] sm:gap-x-4">
         {sorted.map((item) => {
           const tech = flattenTech(item.tech);
           const hit = activeTech.length > 0 && tech.some((t) => activeTech.includes(t));
@@ -50,9 +51,11 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
           return (
             // 320px では日付を独立行に落とす（#150）。sm 以上は親グリッドの
             // 2 列を subgrid で引き継ぎ、日付列とタイトル列を揃える。
+            // 行の縦間隔は gap-y-1 だけ。column-gap を行側に置くと subgrid の
+            // 溝幅（親の sm:gap-x-4）を上書きして日付とタイトルが詰まる（#393）。
             <div
               key={item.id}
-              className="relative flex flex-col gap-1 sm:col-span-2 sm:grid sm:grid-cols-subgrid sm:items-baseline"
+              className="relative flex flex-col gap-y-1 sm:col-span-2 sm:grid sm:grid-cols-subgrid sm:items-baseline"
             >
               <span
                 className={`absolute -left-[26px] top-[5px] size-3.5 rounded-full border-2 ${
