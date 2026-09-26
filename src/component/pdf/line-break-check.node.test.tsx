@@ -65,6 +65,31 @@ function mkPage(lines: LineCheckItem[]): LineCheckPage {
 
 const zeroCounts = Object.fromEntries(LINE_BREAK_RULES.map((rule) => [rule, 0]));
 
+/**
+ * 規則ごとの件数を PDF_LINE_COUNTS_JSON へテスト名で追記する（既存の内容とマージ。
+ * 実データテストだけでなく、落ちたすべてのテストについて件数を公開ログへ出せるように）。
+ * ログにはテスト名と件数だけを書き、行の文字列は書かない。
+ */
+function recordLineCounts(counts: Record<string, number>): void {
+  const countsPath = process.env.PDF_LINE_COUNTS_JSON;
+  if (!countsPath) return;
+  let all: Record<string, Record<string, number>> = {};
+  if (existsSync(countsPath)) {
+    try {
+      const parsed: unknown = JSON.parse(readFileSync(countsPath, 'utf-8'));
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        all = parsed as Record<string, Record<string, number>>;
+      }
+    } catch (error) {
+      console.warn(`[line-break-check] 件数ファイルを読めませんでした（作り直します）: ${String(error)}`);
+    }
+  }
+  const testName = expect.getState().currentTestName;
+  if (testName === undefined) return;
+  all[testName] = counts;
+  writeFileSync(countsPath, JSON.stringify(all), { mode: 0o600 });
+}
+
 describe('改行の規則検査（合成データ）', () => {
   it('行末の余白: 段落の途中で 2 字以上空けて折り返した行を数える', () => {
     // 3 行の段落。1 行目だけが欄の右端（555）より 2 字以上手前で折れている。
@@ -82,11 +107,102 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('ざじずぜぞだ', 720, { width: 120 }),
     ]);
     const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
     expect(result.counts['trailing-gap']).toBe(1);
     expect(result.failingCount).toBe(1);
     expect(result.violations).toEqual([{ rule: 'trailing-gap', page: 1, lineIndex: 0 }]);
     // 段落の最後の行が短いのは普通なので、余白では数えない（このデータの 3 行目）。
     expect(result.counts['runt-last-line']).toBe(0);
+  });
+
+  it('行末の余白: 最後から 2 番目の行の末の余白も数える（短い最後の行を避ける意図的な余白は除く）', () => {
+    // 3 行の段落。2 行目（最後の行を作る折り返し）が 8 字分以上の余白を残して折れ、
+    // 次の行（最後の行）の先頭単位がその余白に入る。最後の行は 8 字で、単位を戻しても
+    // 2 字以下にはならないので意図的な余白ではない。
+    const page = mkPage([
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも', 760, { width: 515 }),
+      mkLine('やゆよわをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ', 740, { width: 423 }),
+      mkLine('おわりの行です。', 720, { width: 92 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['trailing-gap']).toBe(1);
+    expect(result.violations).toEqual([{ rule: 'trailing-gap', page: 1, lineIndex: 1 }]);
+
+    // 意図的な余白の側: 最後の行が 2 字の段落では、折り返しを戻すと最後の行が
+    // 消える（残り 1 字）ので余白は数えない。短い最後の行自体は規則 3 が数える。
+    const runtAvoidance = mkPage([
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも', 760, { width: 515 }),
+      mkLine('やゆよわをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ', 740, { width: 423 }),
+      mkLine('す。', 720, { width: 23 }),
+    ]);
+    const exempt = checkLineBreakRules([runtAvoidance]);
+    recordLineCounts(exempt.counts);
+    expect(exempt.counts['trailing-gap']).toBe(0);
+    expect(exempt.counts['runt-last-line']).toBe(1);
+  });
+
+  it('項目末尾の漢字: 欄いっぱいまで書かれた行が「年」で終わっても項目は切れない', () => {
+    // 段落の途中で欄いっぱいまで書かれた行がたまたま「年」で終わる形。
+    // 「年」ごとに切ると 2 つの塊になり長すぎる段落として見えなくなるので、
+    // つながった 1 段落（150 字 > 137）として数えられることが証跡になる。
+    const line = 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへ';
+    const page = mkPage([
+      mkLine(line, 780, { width: 515 }),
+      mkLine(line, 760, { width: 515 }),
+      mkLine(`${line.slice(0, 28)}年`, 740, { width: 515 }),
+      mkLine(line, 720, { width: 515 }),
+      mkLine(line, 700, { width: 515 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['long-paragraph']).toBe(1);
+    expect(result.counts['trailing-gap']).toBe(0);
+  });
+
+  it('項目末尾の漢字: 早すぎる折り返しの形をした行は項目の終わりにせず違反として数える', () => {
+    // 2 行目が欄いっぱいまで届かず「年」で終わり、次の行の先頭単位が余白に入る形。
+    // 「年」で切ると違反が別段落に隠れるので、段落の途中行として残して数える。
+    const page = mkPage([
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも', 780, { width: 515 }),
+      mkLine('この文は行の途中で折り返されてしまう説明の 2024 年', 760, { width: 423 }),
+      mkLine('つづきの行はここまで並んで欄いっぱいまで届く文です。', 740, { width: 515 }),
+      mkLine('おわり。', 720, { width: 46 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['trailing-gap']).toBe(1);
+    expect(result.violations).toEqual([{ rule: 'trailing-gap', page: 1, lineIndex: 1 }]);
+
+    // 対照: 短い値行（「9名」のような独立した 1 行の項目）は変わらず項目の終わりとする。
+    const valueLine = mkPage([
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも。', 780, { width: 515 }),
+      mkLine('9名', 760, { width: 23 }),
+      mkLine('つづきの文はここから始まって欄いっぱいまで届くように並ぶ文です。', 740, { width: 515 }),
+    ]);
+    const valueResult = checkLineBreakRules([valueLine]);
+    recordLineCounts(valueResult.counts);
+    expect(valueResult.counts['trailing-gap']).toBe(0);
+  });
+
+  it('表の列の判定: 早すぎる折り返しを重ねた段落を「余白が多い列」と見逃さない', () => {
+    // 4 行の段落で 1・2 行目が 8 字分以上手前で折れ、3 行目は欄いっぱいまで届く。
+    // 非末行の半分以上に余白がある塊を列とみなすだけだと、この段落は「表」に分類されて
+    // 違反が 0 になる —— 悪い組版ほど見逃す抜け道。余白に次の行の先頭単位が入る
+    // 行がある塊は必ず段落として扱う。
+    const page = mkPage([
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねの', 780, { width: 423 }),
+      mkLine('やゆよわをんがぎぐげござじずぜぞだぢづでどばびぶべぼ', 760, { width: 423 }),
+      mkLine('ぱぴぷぺぽききくけこさしすせそたちつてとなにぬねのはひふへほまみむ', 740, { width: 515 }),
+      mkLine('めもや。', 720, { width: 46 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['trailing-gap']).toBe(2);
+    expect(result.violations).toEqual([
+      { rule: 'trailing-gap', page: 1, lineIndex: 0 },
+      { rule: 'trailing-gap', page: 1, lineIndex: 1 },
+    ]);
   });
 
   it('英数字の途中: 英数字で終わる行の次が英数字で始まると数える（16 字を超える連なりの強制改行は除く）', () => {
@@ -96,6 +212,7 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('おしまいの行です', 720, { width: 150 }),
     ]);
     const result = checkLineBreakRules([bad]);
+    recordLineCounts(result.counts);
     expect(result.counts['mid-alnum-run']).toBe(1);
 
     // 16 字を超える空白なしの連なりは splitLongRun が行幅いっぱいで切るので、違反にしない。
@@ -114,6 +231,7 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('きちんと終わる行', 680, { width: 200 }),
     ]);
     const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
     expect(result.counts['runt-last-line']).toBe(1);
     expect(result.violations).toEqual([{ rule: 'runt-last-line', page: 1, lineIndex: 1 }]);
   });
@@ -128,6 +246,7 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('.5 のような行頭ピリオドは語の途中', 640, { width: 400 }),
     ]);
     const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
     // （で終わる行末 = 1 件、。で始まる行頭 = 1 件、'.5' は除外
     expect(result.counts.kinsoku).toBe(2);
   });
@@ -136,6 +255,7 @@ describe('改行の規則検査（合成データ）', () => {
     const longLine = 'あいうえおかきくけこさしすせそたちつてと'; // 20 字
     const longParagraph = mkPage(Array.from({ length: 9 }, (_, i) => mkLine(longLine, 760 - i * 20, { width: 500 })));
     const result = checkLineBreakRules([longParagraph]);
+    recordLineCounts(result.counts);
     // 9 行の段落 → 最終行を除く 8 行 × 20 字 = 160 字 > 137
     expect(result.counts['long-paragraph']).toBe(1);
 
@@ -148,6 +268,7 @@ describe('改行の規則検査（合成データ）', () => {
       ...Array.from({ length: 4 }, (_, i) => mkLine(bodyLine, 460 - i * 20, { width: 380, fontName: 'regular' })),
     ]);
     const boldResult = checkLineBreakRules([boldParagraph]);
+    recordLineCounts(boldResult.counts);
     expect(boldResult.counts['long-paragraph']).toBe(0);
     expect(boldResult.failingCount).toBe(0);
   });
@@ -160,6 +281,7 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('footerの行', 20, { width: 200 }),
     ]);
     const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
     expect(result.counts['frame-overflow']).toBe(2);
   });
 
@@ -170,6 +292,7 @@ describe('改行の規則検査（合成データ）', () => {
     ]);
     const page2 = mkPage([mkLine('ページをまたいだ最後の行', 780, { width: 300 })]);
     const result = checkLineBreakRules([page1, page2]);
+    recordLineCounts(result.counts);
     expect(result.counts['page-spill']).toBe(1);
     expect(result.failingCount).toBe(0);
   });
@@ -181,6 +304,7 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('最後の行はここで終わる。', 720, { width: 300 }),
     ]);
     const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
     expect(result.counts).toEqual(zeroCounts);
     expect(result.failingCount).toBe(0);
   });
@@ -277,6 +401,7 @@ describe('改行の規則検査（描画済み合成文）', () => {
       console.log(
         `[line-break:synthetic] ${LINE_BREAK_RULES.map((rule) => `${rule}=${result.counts[rule]}`).join(' ')}`,
       );
+      recordLineCounts(result.counts);
       expect(result.failingCount).toBe(0);
     },
     120_000,
@@ -317,11 +442,7 @@ describe('改行の規則検査（実データ）', () => {
       // 公開ログへ出すのは件数だけ。本文の文字列は console にも書かない。
       const summary = LINE_BREAK_RULES.map((rule) => `${rule}=${result.counts[rule]}`).join(' ');
       console.log(`[line-break:real] pages=${pages.length} ${summary}`);
-      const countsPath = process.env.PDF_LINE_COUNTS_JSON;
-      if (countsPath) {
-        const testName = expect.getState().currentTestName ?? '実データで改行の規則違反が 0 件';
-        writeFileSync(countsPath, JSON.stringify({ [testName]: result.counts }), { mode: 0o600 });
-      }
+      recordLineCounts(result.counts);
       expect(result.failingCount).toBe(0);
     },
     300_000,

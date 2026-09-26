@@ -117,35 +117,16 @@ const MARKER_LINE = /^(?:[-‐‑‒–—―・•‣◦]|\d{1,3}[.)])+$/;
 /** 行頭が箇条書きの開始を示す記号のとき、その行は新しい段落の先頭とみなす。 */
 const PARAGRAPH_HEAD = /^(?:[-‐‑‒–—―・•‣◦]|\d{1,3}[.)])/;
 
-/** 文・項目の末尾に来る字。これで終わる行は明示的な項目の最終行（段落の最後）とみなす。
- * 句点・感嘆符に加えて「7名」「6ヶ月」「2021年」のような量記号・名詞止めの項目末尾も拾う。 */
-const ITEM_END_TAIL = new Set([
-  '。',
-  '！',
-  '？',
-  '）',
-  '』',
-  '」',
-  '】',
-  '名',
-  '人',
-  '月',
-  '日',
-  '年',
-  '社',
-  '件',
-  '枚',
-  '本',
-  '台',
-  '円',
-  '％',
-  '%',
-]);
+/** 文・項目の末尾に来る字（無条件）。句点・感嘆・閉じ括弧で終わる行は常に項目の最終行。 */
+const HARD_ITEM_END = new Set(['。', '！', '？', '）', '』', '】', '」']);
 
-/** 行が項目の終わりらしい字で終わるか。 */
-function endsItemTail(line: ExtractLine): boolean {
-  return ITEM_END_TAIL.has(line.text.trimEnd().slice(-1));
-}
+/**
+ * 「7名」「6ヶ月」「2021年」のような量記号・名詞止めの項目末尾（条件付き）。
+ * 漢字は一般の漢字と見分けがつかないので、行が欄いっぱいまで書かれている場合や
+ * 行自体が「段落の途中で早く折り返された形」をしている場合は項目の終わりとしない
+ * （詳しくは isSameParagraph）。
+ */
+const SOFT_ITEM_END = new Set(['名', '人', '月', '日', '年', '社', '件', '枚', '本', '台', '円', '％', '%']);
 
 // ---- 内部構造 ----
 
@@ -413,6 +394,7 @@ function isSameParagraph(
   next: ExtractLine,
   medianPitch: number,
   markerLines: ExtractLine[],
+  columnRight: number,
 ): boolean {
   // 段内の普通の行間より明確に開いている → 段落（またはブロック）の区切り。
   if (prev.y - next.y > medianPitch + PARA_PITCH_OVER_PT) return false;
@@ -420,7 +402,27 @@ function isSameParagraph(
   if (prev.allBold !== next.allBold) return false;
   // 項目の終わりらしい字で終わる行は、その項目の最後の行（以降は別の項目）。
   // ソースの改行項目はほぼ必ず句点類で閉じるので、ここで段落を切る。
-  if (endsItemTail(prev)) return false;
+  const tailChar = Array.from(prev.text.trimEnd()).at(-1) ?? '';
+  if (HARD_ITEM_END.has(tailChar)) return false;
+  if (SOFT_ITEM_END.has(tailChar)) {
+    // 漢字の助数詞は一般の漢字と見分けがつかないので、行の形でも判定する。
+    // 欄いっぱい（右端までの残りが 1 字未満）まで書かれた行は段落の途中で
+    // たまたまその字で切れただけなので項目の終わりとしない（切ると残りの行が
+    // 別段落になり、規則 1・2・5 の対象からこぼれる）。
+    const gap = columnRight - prev.right;
+    if (gap >= prev.size) {
+      // 行が短い値行（'9名' のような独立した 1 行の項目）はそのまま項目の終わり。
+      // 欄の半分以上を埋める行が 2 字以上の余白を残し、かつ次の行の先頭単位が
+      // その余白に入るときは「早すぎる折り返し」の形 —— ここで切ると規則 1 の
+      // 対象から隠れるので、項目の終わりとせず段落の途中行として残す。
+      const unit = firstBreakUnit(next);
+      const isEarlyBreakShape =
+        gap >= prev.size * 2 &&
+        measureUnitWidth(next, unit) <= gap - 0.5 &&
+        visibleChars(prev.text) * prev.size * 2 >= columnRight - prev.left;
+      if (!isEarlyBreakShape) return false;
+    }
+  }
   // 行頭が箇条書き記号 → 新しい項目の始まり。
   if (PARAGRAPH_HEAD.test(next.text.trimStart())) return false;
   // 同じ高さに箇条書き記号の行があれば、その本文行は項目の先頭。
@@ -434,17 +436,33 @@ function isSameParagraph(
 const TABULAR_RIGHT_RATIO = 0.8;
 
 /**
- * 段落として扱うべき塊か。段落なら末尾行以外の各行は折り返しの都合で
- * ほぼ同じ右端（ブロック内の最大到達点）まで届く。label:value の列や
- * 技術チップの列・期間や人数の値の列のように行ごとに右端がばらける塊、
- * またはページ内の本文の右端に全く届かない幅の列は、段落の規則の対象にしない。
+ * 段落として扱うべき塊か。label:value の列や技術チップの列・期間や人数の値の列
+ * （ページ内の本文の右端に全く届かない幅の塊）は段落の規則の対象にしない。
+ *
+ * 判定は余白の形だけからは決めない。「非末行の半分以上が右端より手前で終わる」
+ * だけで列とみなすと、早すぎる折り返しを重ねた段落ほど検査をすり抜ける
+ * （悪い組版ほど見逃す、単調でない抜け道になる）。そこで右端近くまで届く塊は
+ * 段落とみなし、非末行の余白に次の行の先頭単位が入る行がある場合は確実に段落
+ * （規則 1 で数えられる形）とする。余白に単位が入らない（＝折り返しが全部強制の）
+ * 行ばかりの塊だけを列として残す。
  */
 function isTabularShape(lines: ExtractLine[], pageRight: number): boolean {
   const nonLast = lines.slice(0, -1);
   if (nonLast.length === 0) return false;
   const blockRight = Math.max(...lines.map((line) => line.right));
   if (blockRight < pageRight * TABULAR_RIGHT_RATIO) return true;
-  const gappy = nonLast.filter((line) => blockRight - line.right >= line.size * 2).length;
+  let gappy = 0;
+  let hasFittingGap = false;
+  for (let i = 0; i < nonLast.length; i++) {
+    const line = nonLast[i];
+    const gap = blockRight - line.right;
+    if (gap < line.size * 2) continue;
+    gappy += 1;
+    const next = lines[i + 1];
+    const unit = firstBreakUnit(next);
+    if (measureUnitWidth(next, unit) <= gap - 0.5) hasFittingGap = true;
+  }
+  if (hasFittingGap) return false;
   return gappy * 2 > nonLast.length;
 }
 
@@ -473,7 +491,7 @@ function toBlocks(
       for (let i = 1; i < lines.length; i++) {
         const prev = lines[i - 1];
         const next = lines[i];
-        if (isSameParagraph(prev, next, medianPitch, markerLines[pageIndex])) {
+        if (isSameParagraph(prev, next, medianPitch, markerLines[pageIndex], track.columnRight)) {
           current.lines.push(next);
         } else {
           close(current);
@@ -636,17 +654,20 @@ export function checkLineBreakRules(
       // 次の行の最初の切れ目単位がその余白に入る。余白はその段落自身が届いている
       // 右端（段落内の行の最大到達点）に対して測る。同じ欄に違う幅の段落が並ぶと
       // 段全体の最大ではなくなるので、段落ごとの右端を使う。
-      // 最後の行への折り返し（境界が段落の最後の行を作るもの）は数えない。組版側が
-      // 「最後の行を最小字数にする」ために末尾の改行位置を意図的に消すことがあり、
-      // そのとき前の行の末には切れ目の分だけ意図的な余白ができる。最後の行の短さは
-      // 規則 3「短い最後の行」が見るので、ここでは段落の途中の早すぎる折り返しだけを数える。
-      if (i + 1 < lines.length - 1) {
-        const columnRight = Math.max(...lines.map((line) => line.right));
-        const gap = columnRight - cur.right;
-        if (gap >= cur.size * 2) {
-          const unit = firstBreakUnit(next);
-          const unitWidth = measureUnitWidth(next, unit);
-          if (unitWidth <= gap - 0.5) add('trailing-gap', cur);
+      // 最後の行を作る折り返し（末尾から 2 番目の行の末の余白）も数える。ただし
+      // 組版側が「最後の行を最小字数にする」ために末尾の改行位置を意図的に消す
+      // ことがあり、そのときは余白に入る単位を前の行へ戻すと最後の行が 1〜2 字に
+      // なる —— 残り字数が「2 字 + 戻す単位の字数」以下ならその意図的な余白と
+      // みなして除く（最後の行の短さ自体は規則 3「短い最後の行」が見る）。
+      const columnRight = Math.max(...lines.map((line) => line.right));
+      const gap = columnRight - cur.right;
+      if (gap >= cur.size * 2) {
+        const unit = firstBreakUnit(next);
+        const unitWidth = measureUnitWidth(next, unit);
+        if (unitWidth <= gap - 0.5) {
+          const isLastLineBreak = i + 1 === lines.length - 1;
+          const isRuntAvoidanceGap = isLastLineBreak && visibleChars(next.text) - visibleChars(unit) <= 2;
+          if (!isRuntAvoidanceGap) add('trailing-gap', cur);
         }
       }
 
