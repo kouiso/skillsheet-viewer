@@ -4,7 +4,7 @@ import { TRPCClientError } from '@trpc/client';
 import { motion } from 'framer-motion';
 import { LockKeyhole } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/component/ui/button';
 import { Card, CardContent } from '@/component/ui/card';
@@ -17,10 +17,20 @@ const ViewerAuthPage = () => {
   const router = useRouter();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
+  // hydration 完了前は「見た目では入力済みでも code state は空」になり得る
+  // （controlled input の値と state がズレる間に submit されると空コードで 401 になる）。
+  // React が DOM を引き継いだ後にだけ走る effect を「画面の準備完了」シグナルとし、
+  // それまでは入力・送信を両方無効化する（#398）。
+  const [mounted, setMounted] = useState(false);
   const loginMutation = trpc.auth.login.useMutation();
+
+  useEffect(() => setMounted(true), []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // ボタンの disabled だけでは素通しする経路（Enter キー・requestSubmit() 等の
+    // プログラマティックな submit）が残るため、ハンドラ側でも初期化前を拒否する。
+    if (!mounted || loginMutation.isPending) return;
     setError('');
 
     try {
@@ -132,6 +142,7 @@ const ViewerAuthPage = () => {
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
                   required
+                  disabled={!mounted}
                   // 元は autoComplete="off"。共有コードはメールを消すと再取得できず、
                   // ブラウザ/パスワードマネージャが保存も補完もできないと締め出しに
                   // 直結する。この欄はメールに書かれた共有コードの入力欄であり、
@@ -139,7 +150,13 @@ const ViewerAuthPage = () => {
                   // autoComplete も外して保存・補完を許可する。
                 />
               </div>
-              <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={loginMutation.isPending}>
+              <Button
+                type="submit"
+                variant="gradient"
+                size="lg"
+                className="w-full"
+                disabled={!mounted || loginMutation.isPending}
+              >
                 {loginMutation.isPending ? '認証中...' : '認証'}
               </Button>
             </motion.form>
