@@ -258,6 +258,34 @@ describe('checkCompleteness（案件スコープでの突き合わせ）', () =>
     const missingNonTech = report.missing.filter((m) => !m.fact.label.startsWith('技術('));
     expect(missingNonTech).toEqual([]);
   });
+
+  it('概要が PDF にあっても担当業務が無ければ欠落を報告する（#390）', () => {
+    // 旧実装は検査側も `summary || duties` のフォールバックで 1 本に畳んでいたため、
+    // 両方入力済みの案件の duties が PDF から消えても「summary は載った」で緑になった。
+    // 事実は 2 節ぶん独立に立て、どちらか片方だけの欠落も失敗させる。
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture');
+    const item = project.data.items[0];
+    item.summary = '概要だけの合成案件説明文';
+    item.duties = '担当業務だけの合成実装内容';
+
+    const facts = enumerateCompletenessFacts(blocks);
+    expect(facts.some((f) => f.label.startsWith('概要') && f.text === '概要だけの合成案件説明文')).toBe(true);
+    expect(facts.some((f) => f.label.startsWith('業務内容') && f.text === '担当業務だけの合成実装内容')).toBe(true);
+
+    // アルファのカード相当のページに、概要本文だけを残して担当業務本文を落とす。
+    const pages: QualityPage[] = [
+      [
+        ...SIMULATED_PAGES[0].filter((it) => it.text !== '機能Aの実装' && it.text !== '機能Bの実装'),
+        txt('概要だけの合成案件説明文'),
+      ],
+      ...SIMULATED_PAGES.slice(1),
+    ];
+    const missingTexts = checkCompleteness(facts, pages).missing.map((m) => m.fact.text);
+    expect(missingTexts).toContain('担当業務だけの合成実装内容');
+    expect(missingTexts).not.toContain('概要だけの合成案件説明文');
+  });
 });
 
 // --- 見出しの地の文言及を開始ページと誤認しない（実測バグの回帰） -------------------------
