@@ -24,6 +24,11 @@ export interface QualityItem {
   y: number;
   /** 描画幅。 */
   width: number;
+  /**
+   * pdfjs が内部的に割り当てたフォント ID（item.fontName）。太字かどうかは
+   * 「本文の主フォントと違うか」で判定する側が使う（line-break-check.ts の太字見出し除外）。
+   */
+  fontName?: string;
 }
 
 export type QualityPage = QualityItem[];

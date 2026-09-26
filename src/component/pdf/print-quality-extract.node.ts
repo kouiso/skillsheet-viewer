@@ -13,6 +13,7 @@ interface RawTextItem {
   str?: string;
   width?: number;
   transform?: number[];
+  fontName?: string;
 }
 
 export async function extractQualityPages(buffer: Buffer | Uint8Array): Promise<QualityPage[]> {
@@ -26,7 +27,14 @@ export async function extractQualityPages(buffer: Buffer | Uint8Array): Promise<
       const text = typeof raw.str === 'string' ? raw.str : '';
       if (text.trim() === '') continue;
       const transform = raw.transform ?? [0, 0, 0, 0, 0, 0];
-      items.push({ text, size: transform[0], x: transform[4], y: transform[5], width: raw.width ?? 0 });
+      items.push({
+        text,
+        size: transform[0],
+        x: transform[4],
+        y: transform[5],
+        width: raw.width ?? 0,
+        fontName: typeof raw.fontName === 'string' ? raw.fontName : undefined,
+      });
     }
     pages.push(items);
   }

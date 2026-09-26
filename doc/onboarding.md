@@ -40,6 +40,7 @@ DB のパスワード・トークン・age 鍵・メールアドレスなど値�
 
 PDF の最短経路（ローカルで印刷コードを直接呼ぶ。数秒で終わる）と、本番 DB のブロックを直す手順（退避ブランチ + CAS）は
 [doc/pdf-export-and-data-update.md](./pdf-export-and-data-update.md) にある。
+PDF を書き出して渡す前に PDF Layout Check が緑であることを確かめる。
 
 ## 技術スタック
 
