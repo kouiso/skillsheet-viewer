@@ -73,6 +73,7 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
     (
       [
         ['title', p.title],
+        ['summary', p.summary],
         ['duties', p.duties],
         ['acquired', p.acquired],
         ['comment', p.comment],
@@ -166,6 +167,30 @@ describe('新しい印刷経路の品質', () => {
     project.data.items[0].duties += '\n\n完全性検査専用の未描画合成事実。';
     expect(() => assertComplete(blocks, fixturePages)).toThrow('PDF完全性');
   });
+
+  it('概要と担当業務を別節として両方描画し、概要を先に出す（#390）', async () => {
+    // 旧フォールバック（summary || duties）では両方入力済みの案件の duties が
+    // PDF のどの節にも載らなかった。
+    const blocks = buildPdfQualityFixtureBlocks();
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project' || !project.data.items[0]) throw new Error('合成案件がありません');
+    project.data.items[0].summary = '概要検証用の合成説明文';
+    project.data.items[0].duties = '担当業務検証用の合成作業内容';
+
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks, referenceMonth }),
+    );
+    const pages = await extractQualityPages(buffer);
+    const items = pages.flatMap((page) => page.map((it) => it.text));
+    const joined = items.join('').replaceAll(/\s/g, '');
+
+    expect(items).toContain('概要');
+    expect(items).toContain('業務内容');
+    expect(joined).toContain('概要検証用の合成説明文');
+    expect(joined).toContain('担当業務検証用の合成作業内容');
+    // カードと同じ並び: 同じカード内で「概要」本文は「担当業務」本文より先。
+    expect(joined.indexOf('概要検証用の合成説明文')).toBeLessThan(joined.indexOf('担当業務検証用の合成作業内容'));
+  }, 60_000);
 
   it.skipIf(REAL_BLOCKS_JSON === undefined)(
     '実データでテキスト・ラスタ・見出し重複・完全性の全検査が緑になる',

@@ -42,7 +42,7 @@ const railFrame = (over: Partial<FrameSpec> = {}): FrameSpec => ({
   ...over,
 });
 
-type DetailBlock = 'meta' | 'tech' | 'duties' | 'acquired' | 'comment';
+type DetailBlock = 'meta' | 'tech' | 'summary' | 'duties' | 'acquired' | 'comment';
 
 interface LeafDraft {
   kind: Leaf['kind'];
@@ -76,6 +76,8 @@ function detailCardDrafts(project: PrintProject): LeafDraft[] {
   const present: DetailBlock[] = [];
   if (project.metaRows.length > 0) present.push('meta');
   if (project.techGroups.length > 0) present.push('tech');
+  // 概要 → 担当業務の並びはカード（project-card.tsx）と同じ。空なら節ごと出さない。
+  if (project.summary) present.push('summary');
   if (project.duties) present.push('duties');
   if (project.acquired) present.push('acquired');
   if (project.comment) present.push('comment');
@@ -141,8 +143,22 @@ function detailCardDrafts(project: PrintProject): LeafDraft[] {
       });
       continue;
     }
-    const label = block === 'duties' ? '業務内容' : block === 'acquired' ? '習得スキル・実績' : 'コメント';
-    const text = block === 'duties' ? project.duties : block === 'acquired' ? project.acquired : project.comment;
+    const label =
+      block === 'summary'
+        ? '概要'
+        : block === 'duties'
+          ? '業務内容'
+          : block === 'acquired'
+            ? '習得スキル・実績'
+            : 'コメント';
+    const text =
+      block === 'summary'
+        ? project.summary
+        : block === 'duties'
+          ? project.duties
+          : block === 'acquired'
+            ? project.acquired
+            : project.comment;
     const surface = block === 'acquired';
     const pieces = markdownPieces(text);
     drafts.push({
