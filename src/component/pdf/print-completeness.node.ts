@@ -33,7 +33,7 @@ import {
 } from '@/db/derived-display';
 import { resolveDuration } from '@/db/duration';
 import { companyDisplayName, groupProjectsByCompany } from '@/db/group-by-company';
-import { flattenTech, formatPeriodDisplay, TECH_BUCKET_LABELS, TECH_BUCKET_ORDER } from '@/db/process';
+import { classifyPeriod, flattenTech, formatPeriodDisplay, TECH_BUCKET_LABELS, TECH_BUCKET_ORDER } from '@/db/process';
 import { resolveDetailLevels } from '@/db/project-detail-level';
 import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 import { resolveProjectArea } from '@/db/tech-area';
@@ -777,18 +777,78 @@ export function buildContinuationHeaderNoise(blocks: Block[], referenceMonth?: n
   return noise;
 }
 
+// --- 期間の食い違い（#396 / #377-C） ---------------------------------------------
+//
+// 閲覧画面は外の人が見るので警告は出さない（#377 の方針）。在籍期間の外にある
+// 案件・開始終了が逆転した案件はここでだけ数え、完全性ゲートを通じてビルドを止める。
+
+export interface PeriodConflict {
+  blockId: string;
+  projectId: string;
+  companyId: string;
+}
+
+/** 内外判定できる期間なら bounds を返す。逆転・月未記載などは判定不能として null。 */
+function checkableBounds(period: string, referenceMonth: number) {
+  const classified = classifyPeriod(period, referenceMonth);
+  return classified.bounds && (classified.status === 'valid' || classified.status === 'planned')
+    ? classified.bounds
+    : null;
+}
+
+/** 開始終了が逆転している（または値が壊れて解釈不能な）期間を持つ案件を列挙する。 */
+export function detectInvalidPeriods(blocks: Block[], referenceMonth: number): PeriodConflict[] {
+  return blocks.flatMap((block) =>
+    block.type === 'project'
+      ? filterVisibleProjectData(block.data)
+          .items.filter((item) => classifyPeriod(item.period, referenceMonth).status === 'invalid')
+          .map((item) => ({ blockId: block.id, projectId: item.id, companyId: item.companyId }))
+      : [],
+  );
+}
+
+/** 案件期間が所属会社の在籍期間に収まらない案件を列挙する。 */
+export function detectOutsideCompanyPeriods(blocks: Block[], referenceMonth: number): PeriodConflict[] {
+  const conflicts: PeriodConflict[] = [];
+  for (const block of blocks) {
+    if (block.type !== 'project') continue;
+    const visible = filterVisibleProjectData(block.data);
+    for (const group of groupProjectsByCompany(visible.companies, visible.items)) {
+      const company = checkableBounds(resolveCompanyPeriod(group.company, group.items), referenceMonth);
+      if (!company) continue; // 在籍期間を解釈できない会社は内外を判定できない
+      // 終端「現在」は上限として扱わない（在籍が続く限り案件はいつ終わっても内側）
+      const companyEnd = company.openEnded ? Infinity : company.end;
+      for (const item of group.items) {
+        const bounds = checkableBounds(item.period, referenceMonth);
+        // 逆転・壊れた期間は invalidPeriods で数えるのでここでは飛ばす
+        if (!bounds) continue;
+        const itemEnd = bounds.openEnded ? Infinity : bounds.end;
+        if (bounds.start < company.start || itemEnd > companyEnd) {
+          conflicts.push({ blockId: block.id, projectId: item.id, companyId: group.companyId });
+        }
+      }
+    }
+  }
+  return conflicts;
+}
+
 /** 列挙 + 照合をまとめて行う。 */
 export function buildCompletenessReport(
   blocks: Block[],
   pages: QualityPage[],
   views: PrintViewKey[] = ALL_VIEWS,
   referenceMonth: number,
-): CompletenessReport & { durationConflicts: { blockId: string; projectId: string }[] } {
+): CompletenessReport & {
+  durationConflicts: { blockId: string; projectId: string }[];
+  invalidPeriods: PeriodConflict[];
+  outsideCompanyPeriods: PeriodConflict[];
+} {
   if (!Number.isSafeInteger(referenceMonth) || referenceMonth < 0) throw new Error('INVALID_REFERENCE_MONTH');
   const facts = enumerateCompletenessFacts(blocks, views, referenceMonth);
   // timeline-only でも案件は描かれるので noise/conflicts も rendersProjectCards で判定（#354）
-  const extraNoise = rendersProjectCards(views) ? buildContinuationHeaderNoise(blocks, referenceMonth) : [];
-  const durationConflicts = rendersProjectCards(views)
+  const showsProjects = rendersProjectCards(views);
+  const extraNoise = showsProjects ? buildContinuationHeaderNoise(blocks, referenceMonth) : [];
+  const durationConflicts = showsProjects
     ? blocks.flatMap((block) =>
         block.type === 'project'
           ? filterVisibleProjectData(block.data)
@@ -797,7 +857,9 @@ export function buildCompletenessReport(
           : [],
       )
     : [];
-  return { ...checkCompleteness(facts, pages, extraNoise), durationConflicts };
+  const invalidPeriods = showsProjects ? detectInvalidPeriods(blocks, referenceMonth) : [];
+  const outsideCompanyPeriods = showsProjects ? detectOutsideCompanyPeriods(blocks, referenceMonth) : [];
+  return { ...checkCompleteness(facts, pages, extraNoise), durationConflicts, invalidPeriods, outsideCompanyPeriods };
 }
 
 /** 欠落を `category:scope` でグルーピングする（レポート表示用）。 */

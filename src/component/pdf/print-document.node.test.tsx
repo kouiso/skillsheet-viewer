@@ -93,6 +93,8 @@ function assertComplete(blocks: Block[], pages: Awaited<ReturnType<typeof extrac
   const report = buildCompletenessReport(blocks, pages, undefined, referenceMonth);
   expect(report.missing.length, 'PDF完全性: 元データの事実が欠落しています').toBe(0);
   expect(report.durationConflicts.length, '参画期間の矛盾は本人の差分確認が必要です').toBe(0);
+  expect(report.invalidPeriods.length, '開始と終了が逆転した期間があります').toBe(0);
+  expect(report.outsideCompanyPeriods.length, '在籍期間の外にある案件があります').toBe(0);
 }
 
 describe('新しい印刷経路の品質', () => {
