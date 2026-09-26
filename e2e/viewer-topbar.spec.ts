@@ -63,6 +63,7 @@ test.describe('ビューアトップバー（#397）', () => {
         const hiddenPx = Math.max(0, h.getBoundingClientRect().bottom - h2.getBoundingClientRect().top);
         return { hiddenPx };
       });
+      console.log(`[397] 390px/${theme}: header=${headerBox?.height}px hidden=${overlap.hiddenPx}px`);
       expect(
         overlap.hiddenPx,
         `390px/${theme}: 会社見出しがヘッダーに隠れないこと（0px）`,
