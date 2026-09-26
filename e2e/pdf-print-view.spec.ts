@@ -110,7 +110,9 @@ function processToggleButton(page: Page) {
 // 実ボタンはメニュー項目なので、エクスポートは clickDownloadMenuItem 経由で行う。
 // トリガー自体の参照（enabled 確認用）は「Excelダウンロード」等と衝突しないよう exact で取る。
 function downloadTrigger(page: Page) {
-  return page.getByRole('button', { name: 'ダウンロード', exact: true });
+  // 生成中は aria-label が「ダウンロードを生成中」に変わるため両状態にマッチさせる
+  // （exact なので「Excelダウンロード」「要約版をダウンロード」等は拾わない）。
+  return page.getByRole('button', { name: /ダウンロード(を生成中)?/, exact: true });
 }
 
 function savePdfPath(label: string) {
