@@ -1,7 +1,7 @@
 'use client';
 
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, Download, FileDown, FileMinus, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Download, FileMinus, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -69,10 +69,13 @@ function DigestDownloadMenu({
   onDownloadPdfDigest,
   onDownloadExcelDigest,
   digestLoading,
+  withLabel = false,
 }: {
   onDownloadPdfDigest: () => void | Promise<void>;
   onDownloadExcelDigest?: () => void | Promise<void>;
   digestLoading: boolean;
+  /** true のときアイコンに加えて「要約版 ▾」の文字を出す（デスクトップ用、#397）。 */
+  withLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -80,15 +83,22 @@ function DigestDownloadMenu({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
+          size={withLabel ? undefined : 'icon'}
           disabled={digestLoading}
           aria-busy={digestLoading}
           aria-label={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
           // Popover とは別に、ホバーで用途が分かるネイティブ tooltip（#355）
           title={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
-          className="min-h-11 min-w-11"
+          className={withLabel ? 'min-h-11 gap-1.5 px-3' : 'min-h-11 min-w-11'}
         >
           {digestLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileMinus />}
+          {withLabel && (
+            <>
+              <span>要約版</span>
+              {/* ▾: クリックでメニューが開くことを見た目で伝える（#397） */}
+              <ChevronDown aria-hidden="true" />
+            </>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent>
@@ -132,12 +142,15 @@ function DownloadMenu({
   onDownloadPdfDigest,
   onDownloadExcelDigest,
   loading,
+  withLabel = false,
 }: {
   onDownloadPdf?: () => void | Promise<void>;
   onDownloadExcel?: () => void | Promise<void>;
   onDownloadPdfDigest?: () => void | Promise<void>;
   onDownloadExcelDigest?: () => void | Promise<void>;
   loading: boolean;
+  /** true のときアイコンに加えて「ダウンロード ▾」の文字を出す（デスクトップ用、#397）。 */
+  withLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const item = (label: string, action: () => void | Promise<void>, ariaLabel: string) => (
@@ -157,13 +170,19 @@ function DownloadMenu({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
+          size={withLabel ? undefined : 'icon'}
           disabled={loading}
           aria-busy={loading}
           aria-label={loading ? 'ダウンロードを生成中' : 'ダウンロード'}
-          className="min-h-11 min-w-11"
+          className={withLabel ? 'min-h-11 gap-1.5 px-3' : 'min-h-11 min-w-11'}
         >
           {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Download />}
+          {withLabel && (
+            <>
+              <span>ダウンロード</span>
+              <ChevronDown aria-hidden="true" />
+            </>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent>
@@ -214,10 +233,11 @@ export function ViewerTopbar({
 
   const viewToggleFieldset = (
     <fieldset
-      // min-w-0 + flex-wrap: 横スクロール（overflow-x-auto）だと 4 個目以降のピルが
-      // 右端で見切れて存在に気づかなかったため、SP では2行折返しにする（#355）。
+      // min-w-0 + flex-nowrap + overflow-x-auto: SP ではピルを1段に保ち、
+      // 収まらない分は横スクロールで見せる（#397。2行折返しはヘッダーを177pxまで
+      // 膨らませ、会社見出しの sticky 位置 top-40=160px を踏み越して見出しを隠す）。
       // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
-      className="m-0 flex w-full min-w-0 flex-wrap items-center gap-1.5 border-0 p-0 sm:w-auto"
+      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 sm:w-auto"
     >
       <legend className="sr-only">表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
@@ -268,23 +288,18 @@ export function ViewerTopbar({
         />
       ) : (
         <>
-          {onDownloadPdf && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => void onDownloadPdf()}
-                  disabled={pdfLoading}
-                  aria-busy={pdfLoading}
-                  aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
-                  className="min-h-11 min-w-11"
-                >
-                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
-            </Tooltip>
+          {/* デスクトップでは絵だけのアイコンではなく「文字+アイコン」のボタンにする（#397）。
+              ダウンロードは PDF / Excel / 要約版をまとめたメニューとして出し、
+              ▾ でメニューだと分かる見た目にする。 */}
+          {(onDownloadPdf || onDownloadExcel || onDownloadPdfDigest || onDownloadExcelDigest) && (
+            <DownloadMenu
+              onDownloadPdf={onDownloadPdf}
+              onDownloadExcel={onDownloadExcel}
+              onDownloadPdfDigest={onDownloadPdfDigest}
+              onDownloadExcelDigest={onDownloadExcelDigest}
+              loading={pdfLoading || excelLoading || digestLoading}
+              withLabel
+            />
           )}
 
           {onDownloadExcel && (
@@ -292,14 +307,14 @@ export function ViewerTopbar({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
                   onClick={() => void onDownloadExcel()}
                   disabled={excelLoading}
                   aria-busy={excelLoading}
                   aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
-                  className="min-h-11 min-w-11"
+                  className="min-h-11 gap-1.5 px-3"
                 >
                   {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
+                  <span>Excel</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
@@ -311,6 +326,7 @@ export function ViewerTopbar({
               onDownloadPdfDigest={onDownloadPdfDigest}
               onDownloadExcelDigest={onDownloadExcelDigest}
               digestLoading={digestLoading}
+              withLabel
             />
           )}
         </>
@@ -320,12 +336,13 @@ export function ViewerTopbar({
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
+            size={compactDownloads ? 'icon' : undefined}
             onClick={toggleTheme}
             aria-label="テーマ切り替え"
-            className="min-h-11 min-w-11"
+            className={compactDownloads ? 'min-h-11 min-w-11' : 'min-h-11 gap-1.5 px-3'}
           >
             {mode === 'dark' ? <Sun /> : <Moon />}
+            {!compactDownloads && <span>テーマ</span>}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
@@ -342,7 +359,10 @@ export function ViewerTopbar({
       // design: 背景は下地を 88% 残した色 + blur 8px（カード色ではなくページ地の色を敷く）
       className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
     >
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
+      {/* SP の上下余白を py-2.5 に詰める: ピル(.softbtn)が min-height 45px を持つため、
+          py-3.5 のままだと 390px の2段ヘッダーが 126px になり #397 の上限 120px を超える。
+          sm 以上は従来通り py-3.5 + gap-y-2。 */}
+      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 sm:gap-y-2 sm:px-8 sm:py-3.5">
         {/* 「戻るリンク＋SP用アイコン群」を折り返さない1つの行にまとめる。
             親は flex-wrap だが、flexbox は「縮めてから折り返す」のではなく
             「入らなければ折り返す」ため、リンクに min-w-0 を付けるだけでは足りない。
