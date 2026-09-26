@@ -272,7 +272,7 @@ describe('checkCompleteness（案件スコープでの突き合わせ）', () =>
 
     const facts = enumerateCompletenessFacts(blocks);
     expect(facts.some((f) => f.label.startsWith('概要') && f.text === '概要だけの合成案件説明文')).toBe(true);
-    expect(facts.some((f) => f.label.startsWith('業務内容') && f.text === '担当業務だけの合成実装内容')).toBe(true);
+    expect(facts.some((f) => f.label.startsWith('担当業務') && f.text === '担当業務だけの合成実装内容')).toBe(true);
 
     // アルファのカード相当のページに、概要本文だけを残して担当業務本文を落とす。
     const pages: QualityPage[] = [

@@ -144,13 +144,7 @@ function detailCardDrafts(project: PrintProject): LeafDraft[] {
       continue;
     }
     const label =
-      block === 'summary'
-        ? '概要'
-        : block === 'duties'
-          ? '業務内容'
-          : block === 'acquired'
-            ? '習得スキル・実績'
-            : 'コメント';
+      block === 'summary' ? '概要' : block === 'duties' ? '担当業務' : block === 'acquired' ? '習得スキル' : 'コメント';
     const text =
       block === 'summary'
         ? project.summary

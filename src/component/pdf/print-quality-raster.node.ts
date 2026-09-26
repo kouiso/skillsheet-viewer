@@ -31,7 +31,8 @@
  *     文字を伴わない図形なのは高さ 18px のうち末尾 6〜7px の角丸部分だけで、外接矩形が
  *     走査帯の上端まで伸びるのはこの膨らみのせい）。本文・カード全体は完全に描画されており
  *     壊れていない（gs でラスタライズし目視・pdfjs テキスト抽出の両方で確認済み）。
- *     `textPadding.bottom` を `cardPadVertical` を覆う値まで広げてこの正当な閉じ方を通す。
+ *     `textPadding.bottom` を `cardPadVertical`＋罫線・推定誤差ぶんを覆う値まで広げて
+ *     この正当な閉じ方を通す。
  *     一方、真の壊れ方（本文が別ページへ丸ごと逃げ、断片だけが独立して残る）は本文から
  *     数十 pt 以上離れているため、この程度の拡張では拾えなくならない
  *     （`print-quality-raster.node.test.tsx` で回帰なしを確認済み）。
@@ -119,8 +120,10 @@ export const DEFAULT_RASTER_OPTIONS: RasterQualityOptions = {
   minBlobWidthPx: 6,
   minInkDensity: 0.15,
   grayInkThreshold: 230,
-  // bottom=10: cardPadVertical（print-token.ts、9pt）+ 角丸ぶんの余裕 1pt。
-  textPadding: { top: 9, bottom: 10, side: 1.5 },
+  // bottom=13: cardPadVertical（print-token.ts、9pt）+ 外枠罫線の太さ・glyph 下端の
+  // 推定誤差ぶん。10 では 9pt 直下のカード閉じ罫線（実測で本文最終行から約 11pt 下）
+  // が 1〜2pt 届かず「文字を伴わない図形」に化ける境界例があった（#399 の差分で再現）。
+  textPadding: { top: 9, bottom: 13, side: 1.5 },
 };
 
 export interface RasterFinding {

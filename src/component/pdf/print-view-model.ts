@@ -119,19 +119,10 @@ export interface PrintProject {
   techGroups: PrintTechGroup[];
   /** 詳細版カードの「概要」ブロックの本文。空なら節ごと出さない（フォールバックしない）。 */
   summary: string;
-  /** 詳細版カードの「業務内容」ブロックの本文。空なら節ごと出さない（要約で補わない）。 */
+  /** 詳細版カードの「担当業務」ブロックの本文。空なら節ごと出さない（概要で補わない）。 */
   duties: string;
   acquired: string;
   comment: string;
-  /**
-   * 簡約版の 1 行に出す一言（summary → duties → comment の順で先頭 1 文）。
-   *
-   * 技術名は以前ここに先頭 5 個だけカンマ区切りで同居させていたが、6 個目以降が
-   * 紙面のどこにも出なくなる省略だった（`no-abbreviated-rendering` skill 違反）。
-   * 簡約版カードは `techGroups` を全件そのままチップで出すので、この一言に技術名を
-   * 混ぜる必要はない。
-   */
-  compactNote: string;
   level: DetailLevel;
 }
 
@@ -245,7 +236,7 @@ function trimmed(value: string | undefined): string {
 }
 
 /**
- * markdown として描くフィールド（業務内容 / 習得スキル・実績 / コメント / 自己紹介）用。
+ * markdown として描くフィールド（担当業務 / 習得スキル / コメント / 自己紹介）用。
  * `<details>` のような画面で許容済みのタグは残し、script/style だけ中身ごと落とす。
  */
 function markdownText(value: string | undefined): string {
@@ -316,33 +307,6 @@ export function compactPeriod(period: string): string {
  * 折り返して帯の高さが跳ねる（実データの得意分野は 62 文字だった）。
  */
 const PROFILE_SHORT_VALUE_CHARS = 30;
-
-/** 簡約版の一言に使える最大文字数。これを超える分は「…」で切る（1 行に収める）。 */
-const COMPACT_NOTE_MAX = 60;
-
-/**
- * 先頭 1 文を切り出す。
- *
- * duties / comment はユーザーの自由記述で、実データでは markdown の箇条書き
- * （`- iOS / Android アプリの機能開発（…）。`）になっている。記号をそのまま出すと
- * 簡約版の 1 行に `- ` が残るため、行頭の箇条書き記号・見出し記号・強調記号を落とす。
- */
-export function firstSentence(text: string): string {
-  const source = trimmed(text)
-    .split(/\r?\n/)
-    .map((line) =>
-      line
-        .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, '')
-        .replace(/^\s*#+\s*/, '')
-        .trim(),
-    )
-    .find((line) => line.length > 0);
-  if (!source) return '';
-  const stripped = source.replace(/\*\*/g, '').replace(/\s+/g, ' ');
-  const match = stripped.match(/^[^。\n！？]*[。！？]?/);
-  const sentence = (match?.[0] ?? stripped).trim();
-  return sentence.length > COMPACT_NOTE_MAX ? `${sentence.slice(0, COMPACT_NOTE_MAX)}…` : sentence;
-}
 
 /**
  * 担当工程を表示用の文字列にする。
@@ -492,7 +456,6 @@ function buildProject(
     duties,
     acquired,
     comment,
-    compactNote: firstSentence(summary || duties || comment),
     level,
   };
 }

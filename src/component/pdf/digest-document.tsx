@@ -63,8 +63,8 @@ function DigestCompanyHeading({ company }: { company: PrintCompany }) {
 }
 
 /**
- * 案件行。CompactRow の 1 行の値（期間・案件名・チーム）を写すが、要約列
- * （compactNote）は持たない — 要約版は「見出しだけの一覧」が仕事なので本文を出さない。
+ * 案件行。CompactRow の 1 行の値（期間・案件名・チーム）を写す。要約版は
+ * 「見出しだけの一覧」が仕事なので本文を出さない。
  * 下罫線は枠（frame.divider）に頼らず行自身が引く（要約版の葉は NO_FRAME）。
  */
 function DigestRow({ project }: { project: PrintProject }) {
