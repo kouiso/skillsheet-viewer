@@ -5,6 +5,7 @@ import { type Browser, expect, type Page, test } from '@playwright/test';
 import { getDocument } from 'pdfjs-dist';
 import { buildConsoleDemoBlocks } from '@/db/fixture';
 import { createSheet, deleteSheet, listSheets } from './document-fixture';
+import { clickDownloadMenuItem } from './download-menu';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const RUN_ID = randomUUID().slice(0, 8);
@@ -104,7 +105,7 @@ test('本番経路のブラウザ toBlob PDF に日本語グリフが描画さ�
 
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 100_000 }),
-    page.getByRole('button', { name: 'PDFダウンロード' }).click(),
+    clickDownloadMenuItem(page, 'PDFダウンロード'),
   ]);
 
   const downloadPath = await download.path();

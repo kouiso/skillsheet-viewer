@@ -11,6 +11,7 @@ import {
   TECH_POOLS,
 } from '@/db/fixture';
 import { createSheet, deleteSheet, listSheets } from './document-fixture';
+import { clickDownloadMenuItem } from './download-menu';
 import { extractPdfPages, extractPdfText } from './pdf-extract';
 
 // PR #298（提出用 PDF をデザイン準拠の構造描画へ作り替える）のユーザーストーリーを、
@@ -105,8 +106,11 @@ function processToggleButton(page: Page) {
   return page.getByRole('button', { name: /工程の俯瞰/ }).first();
 }
 
-function exportButton(page: Page) {
-  return page.getByRole('button', { name: /PDF(ダウンロード|を生成中)/ }).first();
+// #397 でデスクトップの PDF 出力も「ダウンロード」Popover メニュー内に移った。
+// 実ボタンはメニュー項目なので、エクスポートは clickDownloadMenuItem 経由で行う。
+// トリガー自体の参照（enabled 確認用）は「Excelダウンロード」等と衝突しないよう exact で取る。
+function downloadTrigger(page: Page) {
+  return page.getByRole('button', { name: 'ダウンロード', exact: true });
 }
 
 function savePdfPath(label: string) {
@@ -198,7 +202,7 @@ test('4. exporting while OFF omits the skills page and page 2 starts the first c
   await skillToggleButton(page).click();
   await expect(skillMatrixSection(page)).toHaveCount(0);
 
-  const pdfPath = await waitAndSaveDownload(page, () => exportButton(page).click(), 'off');
+  const pdfPath = await waitAndSaveDownload(page, () => clickDownloadMenuItem(page, 'PDFダウンロード'), 'off');
   const pages = await extractPdfPages(pdfPath);
 
   expect(pages[0]).not.toContain('スキル一覧');
@@ -214,7 +218,7 @@ test('5. exporting while ON includes the skills page as its own page', async ({ 
   await openSheet(page, richSheetId);
   await expect(skillMatrixSection(page)).toBeVisible(); // デフォルト ON であることを確認してから出力する
 
-  const pdfPath = await waitAndSaveDownload(page, () => exportButton(page).click(), 'on');
+  const pdfPath = await waitAndSaveDownload(page, () => clickDownloadMenuItem(page, 'PDFダウンロード'), 'on');
   const pages = await extractPdfPages(pdfPath);
 
   expect(pages[0]).not.toContain('スキル一覧');
@@ -228,7 +232,7 @@ test('5. exporting while ON includes the skills page as its own page', async ({ 
 // ---------------------------------------------------------------------------
 test('6. the continuation header on a page break carries the real company name', async ({ page }) => {
   await openSheet(page, richSheetId);
-  const pdfPath = await waitAndSaveDownload(page, () => exportButton(page).click(), 'continuation');
+  const pdfPath = await waitAndSaveDownload(page, () => clickDownloadMenuItem(page, 'PDFダウンロード'), 'continuation');
   const pages = await extractPdfPages(pdfPath);
 
   const companyNamePattern = COMPANY_NAMES.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
@@ -246,7 +250,7 @@ test('6. the continuation header on a page break carries the real company name',
 // ---------------------------------------------------------------------------
 test('7. technology chips print in full with no "他N件" abbreviation', async ({ page }) => {
   await openSheet(page, richSheetId);
-  const pdfPath = await waitAndSaveDownload(page, () => exportButton(page).click(), 'tech-chips');
+  const pdfPath = await waitAndSaveDownload(page, () => clickDownloadMenuItem(page, 'PDFダウンロード'), 'tech-chips');
   const text = await extractPdfText(pdfPath);
 
   const flagshipTech = TECH_POOLS[0];
@@ -295,16 +299,16 @@ test('9. exporting still works after navigating back and forward', async ({ page
   // 鮮度に依存しない経路にする。
   await openSheet(page, richSheetId);
 
-  await waitAndSaveDownload(page, () => exportButton(page).click(), 'back-forward-1');
+  await waitAndSaveDownload(page, () => clickDownloadMenuItem(page, 'PDFダウンロード'), 'back-forward-1');
 
   await page.goBack({ waitUntil: 'networkidle' });
   await expect(page).toHaveURL(/\/view$/);
   await page.goForward({ waitUntil: 'networkidle' });
   await expect(page).toHaveURL(/\/view\/db\//);
 
-  const btn = exportButton(page);
+  const btn = downloadTrigger(page);
   await expect(btn).toBeEnabled();
-  await waitAndSaveDownload(page, () => btn.click(), 'back-forward-2');
+  await waitAndSaveDownload(page, () => clickDownloadMenuItem(page, 'PDFダウンロード'), 'back-forward-2');
 });
 
 // ---------------------------------------------------------------------------
@@ -316,11 +320,20 @@ test('9. exporting still works after navigating back and forward', async ({ page
 test('10. double-clicking the export button fires exactly one download', async ({ page }) => {
   await openSheet(page, richSheetId);
 
-  const btn = exportButton(page);
+  const btn = downloadTrigger(page);
   const downloads: number[] = [];
   page.on('download', () => downloads.push(Date.now()));
 
-  await btn.dblclick();
+  // メニュー化した現在の連打ガード: 1発目で popover が閉じ、生成中はトリガーが
+  // disabled でメニューを開き直せないため2発目は発射しない。
+  await clickDownloadMenuItem(page, 'PDFダウンロード');
+  await downloadTrigger(page)
+    .click({ timeout: 2_000 })
+    .catch(() => {});
+  const retryItem = page.getByRole('button', { name: 'PDFダウンロード', exact: true });
+  if (await retryItem.isVisible()) {
+    await retryItem.click().catch(() => {});
+  }
   await page.waitForEvent('download', { timeout: 30_000 });
   // 2発目が飛んでくるかどうかを見るために、もう少し待ってから数える
   // （固定 sleep だが「来ないことの確認」に使っているだけで、来る場合の検出を遅らせているわけではない）。
@@ -402,7 +415,11 @@ test('14. expertise rows survive on the summary page when skills are OFF', async
   await skillToggleButton(page).click();
   await expect(skillMatrixSection(page)).toHaveCount(0);
 
-  const pdfPath = await waitAndSaveDownload(page, () => exportButton(page).click(), 'expertise-fallback');
+  const pdfPath = await waitAndSaveDownload(
+    page,
+    () => clickDownloadMenuItem(page, 'PDFダウンロード'),
+    'expertise-fallback',
+  );
   const pages = await extractPdfPages(pdfPath);
 
   expect(pages[0]).toContain('得意分野');
@@ -419,7 +436,11 @@ test('14. expertise rows survive on the summary page when skills are OFF', async
 // ---------------------------------------------------------------------------
 test('15. every continuation marker is attached to a real company name, never bare', async ({ page }) => {
   await openSheet(page, richSheetId);
-  const pdfPath = await waitAndSaveDownload(page, () => exportButton(page).click(), 'orphan-continuation');
+  const pdfPath = await waitAndSaveDownload(
+    page,
+    () => clickDownloadMenuItem(page, 'PDFダウンロード'),
+    'orphan-continuation',
+  );
   const text = await extractPdfText(pdfPath);
 
   const occurrences = text.match(/[^\n]{0,40}（つづき）/g) ?? [];
