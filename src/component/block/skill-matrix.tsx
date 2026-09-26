@@ -1,5 +1,7 @@
 'use client';
 
+import { Fragment } from 'react';
+
 import type { ProjectItem, SkillsBlockData } from '@/db/block';
 import { experienceSourceLabel, resolveDisplayedSkillExperience } from '@/db/derived-display';
 import { sanitizeHtml } from '@/db/sanitize-html';
@@ -63,7 +65,23 @@ export const SkillMatrix = ({
                 className={`min-w-0 break-words text-sm ${isFeatured ? 'font-semibold text-primary-dark' : 'text-foreground'}`}
                 title={sanitizeHtml(skill.name)}
               >
-                {sanitizeHtml(skill.name)}
+                {/* 空白を含まない 'TypeScript/JavaScript' のような名前が語中で
+                    'TypeScript/JavaSc'+'ript' に割れるのを防ぐ（#393）。
+                    区切り文字の直後に明示的な折れ候補（wbr）を置き、
+                    break-words による語中分割は最終手段にする。 */}
+                {sanitizeHtml(skill.name)
+                  .split(/([/／・･|｜、,])/)
+                  .map((part, j) =>
+                    j % 2 === 1 ? (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト
+                      <Fragment key={j}>
+                        {part}
+                        <wbr />
+                      </Fragment>
+                    ) : (
+                      part
+                    ),
+                  )}
               </span>
               <span className="truncate text-center text-xs text-foreground" title={skill.level}>
                 {skill.level}
