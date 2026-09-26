@@ -7,7 +7,6 @@ import {
   compactPeriod,
   companyLabelOf,
   dedupeRoles,
-  firstSentence,
   formatProcessForPrint,
 } from './print-view-model';
 
@@ -89,27 +88,6 @@ describe('buildTechGroups', () => {
 
   it('中身が無い分類は行ごと出さない', () => {
     expect(buildTechGroups({ ...emptyTech, lang: ['-', ' '] })).toEqual([]);
-  });
-});
-
-describe('firstSentence', () => {
-  it('箇条書き記号を落として先頭 1 文を返す', () => {
-    expect(firstSentence('- iOS アプリの機能開発。\n- バックエンドの実装。')).toBe('iOS アプリの機能開発。');
-  });
-
-  it('強調記法を落とす', () => {
-    expect(firstSentence('**Next.js** で実装。')).toBe('Next.js で実装。');
-  });
-
-  it('長すぎる文は末尾を切る', () => {
-    const long = `${'あ'.repeat(80)}。`;
-    const result = firstSentence(long);
-    expect(result.endsWith('…')).toBe(true);
-    expect(result.length).toBeLessThanOrEqual(61);
-  });
-
-  it('空なら空文字', () => {
-    expect(firstSentence('   ')).toBe('');
   });
 });
 
@@ -402,8 +380,6 @@ describe('buildPrintViewModel', () => {
     const vm = buildPrintViewModel('シート', blocks);
     expect(vm.companies[0].projects[0].summary).toBe(summaryText);
     expect(vm.companies[0].projects[0].duties).toBe('');
-    // compactNote は summary → duties → comment の順で先頭 1 文を取る（旧 effective chain と同じ）。
-    expect(vm.companies[0].projects[0].compactNote).toBe(summaryText);
   });
 });
 
