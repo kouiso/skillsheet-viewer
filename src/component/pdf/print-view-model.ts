@@ -117,12 +117,14 @@ export interface PrintProject {
   /** 詳細版カードのメタ表。役割・技術領域・チーム・担当工程のうち、値があるものだけ。 */
   metaRows: PrintMetaRow[];
   techGroups: PrintTechGroup[];
-  /** 詳細版カードの「業務内容」ブロックの本文。未入力なら要約（`ProjectItem.summary`）で補う。 */
+  /** 詳細版カードの「概要」ブロックの本文。空なら節ごと出さない（フォールバックしない）。 */
+  summary: string;
+  /** 詳細版カードの「業務内容」ブロックの本文。空なら節ごと出さない（要約で補わない）。 */
   duties: string;
   acquired: string;
   comment: string;
   /**
-   * 簡約版の 1 行に出す一言（duties → comment の順で先頭 1 文）。
+   * 簡約版の 1 行に出す一言（summary → duties → comment の順で先頭 1 文）。
    *
    * 技術名は以前ここに先頭 5 個だけカンマ区切りで同居させていたが、6 個目以降が
    * 紙面のどこにも出なくなる省略だった（`no-abbreviated-rendering` skill 違反）。
@@ -464,12 +466,12 @@ function buildProject(
   const title = trimmed(item.title) || '（タイトル未入力）';
   const companyLabel = companyLabelOf(companyDisplayName(company), trimmed(company?.kind));
   const techGroups = buildTechGroups(item.tech);
-  // ビューア（project-card.tsx:55 `item.summary?.trim() || item.duties`）と同じ優先順位。
-  // PrintProject には duties 専用フィールドしか無く、要約だけ入力して担当業務を空にした
-  // 案件（詳細版カード）は 業務内容 ブロックが 1 つも出ない静かなデータ欠落だった
-  // （no-abbreviated-rendering skill 違反）。表示名は duties のままにし、ここで解決済みの
-  // 値を詰める — 呼び出し側（print-leaf-list.tsx 等）に判断を分散させない。
-  const duties = markdownText(item.summary) || markdownText(item.duties);
+  // 概要（summary）と担当業務（duties）は別の情報として両方出す。`summary || duties` の
+  // フォールバックだと、両方入った実データで duties が画面・PDF・検索のどこにも現れない
+  // （no-abbreviated-rendering skill 違反）。カードと同じ順（概要 → 担当業務）で別フィールド
+  // に分けて持ち、描画側（print-leaf-list.tsx / project-card-compact.tsx）へそのまま渡す。
+  const summary = markdownText(item.summary);
+  const duties = markdownText(item.duties);
   const acquired = markdownText(item.acquired);
   const comment = markdownText(item.comment);
   return {
@@ -486,10 +488,11 @@ function buildProject(
     team: trimmed(item.team),
     metaRows,
     techGroups,
+    summary,
     duties,
     acquired,
     comment,
-    compactNote: firstSentence(duties || comment),
+    compactNote: firstSentence(summary || duties || comment),
     level,
   };
 }

@@ -529,10 +529,13 @@ export function enumerateCompletenessFacts(
           }
         }
 
-        // 表示側と同じ優先順位（summary → duties フォールバック）で業務内容を決める。
-        // project-card.tsx:55 `item.summary?.trim() || item.duties` と同じ規則。
-        const duties = sanitizeMarkdown(item.summary ?? '').trim() || sanitizeMarkdown(item.duties ?? '').trim();
-        extractMarkdownFacts(duties).forEach((line, i) => {
+        // 概要・担当業務は描画側では別の節。`summary || duties` のフォールバックで一本化すると
+        // 両方入った実データの duties が未描画でも完全性が緑になる（検査自体がフォールバックの
+        // 欠落を見えなくする）。描画側と同じく 2 節ぶん独立に事実を積む。
+        extractMarkdownFacts(sanitizeMarkdown(item.summary ?? '').trim()).forEach((line, i) => {
+          facts.push({ category: 'project', scope: projectScope, label: `概要 ${i + 1}行目`, text: line });
+        });
+        extractMarkdownFacts(sanitizeMarkdown(item.duties ?? '').trim()).forEach((line, i) => {
           facts.push({ category: 'project', scope: projectScope, label: `業務内容 ${i + 1}行目`, text: line });
         });
         extractMarkdownFacts(sanitizeMarkdown(item.acquired ?? '').trim()).forEach((line, i) => {
