@@ -70,7 +70,7 @@ const zeroCounts = Object.fromEntries(LINE_BREAK_RULES.map((rule) => [rule, 0]))
  * 実データテストだけでなく、落ちたすべてのテストについて件数を公開ログへ出せるように）。
  * ログにはテスト名と件数だけを書き、行の文字列は書かない。
  */
-function recordLineCounts(counts: Record<string, number>): void {
+function recordLineCounts(counts: Record<string, number>, label?: string): void {
   const countsPath = process.env.PDF_LINE_COUNTS_JSON;
   if (!countsPath) return;
   let all: Record<string, Record<string, number>> = {};
@@ -86,7 +86,7 @@ function recordLineCounts(counts: Record<string, number>): void {
   }
   const testName = expect.getState().currentTestName;
   if (testName === undefined) return;
-  all[testName] = counts;
+  all[label === undefined ? testName : `${testName} / ${label}`] = counts;
   writeFileSync(countsPath, JSON.stringify(all), { mode: 0o600 });
 }
 
@@ -137,7 +137,7 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('す。', 720, { width: 23 }),
     ]);
     const exempt = checkLineBreakRules([runtAvoidance]);
-    recordLineCounts(exempt.counts);
+    recordLineCounts(exempt.counts, '意図的な余白の対照');
     expect(exempt.counts['trailing-gap']).toBe(0);
     expect(exempt.counts['runt-last-line']).toBe(1);
   });
@@ -181,7 +181,7 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('つづきの文はここから始まって欄いっぱいまで届くように並ぶ文です。', 740, { width: 515 }),
     ]);
     const valueResult = checkLineBreakRules([valueLine]);
-    recordLineCounts(valueResult.counts);
+    recordLineCounts(valueResult.counts, '短い値行の対照');
     expect(valueResult.counts['trailing-gap']).toBe(0);
   });
 
@@ -220,7 +220,9 @@ describe('改行の規則検査（合成データ）', () => {
       mkLine('あいうえおabcdefghijklmnopqrstuvw', 760, { width: 300 }),
       mkLine('xyzのあとに和文が続いて文は終わる', 740, { width: 300 }),
     ]);
-    expect(checkLineBreakRules([forced]).counts['mid-alnum-run']).toBe(0);
+    const forcedResult = checkLineBreakRules([forced]);
+    recordLineCounts(forcedResult.counts, '16 字超の強制改行の対照');
+    expect(forcedResult.counts['mid-alnum-run']).toBe(0);
   });
 
   it('短い最後の行: 2 行以上の段落の最後の行が 1〜2 字だと数える', () => {
@@ -268,7 +270,7 @@ describe('改行の規則検査（合成データ）', () => {
       ...Array.from({ length: 4 }, (_, i) => mkLine(bodyLine, 460 - i * 20, { width: 380, fontName: 'regular' })),
     ]);
     const boldResult = checkLineBreakRules([boldParagraph]);
-    recordLineCounts(boldResult.counts);
+    recordLineCounts(boldResult.counts, '太字見出しの対照');
     expect(boldResult.counts['long-paragraph']).toBe(0);
     expect(boldResult.failingCount).toBe(0);
   });
