@@ -50,6 +50,31 @@ describe('ProjectCard', () => {
     expect(screen.getByText(/13名/)).toBeInTheDocument();
   });
 
+  it('summary と duties が両方入っている場合、「概要」と「担当業務」を別節でこの順に出す（#390）', () => {
+    const { container } = render(
+      <ProjectCard
+        item={buildItem({ summary: '案件の概要文', duties: '担当した業務内容' })}
+        no={1}
+        activeTech={[]}
+        tech={[]}
+      />,
+    );
+    // 旧フォールバック（`summary || duties`）では duties が「担当業務」ではなく
+    // 「概要」でもなく、どこにも出なかった。
+    const labels = [...container.querySelectorAll('article span')].map((el) => el.textContent);
+    expect(labels.indexOf('概要')).toBeGreaterThanOrEqual(0);
+    expect(labels.indexOf('概要')).toBeLessThan(labels.indexOf('担当業務'));
+    expect(screen.getByText('案件の概要文')).toBeInTheDocument();
+    expect(screen.getByText('担当した業務内容')).toBeInTheDocument();
+  });
+
+  it('summary が空なら「概要」節ごと出さず、duties は「担当業務」節で出す（#390）', () => {
+    render(<ProjectCard item={buildItem({ duties: '担当した業務内容' })} no={1} activeTech={[]} tech={[]} />);
+    expect(screen.queryByText('概要')).not.toBeInTheDocument();
+    expect(screen.getByText('担当業務')).toBeInTheDocument();
+    expect(screen.getByText('担当した業務内容')).toBeInTheDocument();
+  });
+
   it('summary の "- " 箇条書きを <ul><li> として描画する（Markdown 未解釈だった回帰の防止）', () => {
     const summary = '- iOS / Android アプリの機能開発\n- バックエンドの機能実装';
     render(<ProjectCard item={buildItem({ summary })} no={1} activeTech={[]} tech={[]} />);
