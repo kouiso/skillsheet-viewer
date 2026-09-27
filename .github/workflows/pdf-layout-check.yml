@@ -93,7 +93,8 @@ jobs:
         # （PDF_LAYOUT_COUNTS 行）だけ。assertion の文や本文・座標は出さない。
         run: |
           if [[ -f "$RUNNER_TEMP/pdf-layout.log" ]]; then
-            grep -E '^[[:space:]]*(✓|×|FAIL[[:space:]])|PDF_LAYOUT_COUNTS' "$RUNNER_TEMP/pdf-layout.log" || true
+            sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/pdf-layout.log" |
+              grep -E '^[[:space:]]*(✓|×|FAIL[[:space:]])|PDF_LAYOUT_COUNTS' || true
           fi
 
       - name: Remove private data and logs
