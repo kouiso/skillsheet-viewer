@@ -347,9 +347,27 @@ const SkillSheetViewer = ({
       ? (Array.from(root.querySelectorAll<HTMLElement>('[id]')).find((el) => el.id === id) ?? null)
       : document.getElementById(id);
     if (element) {
-      const yOffset = -80;
-      const y = element.getBoundingClientRect().top + window.scrollY + yOffset;
-      window.scrollTo({ top: y, behavior: 'smooth' });
+      const run = () => {
+        // ずらし量は scroll-mt（--viewer-topbar-h）と同じ実測ヘッダー高に揃える（#397）。
+        // 固定値（80px）だと1段化後の114pxや2段時の126pxで見出しがヘッダーに潜る。
+        // ビューアのページ上の <header> は ViewerTopbar / レガシー Header のどちらか1本。
+        const headerOffset = document.querySelector('header')?.offsetHeight ?? 80;
+        const y = element.getBoundingClientRect().top + window.scrollY - headerOffset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+      };
+      // モバイル目次（Sheet）を開いている間は body がスクロールロックされ、閉鎖時の
+      // フォーカス復帰スクロールが scrollTo を巻き戻す。ロック解除を待ってから遷移する。
+      if (document.body.hasAttribute('data-scroll-locked')) {
+        const mo = new MutationObserver(() => {
+          if (document.body.hasAttribute('data-scroll-locked')) return;
+          mo.disconnect();
+          requestAnimationFrame(() => requestAnimationFrame(run));
+        });
+        mo.observe(document.body, { attributes: true, attributeFilter: ['data-scroll-locked'] });
+        setTimeout(() => mo.disconnect(), 2000);
+        return;
+      }
+      run();
     }
   };
 
