@@ -269,6 +269,38 @@ describe('改行の規則検査（合成データ）', () => {
     expect(result.counts['runt-last-line']).toBe(1);
   });
 
+  it('段落の区切り: 行送り上限を超える行間で積まれた行は別要素で、段落の余白として数えない', () => {
+    // ページ右端を 546 にする別段の行を先に置く（段落の段自体は細い実データの積み上げ
+    // を再現するため、段落と同じ段には幅いっぱいの行を置かない）。続く 2 行は、
+    // 1 行目が助数詞「社」で終わり右端まで 10 字分以上の余白があって次の行の
+    // 先頭単位が入る —— 形は早すぎる折り返しだが、行間が 30pt と要素内の折り返し
+    // （11.5×1.75≈20pt）を超えて開いているので、同じ欄に積まれた別のレイアウト
+    // 要素の境目として切る。
+    const refLine = () =>
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよわをんがぎ。', 780, {
+        x: 200,
+        width: 346,
+      });
+    const page = mkPage([
+      refLine(),
+      mkLine('いろいろと考えたのはこの社', 760, { width: 149.5 }),
+      mkLine('あ'.repeat(24) + '。', 730, { width: 276 }),
+    ]);
+    const stacked = checkLineBreakRules([page]);
+    recordLineCounts(stacked.counts);
+    expect(stacked.counts['trailing-gap']).toBe(0);
+
+    // 対照: 同じ形で行間が通常の折り返し（20pt）なら段落として数える。
+    const wrapped = mkPage([
+      refLine(),
+      mkLine('いろいろと考えたのはこの社', 760, { width: 149.5 }),
+      mkLine('あ'.repeat(24) + '。', 740, { width: 276 }),
+    ]);
+    const paragraph = checkLineBreakRules([wrapped]);
+    recordLineCounts(paragraph.counts, '通常行間の対照');
+    expect(paragraph.counts['trailing-gap']).toBe(1);
+  });
+
   it('英数字の途中: 英数字で終わる行の次が英数字で始まると数える（16 字を超える連なりの強制改行は除く）', () => {
     const bad = mkPage([
       mkLine('先頭は和文で末がアルファベットxyzabc', 760, { width: 515 }),

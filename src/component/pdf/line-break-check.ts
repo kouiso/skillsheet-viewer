@@ -141,6 +141,15 @@ const TRACK_LEFT_PT = 1.5;
 const TRACK_SIZE_PT = 0.5;
 /** 「段落の区切り」とみなす行間の、段内標準行間からの超過分（pt）。ブロック間 gap=4pt を拾う。 */
 const PARA_PITCH_OVER_PT = 3;
+/**
+ * 1 つの要素内の折り返し行間が取り得る最大値の、フォントサイズに対する倍率。
+ * 印刷コードの行送り倍率は layout-metric.ts の LINE_HEIGHT（1.6）と
+ * print-token.ts の各スタイル（最大は body の 1.75）で決まり、どのスタイルも
+ * 1.75 を超えない。行の高さ方向の間隔が size×この倍率より大きく開くとき、
+ * その 2 行は同じ段落の折り返しではありえず、同じ欄に縦に積まれた別の
+ * レイアウト要素（フィールド・配列行）の境目とみなせる。
+ */
+const WRAP_PITCH_RATIO_MAX = 1.75;
 /** label:value の行はベースラインがこれくらいずれて並ぶ（セル行の判定幅）。 */
 const CELL_Y_PT = 4;
 /** ページ下端の枠に接しているとみなす範囲（ページ跨ぎ判定用）。 */
@@ -448,7 +457,14 @@ function isSameParagraph(
   columnRight: number,
 ): boolean {
   // 段内の普通の行間より明確に開いている → 段落（またはブロック）の区切り。
-  if (prev.y - next.y > medianPitch + PARA_PITCH_OVER_PT) return false;
+  const pitch = prev.y - next.y;
+  if (pitch > medianPitch + PARA_PITCH_OVER_PT) return false;
+  // 要素内の折り返しは行送り倍率（最大 1.75 倍）の範囲でしか開かないので、
+  // それを超える行間は、同じ欄に縦に積まれた別レイアウト要素（フィールド・
+  // 配列行）の境目。段の行間が要素間隔と同じに揃った積み上げ（値行の羅列など）
+  // では medianPitch 基準では区切れず、境目が段落に吸い込まれてその行末が
+  // 「早すぎる折り返し」に見えるため、行送り上限でも切る。
+  if (pitch > Math.max(prev.size, next.size) * WRAP_PITCH_RATIO_MAX + PARA_PITCH_OVER_PT) return false;
   // 太字の見出し行と本文の行は別の段落（太字は行内の全 item が主フォントと違う行にだけ立つ）。
   if (prev.allBold !== next.allBold) return false;
   // 項目の終わりらしい字で終わる行は、その項目の最後の行（以降は別の項目）。
