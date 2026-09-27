@@ -114,7 +114,7 @@ const CONTINUATION_INDENT = 24;
 /** 「右端の余白が2字以上」: 字 = その行のフォントサイズの em。 */
 const EARLY_BREAK_MIN_SLACK_CHARS = 2;
 /** 改行を含まない段落の長さの上限（字）。 */
-const LONG_PARAGRAPH_MAX_CHARS = 137;
+const LONG_PARAGRAPH_MAX_CHARS = 30;
 /** 長すぎる段落の対象サイズの上限。見出しサイズ（H4 以上）の行は対象外。 */
 const LONG_PARAGRAPH_MAX_SIZE = FONT_SIZE.H4 - 0.25;
 
