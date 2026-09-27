@@ -267,7 +267,9 @@ function firstBreakUnitWidth(seg: WorkSeg, unitLength: number): number {
     }
     consumed += itemChars;
   }
-  return seg.right - seg.left;
+  // 元の文で測った単位がこの行の中身より長い＝行の途中で単位が終わらない
+  // 境界（長い英数字の連なりの分割など）。余白には入らないものとして扱う。
+  return Number.POSITIVE_INFINITY;
 }
 
 /**

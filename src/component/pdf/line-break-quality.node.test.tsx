@@ -225,6 +225,22 @@ function buildLineBreakCheckBlocks(): Block[] {
   ];
 }
 
+/**
+ * ブロックから文字列フィールドを全部拾う。`JSON.stringify(blocks)` を 1 本の
+ * 文字列として渡すと、フィールド境界の `","` をまたいだ一致や `"` の
+ * エスケープで元の文との照合がずれるため、実際の本文フィールド単位で渡す。
+ */
+function collectSourceTexts(value: unknown, out: string[] = []): string[] {
+  if (typeof value === 'string') {
+    out.push(value);
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectSourceTexts(item, out);
+  } else if (value !== null && typeof value === 'object') {
+    for (const item of Object.values(value)) collectSourceTexts(item, out);
+  }
+  return out;
+}
+
 describe('checkLineBreakQuality: 描いた PDF に当てる', () => {
   it('合成ブロックを現行の印刷コードで描いた PDF では規則の当たりが 0 件', { timeout: 60_000 }, async () => {
     const blocks = buildLineBreakCheckBlocks();
@@ -232,7 +248,7 @@ describe('checkLineBreakQuality: 描いた PDF に当てる', () => {
       await buildPrintSkillSheetDocument({ title: '改行規則の検査', blocks, referenceMonth }),
     );
     const pages = await extractQualityPages(buffer);
-    const report = checkLineBreakQuality(pages, { sourceTexts: [JSON.stringify(blocks)] });
+    const report = checkLineBreakQuality(pages, { sourceTexts: collectSourceTexts(blocks) });
     console.log(`PDF_LAYOUT_COUNTS ${summarizeLineBreaks(report)}`);
     for (const rule of LINE_BREAK_RULES) {
       expect(report.counts[rule], `改行の崩れが検出されました: ${rule}`).toBe(0);
@@ -255,7 +271,7 @@ describe('checkLineBreakQuality: 描いた PDF に当てる', () => {
         await buildPrintSkillSheetDocument({ title: 'エンジニアスキルシート', blocks, referenceMonth }),
       );
       const pages = await extractQualityPages(buffer);
-      const report = checkLineBreakQuality(pages, { sourceTexts: [JSON.stringify(blocks)] });
+      const report = checkLineBreakQuality(pages, { sourceTexts: collectSourceTexts(blocks) });
       // 公開ログに出せるのは件数だけ。本文や位置の文字列は出さない。
       console.log(`PDF_LAYOUT_COUNTS ${summarizeLineBreaks(report)}`);
       for (const rule of LINE_BREAK_RULES) {
