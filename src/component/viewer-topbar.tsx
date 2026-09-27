@@ -14,12 +14,13 @@ import {
   Sun,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@/component/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
+import { useViewerTopbarHeight } from '@/hook/use-viewer-topbar-height';
 
 /**
  * ビューアで表示ON/OFFを切り替えられるキー。
@@ -222,23 +223,8 @@ export function ViewerTopbar({
   const { mode, toggleTheme } = useThemeMode();
   const reduceMotion = useReducedMotion();
 
-  // ヘッダーの実高を --viewer-topbar-h へ流し、会社見出しの sticky ずらし量と
-  // 一元化する（#397）。ずらし量を company-section 側へ別に直書きすると、
-  // トグルの段数・パディングが変わるたびに見出しがヘッダーへ潜るズレが再発する。
-  const headerRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    const el = headerRef.current;
-    if (!el) return;
-    const update = () => {
-      document.documentElement.style.setProperty('--viewer-topbar-h', `${el.offsetHeight}px`);
-    };
-    update();
-    // jsdom 等 ResizeObserver が無い環境では初期値だけ書いて終える。
-    if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  // ヘッダー実高を --viewer-topbar-h へ流し、見出し・目次のずらし量と一元化（#397）
+  const headerRef = useViewerTopbarHeight<HTMLElement>();
 
   const editButton = canEdit ? (
     <Tooltip>

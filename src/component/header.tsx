@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/component/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
+import { useViewerTopbarHeight } from '@/hook/use-viewer-topbar-height';
 
 interface HeaderProps {
   title?: string;
@@ -34,6 +35,10 @@ const Header = ({
   backHref,
 }: HeaderProps) => {
   const { mode, toggleTheme } = useThemeMode();
+  // レガシーヘッダーも実高を --viewer-topbar-h へ流す（#397）。project ブロック無しの
+  // シートでも目次サイドバーがこの変数を引くため、ViewerTopbar と揃えておかないと
+  // フォールバック値と実高の差ぶん目次がずれる。
+  const headerRef = useViewerTopbarHeight<HTMLElement>();
   const editButton = canEdit ? (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -53,6 +58,7 @@ const Header = ({
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
       className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md"
+      ref={headerRef}
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
         {backHref ? (
