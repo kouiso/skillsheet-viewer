@@ -164,7 +164,7 @@ export const ProjectCard = ({
         <CardBlock label="習得スキル">
           <InlineMarkdown
             content={collapseSoftBreaks(item.acquired)}
-            className="break-words leading-relaxed text-foreground"
+            className="break-words text-[13.5px] leading-relaxed text-foreground"
           />
         </CardBlock>
       ) : null}

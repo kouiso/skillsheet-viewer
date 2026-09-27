@@ -33,6 +33,8 @@ export PGSERVICEFILE="$PWD/.pg_service.conf"
 
 ## PDF を出す（ローカルで印刷コードを直接呼ぶ）
 
+PDF の一次情報は本番 DB であり、書き出しはアプリの印刷コードを通して行う。独自に組んだ Chromium のレイアウトは使わない。2026-09-24 の文字サイズ不具合は、本番 DB とアプリの印刷コードを経由しない書き出し方が原因だった。同じ経路を再び選ばないよう、判断の根拠としてここに残す。
+
 `pnpm dev` も `pnpm build` も、ブラウザからの書き出しも要らない。アプリの PDF 出力と同じ
 `buildPrintSkillSheetDocument` を `tsx` で呼ぶので、出てくる PDF はアプリから書き出したものと同じ組版になる。
 
