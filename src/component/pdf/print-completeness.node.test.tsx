@@ -217,6 +217,23 @@ describe('enumerateCompletenessFacts', () => {
     const alphaTech = facts.filter((f) => f.scope === '案件アルファ' && f.label.startsWith('技術(言語)'));
     expect(alphaTech).toHaveLength(8); // PRINT_CHIP_LIMIT=6 を超えて Ruby / PHP も含む
   });
+
+  it('概要と担当業務を別の事実として列挙する（#377 M4: 代用ルールでは duties が検査されなかった）', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture');
+    project.data.items[0].summary = '概要の独自文';
+
+    const facts = enumerateCompletenessFacts(blocks);
+    const alpha = facts.filter((f) => f.scope === '案件アルファ');
+    expect(alpha.find((f) => f.label === '概要 1行目')?.text).toBe('概要の独自文');
+    // duties 側は summary の有無に関わらず別欄として列挙される（以前は summary 優先で捨てられていた）。
+    expect(alpha.filter((f) => f.label.startsWith('担当業務')).map((f) => f.text)).toEqual([
+      '機能Aの実装',
+      '機能Bの実装',
+    ]);
+    expect(alpha.some((f) => f.label.startsWith('業務内容'))).toBe(false);
+  });
 });
 
 describe('checkCompleteness（案件スコープでの突き合わせ）', () => {

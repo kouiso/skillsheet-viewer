@@ -94,9 +94,8 @@ const mdToSheet = (s: string | undefined): string =>
     .replace(/^#+\s*/gm, '')
     .trim();
 
-// ビューアは summary 未入力時に duties へフォールバックして表示する
-// （project-card.tsx `item.summary?.trim() || item.duties`）。xlsx も同じ優先順位で
-// 要約を出し、duties も別節として残す（消すとバックアップとしての情報量が落ちる）。
+// ビューア・PDF は summary と duties を別欄で出す（#377 M4）。xlsx も両方を別節で
+// 出す（消すとバックアップとしての情報量が落ちる）。
 const composeDesc = (i: ProjectItem): string => {
   const sections: string[] = [];
   const summary = i.summary?.trim();

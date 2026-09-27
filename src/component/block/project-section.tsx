@@ -57,9 +57,9 @@ export function projectSearchHaystack(
     item.role,
     companyName,
     companyNote,
-    // 表示側（project-card.tsx）は `summary?.trim() || duties`。`??` だと空文字の
-    // summary が採用され、カードに出ている duties の語で検索してもヒットしない。
-    item.summary?.trim() || item.duties,
+    // カードは summary と duties を別欄で出す（#377 M4）ので、検索も両方を対象にする。
+    item.summary,
+    item.duties,
     item.acquired,
     item.comment,
     ...tech,

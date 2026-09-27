@@ -59,6 +59,43 @@ describe('ProjectCard', () => {
     expect(items[0]).toHaveTextContent('iOS / Android アプリの機能開発');
   });
 
+  it('概要と担当業務を別の欄で出す（#377 M4: summary 優先の代用表示をやめる）', () => {
+    // 実データは両方入っている。以前は `summary?.trim() || duties` で duties が
+    // 1 件も画面に出なかった。
+    render(
+      <ProjectCard
+        item={buildItem({ summary: '概要の文です。', duties: '担当業務の本文です。' })}
+        no={1}
+        activeTech={[]}
+        tech={[]}
+      />,
+    );
+
+    expect(screen.getByText('概要')).toBeInTheDocument();
+    expect(screen.getByText('概要の文です。')).toBeInTheDocument();
+    expect(screen.getByText('担当業務')).toBeInTheDocument();
+    expect(screen.getByText('担当業務の本文です。')).toBeInTheDocument();
+    // 概要の本文が担当業務の欄に混ざらない（欄ごとに本文が所属することを確認）。
+    expect(screen.getByText('概要').parentElement).toHaveTextContent('概要の文です。');
+    expect(screen.getByText('担当業務').parentElement).toHaveTextContent('担当業務の本文です。');
+  });
+
+  it('概要・担当業務の空欄は見出しごと出さない（既存の空欄ルールと同じ）', () => {
+    const { rerender } = render(
+      <ProjectCard item={buildItem({ summary: '概要だけ' })} no={1} activeTech={[]} tech={[]} />,
+    );
+    expect(screen.getByText('概要')).toBeInTheDocument();
+    expect(screen.queryByText('担当業務')).not.toBeInTheDocument();
+
+    rerender(<ProjectCard item={buildItem({ duties: '担当業務だけ' })} no={1} activeTech={[]} tech={[]} />);
+    expect(screen.queryByText('概要')).not.toBeInTheDocument();
+    expect(screen.getByText('担当業務')).toBeInTheDocument();
+
+    rerender(<ProjectCard item={buildItem({})} no={1} activeTech={[]} tech={[]} />);
+    expect(screen.queryByText('概要')).not.toBeInTheDocument();
+    expect(screen.queryByText('担当業務')).not.toBeInTheDocument();
+  });
+
   it('comment の "**強調**" を太字要素として描画し、"**" を画面に残さない', () => {
     const comment = '**動かして**みないと気が済まない性格です。';
     render(<ProjectCard item={buildItem({ comment })} no={1} activeTech={[]} tech={[]} />);

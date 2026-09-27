@@ -196,7 +196,8 @@ export function compactBodyPieces(project: PrintProject): CompactBodyPiece[] {
   });
 
   const sections = [
-    { label: '業務内容', text: project.duties },
+    { label: '概要', text: project.summary },
+    { label: '担当業務', text: project.duties },
     { label: '習得スキル・実績', text: project.acquired },
     { label: 'コメント', text: project.comment },
   ].filter((section) => section.text.length > 0);

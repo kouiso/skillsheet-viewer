@@ -529,11 +529,13 @@ export function enumerateCompletenessFacts(
           }
         }
 
-        // 表示側と同じ優先順位（summary → duties フォールバック）で業務内容を決める。
-        // project-card.tsx:55 `item.summary?.trim() || item.duties` と同じ規則。
-        const duties = sanitizeMarkdown(item.summary ?? '').trim() || sanitizeMarkdown(item.duties ?? '').trim();
-        extractMarkdownFacts(duties).forEach((line, i) => {
-          facts.push({ category: 'project', scope: projectScope, label: `業務内容 ${i + 1}行目`, text: line });
+        // 表示側（project-card.tsx / print-leaf-list.tsx）と同じく概要と担当業務は
+        // 別欄（#377 M4）。片方だけの検査だともう片方の欠落を見逃すため、両方を検査する。
+        extractMarkdownFacts(sanitizeMarkdown(item.summary ?? '').trim()).forEach((line, i) => {
+          facts.push({ category: 'project', scope: projectScope, label: `概要 ${i + 1}行目`, text: line });
+        });
+        extractMarkdownFacts(sanitizeMarkdown(item.duties ?? '').trim()).forEach((line, i) => {
+          facts.push({ category: 'project', scope: projectScope, label: `担当業務 ${i + 1}行目`, text: line });
         });
         extractMarkdownFacts(sanitizeMarkdown(item.acquired ?? '').trim()).forEach((line, i) => {
           facts.push({ category: 'project', scope: projectScope, label: `習得スキル・実績 ${i + 1}行目`, text: line });

@@ -194,8 +194,8 @@ export function projectBlockToMarkdown(
       lines.push(escapeMarkdownParagraph(company.note.trim()));
     }
     // 案件の要約（ProjectItem.summary）。MCP/エディタで書き込めるのにここで出さないと
-    // includeHidden バックアップ → 復元の往復で黙って消える（#343）。ビューアは
-    // `summary || duties` の順で本文に使うため、duties とは別節として残す。
+    // includeHidden バックアップ → 復元の往復で黙って消える（#343）。ビューア・PDF も
+    // duties とは別欄で出す（#377 M4）ため、ここでも別節として残す。
     if (item.summary?.trim()) {
       lines.push('');
       lines.push('**要約**');

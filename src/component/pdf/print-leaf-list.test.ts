@@ -25,6 +25,7 @@ function project(overrides: Partial<PrintProject> = {}): PrintProject {
     team: '5 名',
     metaRows: [{ label: '役割', value: 'バックエンド' }],
     techGroups: [{ label: '言語', chips: [{ label: 'TypeScript', emphasis: 'solid' }] }],
+    summary: '',
     duties: '業務内容の本文。\n\n- 箇条書き 1\n- 箇条書き 2',
     acquired: '',
     comment: 'コメントの本文。',
@@ -92,6 +93,20 @@ describe('toLeaves', () => {
       'section-label',
       'paragraph',
     ]);
+  });
+
+  it('概要と担当業務はそれぞれ小見出し + 本文の別ブロックになる（#377 M4）', () => {
+    const leaves = toLeaves(
+      vm([company([project({ summary: '概要の本文。', duties: '担当業務の本文。', comment: '' })])]),
+    );
+    // card-header → meta → tech-group → [概要 label + 本文] → [担当業務 label + 本文]
+    const sectionLabels = leaves
+      .filter((leaf) => leaf.kind === 'section-label')
+      .map((leaf) => (leaf.el.props as { children: string }).children);
+    expect(sectionLabels).toEqual(['概要', '担当業務']);
+    const texts = leaves.map((leaf) => leaf.text).filter(Boolean);
+    expect(texts).toContain('概要の本文。');
+    expect(texts).toContain('担当業務の本文。');
   });
 
   it('見出し類は次の葉と同居し、本文の葉は同居を要求しない', () => {

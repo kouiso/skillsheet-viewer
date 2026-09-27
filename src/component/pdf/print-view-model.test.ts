@@ -372,25 +372,31 @@ describe('buildPrintViewModel', () => {
     expect(vm.summary.topSkills).toEqual([]);
   });
 
-  it('要約だけ入力し担当業務を空にした案件は、要約の全文を duties として持つ', () => {
-    // ビューア（project-card.tsx:55 `item.summary?.trim() || item.duties`）と同じ優先順位。
-    // 以前は PrintProject.duties が item.duties しか見ておらず、要約だけ入力した直近案件
-    // （詳細版カード）は「業務内容」ブロックが 1 つも出ない静かなデータ欠落だった。
+  it('概要と担当業務は別の値で持つ（summary 優先の代用をやめる、#377 M4）', () => {
+    // 以前は `markdownText(item.summary) || markdownText(item.duties)` で、両方入っている
+    // 実データ（33 件全件）では担当業務が PDF に 1 行も出なかった。summary が空のときだけ
+    // duties を出す代用ルールもやめ、どちらも入力されれば両方を別ブロックで描く。
     // 60 文字超・2 文の本文にする（firstSentence が使う compactNote 側の 1 文/60 文字切りを
-    // 混同していないことも確かめる — ここで見るのは duties そのもので、切られていないこと）。
+    // 混同していないことも確かめる — ここで見るのは summary/duties そのもので、切られていないこと）。
     const summaryText =
       '決済基盤のリプレイスを設計から主導した案件。旧バッチの段階移行と本番切り替えまで担当し、無停止で移行を完了させた。';
     const blocks = blocksFixture();
     const project = blocks.find((b) => b.type === 'project');
-    if (project?.type === 'project') {
-      project.data.items[0].duties = '';
-      project.data.items[0].summary = summaryText;
-    }
+    if (project?.type !== 'project') throw new Error('fixture');
+    project.data.items[0].summary = summaryText;
+    project.data.items[0].duties = '- 実装を担当。';
     // 赤くなることを確認済み: buildProject の
-    // `const duties = trimmed(item.summary) || trimmed(item.duties);` を
-    // `const duties = trimmed(item.duties);` に戻すと、この it は空文字との比較で落ちる。
+    // `const summary = markdownText(item.summary);` を `const summary = '';` にすると落ちる。
     const vm = buildPrintViewModel('シート', blocks);
-    expect(vm.companies[0].projects[0].duties).toBe(summaryText);
+    const item = vm.companies[0].projects[0];
+    expect(item.summary).toBe(summaryText);
+    expect(item.duties).toBe('- 実装を担当。');
+    // 要約だけの案件は duties が空のまま — 欠落チェック（print-completeness）が別欄として
+    // 両方を見るため、代用で duties に流す必要はない。
+    project.data.items[0].duties = '';
+    const only = buildPrintViewModel('シート', blocks).companies[0].projects[0];
+    expect(only.summary).toBe(summaryText);
+    expect(only.duties).toBe('');
   });
 });
 

@@ -181,4 +181,28 @@ describe('ProjectSection の検索', () => {
     expect(screen.getByText('案件B')).toBeInTheDocument();
     expect(screen.queryByText('案件A')).not.toBeInTheDocument();
   });
+
+  it('summary と duties の両方が入っている案件は、duties 側の語でも絞り込める（#377 M4）', async () => {
+    // 以前は haystack が `summary?.trim() || duties` で、summary が入っていると duties の
+    // 本文が検索対象から抜けていた。カードは両方を別欄で出すので、検索も両方を見る。
+    const user = userEvent.setup();
+    const data: ProjectBlockData = {
+      companies: [{ id: 'c1', name: 'Q 社', kind: '', period: '', note: '' }],
+      items: [
+        buildItem({
+          id: 'p1',
+          title: '案件A',
+          summary: '社内向け管理画面の改善',
+          duties: '決済基盤のリプレイス',
+        }),
+        buildItem({ id: 'p2', title: '案件B', summary: '別の概要', duties: '別の業務' }),
+      ],
+    };
+    render(<ProjectSection data={data} showProcess={false} showTimeline={false} />);
+
+    await user.type(screen.getByLabelText('案件・技術・役割を検索'), '決済基盤');
+
+    expect(screen.getByText('案件A')).toBeInTheDocument();
+    expect(screen.queryByText('案件B')).not.toBeInTheDocument();
+  });
 });
