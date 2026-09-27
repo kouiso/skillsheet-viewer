@@ -206,7 +206,7 @@ export function RunningFooter({ name, sheetTitle }: { name: string; sheetTitle: 
   );
 }
 
-/** 小見出し（業務内容 / 習得スキル・実績 / コメント 等）。 */
+/** 小見出し（担当業務 / 習得スキル / コメント 等）。 */
 export function SectionLabel({ children }: { children: ReactNode }) {
   return <PrintText style={styles.sectionLabel}>{children}</PrintText>;
 }

@@ -63,7 +63,7 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
     ...vm.companies.map((c) => c.name),
     ...projects.map((p) => p.title),
     // 簡約版の表が跨いだページは、fixed の列ヘッダーから始まる。
-    '期間 案件 ／ 担当 チーム',
+    '期間 案件 チーム',
     // スキル一覧が 2 ページに跨ったときの継続ヘッダー。
     'スキル一覧（続き）',
     // 詳細版カードが跨いだページは継続ヘッダー（案件名）から始まる。
@@ -73,6 +73,7 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
     (
       [
         ['title', p.title],
+        ['summary', p.summary],
         ['duties', p.duties],
         ['acquired', p.acquired],
         ['comment', p.comment],
@@ -92,6 +93,8 @@ function assertComplete(blocks: Block[], pages: Awaited<ReturnType<typeof extrac
   const report = buildCompletenessReport(blocks, pages, undefined, referenceMonth);
   expect(report.missing.length, 'PDF完全性: 元データの事実が欠落しています').toBe(0);
   expect(report.durationConflicts.length, '参画期間の矛盾は本人の差分確認が必要です').toBe(0);
+  expect(report.invalidPeriods.length, '開始と終了が逆転した期間があります').toBe(0);
+  expect(report.outsideCompanyPeriods.length, '在籍期間の外にある案件があります').toBe(0);
 }
 
 describe('新しい印刷経路の品質', () => {
@@ -164,6 +167,60 @@ describe('新しい印刷経路の品質', () => {
     project.data.items[0].duties += '\n\n完全性検査専用の未描画合成事実。';
     expect(() => assertComplete(blocks, fixturePages)).toThrow('PDF完全性');
   });
+
+  it('概要と担当業務を別節として両方描画し、概要を先に出す（#390）', async () => {
+    // 旧フォールバック（summary || duties）では両方入力済みの案件の duties が
+    // PDF のどの節にも載らなかった。
+    const blocks = buildPdfQualityFixtureBlocks();
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project' || !project.data.items[0]) throw new Error('合成案件がありません');
+    project.data.items[0].summary = '概要検証用の合成説明文';
+    project.data.items[0].duties = '担当業務検証用の合成作業内容';
+
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks, referenceMonth }),
+    );
+    const pages = await extractQualityPages(buffer);
+    const items = pages.flatMap((page) => page.map((it) => it.text));
+    const joined = items.join('').replaceAll(/\s/g, '');
+
+    expect(items).toContain('概要');
+    expect(items).toContain('担当業務');
+    expect(joined).toContain('概要検証用の合成説明文');
+    expect(joined).toContain('担当業務検証用の合成作業内容');
+    // カードと同じ並び: 同じカード内で「概要」本文は「担当業務」本文より先。
+    expect(joined.indexOf('概要検証用の合成説明文')).toBeLessThan(joined.indexOf('担当業務検証用の合成作業内容'));
+  }, 60_000);
+
+  it('簡約版カードでも概要の文は同じページに 2 回出ない（#399）', async () => {
+    // 簡約版カードは 1 行目の「一言」（compactNote）に概要の先頭 1 文を出し、
+    // 2 段目の概要ブロックで同じ文を全文で再度出していたため、概要が 1 文の
+    // 案件では同じ文が同じページに 2 度現れていた（実データ PDF の 3〜5 ページで再現）。
+    const blocks = buildPdfQualityFixtureBlocks();
+    const project = blocks.find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('合成案件がありません');
+    const item = project.data.items.find((i) => i.title === '社内ツールの保守');
+    if (!item) throw new Error('簡約版の合成案件がありません');
+    const summaryText = '概要重複を検出するための一意な合成文章。';
+    item.summary = summaryText;
+
+    const buffer = await renderToBuffer(
+      await buildPrintSkillSheetDocument({ title: PDF_QUALITY_FIXTURE_TITLE, blocks, referenceMonth }),
+    );
+    const pages = await extractQualityPages(buffer);
+    // 見出しと本文を同一行へ畳めるよう、ページ内の抽出 item を空白なしで連結する。
+    const pageTexts = pages.map((page) =>
+      page
+        .map((i) => i.text)
+        .join('')
+        .replaceAll(/\s/g, ''),
+    );
+    const pageIndex = pageTexts.findIndex((text) => text.includes(item.title));
+    expect(pageIndex).toBeGreaterThanOrEqual(0);
+    // カードの行と本文がページ境界で割れる正当なレイアウトがあり得るため、
+    // ページ単位ではなく文書全体でちょうど 1 回出ることだけを見る（AC: 同じ文が 2 回出ない）。
+    expect(pageTexts.join('').split(summaryText).length - 1).toBe(1);
+  }, 60_000);
 
   it.skipIf(REAL_BLOCKS_JSON === undefined)(
     '実データでテキスト・ラスタ・見出し重複・完全性の全検査が緑になる',

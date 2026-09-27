@@ -73,7 +73,9 @@ const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps
                 isActive ? 'size-1.5 bg-primary' : 'size-[5px] bg-faint',
               )}
             />
-            {!collapsed && <span className="truncate">{label}</span>}
+            {/* 長い見出し（会社名など）を truncate の「…」で切らず、
+                全文が読めるよう折り返して出す（#393）。 */}
+            {!collapsed && <span className="min-w-0 break-words">{label}</span>}
           </button>
         </li>
       );
@@ -126,7 +128,9 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
   return (
     <aside
       className={cn(
-        'no-print sticky top-16 z-30 flex h-[calc(100vh-4rem)] shrink-0 flex-col gap-4 self-start border-r border-border transition-[width] duration-300',
+        // sticky top / 高さは全帯でヘッダー実高 --viewer-topbar-h を引く（#397）。
+        // 固定値（4rem）だと実高 74px との差分で上端がヘッダーに潜っていた。
+        'no-print sticky top-(--viewer-topbar-h) z-30 flex h-[calc(100vh-var(--viewer-topbar-h))] shrink-0 flex-col gap-4 self-start border-r border-border transition-[width] duration-300',
         isCollapsed ? 'items-center px-2 pb-10 pt-7' : 'px-[22px] pb-10 pt-7',
       )}
       style={{ width: isCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH }}

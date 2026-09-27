@@ -1,8 +1,9 @@
 /**
  * `print-quality-raster.node.ts` の回帰テスト。
  *
- * `DEFAULT_RASTER_OPTIONS.textPadding.bottom` は 3 → 10 に広げてある（p20 の閉じ切った
- * カードの角丸を「文字を伴わない図形」と誤検出しないため。ファイル冒頭コメント参照）。
+ * `DEFAULT_RASTER_OPTIONS.textPadding.bottom` は 3 → 13 に広げてある（p20 の閉じ切った
+ * カードの角丸、およびカード閉じ罫線を「文字を伴わない図形」と誤検出しないため。
+ * ファイル冒頭コメント参照）。
  * この拡張が緩めすぎて本物の壊れ方（本文が別ページへ丸ごと逃げ、断片だけが版面の縁に
  * 独立して残る）まで見逃さないかを、手で組んだ孤立図形（本文から遠く離れた塗り・枠線の
  * 矩形）で確認する。これは `print-document.tsx` の実コンポーネントに依存しない、
@@ -75,7 +76,7 @@ describe('print-quality-raster: textPadding.bottom を広げても本物の孤�
     const buffer = await renderToBuffer(<OrphanShapeProbeDocument />);
     const pages = await extractQualityPages(buffer);
 
-    // 3 は変更前の値、10 は変更後の既定値。その間と少し上まで振って安全マージンを見る。
+    // 3 は最初の値、13 は現在の既定値。その間と少し上まで振って安全マージンを見る。
     for (const bottom of [3, 6, 8, 10, 12, 15]) {
       const opts = { ...DEFAULT_RASTER_OPTIONS, textPadding: { ...DEFAULT_RASTER_OPTIONS.textPadding, bottom } };
       const findings = await runRasterQualityChecks(buffer, pages, opts);

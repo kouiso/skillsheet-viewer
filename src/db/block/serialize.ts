@@ -193,24 +193,24 @@ export function projectBlockToMarkdown(
       lines.push('');
       lines.push(escapeMarkdownParagraph(company.note.trim()));
     }
-    // 案件の要約（ProjectItem.summary）。MCP/エディタで書き込めるのにここで出さないと
-    // includeHidden バックアップ → 復元の往復で黙って消える（#343）。ビューアは
-    // `summary || duties` の順で本文に使うため、duties とは別節として残す。
+    // 案件の概要（ProjectItem.summary）。MCP/エディタで書き込めるのにここで出さないと
+    // includeHidden バックアップ → 復元の往復で黙って消える（#343）。画面・PDF・Excel と
+    // 同じ見出し語（概要/担当業務/習得スキル/コメント）を節見出しに使う（#399）。
     if (item.summary?.trim()) {
       lines.push('');
-      lines.push('**要約**');
+      lines.push('**概要**');
       lines.push('');
       lines.push(asInlineMarkdown(collapseSoftBreaks(item.summary.trim())));
     }
     if (item.duties.trim()) {
       lines.push('');
-      lines.push('**業務内容**');
+      lines.push('**担当業務**');
       lines.push('');
       lines.push(asInlineMarkdown(collapseSoftBreaks(item.duties.trim())));
     }
     if (item.acquired.trim()) {
       lines.push('');
-      lines.push('**習得スキル・実績**');
+      lines.push('**習得スキル**');
       lines.push('');
       lines.push(asInlineMarkdown(collapseSoftBreaks(item.acquired.trim())));
     }

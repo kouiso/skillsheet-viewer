@@ -56,7 +56,9 @@ export const COMPANY_NAMES: readonly string[] = [
   'H社',
   'I社',
   'J社（受託開発）',
-  'K社',
+  // 目次（左 CONTENTS）は横幅が限られるため、意図的に 1 行に収まらない長い会社名を
+  // 混ぜて「…」切れの再現ケースにする（#393 項目4）。実データではなく合成名。
+  'K社（エンタープライズソリューションズ・グローバルシステムズグループ）',
   'L社',
   'M社',
   'N社',
@@ -145,12 +147,27 @@ const PROCESS_POOLS: readonly string[][] = [
   ['要件定義', '基本設計', '実装', '運用・保守'],
 ];
 
+// #396: 案件は会社の在籍期間に収まっている必要がある（収まらないと PDF 完全性
+// ゲートがビルドを止める）。会社期間は年を跨ぐ十分な幅を持たせ、案件期間は
+// その窓の内側に生成する。
+function companyPeriod(i: number): string {
+  return i === 0 ? '2025.11 — 現在' : `${2008 + (i % 12)}.${(i % 9) + 1} — ${2008 + (i % 12) + 4}.${(i % 9) + 1}`;
+}
+
+/** 会社 c の在籍期間の内側に収まる、p 番目の案件の期間（4 か月）。 */
+function projectPeriod(c: number, p: number): string {
+  if (c === 0) return '2025.12 — 2026.03'; // Q社（2025.11 — 現在）の内側
+  const startYear = 2008 + (c % 12);
+  const startMonth = (c % 9) + 1;
+  return `${startYear + p}.${startMonth} — ${startYear + p}.${startMonth + 3}`;
+}
+
 function buildCompanies(): CompanyInfo[] {
   return COMPANY_NAMES.map((name, i) => ({
     id: newId(),
     name,
     kind: '',
-    period: i === 0 ? '2025.11 — 現在' : `${2018 + (i % 8)}.${(i % 12) + 1} — ${2018 + (i % 8)}.${((i + 3) % 12) + 1}`,
+    period: companyPeriod(i),
     note: '',
   }));
 }
@@ -171,9 +188,7 @@ function buildItems(companies: CompanyInfo[]): ProjectItem[] {
         companyId: companies[c].id,
         title: isFlagship ? 'マッチングアプリの開発' : titleTemplate,
         scope: SCOPE_TEMPLATES[idx % SCOPE_TEMPLATES.length],
-        period: isFlagship
-          ? '2025.11 — 現在'
-          : `${2018 + (idx % 8)}.${(idx % 12) + 1} — ${2018 + (idx % 8)}.${((idx + 3) % 12) + 1}`,
+        period: isFlagship ? '2025.11 — 現在' : projectPeriod(c, p),
         role: isFlagship
           ? 'フルスタックエンジニア / エンジニアリングマネージャー'
           : ROLE_TEMPLATES[idx % ROLE_TEMPLATES.length],
@@ -181,8 +196,12 @@ function buildItems(companies: CompanyInfo[]): ProjectItem[] {
         tech,
         process: PROCESS_POOLS[idx % PROCESS_POOLS.length],
         duties: `・${titleTemplate}の設計・実装\n・関連システムとの連携調整`,
-        acquired: '',
-        comment: '',
+        // 案件カードの「担当業務 / 習得スキル / コメント」3 欄がそろうよう、
+        // 代表案件にだけ習得スキルとコメントを入れる（#393 項目1 の検証用。合成文言）。
+        acquired: isFlagship ? '・TypeScript/JavaScript での UI 実装\n・変更に強い設計とテスト整備' : '',
+        comment: isFlagship
+          ? '立ち上げ期の短い案件だったが、設計から運用移行まで一貫して担当した。\n\n次案件でも同じ構成で即戦力になれる見通し。'
+          : '',
         summary: `${companies[c].name}にて${titleTemplate}を担当。要件整理から実装・運用まで一気通貫で対応。`,
         // 期間はすべて4か月（年を跨がないものは classifyPeriod が invalid にする）なので、
         // duration は導出と一致する '4ヶ月' に固定する — 不一致にすると
@@ -210,7 +229,57 @@ const projectBlock: BlockInput = { type: 'project', data: { companies, items } }
 
 export function buildRealVolumeDemoBlocks(): BlockInput[] {
   const nonProjectBlocks = buildConsoleDemoBlocks().filter((b) => b.type !== 'project');
-  return [...nonProjectBlocks, projectBlock];
+  // スキルマトリクスの語中折れ（#393 項目2）を再現するため、空白を含まない
+  // 'TypeScript/JavaScript' を合成スキルとして先頭カテゴリへ追加する
+  // （console-demo の 'TypeScript / JavaScript' は空白があり別物）。
+  const firstSkillsIndex = nonProjectBlocks.findIndex((b) => b.type === 'skills');
+  return [
+    ...nonProjectBlocks.map((block, i) =>
+      block.type === 'skills' && i === firstSkillsIndex
+        ? {
+            ...block,
+            data: {
+              ...block.data,
+              skills: [...block.data.skills, { name: 'TypeScript/JavaScript', years: 8, level: '上級' }],
+            },
+          }
+        : block,
+    ),
+    projectBlock,
+  ];
+}
+
+/**
+ * #396: 完全性チェックが開始終了の逆転を検出できるかを確認するための fixture。
+ * わざと逆転させた期間の案件を 1 件だけ含む。本デモの 32 件には混ぜない
+ * （混ぜるとデモシート自体がビルドゲートに止められる）。
+ */
+export function buildReversedPeriodFixtureBlocks(): BlockInput[] {
+  const companyId = newId();
+  return [
+    {
+      type: 'project',
+      data: {
+        companies: [{ id: companyId, name: '期間検証会社', kind: '', period: '2020.01 — 2020.12', note: '' }],
+        items: [
+          {
+            id: newId(),
+            companyId,
+            title: '期間逆転の検証案件',
+            scope: '',
+            period: '2020.06 — 2020.01',
+            role: '',
+            team: '',
+            tech: { lang: ['TypeScript'], fw: [], db: [], infra: [], tools: [], collab: [] },
+            process: [],
+            duties: '',
+            acquired: '',
+            comment: '',
+          },
+        ],
+      },
+    },
+  ];
 }
 
 export const REAL_VOLUME_DEMO_TITLE = '実データボリューム検証シート（19社/32案件）';

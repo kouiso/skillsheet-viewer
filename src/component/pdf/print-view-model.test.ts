@@ -7,7 +7,6 @@ import {
   compactPeriod,
   companyLabelOf,
   dedupeRoles,
-  firstSentence,
   formatProcessForPrint,
 } from './print-view-model';
 
@@ -89,27 +88,6 @@ describe('buildTechGroups', () => {
 
   it('中身が無い分類は行ごと出さない', () => {
     expect(buildTechGroups({ ...emptyTech, lang: ['-', ' '] })).toEqual([]);
-  });
-});
-
-describe('firstSentence', () => {
-  it('箇条書き記号を落として先頭 1 文を返す', () => {
-    expect(firstSentence('- iOS アプリの機能開発。\n- バックエンドの実装。')).toBe('iOS アプリの機能開発。');
-  });
-
-  it('強調記法を落とす', () => {
-    expect(firstSentence('**Next.js** で実装。')).toBe('Next.js で実装。');
-  });
-
-  it('長すぎる文は末尾を切る', () => {
-    const long = `${'あ'.repeat(80)}。`;
-    const result = firstSentence(long);
-    expect(result.endsWith('…')).toBe(true);
-    expect(result.length).toBeLessThanOrEqual(61);
-  });
-
-  it('空なら空文字', () => {
-    expect(firstSentence('   ')).toBe('');
   });
 });
 
@@ -372,25 +350,36 @@ describe('buildPrintViewModel', () => {
     expect(vm.summary.topSkills).toEqual([]);
   });
 
-  it('要約だけ入力し担当業務を空にした案件は、要約の全文を duties として持つ', () => {
-    // ビューア（project-card.tsx:55 `item.summary?.trim() || item.duties`）と同じ優先順位。
-    // 以前は PrintProject.duties が item.duties しか見ておらず、要約だけ入力した直近案件
-    // （詳細版カード）は「業務内容」ブロックが 1 つも出ない静かなデータ欠落だった。
-    // 60 文字超・2 文の本文にする（firstSentence が使う compactNote 側の 1 文/60 文字切りを
-    // 混同していないことも確かめる — ここで見るのは duties そのもので、切られていないこと）。
+  it('概要と担当業務は別フィールドとして保持し、どちらもフォールバックしない', () => {
+    // #390: `summary || duties` のフォールバックだと、両方入力済みの実データで duties が
+    // 画面・PDF・検索のどこにも現れない（no-abbreviated-rendering skill 違反）。
     const summaryText =
       '決済基盤のリプレイスを設計から主導した案件。旧バッチの段階移行と本番切り替えまで担当し、無停止で移行を完了させた。';
+    const dutiesText = '要件定義・基本設計・実装・結合テストを担当した。';
+    const blocks = blocksFixture();
+    const project = blocks.find((b) => b.type === 'project');
+    if (project?.type === 'project') {
+      project.data.items[0].summary = summaryText;
+      project.data.items[0].duties = dutiesText;
+    }
+    // 赤くなることを確認済み: buildProject の `const duties = markdownText(item.summary) || markdownText(item.duties);`
+    // に戻すと、duties 側の比較で落ちる。
+    const vm = buildPrintViewModel('シート', blocks);
+    expect(vm.companies[0].projects[0].summary).toBe(summaryText);
+    expect(vm.companies[0].projects[0].duties).toBe(dutiesText);
+  });
+
+  it('要約だけ入力し担当業務を空にした案件は、要約を summary に、duties は空のままにする', () => {
+    const summaryText = '決済基盤のリプレイスを設計から主導した案件。';
     const blocks = blocksFixture();
     const project = blocks.find((b) => b.type === 'project');
     if (project?.type === 'project') {
       project.data.items[0].duties = '';
       project.data.items[0].summary = summaryText;
     }
-    // 赤くなることを確認済み: buildProject の
-    // `const duties = trimmed(item.summary) || trimmed(item.duties);` を
-    // `const duties = trimmed(item.duties);` に戻すと、この it は空文字との比較で落ちる。
     const vm = buildPrintViewModel('シート', blocks);
-    expect(vm.companies[0].projects[0].duties).toBe(summaryText);
+    expect(vm.companies[0].projects[0].summary).toBe(summaryText);
+    expect(vm.companies[0].projects[0].duties).toBe('');
   });
 });
 

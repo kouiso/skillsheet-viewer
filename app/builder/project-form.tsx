@@ -414,7 +414,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               onFocus={focus('duties')}
             />
           </Field>
-          <Field label="習得スキル" col2 hint="≪習得スキル・実績≫">
+          <Field label="習得スキル" col2 hint="≪習得スキル≫">
             <GrowTextarea
               value={p.acquired}
               onChange={(v) => set('acquired', v)}
@@ -434,12 +434,12 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               onFocus={focus('comment')}
             />
           </Field>
-          <Field label="要約（任意）" col2 hint="工程の俯瞰カードに表示。空欄なら担当業務を使用">
+          <Field label="概要（任意）" col2 hint="案件カードの「概要」節に表示">
             <GrowTextarea
               value={p.summary ?? ''}
               onChange={(v) => set('summary', v)}
-              label="要約"
-              placeholder="案件の要約を1〜3文で記載"
+              label="概要"
+              placeholder="案件の概要を1〜3文で記載"
               syncKey="summary"
               onFocus={focus('summary')}
             />
