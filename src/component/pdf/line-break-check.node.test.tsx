@@ -117,29 +117,17 @@ describe('改行の規則検査（合成データ）', () => {
 
   it('行末の余白: 最後から 2 番目の行の末の余白も数える（短い最後の行を避ける意図的な余白は除く）', () => {
     // 3 行の段落。2 行目（最後の行を作る折り返し）が 8 字分以上の余白を残して折れ、
-    // 次の行（最後の行）の先頭単位がその余白に入る。最後の行は 8 字で、単位を戻しても
-    // 2 字以下にはならないので意図的な余白ではない。
+    // 次の行（最後の行）の先頭単位がその余白に入る。最後の行は 10 字で、余白に入る
+    // 7 字を戻しても残りが 3 字になるので意図的な余白ではない。
     const page = mkPage([
       mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも', 760, { width: 515 }),
       mkLine('やゆよわをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ', 740, { width: 423 }),
-      mkLine('おわりの行です。', 720, { width: 92 }),
+      mkLine('おわりの行がつづくよ', 720, { width: 115 }),
     ]);
     const result = checkLineBreakRules([page]);
     recordLineCounts(result.counts);
     expect(result.counts['trailing-gap']).toBe(1);
     expect(result.violations).toEqual([{ rule: 'trailing-gap', page: 1, lineIndex: 1 }]);
-
-    // 意図的な余白の側: 最後の行が 2 字の段落では、折り返しを戻すと最後の行が
-    // 消える（残り 1 字）ので余白は数えない。短い最後の行自体は規則 3 が数える。
-    const runtAvoidance = mkPage([
-      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも', 760, { width: 515 }),
-      mkLine('やゆよわをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ', 740, { width: 423 }),
-      mkLine('す。', 720, { width: 23 }),
-    ]);
-    const exempt = checkLineBreakRules([runtAvoidance]);
-    recordLineCounts(exempt.counts, '意図的な余白の対照');
-    expect(exempt.counts['trailing-gap']).toBe(0);
-    expect(exempt.counts['runt-last-line']).toBe(1);
   });
 
   it('項目末尾の漢字: 欄いっぱいまで書かれた行が「年」で終わっても項目は切れない', () => {
@@ -203,6 +191,82 @@ describe('改行の規則検査（合成データ）', () => {
       { rule: 'trailing-gap', page: 1, lineIndex: 0 },
       { rule: 'trailing-gap', page: 1, lineIndex: 1 },
     ]);
+  });
+
+  it('行末の余白: 細い段でも「余白に次の行の先頭単位が入る」塊は段落として数える', () => {
+    // 44 字の行を先頭に置いてページ右端を 546 にする（その行自体は「。」で終わる別段落）。
+    // 続く 4 行の段落は 25/33/33/4 字で、ブロック右端 419.5 < 546×0.8 —— 細い段なので
+    // 幅だけで表の列とみなされると検査がすり抜ける。余白（92pt）に次の行の先頭単位が
+    // 入る行がある塊は必ず段落として数える。
+    const page = mkPage([
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよわをんがぎ。', 780, {
+        width: 506,
+      }),
+      mkLine('あ'.repeat(25), 760, { width: 287.5 }),
+      mkLine('あ'.repeat(33), 740, { width: 379.5 }),
+      mkLine('あ'.repeat(33), 720, { width: 379.5 }),
+      mkLine('あ'.repeat(4), 700, { width: 46 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['trailing-gap']).toBe(1);
+    expect(result.violations).toEqual([{ rule: 'trailing-gap', page: 1, lineIndex: 1 }]);
+  });
+
+  it('改行の無い段落: 細い段の長い段落も数える（列の免除は規則 1・2 だけ）', () => {
+    // 44 字の行でページ右端を 546 にする。段にセル行（同じ高さに並ぶ別の段の行）を
+    // 1 組置いて、その段が細いのは本当の多段組みに由来する形を作る。
+    // 段落は 30 字の行が 8 行 + 9 字の行 = 249 字 > 137。ブロック右端 385 < 546×0.8
+    // かつセル行があるので列とみなされるが、規則 5（長すぎる段落）は列にも当てる。
+    const cellRow = [
+      { text: 'ああ', size: FONT_SIZE, x: FRAME.left, y: 760, width: FONT_SIZE * 2 },
+      { text: 'あ'.repeat(10), size: FONT_SIZE, x: 300, y: 760, width: FONT_SIZE * 10 },
+    ];
+    const page = mkPage([
+      mkLine('あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよわをんがぎ。', 780, {
+        width: 506,
+      }),
+      mkLine('あ'.repeat(30), 770, { width: 345 }),
+      ...cellRow,
+      ...[750, 730, 710, 690, 670, 650, 630].map((y) => mkLine('あ'.repeat(30), y, { width: 345 })),
+      mkLine('あ'.repeat(9), 610, { width: 103.5 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['long-paragraph']).toBe(1);
+    expect(result.counts['trailing-gap']).toBe(0);
+  });
+
+  it('行末の余白: 最後の行の全部が余白に入る折り返しは意図的な余白ではない', () => {
+    // 44/20/3 字の段落。2 行目が 24 字分の余白を残して折れ、最後の行（3 字）は
+    // 単位を全部戻すと余白に収まる（残り 0 字）—— 余白は短い最後の行を避けるための
+    // ものではないので早すぎる折り返しとして数える。
+    const page = mkPage([
+      mkLine('あ'.repeat(44), 760, { width: 506 }),
+      mkLine('あ'.repeat(20), 740, { width: 230 }),
+      mkLine('ぞだぢ', 720, { width: 34.5 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['trailing-gap']).toBe(1);
+    expect(result.violations).toEqual([{ rule: 'trailing-gap', page: 1, lineIndex: 1 }]);
+    expect(result.counts['runt-last-line']).toBe(0);
+  });
+
+  it('行末の余白: 戻すと最後の行が 1〜2 字になる余白は意図的なものとして除く', () => {
+    // 44/42/2 字の段落。2 行目の末の余白は 2 字分で、最後の行「す。」の先頭単位
+    // 「す」だけが入る（「す。」全部は入らない）。戻すと最後の行が 1 字（。だけ）に
+    // なるので、余白は短い最後の行を避けるための意図的なもの —— 余白では数えない。
+    // なお最後の行の短さ自体は規則 3「短い最後の行」が別途数える。
+    const page = mkPage([
+      mkLine('あ'.repeat(44), 760, { width: 506 }),
+      mkLine('あ'.repeat(42), 740, { width: 483 }),
+      mkLine('す。', 720, { width: 23 }),
+    ]);
+    const result = checkLineBreakRules([page]);
+    recordLineCounts(result.counts);
+    expect(result.counts['trailing-gap']).toBe(0);
+    expect(result.counts['runt-last-line']).toBe(1);
   });
 
   it('英数字の途中: 英数字で終わる行の次が英数字で始まると数える（16 字を超える連なりの強制改行は除く）', () => {

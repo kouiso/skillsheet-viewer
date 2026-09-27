@@ -193,6 +193,8 @@ interface ParagraphBlock {
    * ブロック右端より 2 字以上手前で終わる塊は段落の規則を当てない対象とする。
    */
   tabular: boolean;
+  /** 塊の属する段にセル行（別の段と同じ高さで並ぶ行）があるか。幅で列とみなす際の構造的な裏付けに使う。 */
+  trackHasCells: boolean;
 }
 
 function visibleChars(text: string): number {
@@ -238,6 +240,55 @@ function measureUnitWidth(line: ExtractLine, unit: string): number {
     if (need <= 0) break;
   }
   // item が尽きた残りは推定（和文 1 字 = size、英字は概ね 0.55 size）。
+  if (need > 0) width += need * line.size;
+  return width;
+}
+
+/** 行の先頭から順に切れ目単位の終端位置（先頭からの累積字数）を列挙する。
+ * 単位規則は firstBreakUnit と同じ（和文・非英数字は 1 字、英数字は区切り字・空白までの連なり）。
+ * item の境界は必ず切れ目（そこで折り返せる区間）とする。 */
+function unitBoundaries(line: ExtractLine): number[] {
+  const boundaries: number[] = [];
+  let offset = 0;
+  for (const item of line.items) {
+    const chars = Array.from(item.text);
+    let i = 0;
+    while (i < chars.length) {
+      const first = chars[i];
+      if (!ASCII_ALNUM.test(first)) {
+        i += 1;
+      } else {
+        let j = i + 1;
+        for (; j < chars.length; j++) {
+          const ch = chars[j];
+          if (BREAK_AFTER.has(ch)) {
+            j += 1;
+            break;
+          }
+          if (ASCII_ALNUM.test(ch) || ch === ' ' || ch === ' ') continue;
+          break;
+        }
+        i = j;
+      }
+      boundaries.push(offset + i);
+    }
+    offset += chars.length;
+  }
+  return boundaries;
+}
+
+/** 行の先頭から chars 字分の描画幅を item の実測幅から按分して返す。 */
+function measurePrefixWidth(line: ExtractLine, chars: number): number {
+  let need = chars;
+  let width = 0;
+  for (const item of line.items) {
+    const itemChars = Array.from(item.text).length;
+    if (itemChars === 0) continue;
+    const take = Math.min(need, itemChars);
+    width += (item.width * take) / itemChars;
+    need -= take;
+    if (need <= 0) break;
+  }
   if (need > 0) width += need * line.size;
   return width;
 }
@@ -437,20 +488,23 @@ const TABULAR_RIGHT_RATIO = 0.8;
 
 /**
  * 段落として扱うべき塊か。label:value の列や技術チップの列・期間や人数の値の列
- * （ページ内の本文の右端に全く届かない幅の塊）は段落の規則の対象にしない。
+ * には段落の規則の対象にしないものがある（規則 1・2 の行末余白系だけ。規則 3〜5
+ * は行・段落そのものの形を見るので列にも当てる）。
  *
  * 判定は余白の形だけからは決めない。「非末行の半分以上が右端より手前で終わる」
  * だけで列とみなすと、早すぎる折り返しを重ねた段落ほど検査をすり抜ける
- * （悪い組版ほど見逃す、単調でない抜け道になる）。そこで右端近くまで届く塊は
- * 段落とみなし、非末行の余白に次の行の先頭単位が入る行がある場合は確実に段落
- * （規則 1 で数えられる形）とする。余白に単位が入らない（＝折り返しが全部強制の）
- * 行ばかりの塊だけを列として残す。
+ * （悪い組版ほど見逃す、単調でない抜け道になる）。そこで、非末行の余白に次の行の
+ * 先頭単位が入る行が 1 つでもある塊は必ず段落（規則 1 で数えられる形）とし、
+ * 幅の免除はそのあとに評価する。幅で列とみなすのは、その段にセル行（別の段と同じ
+ * 高さで並ぶ行）がある時だけ —— 段が細いのが本当の多段組み（label:value 等）に
+ * 由来することをその構造で確認する。段が細いだけでセル行の無い塊は段落として残す。
+ * それ以外では、余白に単位が入らない（＝折り返しが全部強制の）行が過半の塊だけを
+ * 列として残す。
  */
-function isTabularShape(lines: ExtractLine[], pageRight: number): boolean {
+function isTabularShape(lines: ExtractLine[], pageRight: number, trackHasCells: boolean): boolean {
   const nonLast = lines.slice(0, -1);
   if (nonLast.length === 0) return false;
   const blockRight = Math.max(...lines.map((line) => line.right));
-  if (blockRight < pageRight * TABULAR_RIGHT_RATIO) return true;
   let gappy = 0;
   let hasFittingGap = false;
   for (let i = 0; i < nonLast.length; i++) {
@@ -463,6 +517,7 @@ function isTabularShape(lines: ExtractLine[], pageRight: number): boolean {
     if (measureUnitWidth(next, unit) <= gap - 0.5) hasFittingGap = true;
   }
   if (hasFittingGap) return false;
+  if (trackHasCells && blockRight < pageRight * TABULAR_RIGHT_RATIO) return true;
   return gappy * 2 > nonLast.length;
 }
 
@@ -473,12 +528,14 @@ function toBlocks(
   pageRight: (page: number) => number,
 ): ParagraphBlock[] {
   const blocks: ParagraphBlock[] = [];
+  let currentTrackHasCells = false;
   const close = (block: ParagraphBlock): void => {
-    block.tabular = isTabularShape(block.lines, pageRight(block.lines[0].page));
+    block.tabular = isTabularShape(block.lines, pageRight(block.lines[0].page), currentTrackHasCells);
     blocks.push(block);
   };
   pageTracks.forEach((tracks, pageIndex) => {
     for (const track of tracks) {
+      currentTrackHasCells = track.lines.some((line) => line.cell);
       const lines = track.lines.filter((line) => !line.isMarker && !line.cell);
       if (lines.length === 0) continue;
       // 段内の標準行間（連続する行の y 間隔の中央値）を測り、段落区切りの判定に使う。
@@ -487,7 +544,12 @@ function toBlocks(
       pitches.sort((a, b) => a - b);
       const medianPitch = pitches.length > 0 ? pitches[Math.floor(pitches.length / 2)] : lines[0].size * 1.75;
 
-      let current: ParagraphBlock = { lines: [lines[0]], spillLines: 0, tabular: false };
+      let current: ParagraphBlock = {
+        lines: [lines[0]],
+        spillLines: 0,
+        tabular: false,
+        trackHasCells: currentTrackHasCells,
+      };
       for (let i = 1; i < lines.length; i++) {
         const prev = lines[i - 1];
         const next = lines[i];
@@ -495,7 +557,7 @@ function toBlocks(
           current.lines.push(next);
         } else {
           close(current);
-          current = { lines: [next], spillLines: 0, tabular: false };
+          current = { lines: [next], spillLines: 0, tabular: false, trackHasCells: currentTrackHasCells };
         }
       }
       close(current);
@@ -542,7 +604,11 @@ function linkSpilledBlocks(
       const [next] = candidates;
       block.lines.push(...next.lines);
       block.spillLines = next.lines.length;
-      block.tabular = isTabularShape(block.lines, pageRight(block.lines[0].page));
+      block.tabular = isTabularShape(
+        block.lines,
+        pageRight(block.lines[0].page),
+        block.trackHasCells || next.trackHasCells,
+      );
       swallowed.add(next);
     }
     merged.push(block);
@@ -614,9 +680,6 @@ export function checkLineBreakRules(
       });
     }
 
-    // 表の列とみなした塊には段落向けの規則（1〜5）を当てない。
-    if (block.tabular) continue;
-
     // 規則 5「長すぎる段落」: 改行の無い段落の字数が 137 字を超える（太字の見出しは除く）。
     const paragraphChars = lines.reduce((sum, line) => sum + visibleChars(line.text), 0);
     if (paragraphChars > options.maxParagraphChars && !lines.every((line) => line.allBold)) {
@@ -643,6 +706,10 @@ export function checkLineBreakRules(
       }
     }
 
+    // 表の列とみなした塊には段落の行境界の規則（1・2）を当てない
+    // （規則 3〜5 は行・段落そのものの形なので列にも当てる）。
+    if (block.tabular) continue;
+
     // 段落内の行境界（規則 1・2）を順に見る。
     for (let i = 0; i + 1 < lines.length; i++) {
       const cur = lines[i];
@@ -656,18 +723,29 @@ export function checkLineBreakRules(
       // 段全体の最大ではなくなるので、段落ごとの右端を使う。
       // 最後の行を作る折り返し（末尾から 2 番目の行の末の余白）も数える。ただし
       // 組版側が「最後の行を最小字数にする」ために末尾の改行位置を意図的に消す
-      // ことがあり、そのときは余白に入る単位を前の行へ戻すと最後の行が 1〜2 字に
-      // なる —— 残り字数が「2 字 + 戻す単位の字数」以下ならその意図的な余白と
-      // みなして除く（最後の行の短さ自体は規則 3「短い最後の行」が見る）。
+      // ことがある。余白に入るだけの単位を最後の行の先頭から順に前の行へ戻したとき、
+      // 残りが 1〜2 字になる場合だけその意図的な余白とみなして除く（残り 0 字、
+      // つまり最後の行が全部余白に入る場合や 3 字以上残る場合は、余白はそのための
+      // ものではないので早すぎる折り返しとして数える）。最後の行の短さ自体は
+      // 規則 3「短い最後の行」が別途数える。
       const columnRight = Math.max(...lines.map((line) => line.right));
       const gap = columnRight - cur.right;
       if (gap >= cur.size * 2) {
         const unit = firstBreakUnit(next);
         const unitWidth = measureUnitWidth(next, unit);
         if (unitWidth <= gap - 0.5) {
-          const isLastLineBreak = i + 1 === lines.length - 1;
-          const isRuntAvoidanceGap = isLastLineBreak && visibleChars(next.text) - visibleChars(unit) <= 2;
-          if (!isRuntAvoidanceGap) add('trailing-gap', cur);
+          let intentionalLastGap = false;
+          if (i + 1 === lines.length - 1) {
+            const nextChars = Array.from(next.items.map((item) => item.text).join(''));
+            let pulled = 0;
+            for (const boundary of unitBoundaries(next)) {
+              if (measurePrefixWidth(next, boundary) <= gap - 0.5) pulled = boundary;
+              else break;
+            }
+            const remainder = visibleChars(nextChars.join('')) - visibleChars(nextChars.slice(0, pulled).join(''));
+            intentionalLastGap = remainder === 1 || remainder === 2;
+          }
+          if (!intentionalLastGap) add('trailing-gap', cur);
         }
       }
 
