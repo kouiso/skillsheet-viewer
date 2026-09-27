@@ -71,7 +71,10 @@ export const ProjectCard = ({
   // PDF と同じ判定（resolveDuration: 手入力 duration 優先、基準月は呼出側で固定）。
   // トグル OFF では出さない。
   const duration = showDuration ? sanitizeHtml(resolveDuration(item.period, item.duration, referenceMonth).label) : '';
-  const summary = item.summary?.trim() || item.duties;
+  // 概要（summary）と担当業務（duties）は別項目。`summary || duties` のフォールバックだと
+  // 両方入っている実データで duties がどこにも出ないため、独立した節として並べる。
+  const summary = item.summary?.trim() || '';
+  const duties = item.duties.trim();
   const area = resolveProjectArea(item.scope, item.tech);
   const periodDisplay = formatPeriodDisplay(item.period);
   const roleText = item.role?.trim() ? sanitizeHtml(item.role) : '';
@@ -140,9 +143,18 @@ export const ProjectCard = ({
       </div>
 
       {summary ? (
-        <CardBlock label="担当業務">
+        <CardBlock label="概要">
           <InlineMarkdown
             content={collapseSoftBreaks(summary)}
+            className="break-words text-[13.5px] leading-[1.85] text-foreground"
+          />
+        </CardBlock>
+      ) : null}
+
+      {duties ? (
+        <CardBlock label="担当業務">
+          <InlineMarkdown
+            content={collapseSoftBreaks(duties)}
             className="break-words text-[13.5px] leading-[1.85] text-foreground"
           />
         </CardBlock>

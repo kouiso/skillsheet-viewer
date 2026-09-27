@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectBlockData, ProjectItem } from '@/db/block';
+import { buildRealVolumeDemoBlocks, REAL_VOLUME_PROJECT_COUNT } from '@/db/fixture/real-volume-demo';
 
 import { ProjectSection } from './project-section';
 
@@ -157,7 +158,32 @@ const SEARCH_DATA: ProjectBlockData = {
   ],
 };
 
+// summary と duties の両方が入っている案件（実データは全件この形）。旧フォールバック
+// `summary || duties` では summary 非空の案件の duties が検索対象から消えていた（#390）。
+const BOTH_FILLED_DATA: ProjectBlockData = {
+  companies: [{ id: 'c1', name: 'Q 社', kind: '', period: '', note: '' }],
+  items: [
+    buildItem({
+      id: 'p1',
+      title: '案件C',
+      summary: '決済基盤のリプレイスを主導',
+      duties: 'API ゲートウェイの連携調整',
+    }),
+    buildItem({ id: 'p2', title: '案件D', summary: '在庫管理の帳票出力', duties: '帳票の印刷・出力機能' }),
+  ],
+};
+
 describe('ProjectSection の検索', () => {
+  it('summary も duties も入っている案件で、duties にだけ出る語で絞り込める', async () => {
+    const user = userEvent.setup();
+    render(<ProjectSection data={BOTH_FILLED_DATA} showProcess={false} showTimeline={false} />);
+
+    await user.type(screen.getByLabelText('案件・技術・役割を検索'), 'ゲートウェイ');
+
+    expect(screen.getByText('案件C')).toBeInTheDocument();
+    expect(screen.queryByText('案件D')).not.toBeInTheDocument();
+  });
+
   it('summary が空文字でも、カードに出ている duties の語で絞り込める', async () => {
     const user = userEvent.setup();
     render(<ProjectSection data={SEARCH_DATA} showProcess={false} showTimeline={false} />);
@@ -180,5 +206,32 @@ describe('ProjectSection の検索', () => {
 
     expect(screen.getByText('案件B')).toBeInTheDocument();
     expect(screen.queryByText('案件A')).not.toBeInTheDocument();
+  });
+});
+
+describe('ProjectSection の概要・担当業務の分離（#390）', () => {
+  it('real-volume-demo の全 32 案件で「概要」見出しと「担当業務」本文が出る', () => {
+    const project = buildRealVolumeDemoBlocks().find((block) => block.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture に project ブロックがない');
+    // 前提: 全案件が summary・duties 両方を持つ。ここが崩れると件数の比較が意味をなさない。
+    expect(project.data.items).toHaveLength(REAL_VOLUME_PROJECT_COUNT);
+    expect(project.data.items.every((item) => (item.summary ?? '').trim().length > 0)).toBe(true);
+    expect(project.data.items.every((item) => item.duties.trim().length > 0)).toBe(true);
+
+    const { container } = render(<ProjectSection data={project.data} showProcess={false} showTimeline={false} />);
+    const cards = [...container.querySelectorAll('article')];
+    expect(cards).toHaveLength(REAL_VOLUME_PROJECT_COUNT);
+
+    // 見出し（CardBlock のラベル span）の件数。旧フォールバックでは「概要」0件・
+    // 「担当業務」の本文は summary の文だった（= duties がどこにも出なかった）。
+    const labelCount = (label: string) =>
+      cards.filter((card) => [...card.querySelectorAll('span')].some((el) => el.textContent === label)).length;
+    expect(labelCount('概要')).toBe(REAL_VOLUME_PROJECT_COUNT);
+    expect(labelCount('担当業務')).toBe(REAL_VOLUME_PROJECT_COUNT);
+
+    // 本文側: real-volume-demo の全 duties が共通で含む行で、「見出しだけの空の節」
+    // になっていないことを数える。
+    const dutyBodies = cards.filter((card) => card.textContent?.includes('・関連システムとの連携調整'));
+    expect(dutyBodies).toHaveLength(REAL_VOLUME_PROJECT_COUNT);
   });
 });
