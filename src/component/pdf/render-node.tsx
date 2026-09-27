@@ -256,7 +256,7 @@ export function isCardLikelyToFitOnePage(
 
 // 見出し直後に表が続くケース（案件カードの見出し+項目表、スキルカテゴリ見出し+
 // スキル表）を1つの View にまとめて描画する。案件カードは表の直後に会社概要文・
-// 業務内容・習得スキル・実績の段落が続くことがあり（projectBlockToMarkdown 参照）、
+// 担当業務・習得スキルの段落が続くことがあり（projectBlockToMarkdown 参照）、
 // これらも見出し・表と同じ分割制御単位に含める（Issue #194）。
 // - 1ページに収まると見積もれるときだけ wrap={false} で丸ごと分割不可にし、見出しだけが
 //   前ページに取り残されたり、カードの途中でページが割れたりするのを防ぐ。
@@ -357,7 +357,7 @@ export function renderBlocks(nodes: MdNode[] | undefined, width: number = CONTEN
     const next = nodes[i + 1];
     // 見出しの直後に表が続く場合は1つの分割制御単位にまとめる（案件カード/
     // スキルカテゴリ表のページ境界分断対策）。表は結合済みとしてスキップする。
-    // 表の直後に続く内容（案件カードの会社概要文・業務内容・習得スキル・実績）も
+    // 表の直後に続く内容（案件カードの会社概要文・担当業務・習得スキル）も
     // 同じ単位に含める（Issue #194）。次の**見出し**に当たった時点で打ち切り、
     // それ以外の型（paragraph・list・table・blockquote 等）は全て取り込む。
     // duties/acquired 等はユーザーの自由記述で、箇条書き（list）や GFM 表になることが

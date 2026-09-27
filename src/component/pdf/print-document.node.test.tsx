@@ -63,7 +63,7 @@ function buildTextQualityInputs(title: string, vm: PrintViewModel) {
     ...vm.companies.map((c) => c.name),
     ...projects.map((p) => p.title),
     // 簡約版の表が跨いだページは、fixed の列ヘッダーから始まる。
-    '期間 案件 ／ 担当 チーム',
+    '期間 案件 チーム',
     // スキル一覧が 2 ページに跨ったときの継続ヘッダー。
     'スキル一覧（続き）',
     // 詳細版カードが跨いだページは継続ヘッダー（案件名）から始まる。
@@ -217,8 +217,8 @@ describe('新しい印刷経路の品質', () => {
     );
     const pageIndex = pageTexts.findIndex((text) => text.includes(item.title));
     expect(pageIndex).toBeGreaterThanOrEqual(0);
-    // 1 行目と 2 段目がページを跨いでも漏れないよう、全体でも 1 回であることを見る。
-    expect((pageTexts[pageIndex] ?? '').split(summaryText).length - 1).toBe(1);
+    // カードの行と本文がページ境界で割れる正当なレイアウトがあり得るため、
+    // ページ単位ではなく文書全体でちょうど 1 回出ることだけを見る（AC: 同じ文が 2 回出ない）。
     expect(pageTexts.join('').split(summaryText).length - 1).toBe(1);
   }, 60_000);
 
