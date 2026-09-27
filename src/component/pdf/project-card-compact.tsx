@@ -119,7 +119,7 @@ export function CompactTableHeader() {
   return (
     <View style={styles.headerRow}>
       <PrintText style={styles.headerPeriod}>期間</PrintText>
-      <PrintText style={styles.headerMain}>案件 ／ 担当</PrintText>
+      <PrintText style={styles.headerMain}>案件</PrintText>
       <PrintText style={styles.headerTeam}>チーム</PrintText>
     </View>
   );
