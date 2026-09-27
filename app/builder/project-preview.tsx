@@ -63,7 +63,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
   const textBlocks = (
     [
       ['duties', '≪担当業務≫', project.duties],
-      ['acquired', '≪習得スキル・実績≫', project.acquired],
+      ['acquired', '≪習得スキル≫', project.acquired],
       ['comment', '≪コメント≫', project.comment],
     ] as const
   ).filter(([, , body]) => body.trim());

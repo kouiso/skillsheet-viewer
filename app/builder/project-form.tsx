@@ -414,7 +414,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               onFocus={focus('duties')}
             />
           </Field>
-          <Field label="習得スキル" col2 hint="≪習得スキル・実績≫">
+          <Field label="習得スキル" col2 hint="≪習得スキル≫">
             <GrowTextarea
               value={p.acquired}
               onChange={(v) => set('acquired', v)}
