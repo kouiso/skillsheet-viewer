@@ -23,7 +23,7 @@ const COL = {
   PERIOD_END: 7, // G:I 終了月 or 「現在」
   DURATION: 2, // B:I の行2 = (Xヶ月間) 数式
   TITLE: 10, // J:AP 行0 = タイトル
-  DESC: 10, // J:AP 行1-2 = 業務内容（≪担当業務≫≪習得スキル≫≪コメント≫）
+  DESC: 10, // J:AP 行1-2 = 業務内容（≪概要≫≪担当業務≫≪習得スキル≫≪コメント≫）
   ROLE_SCALE: 43, // AQ:AS 行1-2 = 役割/規模
   LANG: 46, // AT:AV 使用言語
   DB: 49, // AW:BB DB
@@ -94,13 +94,12 @@ const mdToSheet = (s: string | undefined): string =>
     .replace(/^#+\s*/gm, '')
     .trim();
 
-// ビューアは summary 未入力時に duties へフォールバックして表示する
-// （project-card.tsx `item.summary?.trim() || item.duties`）。xlsx も同じ優先順位で
-// 要約を出し、duties も別節として残す（消すとバックアップとしての情報量が落ちる）。
+// ビューア・PDF と同じ項目名で節を出す（≪概要≫≪担当業務≫≪習得スキル≫≪コメント≫）。
+// duties も別節として残す（消すとバックアップとしての情報量が落ちる）。
 const composeDesc = (i: ProjectItem): string => {
   const sections: string[] = [];
   const summary = i.summary?.trim();
-  if (summary) sections.push(`≪要約≫\n${mdToSheet(summary)}`);
+  if (summary) sections.push(`≪概要≫\n${mdToSheet(summary)}`);
   sections.push(`≪担当業務≫\n${mdToSheet(i.duties)}`);
   sections.push(`≪習得スキル≫\n${mdToSheet(i.acquired)}`);
   sections.push(`≪コメント≫\n${mdToSheet(i.comment)}`);
