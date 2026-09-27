@@ -239,7 +239,9 @@ export function ViewerTopbar({
       // 収まらない分は横スクロールで見せる（#397。2行折返しはヘッダーを177pxまで
       // 膨らませ、会社見出しの sticky 位置 top-40=160px を踏み越して見出しを隠す）。
       // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
-      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 sm:w-auto"
+      // sm 以上も flex-1: ラベル付き出力コントロール分の幅が増えてもピル側が
+      // 縮んで横スクロールに逃げるため、ヘッダーは常に1段に保てる。
+      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 sm:flex-1"
     >
       <legend className="sr-only">表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
