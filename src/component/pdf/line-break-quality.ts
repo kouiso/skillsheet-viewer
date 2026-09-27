@@ -467,10 +467,6 @@ function firstBreakUnitWidth(seg: WorkSeg, unitLength: number): number {
   return Number.POSITIVE_INFINITY;
 }
 
-function escapeRegExp(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 /**
  * 切れ目が含まれる「切れ目単位」の先頭（文字数・code point 単位）へ遡る。
  * 境界が連なりの途中（長い英数字の途中や U+00A0 で結合した語の直後）にある
@@ -507,7 +503,22 @@ function boundarySource(
     .replace(/^[\s\u00a0]+/, '');
   if (tail.length === 0 || head.length === 0) return undefined;
   const joined = tail + head;
-  const loose = new RegExp(`${escapeRegExp(tail)}[\\s\\u00a0]+${escapeRegExp(head)}`);
+  // 空白での折り返し用の緩い一致: tail の直後に空白系の字が 1 字以上、
+  // その直後に head が続くとき、その head の UTF-16 位置を返す。
+  // （リテラルの走査で、動的な RegExp は作らない——Code Scan の対策でもある）
+  const looseAt = (text: string): number => {
+    for (let at = 0; ; at += 1) {
+      at = text.indexOf(tail, at);
+      if (at < 0) return -1;
+      let i = at + tail.length;
+      let ws = 0;
+      while (i < text.length && /[\s\u00a0]/.test(text[i])) {
+        i += 1;
+        ws += 1;
+      }
+      if (ws > 0 && text.startsWith(head, i)) return i;
+    }
+  };
   // 同じ切れ端が複数の出典に当たることがある（例: 値 'A / バックエンド' が
   // 別の値 'A / バックエンド / 管理画面' の部分文字列）。そのとき b が出典の
   // 残り全部に一致するもの——b がその段落の最終行——を優先し、なければ
@@ -520,11 +531,9 @@ function boundarySource(
       candidates.push({ text, headIndex: unitStart(text, [...text.slice(0, index + tail.length)].length) });
       continue;
     }
-    const match = loose.exec(text);
-    if (match !== null) {
-      const headCpIndex = [...match[0]].length - [...head].length;
-      const absCpIndex = [...text.slice(0, match.index)].length + headCpIndex;
-      candidates.push({ text, headIndex: unitStart(text, absCpIndex) });
+    const looseIndex = looseAt(text);
+    if (looseIndex >= 0) {
+      candidates.push({ text, headIndex: unitStart(text, [...text.slice(0, looseIndex)].length) });
     }
   }
   if (candidates.length === 0) return undefined;
