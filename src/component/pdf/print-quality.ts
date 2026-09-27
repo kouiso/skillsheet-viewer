@@ -285,7 +285,7 @@ export function findBottomOverflows(
  * ときに見逃す（レビュー指摘）。`footerText` が渡されないときは座標だけで判定する
  * （従来どおりで検出は甘いので、実データを通す呼び出しでは必ず渡すこと）。
  */
-function isFooterItem(item: QualityItem, options: QualityOptions, footerText: string): boolean {
+export function isFooterItem(item: QualityItem, options: QualityOptions, footerText: string): boolean {
   if (item.y >= options.footerReserve) return false;
   if (!footerText) return true;
   const text = normalize(item.text);
