@@ -13,10 +13,13 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Block } from '@/db/block';
 import { currentMonthKey } from '@/db/derived-display';
+import { buildRealVolumeDemoBlocks, buildReversedPeriodFixtureBlocks } from '@/db/fixture/real-volume-demo';
 
 import {
   buildCompletenessReport,
   checkCompleteness,
+  detectInvalidPeriods,
+  detectOutsideCompanyPeriods,
   enumerateCompletenessFacts,
   groupMissingByScope,
   normalizeForMatch,
@@ -216,6 +219,112 @@ describe('enumerateCompletenessFacts', () => {
     const facts = enumerateCompletenessFacts(PROJECT_BLOCKS);
     const alphaTech = facts.filter((f) => f.scope === '案件アルファ' && f.label.startsWith('技術(言語)'));
     expect(alphaTech).toHaveLength(8); // PRINT_CHIP_LIMIT=6 を超えて Ruby / PHP も含む
+  });
+});
+
+describe('期間の食い違いの検出（#396）', () => {
+  const REF_MONTH = 2026 * 12 + 8;
+
+  function projectBlockOf(blocks: Block[]) {
+    const project = blocks.find((b) => b.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture');
+    return project;
+  }
+
+  it('開始と終了が逆転した案件を invalidPeriods で検出する', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = projectBlockOf(blocks);
+    const item = project.data.items[0];
+    item.period = '2020.06 — 2020.01';
+    const report = buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH);
+    expect(report.invalidPeriods).toEqual([{ blockId: project.id, projectId: item.id, companyId: item.companyId }]);
+    // 逆転した期間は内外判定不能なため outside 側で二重計上しない
+    expect(report.outsideCompanyPeriods).toEqual([]);
+  });
+
+  it('会社の在籍期間（手入力）の外にある案件を検出する', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = projectBlockOf(blocks);
+    project.data.companies[0].period = '2021.01 — 2021.12';
+    const report = buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH);
+    expect(report.outsideCompanyPeriods).toHaveLength(3);
+    expect(report.outsideCompanyPeriods).toContainEqual({
+      blockId: project.id,
+      projectId: project.data.items[0].id,
+      companyId: project.data.companies[0].id,
+    });
+    expect(report.invalidPeriods).toEqual([]);
+  });
+
+  it('在籍が「現在」で終わる会社は上限を持たず、境界一致は内側とみなす', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = projectBlockOf(blocks);
+    project.data.companies[0].period = '2018.01 — 現在';
+    expect(buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH).outsideCompanyPeriods).toEqual([]);
+    // 在籍開始より前に始まる案件は外側
+    project.data.companies[0].period = '2018.02 — 現在';
+    expect(
+      buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH).outsideCompanyPeriods.map(
+        (c) => c.projectId,
+      ),
+    ).toEqual(['p3']);
+    // 在籍終了と一致する終了は内側
+    project.data.companies[0].period = '2018.01 — 2020.06';
+    expect(buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH).outsideCompanyPeriods).toEqual([]);
+    // ただし会社に終わりがある限り、案件の「現在」は外側
+    project.data.items[0].period = '2020.01 — 現在';
+    expect(
+      buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH).outsideCompanyPeriods.map(
+        (c) => c.projectId,
+      ),
+    ).toEqual(['p1']);
+  });
+
+  it('在籍期間が未記入の会社は案件から導出した期間で判定する（外側にならない）', () => {
+    const report = buildCompletenessReport(PROJECT_BLOCKS, SIMULATED_PAGES, undefined, REF_MONTH);
+    expect(report.outsideCompanyPeriods).toEqual([]);
+    expect(report.invalidPeriods).toEqual([]);
+  });
+
+  it('hidden な案件と、在籍期間を解釈できない会社は対象外', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    const project = projectBlockOf(blocks);
+    project.data.companies[0].period = '在籍期間不明';
+    // 会社期間を解釈できないので、全案件が範囲外でも数えない
+    project.data.items.forEach((item) => {
+      item.period = '1900.01 — 1900.12';
+    });
+    expect(buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH).outsideCompanyPeriods).toEqual([]);
+    // hidden な案件は本人が消したものなので逆転でも検出しない
+    project.data.companies[0].period = '';
+    project.data.items[0].period = '2020.06 — 2020.01';
+    project.data.items[0].hidden = true;
+    expect(buildCompletenessReport(blocks, SIMULATED_PAGES, undefined, REF_MONTH).invalidPeriods).toEqual([]);
+  });
+
+  it('案件が描かれないビューでは期間検査を行わない', () => {
+    const blocks = structuredClone(PROJECT_BLOCKS);
+    projectBlockOf(blocks).data.items[0].period = '2020.06 — 2020.01';
+    const report = buildCompletenessReport(blocks, SIMULATED_PAGES, ['skills', 'process'], REF_MONTH);
+    expect(report.invalidPeriods).toEqual([]);
+    expect(report.outsideCompanyPeriods).toEqual([]);
+  });
+
+  it('実データ相当 fixture（19社/32案件）の全案件は在籍期間に収まる（0/32）', () => {
+    const blocks = buildRealVolumeDemoBlocks().map((b, i) => ({ ...b, id: `b${i}`, order: i })) as Block[];
+    expect(projectBlockOf(blocks).data.items).toHaveLength(32);
+    expect(detectInvalidPeriods(blocks, REF_MONTH)).toEqual([]);
+    expect(detectOutsideCompanyPeriods(blocks, REF_MONTH)).toEqual([]);
+  });
+
+  it('わざと逆転させた 1 件を 1/1 で検出する', () => {
+    const blocks = buildReversedPeriodFixtureBlocks().map((b, i) => ({ ...b, id: `b${i}`, order: i })) as Block[];
+    const project = projectBlockOf(blocks);
+    const item = project.data.items[0];
+    expect(detectInvalidPeriods(blocks, REF_MONTH)).toEqual([
+      { blockId: 'b0', projectId: item.id, companyId: item.companyId },
+    ]);
+    expect(detectOutsideCompanyPeriods(blocks, REF_MONTH)).toEqual([]);
   });
 });
 
