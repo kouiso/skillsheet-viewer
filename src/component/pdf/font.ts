@@ -52,7 +52,7 @@ function isSupplementaryCjkIdeograph(code: number): boolean {
   );
 }
 
-function isCjk(ch: string): boolean {
+export function isCjk(ch: string): boolean {
   const code = ch.codePointAt(0) ?? 0;
   if (code >= CODEPOINT.CJK_START && code < CJK_END_EXCLUSIVE) return true;
   return isSupplementaryCjkIdeograph(code);
@@ -84,11 +84,29 @@ function isCombiningOrVariationSelector(ch: string): boolean {
 // （Issue #263 C）し、段落では右マージンを越えて紙面からはみ出す（同 F）。
 // 10.5pt のラテン文字は平均 5〜6pt 幅なので、16 文字なら約 90pt。もっとも狭い
 // 2 列表のラベル列（内寸 約143pt）にも収まる。
-const MAX_UNBREAKABLE_RUN = 16;
+export const MAX_UNBREAKABLE_RUN = 16;
 
 // この文字の「直後」を改行機会にしてよい区切り記号。URL のパス区切りや
 // ハイフン連結の識別子で、人間が見ても自然な位置で折り返せるようにする。
-const BREAK_AFTER = new Set(['/', '-', '_', '.', '?', '&', '=', ':', ',', ';', '+', '~', '@', '#', '%', '|', '\\']);
+export const BREAK_AFTER = new Set([
+  '/',
+  '-',
+  '_',
+  '.',
+  '?',
+  '&',
+  '=',
+  ':',
+  ',',
+  ';',
+  '+',
+  '~',
+  '@',
+  '#',
+  '%',
+  '|',
+  '\\',
+]);
 
 function isAsciiLower(ch: string): boolean {
   return ch >= 'a' && ch <= 'z';
@@ -106,7 +124,7 @@ function isAsciiDigit(ch: string): boolean {
  * 行頭に置いてはいけない文字（行頭禁則）。句読点・閉じ括弧・小書き仮名・繰り返し記号など。
  * ここに載っている文字の直前では改行マーカーを挟まない。
  */
-const NO_LINE_START = new Set(
+export const NO_LINE_START = new Set(
   [
     '、。，．・：；？！',
     'ヽヾゝゞ々ー',
@@ -123,13 +141,13 @@ const NO_LINE_START = new Set(
  * 行末に置いてはいけない文字（行末禁則）。開き括弧など。
  * ここに載っている文字の直後では改行マーカーを挟まない。
  */
-const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{', '\u00a0'].join(''));
+export const NO_LINE_END = new Set(['（〔［｛〈《「『【〘〖〝‘“｟«', '([{', '\u00a0'].join(''));
 
 /**
  * 行頭禁則の判定。半角の「.」は英数字が続くときは語の先頭（`.htaccess`・`.NET` など）なので、
  * 行頭に置いてよい。禁則のままだと「。」と「.」の間で改行できず、前の行に余白が残る。
  */
-function isNoLineStart(ch: string, following: string | undefined): boolean {
+export function isNoLineStart(ch: string, following: string | undefined): boolean {
   if (ch === '.' && following !== undefined && /^[0-9A-Za-z]$/.test(following)) return false;
   return NO_LINE_START.has(ch);
 }
