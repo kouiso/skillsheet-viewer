@@ -246,7 +246,7 @@ export function ViewerTopbar({
       // スクロールバーは表示しない — classic スクロールバーは要素の高さに加算され、
       // ≤120px のヘッダー高条件を超えてしまう。
       // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
-      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden"
+      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 [scrollbar-width:none] max-sm:[mask-image:linear-gradient(to_right,black_calc(100%_-_16px),transparent_100%)] sm:w-auto [&::-webkit-scrollbar]:hidden"
     >
       <legend className="sr-only">表示するビュー</legend>
       {ALL_VIEWS.map((view) => {

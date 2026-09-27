@@ -14,15 +14,26 @@ export function useViewerTopbarHeight<T extends HTMLElement = HTMLElement>() {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    const rootStyle = document.documentElement.style;
+    // アンマウント後に実測値が残ると、次にこの変数を引くページで一瞬古い高さが
+    // 適用されるため、元の値を保存しておきクリーンアップで戻す。
+    const previous = rootStyle.getPropertyValue('--viewer-topbar-h');
+    const restore = () => {
+      if (previous) rootStyle.setProperty('--viewer-topbar-h', previous);
+      else rootStyle.removeProperty('--viewer-topbar-h');
+    };
     const update = () => {
-      document.documentElement.style.setProperty('--viewer-topbar-h', `${el.offsetHeight}px`);
+      rootStyle.setProperty('--viewer-topbar-h', `${el.offsetHeight}px`);
     };
     update();
     // jsdom 等 ResizeObserver が無い環境では初期値だけ書いて終える。
-    if (typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === 'undefined') return restore;
     const ro = new ResizeObserver(update);
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      restore();
+    };
   }, []);
 
   return ref;
