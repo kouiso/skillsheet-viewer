@@ -138,4 +138,13 @@ describe('Header', () => {
       expect(screen.getByLabelText('シート一覧へ戻る')).toHaveAttribute('href', '/view');
     });
   });
+
+  describe('ヘッダー実高の共有（#397）', () => {
+    it('レガシーヘッダーも --viewer-topbar-h を documentElement へ書き込む', () => {
+      renderHeader();
+      // project ブロック無しのシートでも目次サイドバーがこの変数を引くため、
+      // ViewerTopbar と同じ実測値の流し方を固定する。jsdom では offsetHeight=0。
+      expect(document.documentElement.style.getPropertyValue('--viewer-topbar-h')).toMatch(/^\d+(\.\d+)?px$/);
+    });
+  });
 });
