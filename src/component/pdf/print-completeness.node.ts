@@ -73,7 +73,7 @@ export interface CompletenessFact {
   scope: string;
   /** 同名案件を区別する内部ID。省略時はscopeを使う。 */
   scopeId?: string;
-  /** 人間向けの説明（例: "技術(言語): TypeScript" "業務内容 2行目"）。 */
+  /** 人間向けの説明（例: "技術(言語): TypeScript" "担当業務 2行目"）。 */
   label: string;
   /** PDF のテキストレイヤーに現れるはずの原文（正規化前）。 */
   text: string;
@@ -529,14 +529,17 @@ export function enumerateCompletenessFacts(
           }
         }
 
-        // 表示側と同じ優先順位（summary → duties フォールバック）で業務内容を決める。
-        // project-card.tsx:55 `item.summary?.trim() || item.duties` と同じ規則。
-        const duties = sanitizeMarkdown(item.summary ?? '').trim() || sanitizeMarkdown(item.duties ?? '').trim();
-        extractMarkdownFacts(duties).forEach((line, i) => {
-          facts.push({ category: 'project', scope: projectScope, label: `業務内容 ${i + 1}行目`, text: line });
+        // 概要・担当業務は描画側では別の節。`summary || duties` のフォールバックで一本化すると
+        // 両方入った実データの duties が未描画でも完全性が緑になる（検査自体がフォールバックの
+        // 欠落を見えなくする）。描画側と同じく 2 節ぶん独立に事実を積む。
+        extractMarkdownFacts(sanitizeMarkdown(item.summary ?? '').trim()).forEach((line, i) => {
+          facts.push({ category: 'project', scope: projectScope, label: `概要 ${i + 1}行目`, text: line });
+        });
+        extractMarkdownFacts(sanitizeMarkdown(item.duties ?? '').trim()).forEach((line, i) => {
+          facts.push({ category: 'project', scope: projectScope, label: `担当業務 ${i + 1}行目`, text: line });
         });
         extractMarkdownFacts(sanitizeMarkdown(item.acquired ?? '').trim()).forEach((line, i) => {
-          facts.push({ category: 'project', scope: projectScope, label: `習得スキル・実績 ${i + 1}行目`, text: line });
+          facts.push({ category: 'project', scope: projectScope, label: `習得スキル ${i + 1}行目`, text: line });
         });
         extractMarkdownFacts(sanitizeMarkdown(item.comment ?? '').trim()).forEach((line, i) => {
           facts.push({ category: 'project', scope: projectScope, label: `コメント ${i + 1}行目`, text: line });
