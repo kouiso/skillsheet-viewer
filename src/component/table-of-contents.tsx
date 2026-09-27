@@ -73,7 +73,9 @@ const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps
                 isActive ? 'size-1.5 bg-primary' : 'size-[5px] bg-faint',
               )}
             />
-            {!collapsed && <span className="truncate">{label}</span>}
+            {/* 長い見出し（会社名など）を truncate の「…」で切らず、
+                全文が読めるよう折り返して出す（#393）。 */}
+            {!collapsed && <span className="min-w-0 break-words">{label}</span>}
           </button>
         </li>
       );
