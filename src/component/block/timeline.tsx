@@ -32,7 +32,11 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
     // design: カードで包み、レールを left:6px / 幅2px、項目間 18px にする。
     <div className="relative rounded-[var(--radius-lg)] border border-border bg-card p-7 pl-[26px] shadow-elevation-1">
       <div className="absolute bottom-7 left-[6px] top-7 w-0.5 bg-border" />
-      <div className="flex flex-col gap-[18px]">
+      {/* sm 以上は subgrid で日付＋稼働月数の列幅を全行で揃える。
+          fit-content で最長ラベル幅（上限 280px）の全行共有 1 トラックになり、
+          全タイトルの左端が一致する。minmax(0,280px) だと空きがあれば常に
+          280px まで伸びて短いラベルの行に空白が残るため使わない（#393）。 */}
+      <div className="flex flex-col gap-y-[18px] sm:grid sm:grid-cols-[fit-content(280px)_minmax(0,1fr)] sm:gap-x-4">
         {sorted.map((item) => {
           const tech = flattenTech(item.tech);
           const hit = activeTech.length > 0 && tech.some((t) => activeTech.includes(t));
@@ -45,30 +49,33 @@ export function Timeline({ items, companyMap, activeTech, showDuration = true, r
             ? sanitizeHtml(resolveDuration(item.period, item.duration, referenceMonth).label)
             : '';
           return (
-            <div key={item.id} className="relative">
+            // 320px では日付を独立行に落とす（#150）。sm 以上は親グリッドの
+            // 2 列を subgrid で引き継ぎ、日付列とタイトル列を揃える。
+            // 行の縦間隔は gap-y-1 だけ。column-gap を行側に置くと subgrid の
+            // 溝幅（親の sm:gap-x-4）を上書きして日付とタイトルが詰まる（#393）。
+            <div
+              key={item.id}
+              className="relative flex flex-col gap-y-1 sm:col-span-2 sm:grid sm:grid-cols-subgrid sm:items-baseline"
+            >
               <span
                 className={`absolute -left-[26px] top-[5px] size-3.5 rounded-full border-2 ${
                   hit ? 'border-primary bg-primary' : 'border-border bg-card'
                 }`}
               />
-              {/* 320px では日付列 min-w-[132px] がタイトル列を圧迫し5〜6行に断片化していた（#150）。
-                  狭幅は日付を独立行に落とし、sm 以上でのみ従来どおり横並びにする。 */}
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-4">
-                <span className="font-mono text-[12px] text-accent-text sm:min-w-[132px]">
-                  {periodDisplay || '(期間未入力)'}
-                  {duration && <span className="text-faint">（{duration}）</span>}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[14.5px] font-semibold text-foreground">
-                    {sanitizeHtml(item.title) || '(タイトル未入力)'}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {/* 役割の隣に無ラベルで並べると担当領域として読まれるため、
-                        導出値のときだけ「技術領域」を前置する（tech-area.ts 参照）。 */}
-                    {[sanitizeHtml(company?.name), sanitizeHtml(item.role), timelineArea(item)]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </div>
+              <span className="min-w-0 break-words font-mono text-[12px] text-accent-text">
+                {periodDisplay || '(期間未入力)'}
+                {duration && <span className="text-faint">（{duration}）</span>}
+              </span>
+              <div className="min-w-0">
+                <div className="text-[14.5px] font-semibold text-foreground">
+                  {sanitizeHtml(item.title) || '(タイトル未入力)'}
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {/* 役割の隣に無ラベルで並べると担当領域として読まれるため、
+                      導出値のときだけ「技術領域」を前置する（tech-area.ts 参照）。 */}
+                  {[sanitizeHtml(company?.name), sanitizeHtml(item.role), timelineArea(item)]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </div>
               </div>
             </div>
