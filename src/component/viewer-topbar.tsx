@@ -1,9 +1,20 @@
 'use client';
 
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowLeft, Download, FileDown, FileMinus, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronDown,
+  Download,
+  FileDown,
+  FileMinus,
+  Loader2,
+  Moon,
+  PencilLine,
+  Sheet,
+  Sun,
+} from 'lucide-react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/component/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
@@ -69,10 +80,13 @@ function DigestDownloadMenu({
   onDownloadPdfDigest,
   onDownloadExcelDigest,
   digestLoading,
+  labeled = false,
 }: {
   onDownloadPdfDigest: () => void | Promise<void>;
   onDownloadExcelDigest?: () => void | Promise<void>;
   digestLoading: boolean;
+  /** デスクトップでは文字ラベル＋下向き矢印で「メニューが開く」ことを示す（#397）。 */
+  labeled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -80,15 +94,24 @@ function DigestDownloadMenu({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
+          size={labeled ? undefined : 'icon'}
           disabled={digestLoading}
           aria-busy={digestLoading}
           aria-label={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
           // Popover とは別に、ホバーで用途が分かるネイティブ tooltip（#355）
           title={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
-          className="min-h-11 min-w-11"
+          // デスクトップでもアイコンだけの帯（<xl）があるため min-w-11 は残す
+          className={labeled ? 'min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]' : 'min-h-11 min-w-11'}
         >
           {digestLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileMinus />}
+          {labeled && (
+            <>
+              {/* 文字ラベルは xl 以上で出す。1024–1279px だとラベル込みだとヘッダーが
+                  2 段に折り返してしまうため、その帯では従来どおりアイコンのみ。 */}
+              <span className="hidden xl:inline">要約版</span>
+              <ChevronDown className="hidden size-3.5 text-muted-foreground xl:inline" aria-hidden />
+            </>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent>
@@ -199,6 +222,24 @@ export function ViewerTopbar({
   const { mode, toggleTheme } = useThemeMode();
   const reduceMotion = useReducedMotion();
 
+  // ヘッダーの実高を --viewer-topbar-h へ流し、会社見出しの sticky ずらし量と
+  // 一元化する（#397）。ずらし量を company-section 側へ別に直書きすると、
+  // トグルの段数・パディングが変わるたびに見出しがヘッダーへ潜るズレが再発する。
+  const headerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const update = () => {
+      document.documentElement.style.setProperty('--viewer-topbar-h', `${el.offsetHeight}px`);
+    };
+    update();
+    // jsdom 等 ResizeObserver が無い環境では初期値だけ書いて終える。
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const editButton = canEdit ? (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -214,10 +255,12 @@ export function ViewerTopbar({
 
   const viewToggleFieldset = (
     <fieldset
-      // min-w-0 + flex-wrap: 横スクロール（overflow-x-auto）だと 4 個目以降のピルが
-      // 右端で見切れて存在に気づかなかったため、SP では2行折返しにする（#355）。
+      // flex-nowrap + overflow-x-auto: 390px でトグルを1段の横スクロールに収める（#397）。
+      // 折返しにするとヘッダーが 177px まで膨れて会社見出しに被さる（実測 17px 埋没）。
+      // スクロールバーは表示しない — classic スクロールバーは要素の高さに加算され、
+      // ≤120px のヘッダー高条件を超えてしまう。
       // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
-      className="m-0 flex w-full min-w-0 flex-wrap items-center gap-1.5 border-0 p-0 sm:w-auto"
+      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden"
     >
       <legend className="sr-only">表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
@@ -248,7 +291,10 @@ export function ViewerTopbar({
   // デスクトップだけ並びが入れ替わって毎回レイアウトシフトが起きる。
   // display:none はフォーカス順からも a11y ツリーからも外れるので、CSS だけで
   // 両ブレークポイントの DOM順=視覚順を成立させられる出し分けを採る。
-  const renderActionIcons = (className: string, compactDownloads = false) => (
+  // compact=true は SP 向け（ダウンロードは「ダウンロード」メニュー1個に畳み、
+  // テーマはアイコンのみ）。false はデスクトップ向けで、出力ボタンに文字ラベルを付ける
+  // （#397: アイコンだけでは何を出力するか分からないため）。
+  const renderActionIcons = (className: string, compact = false) => (
     <div className={className}>
       {reserveEditSlot ? (
         <span data-testid="edit-slot" className="size-11 shrink-0">
@@ -258,7 +304,7 @@ export function ViewerTopbar({
         editButton
       )}
 
-      {compactDownloads && (onDownloadPdf || onDownloadExcel || onDownloadPdfDigest || onDownloadExcelDigest) ? (
+      {compact && (onDownloadPdf || onDownloadExcel || onDownloadPdfDigest || onDownloadExcelDigest) ? (
         <DownloadMenu
           onDownloadPdf={onDownloadPdf}
           onDownloadExcel={onDownloadExcel}
@@ -273,14 +319,15 @@ export function ViewerTopbar({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size={compact ? 'icon' : undefined}
                   onClick={() => void onDownloadPdf()}
                   disabled={pdfLoading}
                   aria-busy={pdfLoading}
                   aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
-                  className="min-h-11 min-w-11"
+                  className={compact ? 'min-h-11 min-w-11' : 'min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]'}
                 >
                   {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+                  {!compact && <span className="hidden xl:inline">PDF</span>}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{pdfLoading ? 'PDFを生成中…' : 'PDFをダウンロード'}</TooltipContent>
@@ -292,14 +339,15 @@ export function ViewerTopbar({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
+                  size={compact ? 'icon' : undefined}
                   onClick={() => void onDownloadExcel()}
                   disabled={excelLoading}
                   aria-busy={excelLoading}
                   aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
-                  className="min-h-11 min-w-11"
+                  className={compact ? 'min-h-11 min-w-11' : 'min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]'}
                 >
                   {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
+                  {!compact && <span className="hidden xl:inline">Excel</span>}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
@@ -311,6 +359,7 @@ export function ViewerTopbar({
               onDownloadPdfDigest={onDownloadPdfDigest}
               onDownloadExcelDigest={onDownloadExcelDigest}
               digestLoading={digestLoading}
+              labeled={!compact}
             />
           )}
         </>
@@ -320,12 +369,13 @@ export function ViewerTopbar({
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
+            size={compact ? 'icon' : undefined}
             onClick={toggleTheme}
             aria-label="テーマ切り替え"
-            className="min-h-11 min-w-11"
+            className={compact ? 'min-h-11 min-w-11' : 'min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]'}
           >
             {mode === 'dark' ? <Sun /> : <Moon />}
+            {!compact && <span className="hidden xl:inline">テーマ</span>}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>
@@ -341,8 +391,10 @@ export function ViewerTopbar({
       transition={{ duration: 0.5, ease: 'easeOut' }}
       // design: 背景は下地を 88% 残した色 + blur 8px（カード色ではなくページ地の色を敷く）
       className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
+      ref={headerRef}
     >
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3.5 sm:px-8">
+      {/* py-2（SP）: 390px でヘッダー高を ≤120px に収める（#397）。sm 以上は従来の py-3.5。 */}
+      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:px-8 sm:py-3.5">
         {/* 「戻るリンク＋SP用アイコン群」を折り返さない1つの行にまとめる。
             親は flex-wrap だが、flexbox は「縮めてから折り返す」のではなく
             「入らなければ折り返す」ため、リンクに min-w-0 を付けるだけでは足りない。
