@@ -48,9 +48,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
   const tech = flattenTech(project.tech);
   const shownTech = tech.slice(0, MAX_TECH_CHIPS);
   const process = normalizeProcess(project.process);
-  /** 要約欄そのものに値がある（担当業務での代替ではない）。 */
-  const hasOwnSummary = Boolean(project.summary?.trim());
-  const summary = project.summary?.trim() || project.duties.trim();
+  const summary = project.summary?.trim();
   /** スコープ欄の値そのままか、空なら技術スタックからの導出値（由来を添える）。 */
   const ownScope = project.scope.trim();
   const derivedArea = ownScope ? '' : projectAreaText('', project.tech);
@@ -78,7 +76,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
     'title',
     'scope',
     'meta',
-    ...(summary && hasOwnSummary ? ['summary'] : []),
+    ...(summary ? ['summary'] : []),
     ...(shownTech.length > 0 ? ['tech'] : []),
     'process',
     ...textBlocks.map(([key]) => key as string),
@@ -190,18 +188,13 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
             {company?.note?.trim() && <div className="pv-company-note">{company.note.trim()}</div>}
           </div>
 
-          {/* 要約は summary 欄の値を優先し、空のときだけ担当業務で代替する。
-              代替表示のときはクリックもキーボード移動も付けない。付けると飛び先キーが
-              下の ≪担当業務≫ ブロックと重複し、編集欄からの追従が先に見つけた
-              こちらへ走って、本来の担当業務ブロックへ行かなくなる。 */}
-          {summary &&
-            (hasOwnSummary ? (
-              <div {...sync('summary')}>
-                <InlineMarkdown content={summary} className="pv-summary" linksTabbable={false} />
-              </div>
-            ) : (
+          {/* 実出力3種（画面/PDF/Excel）と同じく、summary が空のとき「概要」節は出さない
+              （#390 でフォールバックは廃止済み）。 */}
+          {summary && (
+            <div {...sync('summary')}>
               <InlineMarkdown content={summary} className="pv-summary" linksTabbable={false} />
-            ))}
+            </div>
+          )}
 
           {shownTech.length > 0 && (
             <div {...sync('tech')}>

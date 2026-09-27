@@ -90,22 +90,22 @@ describe('ProjectPreview のキーボード移動', () => {
     expect(document.activeElement).toBe(first);
   });
 
-  it('移動先が重複せず、要約が担当業務の代替表示のときは移動先に入らない', () => {
+  it('移動先が重複せず、概要が空のときは概要スロットが移動先に入らない', () => {
     const withSummary = render(<ProjectPreview project={project()} company={undefined} no={1} />);
     const withSlots = slotsOf(withSummary.container);
     expect(new Set(withSlots).size).toBe(withSlots.length);
     expect(withSlots).toContain('summary');
 
-    const fallback = render(<ProjectPreview project={project({ summary: '' })} company={undefined} no={1} />);
-    const fbSlots = slotsOf(fallback.container);
+    const emptySummary = render(<ProjectPreview project={project({ summary: '' })} company={undefined} no={1} />);
+    const fbSlots = slotsOf(emptySummary.container);
     expect(new Set(fbSlots).size).toBe(fbSlots.length);
     expect(fbSlots).not.toContain('summary');
     expect(fbSlots).toContain('duties');
   });
 
-  it('要約が空でも飛び先キーが重複しない', () => {
-    // 飛び先キーが2箇所に出ると、編集欄→プレビューの追従が先に見つけた方（要約ブロック）へ
-    // 走り、本来の ≪担当業務≫ ブロックへ行かない。ハイライトも2箇所同時に点く。
+  it('概要が空でも飛び先キーが重複しない', () => {
+    // 飛び先キーが2箇所に出ると、編集欄→プレビューの追従が先に見つけた方へ
+    // 走り、本来のブロックへ行かない。ハイライトも2箇所同時に点く。
     const { container } = render(<ProjectPreview project={project({ summary: '' })} company={undefined} no={1} />);
     const keys = Array.from(container.querySelectorAll<HTMLElement>('[data-sync-pv]')).map((el) => el.dataset.syncPv);
 

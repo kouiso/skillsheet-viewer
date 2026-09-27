@@ -55,7 +55,7 @@ const FIELD_NAMES: Record<string, string> = {
   duties: '担当業務',
   acquired: '習得スキル',
   comment: 'コメント',
-  summary: '要約',
+  summary: '概要',
   companyId: '所属会社',
 };
 

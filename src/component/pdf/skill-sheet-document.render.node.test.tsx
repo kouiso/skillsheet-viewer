@@ -161,18 +161,18 @@ function buildCardMarkdown(heading: string, rowCount: number): string {
   return [heading, '', '| 項目 | 内容 |', '| :--- | :--- |', rows, ''].join('\n');
 }
 
-// projectBlockToMarkdown が実際に出す形（見出し→表→会社概要文→**業務内容**→本文→
-// **習得スキル・実績**→本文、全て paragraph）に近い案件カードを組み立てる。
+// projectBlockToMarkdown が実際に出す形（見出し→表→会社概要文→**担当業務**→本文→
+// **習得スキル**→本文、全て paragraph）に近い案件カードを組み立てる。
 function buildProjectCardMarkdown(heading: string, note: string, duties: string, acquired: string): string {
   return [
     buildCardMarkdown(heading, 4),
     note,
     '',
-    '**業務内容**',
+    '**担当業務**',
     '',
     duties,
     '',
-    '**習得スキル・実績**',
+    '**習得スキル**',
     '',
     acquired,
     '',
@@ -684,7 +684,7 @@ describe('SkillSheetDocument（実バイト描画）', () => {
             '| 技術スタック | TypeScript, React, Next.js |',
             '| 担当工程 | 要件定義, 設計, 実装, テスト |',
             '',
-            '**業務内容**',
+            '**担当業務**',
             '',
             '要件定義から運用までを一貫して担当しました。',
             '',
@@ -960,7 +960,7 @@ describe('projectBlockToMarkdown → PDF テキスト層（Issue #242）', () =>
         '| 役割 | SE |',
         '| 技術スタック | TypeScript, Python, Next.js, Chakra UI, GraphQL, FastAPI, PostgreSQL, AWS |',
         '',
-        '**習得スキル・実績**',
+        '**習得スキル**',
         '',
         'GRAPHQL, オニオンアーキテクチャ、クリーンアーキテクチャ、Next.js パフォーマンス最適化、',
         'Python での Excel 出力',
