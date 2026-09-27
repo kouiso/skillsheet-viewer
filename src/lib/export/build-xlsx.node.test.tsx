@@ -253,13 +253,13 @@ describe('buildSkillSheetXlsx', () => {
     expect(ws.getRow(12).height).toBeGreaterThan(19.5);
   });
 
-  it('viewer と同じ値を出す: 本人入力 duration・要約・複数 project ブロック・表外工程・タグ除去', async () => {
+  it('viewer と同じ値を出す: 本人入力 duration・概要・複数 project ブロック・表外工程・タグ除去', async () => {
     const manual = item({
       id: 'i-manual',
       title: '<details>手入力期間の案件</details>',
       period: '2025.1 — 現在',
       duration: '3年',
-      summary: '要約の本文',
+      summary: '概要の本文',
       duties: '業務の本文',
       process: ['実装', '独自工程X'],
     });
@@ -283,9 +283,9 @@ describe('buildSkillSheetXlsx', () => {
     expect(ws.getCell('J10').value).toBe('手入力期間の案件');
     // 月数は DATEDIF ではなく本人入力優先のラベル
     expect(ws.getCell('B12').value).toBe('本人入力 3年／2026-12基準 2年');
-    // 要約と業務の両方が出る（画面の summary||duties 表示と同等の情報量）
+    // 概要と担当業務の両方が出る（画面・PDF と同じ項目名の節）
     const desc = ws.getCell('J11').value as string;
-    expect(desc).toContain('≪要約≫\n要約の本文');
+    expect(desc).toContain('≪概要≫\n概要の本文');
     expect(desc).toContain('≪担当業務≫\n業務の本文');
     // 7工程表外のラベルは業務内容末尾の ≪担当工程（その他）≫ に残る
     expect(desc).toContain('≪担当工程（その他）≫\n独自工程X');

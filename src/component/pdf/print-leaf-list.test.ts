@@ -29,7 +29,6 @@ function project(overrides: Partial<PrintProject> = {}): PrintProject {
     duties: '業務内容の本文。\n\n- 箇条書き 1\n- 箇条書き 2',
     acquired: '',
     comment: 'コメントの本文。',
-    compactNote: '',
     level: 'detail',
     ...overrides,
   };
