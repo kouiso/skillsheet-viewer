@@ -84,7 +84,7 @@ function isCombiningOrVariationSelector(ch: string): boolean {
 // （Issue #263 C）し、段落では右マージンを越えて紙面からはみ出す（同 F）。
 // 10.5pt のラテン文字は平均 5〜6pt 幅なので、16 文字なら約 90pt。もっとも狭い
 // 2 列表のラベル列（内寸 約143pt）にも収まる。
-const MAX_UNBREAKABLE_RUN = 16;
+export const MAX_UNBREAKABLE_RUN = 16;
 
 // この文字の「直後」を改行機会にしてよい区切り記号。URL のパス区切りや
 // ハイフン連結の識別子で、人間が見ても自然な位置で折り返せるようにする。

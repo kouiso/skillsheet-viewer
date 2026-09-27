@@ -19,10 +19,10 @@
  *
  * 純関数だけを置く。PDF の描画も DB へのアクセスもしない。
  */
-import { BREAK_AFTER, isCjk, isNoLineStart, NO_LINE_END, splitLongRun } from './font';
-import { FONT_SIZE, LINE_HEIGHT, PAGE } from './layout-metric';
+import { isCjk, isNoLineStart, MAX_UNBREAKABLE_RUN, NO_LINE_END, splitLongRun } from './font';
 import type { QualityItem, QualityPage } from './print-quality';
-import { DEFAULT_QUALITY_OPTIONS } from './print-quality';
+import { DEFAULT_QUALITY_OPTIONS, isFooterItem } from './print-quality';
+import { PRINT_SIZE, PRINT_TYPE } from './print-token';
 
 export const LINE_BREAK_RULES = [
   'early-break',
@@ -60,6 +60,12 @@ export interface LineBreakCheckOptions {
    * 空白での折り返し（`tail head` の形でしか出ないもの）を除外する。
    */
   sourceTexts?: string[];
+  /**
+   * running footer の文字列（`氏名 ／ シート名`）。渡すと下端帯では footer
+   * と本文を文字で区別し、footer の高さまで流れ込んだ本文も「はみ出し」に数える。
+   * 省略時は帯全体を footer とみなす従来動作（検出が甘い）。
+   */
+  footerText?: string;
 }
 
 interface WorkLine {
@@ -83,29 +89,44 @@ interface WorkSeg {
   y: number;
   /** セグメント内アイテムの最大フォントサイズ。 */
   size: number;
+  /** 同じ行で右隣にあるセグメントの左端。右端のセグメントは undefined。 */
+  nextLeft?: number;
+  /**
+   * 同じ左端・同じフォントサイズのセグメントがその頁で届く最大の右端
+   * （「列の実測の右端」）。異なる幅のコンテナが同じ左端に混ざる頁では
+   * 他コンテナ由来の値になり得るため、段落連結の後に段落自身の行が届く
+   * 右端で上書きし直す。
+   */
+  colRight: number;
+  /**
+   * このセグメントが属する列が使える右端の推定値。右隣の列があるときは
+   * 隣列の左端から列間の内側余白を引いた位置、無いときは列の実測右端
+   * （ただし段落の行が明らかに狭い欄に居るときは段落の実測右端）。
+   */
+  bound: number;
 }
 
-// 既存の幾何検査と同じ版面の定数を使う。
-const CONTENT_LEFT = PAGE.PADDING_HORIZONTAL;
-const CONTENT_RIGHT = PAGE.WIDTH - PAGE.PADDING_HORIZONTAL;
-/** ページの左余白。見出し・footer・箇条書きの記号は本文枠（44）より手前の 40 から始まる。 */
-const PAGE_LEFT = 40;
+// 版面の定数は印刷経路の実デザイン（print-token / print-quality の閾値）に揃える。
+// `layout-metric.ts` の FONT_SIZE/LINE_HEIGHT は別系統の値で、本文 11.5pt /
+// 行送り 1.75 の実 PDF には合わない（レビュー指摘）。
+const PAGE_LEFT = PRINT_SIZE.padHorizontal;
 const OVERFLOW_RIGHT = DEFAULT_QUALITY_OPTIONS.contentRight;
 const CONTENT_BOTTOM = DEFAULT_QUALITY_OPTIONS.contentBottom;
 const FOOTER_RESERVE = DEFAULT_QUALITY_OPTIONS.footerReserve;
 const BODY_TOP = DEFAULT_QUALITY_OPTIONS.contentTop;
 
 /**
- * 段落としてつなぐ最小フォントサイズ。CODE（9.5pt）の行はソース行がそのまま
- * 改行されるため「段落の改行規則」の対象外。FOOTER（9pt）も同様。
+ * 段落としてつなぐ最小フォントサイズ。印刷経路の最小は PRINT_MIN_FONT_SIZE
+ * （11pt）で、それより小さい行はこの検査の対象にならない。
  */
-const PARA_MIN_SIZE = FONT_SIZE.CODE + 0.25;
+const PARA_MIN_SIZE = 10.75;
 const SIZE_MATCH = 0.5;
 /**
- * 行送りは `size * LINE_HEIGHT`。段落間はそこに
- * `SPACING.PARAGRAPH_MARGIN_BOTTOM`（5pt）が足される。その中間に切れ目を置く。
+ * 段落内の行送りは `size * そのサイズの lineHeight`（本文 11.5pt×1.75≈20.1）。
+ * 段落の切れ目にはさらにブロック間ギャップ（3〜4pt）が足されるので、
+ * その中間に切れ目を置く。
  */
-const PARAGRAPH_GAP_SLACK = 3.5;
+const PARAGRAPH_GAP_SLACK = 2;
 /** 行の中でこの幅以上の横の空きがあったら、そこでセグメントを切る（≈1字分）。 */
 const SEGMENT_GAP_EM = 1.0;
 /** 段落の先頭行から見て、継続行の左端がこの幅まで右にずれても同じ段落とみなす
@@ -115,8 +136,58 @@ const CONTINUATION_INDENT = 24;
 const EARLY_BREAK_MIN_SLACK_CHARS = 2;
 /** 改行を含まない段落の長さの上限（字）。 */
 const LONG_PARAGRAPH_MAX_CHARS = 137;
-/** 長すぎる段落の対象サイズの上限。見出しサイズ（H4 以上）の行は対象外。 */
-const LONG_PARAGRAPH_MAX_SIZE = FONT_SIZE.H4 - 0.25;
+/**
+ * 長すぎる段落の対象サイズの上限。本文（11.5pt）とメタ（11pt）は対象にし、
+ * 見出しサイズ（projectTitle 13pt 以上）の行は対象外。
+ */
+const LONG_PARAGRAPH_MAX_SIZE = PRINT_TYPE.projectTitle.fontSize - 0.5;
+/**
+ * 長すぎる段落の対象は本文カラムの段落だけ。メタ表の値列（x≈152〜）のような
+ * 列レイアウトの連結は対象外にするため、左端の上限を置く。
+ */
+const LONG_PARAGRAPH_LEFT_MAX = 100;
+/**
+ * 隣の列の左端から引く、列間の内側余白。メタ表（metaRowPadHorizontal 12pt
+ * ずつ両側）がこのデザインで最も広い列間余白なので、その両側分を使う。
+ * 実際は「隣列テキストの左端 − セル右パディング」が自セルの本文右端なので、
+ * やや保守的（検出漏れ側）に倒れている。
+ */
+const INTER_COLUMN_GAP = 2 * PRINT_SIZE.metaRowPadHorizontal;
+/**
+ * 段落自身の非最終行が届く右端と、同じ列の頁内最大右端がこれだけ離れている
+ * とき、その段落は別の狭いコンテナに居るとみなす。簡約表の主列
+ * （本文右端 − チーム列 44pt ≈ 4 字分の差）のような構造的な差を拾い、
+ * 段落の全行が一様に大きく手前で折れる一様な崩れ（差がもっと大きい）は
+ * 列右端との差で検出できるようにするための境目。
+ */
+const CONTAINER_DROP_CHARS = 6;
+/**
+ * 段落最終行の末尾保護。描画エンジン側（patch/@react-pdf__textkit）の
+ * keepLastLineMinimum と同じ値: 段落末尾のこの字数の間にある改行機会は
+ * 消されるので、最終行の短い連なりは「余白に入る単位」として評価しない。
+ */
+const LAST_LINE_MIN_CHARS = 3;
+/**
+ * 頁またぎ継続の判定で「頁の下端近く」「上端近く」とみなす帯。継続行は本文領域の
+ * 最下部・最上部にしか来ない。
+ */
+const PAGE_BOTTOM_BAND = 2; // 行送りの倍数
+const PAGE_TOP_BAND = 60;
+
+/**
+ * フォントサイズごとの行送り。印刷経路の PRINT_TYPE の対応表を使う
+ * （body 11.5pt→1.75、meta 11pt→1.55 …）。未定義のサイズは 1.6 に倒す。
+ */
+const LINE_HEIGHT_BY_SIZE = new Map<number, number>();
+for (const t of Object.values(PRINT_TYPE)) {
+  LINE_HEIGHT_BY_SIZE.set(t.fontSize, Math.max(LINE_HEIGHT_BY_SIZE.get(t.fontSize) ?? 0, t.lineHeight));
+}
+function pitchOf(size: number): number {
+  for (const [s, lh] of LINE_HEIGHT_BY_SIZE) {
+    if (Math.abs(s - size) < SIZE_MATCH) return size * lh;
+  }
+  return size * 1.6;
+}
 
 /**
  * 行頭に来たら新しい項目（＝新しい段落）とみなす記号。箇条書きの「—」「・」や
@@ -173,6 +244,8 @@ function toSegments(line: WorkLine): WorkSeg[] {
       lineIndex: line.index,
       items,
       text: items.map((item) => item.text).join(''),
+      bound: 0,
+      colRight: 0,
       left: items[0].x,
       right,
       y: line.y,
@@ -188,12 +261,22 @@ function toSegments(line: WorkLine): WorkSeg[] {
     right = Math.max(right, item.x + item.width);
   }
   flush();
+  for (let i = 0; i + 1 < segs.length; i += 1) {
+    segs[i].nextLeft = segs[i + 1].left;
+  }
   return segs;
 }
 
-/** 本文領域にあるか。頁をまたぐ継続見出し（BODY_TOP より上）と footer 行は除く。 */
-function isBodySeg(seg: WorkSeg): boolean {
-  return seg.y <= BODY_TOP && seg.y >= FOOTER_RESERVE;
+/**
+ * 本文領域にあるか。頁をまたぐ継続見出し（BODY_TOP より上）は除く。下端帯
+ * （FOOTER_RESERVE より下）は footer と判定されたセグメントだけ除く——
+ * footerText が渡れば本文が footer と同じ高さに流れ込んだ場合も本文扱いに
+ * なり、段落連結の対象から落ちない（はみ出し検査でも拾う）。
+ */
+function isBodySeg(seg: WorkSeg, footerText: string): boolean {
+  if (seg.y > BODY_TOP) return false;
+  if (seg.y >= FOOTER_RESERVE) return true;
+  return !seg.items.every((item) => isFooterItem(item, DEFAULT_QUALITY_OPTIONS, footerText));
 }
 
 /**
@@ -207,7 +290,7 @@ function sameParagraph(para: WorkSeg[], next: WorkSeg): boolean {
   if (Math.abs(prev.size - next.size) >= SIZE_MATCH) return false;
   // 同じ高さ（横に並んだ別の列）や間延びした行は別の段落。
   const gap = prev.y - next.y;
-  if (gap <= 0.5 || gap > Math.min(prev.size, next.size) * LINE_HEIGHT + PARAGRAPH_GAP_SLACK) return false;
+  if (gap <= 0.5 || gap > Math.min(pitchOf(prev.size), pitchOf(next.size)) + PARAGRAPH_GAP_SLACK) return false;
   // 箇条書きの各行は先頭に「—」「・」「12.」が付く。項目の切れ目は段落の切れ目。
   if (LIST_MARKER.test(next.text)) return false;
   // 列の左端が揃う行だけを連結する。字下げされた箇条書きの継続行までは許す。
@@ -219,8 +302,8 @@ function sameParagraph(para: WorkSeg[], next: WorkSeg): boolean {
 /**
  * 頁またぎの段落継続の推定。前頁の最終行の右端余白が 2 字未満なら
  * 「行を最後まで埋めて頁を送った」とみなし、次頁の先頭行を同じ段落に継ぐ。
- * 段落が 1 行しか無いときは行の右端がそのまま段落の右端になってしまうので、
- * 本文左端から始まる行だけ版面の右端と比べる。
+ * 右端の判定は `seg.bound`（列の推定右端）に対して行う。複数列の頁では
+ * 各セグメントの列ごとの値になるので、表の列の継続も拾える。
  */
 function continuesAcrossPage(para: WorkSeg[], firstOfNext: WorkSeg): boolean {
   const last = para.at(-1);
@@ -230,30 +313,142 @@ function continuesAcrossPage(para: WorkSeg[], firstOfNext: WorkSeg): boolean {
   if (LIST_MARKER.test(firstOfNext.text)) return false;
   const first = para[0];
   if (firstOfNext.left < first.left - 1.5 || firstOfNext.left > first.left + CONTINUATION_INDENT) return false;
-  if (para.length > 1) {
-    return Math.max(...para.map((seg) => seg.right)) - last.right < EARLY_BREAK_MIN_SLACK_CHARS * last.size;
-  }
-  if (last.left > CONTENT_LEFT + 1) return false;
-  return CONTENT_RIGHT - last.right < EARLY_BREAK_MIN_SLACK_CHARS * last.size;
+  return last.bound - last.right < EARLY_BREAK_MIN_SLACK_CHARS * last.size;
 }
 
 /**
- * 行の先頭の「切れ目単位」の文字数。英数字の連なりは次の空白・CJK・
- * BREAK_AFTER の字まで（区切り字はその字まで）。それ以外は 1 字。
+ * seg の属する表で、seg の列の次にある列の左端。同じ行の隣のセグメント
+ * （`seg.nextLeft`）があればそれを基本にするが、ラベル列が空など間のセルに
+ * 文字が無い行では隣が遠い列を指すので、同じ列のセグメントが立つ他の行に
+ * 現れる列まで見て、seg の列より右で最も近い列の左端を返す。
  */
-function firstBreakUnitLength(text: string): number {
-  const chars = [...text];
-  const first = chars[0];
-  if (first === undefined) return 0;
-  if (!isAlnum(first)) return 1;
-  let n = 1;
-  while (n < chars.length) {
-    const ch = chars[n];
-    if (BREAK_AFTER.has(ch)) return n + 1;
-    if (ch === ' ' || isCjk(ch)) break;
-    n += 1;
+function nextColumnLeft(seg: WorkSeg, segs: WorkSeg[]): number | undefined {
+  const lefts = new Set<number>();
+  for (const same of segs) {
+    // 同じ列にある他行のセグメントが立つ行ごと、その行にある列をすべて拾う。
+    if (Math.abs(same.left - seg.left) > 2) continue;
+    for (const rowSeg of segs) {
+      if (Math.abs(rowSeg.y - same.y) <= 0.5) lefts.add(rowSeg.left);
+    }
   }
-  return n;
+  const next = [...lefts].filter((left) => left > seg.left + 2).sort((a, b) => a - b)[0];
+  return next ?? seg.nextLeft;
+}
+
+/**
+ * 各セグメントの `bound`（列の推定右端）を頁内のセグメント分布から決める。
+ * 右に別の列が並ぶ行は次の列の左端から列間の内側余白を引いた位置、無い行は
+ * 「同じ左端・同じサイズで最も右まで届くセグメント」の右端——列の実測の
+ * 右端——を暫定値とする。異なる幅のコンテナが同じ左端に混ざる頁（簡約表の
+ * 主列と全幅のメタ行など）では実測右端が他コンテナ由来になるので、段落連結
+ * の後で段落自身の行が届く右端に直す（resolveParaBounds）。
+ */
+function annotateBounds(segs: WorkSeg[]): void {
+  for (const seg of segs) {
+    let colRight = seg.right;
+    for (const other of segs) {
+      if (Math.abs(other.left - seg.left) <= 2 && Math.abs(other.size - seg.size) < SIZE_MATCH) {
+        colRight = Math.max(colRight, other.right);
+      }
+    }
+    seg.colRight = colRight;
+    if (seg.nextLeft === undefined) {
+      seg.bound = colRight;
+      continue;
+    }
+    const edge = nextColumnLeft(seg, segs) ?? seg.nextLeft;
+    seg.bound = Math.max(seg.right, edge - INTER_COLUMN_GAP);
+  }
+}
+
+/**
+ * 隣列の無いセグメントの `bound` を、段落自身の行が届く右端で上書きする。
+ * 段落の最終行は短いのが普通なので証拠から除き、非最終行の最大右端を
+ * その段落の実測の右端とする。それが列の最大右端から CONTAINER_DROP_CHARS
+ * 字分以上狭いときは、その段落は別の（狭い）コンテナに居るとみなす。
+ * 行がまったく同じ短さで終わる一様な崩れ（実測右端と列右端の差が大きい）
+ * はここでは覆さず、列右端との差として検出できるままにする。
+ */
+function resolveParaBounds(paragraphs: WorkSeg[][]): void {
+  for (const para of paragraphs) {
+    // 1 行の段落は折り返しを持たず、a→b の対も生えない。
+    if (para.length < 2) continue;
+    const ownEdge = para.slice(0, -1).reduce((m, seg) => Math.max(m, seg.right), 0);
+    for (const seg of para) {
+      if (seg.nextLeft !== undefined) continue;
+      if (ownEdge > 0 && seg.colRight - ownEdge <= CONTAINER_DROP_CHARS * seg.size) {
+        seg.bound = Math.max(seg.right, ownEdge);
+      }
+    }
+  }
+}
+
+/**
+ * 頁内で「このセグメントの列の最上段／最下段」か。x 区間が重なるセグメントを
+ * 同じ列とみなし、同じ列で上下にセグメントが無いときだけ真。
+ */
+function xOverlap(a: WorkSeg, b: WorkSeg): boolean {
+  return Math.min(a.right, b.right) - Math.max(a.left, b.left) > 0;
+}
+function isLaneTop(seg: WorkSeg, segs: WorkSeg[]): boolean {
+  return !segs.some((s) => s !== seg && s.y > seg.y + 0.5 && xOverlap(s, seg));
+}
+function isLaneBottom(seg: WorkSeg, segs: WorkSeg[]): boolean {
+  return !segs.some((s) => s !== seg && s.y < seg.y - 0.5 && xOverlap(s, seg));
+}
+
+/**
+ * 位置 i（chars[i-1] と chars[i] の間）で描画エンジンが実際に切れるか。
+ * textkit は各シラブルの間のマーカーでしか折り返さないので、ここでも
+ * splitForHyphenation と同じ規則で切れる位置だけを返す:
+ * - 半角空白の前後は語の境界として必ず切れる
+ * - 行末禁則の字の直後・行頭禁則の字の直前では切れない
+ * - 非 CJK の連なりの中では splitLongRun の分割点だけが切れる
+ * - 残り（CJK との境目、CJK どうし）は切れる
+ */
+function canBreakBetween(chars: string[], i: number): boolean {
+  const prev = chars[i - 1];
+  const cur = chars[i];
+  if (prev === ' ' || cur === ' ') return true;
+  if (NO_LINE_END.has(prev) || isNoLineStart(cur, chars[i + 1])) return false;
+  if (!isCjk(prev) && !isCjk(cur)) {
+    // 非 CJK の連なりの内部位置。run 全体に splitLongRun を通して、
+    // ここが分割点のときだけ切れる。
+    let start = i - 1;
+    while (start > 0 && chars[start - 1] !== ' ' && !isCjk(chars[start - 1])) start -= 1;
+    let end = i;
+    while (end < chars.length && chars[end] !== ' ' && !isCjk(chars[end])) end += 1;
+    const run = chars.slice(start, end).join('');
+    if (run.length <= MAX_UNBREAKABLE_RUN) return false;
+    let cut = start;
+    for (const chunk of splitLongRun(run)) {
+      cut += [...chunk].length;
+      if (cut === i) return true;
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 行の先頭の「切れ目単位」の文字数。描画エンジンが実際に切れる最初の位置まで
+ * の、分割できない先頭の塊を測る。例えば行頭が `（onIdTokenChanged）` のとき
+ * 「（」は行末禁則なので 1 字では置けず、単位は閉じ括弧までの全体になる。
+ *
+ * `isLastLine`（段落の最終行）のときは、パッチ済み textkit の
+ * keepLastLineMinimum（段落末尾 LAST_LINE_MIN_CHARS 字の間の切れ目は消える）
+ * を再現して、保護された末尾の中の切れ目を数えない。最終行が 3 字以下なら
+ * 行全体が 1 つの単位になる。
+ */
+function firstBreakUnitLength(text: string, isLastLine: boolean): number {
+  const chars = [...text];
+  // 末尾保護で消える切れ目: 最終行では末尾 LAST_LINE_MIN_CHARS 字の中の
+  // 区切りは無いので、切れ候補は length - LAST_LINE_MIN_CHARS まで。
+  const limit = isLastLine ? Math.max(0, chars.length - LAST_LINE_MIN_CHARS) : chars.length;
+  for (let i = 1; i <= limit && i < chars.length; i += 1) {
+    if (canBreakBetween(chars, i)) return i;
+  }
+  return chars.length;
 }
 
 /** 行先頭の切れ目単位の幅（pt）。アイテム途中で切れる分は文字数で案分する。 */
@@ -272,11 +467,29 @@ function firstBreakUnitWidth(seg: WorkSeg, unitLength: number): number {
   return Number.POSITIVE_INFINITY;
 }
 
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 切れ目が含まれる「切れ目単位」の先頭（文字数・code point 単位）へ遡る。
+ * 境界が連なりの途中（長い英数字の途中や U+00A0 で結合した語の直後）にある
+ * とき、折り返し単位はその連なり全体なので、空白・CJK の直前まで戻す。
+ */
+function unitStart(text: string, headIndex: number): number {
+  const chars = [...text];
+  let i = headIndex;
+  while (i > 0 && chars[i - 1] !== ' ' && !isCjk(chars[i - 1])) i -= 1;
+  return i;
+}
+
 /**
  * 行末・行頭の空白を除いた文字の切れ端が、元の文のどの位置に連続して出るかを探す。
- * 空白の折り返しや、元の文にあった強制改行（段落の切れ目）では、つないだ切れ端が
- * 元の文にそのまま出ない。描画側が段落の途中で勝手に切った境界だけが元の文に
- * 連続して残る。
+ * まず `tail+head` の連続一致を試し、見つからなければ空白（半角空白・全角空白・
+ * U+00A0・改行）を挟む一致を試す——抽出では折り返し位置の空白が行末から
+ * 落ちるため、空白での折り返しはこちらにしか当たらない。元の文にあった強制
+ * 改行（段落の切れ目）は行送りのギャップで別の段落になるためここには来ない。
+ * 返す `headIndex` は切れ目単位の先頭（`unitStart` で遡った位置）。
  */
 function boundarySource(
   a: WorkSeg,
@@ -294,11 +507,33 @@ function boundarySource(
     .replace(/^[\s\u00a0]+/, '');
   if (tail.length === 0 || head.length === 0) return undefined;
   const joined = tail + head;
+  const loose = new RegExp(`${escapeRegExp(tail)}[\\s\\u00a0]+${escapeRegExp(head)}`);
+  // 同じ切れ端が複数の出典に当たることがある（例: 値 'A / バックエンド' が
+  // 別の値 'A / バックエンド / 管理画面' の部分文字列）。そのとき b が出典の
+  // 残り全部に一致するもの——b がその段落の最終行——を優先し、なければ
+  // b の内容で始まる残りが短い順に採用する。
+  const candidates: { text: string; headIndex: number }[] = [];
   for (const text of sourceTexts) {
     const index = text.indexOf(joined);
-    if (index >= 0) return { text, headIndex: index + tail.length };
+    if (index >= 0) {
+      // indexOf の結果は UTF-16 の位置なので code point 数に直す。
+      candidates.push({ text, headIndex: unitStart(text, [...text.slice(0, index + tail.length)].length) });
+      continue;
+    }
+    const match = loose.exec(text);
+    if (match !== null) {
+      const headCpIndex = [...match[0]].length - [...head].length;
+      const absCpIndex = [...text.slice(0, match.index)].length + headCpIndex;
+      candidates.push({ text, headIndex: unitStart(text, absCpIndex) });
+    }
   }
-  return undefined;
+  if (candidates.length === 0) return undefined;
+  const bSquash = squashVisible(b.text);
+  const restOf = (c: { text: string; headIndex: number }) => squashVisible([...c.text].slice(c.headIndex).join(''));
+  const exact = candidates.find((c) => restOf(c) === bSquash);
+  if (exact !== undefined) return exact;
+  candidates.sort((x, y) => restOf(x).length - restOf(y).length);
+  return candidates.find((c) => restOf(c).startsWith(bSquash)) ?? candidates[0];
 }
 
 /** 行末・行頭の空白でない文字の連なり（空白・CJK で切った走査）。 */
@@ -330,6 +565,16 @@ function isIntendedRunSplit(tail: string, head: string): boolean {
   return false;
 }
 
+/** 空白系の字（半角・全角空白・U+00A0・改行）を除いた並び。 */
+function squashVisible(t: string): string {
+  return [...t].filter((ch) => !/[\s\u00a0]/.test(ch)).join('');
+}
+
+/** 空白系の字を除いた並びが同じか。 */
+function sameVisible(a: string, b: string): boolean {
+  return squashVisible(a) === squashVisible(b);
+}
+
 /** 同じ段落の連続するセグメントの対（頁またぎの継続を含む）に走らせる規則。 */
 function checkSegPairs(
   paragraphs: WorkSeg[][],
@@ -337,20 +582,24 @@ function checkSegPairs(
   sourceTexts: string[] | undefined,
 ): void {
   for (const para of paragraphs) {
-    const frameRight = Math.max(...para.map((seg) => seg.right));
     for (let i = 0; i + 1 < para.length; i += 1) {
       const a = para[i];
       const b = para[i + 1];
       // 行末の余白: 段落最終行以外で右端に 2 字以上空き、次行先頭の
-      // 切れ目単位がその余白に入る。切れ目単位は元の文があればそこで測る
-      // （抽出テキストでは U+00A0 が半角空白と区別できず、つながった連なりが
-      // 実際の折り返し単位になる）。
+      // 切れ目単位がその余白に入る。右端は `a.bound`（列の推定右端）を使う。
+      // 切れ目単位は「エンジンが実際に切れる最小の塊」（禁則で伸びる塊や、
+      // 最終行の末尾保護を含む）で、元の文があればそこで測る（抽出テキストでは
+      // U+00A0 が半角空白と区別できず、つながった連なりが実際の折り返し単位
+      // になる）。
+      // 「最終行」は抽出で連結した列段落ではなく描画元の段落で判断する:
+      // メタ表の値セルのように列方向につながった段落でも、セルごとの段落の
+      // 最終行には末尾保護が効くので、出典の残り全部がちょうどその行に載る
+      // ときを最終行とみなす。
       const boundary = boundarySource(a, b, sourceTexts);
-      const unitLength =
-        boundary === undefined
-          ? firstBreakUnitLength(b.text)
-          : firstBreakUnitLength(boundary.text.slice(boundary.headIndex));
-      const slack = frameRight - a.right;
+      const rest = boundary === undefined ? undefined : [...boundary.text].slice(boundary.headIndex).join('');
+      const bIsLastLine = rest === undefined ? i + 1 === para.length - 1 : sameVisible(rest, b.text);
+      const unitLength = firstBreakUnitLength(rest ?? b.text, bIsLastLine);
+      const slack = a.bound - a.right;
       const sourceOk = sourceTexts === undefined || boundary !== undefined;
       if (slack >= EARLY_BREAK_MIN_SLACK_CHARS * a.size && firstBreakUnitWidth(b, unitLength) <= slack && sourceOk) {
         hits['early-break'].add(`${a.page}:${a.lineIndex}`);
@@ -393,44 +642,63 @@ function emptyHits(): Record<LineBreakMetric, Set<string>> {
  */
 export function checkLineBreakQuality(pages: QualityPage[], options?: LineBreakCheckOptions): LineBreakReport {
   const hits = emptyHits();
+  const footerText = options?.footerText ?? '';
   const linesByPage = pages.map((page, i) => toWorkLines(page, i + 1));
   const segsByPage = linesByPage.map((lines) => lines.flatMap(toSegments));
-  const bodyByPage = segsByPage.map((segs) => segs.filter(isBodySeg));
+  const bodyByPage = segsByPage.map((segs) => segs.filter((seg) => isBodySeg(seg, footerText)));
+  for (const segs of bodyByPage) annotateBounds(segs);
 
   // セグメントを段落に連結する（頁内 → 頁またぎの順）。
+  // 表のように同じ行に複数の列が並ぶと、セグメントは行順に列を往復する。
+  // 「直前のセグメント」とだけ比べると同じ列の次の行とは二度と連結されず、
+  // 列内の折り返しが一切検査されない（レビュー指摘）。そこで閉じていない段落を
+  // すべて保持し、各セグメントは条件を満たす中で最も縦に近い段落へ継ぐ。
+  // ギャップは行が下がるほど単調に広がるので、繋げなかった段落へ後から
+  // 戻って誤って継ぐことはない。
   const paragraphs: WorkSeg[][] = [];
   for (const segs of bodyByPage) {
-    let current: WorkSeg[] = [];
+    const open: WorkSeg[][] = [];
     for (const seg of segs) {
-      if (current.length === 0 || !sameParagraph(current, seg)) {
-        if (current.length > 0) paragraphs.push(current);
-        current = [seg];
+      let best: WorkSeg[] | undefined;
+      for (const cand of open) {
+        if (!sameParagraph(cand, seg)) continue;
+        if (best === undefined || cand[cand.length - 1].y < best[best.length - 1].y) best = cand;
+      }
+      if (best !== undefined) {
+        best.push(seg);
       } else {
-        current.push(seg);
+        const para = [seg];
+        open.push(para);
+        paragraphs.push(para);
       }
     }
-    if (current.length > 0) paragraphs.push(current);
   }
+  // 頁またぎ: 段落の先頭が「その頁の列の最上段」で頁上端の帯にあるときだけ、
+  // 前の頁で「同じ列の最下段かつ頁下端の帯」を最終行に持つ段落に継ぐ。
+  // 複数列の頁では列ごとに独立して継ぎ目を判定する（1 列だけが継続する場合もある）。
   const merged: WorkSeg[][] = [];
   for (const para of paragraphs) {
-    const prev = merged.at(-1);
-    const prevLast = prev?.at(-1);
     const first = para[0];
-    const lastBodyOfPrevPage = prevLast === undefined ? undefined : bodyByPage[prevLast.page - 1].at(-1);
-    if (
-      prev !== undefined &&
-      prevLast !== undefined &&
-      first !== undefined &&
-      prevLast === lastBodyOfPrevPage &&
-      prevLast.page === first.page - 1 &&
-      continuesAcrossPage(prev, first)
-    ) {
-      prev.push(...para);
+    let target: WorkSeg[] | undefined;
+    if (first.page > 1 && first.y >= BODY_TOP - PAGE_TOP_BAND && isLaneTop(first, bodyByPage[first.page - 1])) {
+      for (const cand of merged) {
+        const last = cand[cand.length - 1];
+        if (last.page !== first.page - 1) continue;
+        if (last.y > CONTENT_BOTTOM + PAGE_BOTTOM_BAND * pitchOf(last.size)) continue;
+        if (!isLaneBottom(last, bodyByPage[last.page - 1])) continue;
+        if (!continuesAcrossPage(cand, first)) continue;
+        target = cand;
+        break;
+      }
+    }
+    if (target !== undefined) {
+      target.push(...para);
     } else {
-      merged.push([...para]);
+      merged.push(para);
     }
   }
 
+  resolveParaBounds(merged);
   checkSegPairs(merged, hits, options?.sourceTexts);
 
   for (const para of merged) {
@@ -440,11 +708,12 @@ export function checkLineBreakQuality(pages: QualityPage[], options?: LineBreakC
     if (para.length >= 2 && visibleLength(last.text) <= 2) {
       hits['runt-line'].add(`${last.page}:${last.lineIndex}`);
     }
-    // 長すぎる段落: 改行を含まない段落の合計が 137 字超。本文左端に揃う
-    // 段落だけを対象にし、表の列の連結や見出しサイズの行は対象外。
+    // 長すぎる段落: 改行を含まない段落の合計が 137 字超。本文カラム
+    // （頁直下・カード内・字下げの箇条書きまで）に揃う段落だけを対象にし、
+    // メタ表の値列などの列レイアウトや見出しサイズの行は対象外。
     const isBodyPara =
       para.every((seg) => seg.size >= PARA_MIN_SIZE && seg.size < LONG_PARAGRAPH_MAX_SIZE) &&
-      para[0].left <= CONTENT_LEFT + 1;
+      para[0].left <= LONG_PARAGRAPH_LEFT_MAX;
     const length = para.reduce((sum, seg, i) => {
       const text = i === 0 ? seg.text.replace(LIST_MARKER, '') : seg.text;
       return sum + visibleLength(text);
@@ -460,11 +729,14 @@ export function checkLineBreakQuality(pages: QualityPage[], options?: LineBreakC
 
   // はみ出し: 文字の bbox が版面の外。右は既存の overflow 検査と同じ閾値。
   // 見出し・footer・箇条書き記号はページ左余白（40）から始まるので左の閾値はそこに置き、
-  // footer 帯（FOOTER_RESERVE より下）と本文上端より上（継続見出しの絶対配置）は除く。
+  // 本文上端より上（継続見出しの絶対配置）は除く。下端帯は footer 由来の item だけを
+  // 除く——座標で帯ごと除くと、本文が footer の高さまで流れ込んだ崩れを見逃す
+  // （レビュー指摘。既存の findBottomOverflows と同じ isFooterItem の判定）。
   for (const lines of linesByPage) {
     for (const line of lines) {
       for (const item of line.items) {
-        if (item.y > BODY_TOP || item.y < FOOTER_RESERVE) continue;
+        if (item.y > BODY_TOP) continue;
+        if (isFooterItem(item, DEFAULT_QUALITY_OPTIONS, footerText)) continue;
         if (item.x + item.width > OVERFLOW_RIGHT + 0.5 || item.x < PAGE_LEFT - 0.5 || item.y < CONTENT_BOTTOM) {
           hits.overflow.add(`${line.page}:${line.index}`);
         }
