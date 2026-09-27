@@ -580,7 +580,7 @@ export function checkCompleteness(
   const bareContinuationCompanies = facts
     .filter((f) => f.category === 'company' && f.label === '会社名')
     .flatMap((f) => [normalizeForMatch(`${f.text}（続き）`), normalizeForMatch(`${f.text}（つづき）`)]);
-  const COMPACT_TABLE_HEADER = normalizeForMatch('期間 案件 ／ 担当 チーム');
+  const COMPACT_TABLE_HEADER = normalizeForMatch('期間 案件 チーム');
   const globalSafePatterns = [...bareContinuationTitles, ...bareContinuationCompanies, COMPACT_TABLE_HEADER].filter(
     (s) => s.length > 0,
   );
