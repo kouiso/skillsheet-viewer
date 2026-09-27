@@ -28,9 +28,12 @@ await page.waitForSelector('text=/〜/', { timeout: 40000 });
 await page.waitForTimeout(1000);
 
 async function downloadPdf(name) {
+  // PDFダウンロードは Popover メニュー内の項目のため、先に「ダウンロード」トリガーを開く
+  // （#397 でメニュー化。e2e/download-menu.ts と同じ手順）。
+  await page.getByRole('button', { name: 'ダウンロード', exact: true }).click();
   const [dl] = await Promise.all([
     page.waitForEvent('download', { timeout: 90000 }),
-    page.locator('button[aria-label="PDFダウンロード"]:visible').click(),
+    page.getByRole('button', { name: 'PDFダウンロード', exact: true }).click(),
   ]);
   const path = `/tmp/shots-i288/${name}.pdf`;
   await dl.saveAs(path);

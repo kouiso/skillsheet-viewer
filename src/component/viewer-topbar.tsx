@@ -74,7 +74,7 @@ function DigestDownloadMenu({
   onDownloadPdfDigest: () => void | Promise<void>;
   onDownloadExcelDigest?: () => void | Promise<void>;
   digestLoading: boolean;
-  /** true のときアイコンに加えて「要約版 ▾」の文字を出す（デスクトップ用、#397）。 */
+  /** true のときアイコンに加えて「要約版 ▾」の文字を xl 以上で出す（デスクトップ用、#397）。 */
   withLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -83,20 +83,20 @@ function DigestDownloadMenu({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size={withLabel ? undefined : 'icon'}
+          size="icon"
           disabled={digestLoading}
           aria-busy={digestLoading}
           aria-label={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
           // Popover とは別に、ホバーで用途が分かるネイティブ tooltip（#355）
           title={digestLoading ? '要約版を生成中' : '要約版をダウンロード'}
-          className={withLabel ? 'min-h-11 gap-1.5 px-3' : 'min-h-11 min-w-11'}
+          className={withLabel ? 'min-h-11 min-w-11 xl:w-auto xl:gap-1.5 xl:px-3' : 'min-h-11 min-w-11'}
         >
           {digestLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileMinus />}
           {withLabel && (
             <>
-              <span>要約版</span>
-              {/* ▾: クリックでメニューが開くことを見た目で伝える（#397） */}
-              <ChevronDown aria-hidden="true" />
+              <span className="hidden xl:inline">要約版</span>
+              {/* ▾: クリックでメニューが開くことを見た目で伝える（#397）。ラベルと同じく xl 以上 */}
+              <ChevronDown className="hidden xl:block" aria-hidden="true" />
             </>
           )}
         </Button>
@@ -149,7 +149,7 @@ function DownloadMenu({
   onDownloadPdfDigest?: () => void | Promise<void>;
   onDownloadExcelDigest?: () => void | Promise<void>;
   loading: boolean;
-  /** true のときアイコンに加えて「ダウンロード ▾」の文字を出す（デスクトップ用、#397）。 */
+  /** true のときアイコンに加えて「ダウンロード ▾」の文字を xl 以上で出す（デスクトップ用、#397）。 */
   withLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -170,17 +170,19 @@ function DownloadMenu({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size={withLabel ? undefined : 'icon'}
+          size="icon"
           disabled={loading}
           aria-busy={loading}
           aria-label={loading ? 'ダウンロードを生成中' : 'ダウンロード'}
-          className={withLabel ? 'min-h-11 gap-1.5 px-3' : 'min-h-11 min-w-11'}
+          className={withLabel ? 'min-h-11 min-w-11 xl:w-auto xl:gap-1.5 xl:px-3' : 'min-h-11 min-w-11'}
         >
           {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Download />}
           {withLabel && (
             <>
-              <span>ダウンロード</span>
-              <ChevronDown aria-hidden="true" />
+              {/* ラベルは xl 以上だけに出す。sm〜lg ではラベル込みの幅がヘッダーを
+                  2段化させ、会社見出しを隠すため（#397 レビュー指摘）。 */}
+              <span className="hidden xl:inline">ダウンロード</span>
+              <ChevronDown className="hidden xl:block" aria-hidden="true" />
             </>
           )}
         </Button>
@@ -307,14 +309,15 @@ export function ViewerTopbar({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
+                  size="icon"
                   onClick={() => void onDownloadExcel()}
                   disabled={excelLoading}
                   aria-busy={excelLoading}
                   aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
-                  className="min-h-11 gap-1.5 px-3"
+                  className="min-h-11 min-w-11 xl:w-auto xl:gap-1.5 xl:px-3"
                 >
                   {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
-                  <span>Excel</span>
+                  <span className="hidden xl:inline">Excel</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
@@ -336,13 +339,13 @@ export function ViewerTopbar({
         <TooltipTrigger asChild>
           <Button
             variant="ghost"
-            size={compactDownloads ? 'icon' : undefined}
+            size="icon"
             onClick={toggleTheme}
             aria-label="テーマ切り替え"
-            className={compactDownloads ? 'min-h-11 min-w-11' : 'min-h-11 gap-1.5 px-3'}
+            className={compactDownloads ? 'min-h-11 min-w-11' : 'min-h-11 min-w-11 xl:w-auto xl:gap-1.5 xl:px-3'}
           >
             {mode === 'dark' ? <Sun /> : <Moon />}
-            {!compactDownloads && <span>テーマ</span>}
+            {!compactDownloads && <span className="hidden xl:inline">テーマ</span>}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{mode === 'dark' ? 'ライトモード' : 'ダークモード'}</TooltipContent>

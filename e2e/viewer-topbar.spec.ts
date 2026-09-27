@@ -27,46 +27,81 @@ test.describe('ビューアトップバー（#397）', () => {
 
   // #397: 390px で表示切替ピルが2段に折れてヘッダーが ~177px に膨らみ、
   // scroll-mt-40(=160px) でアンカー到着した会社見出しを 7px 隠していた回帰。
-  // ピル行は折り返さず横スクロールにして、ヘッダーを 120px 以下に収める。
-  test('390px でヘッダーが120px以下かつ会社見出しが隠れない', async ({ page }) => {
+  // ラベル付与でデスクトップも2段化（126px）し同じ欠陥を再発させたため、
+  // 実際のアンカー遷移（location.hash）後の位置関係を 390/1024/1280/1440 で検証する。
+  // scrollIntoView は h2 の scroll-mt（160px/76px）を必ず潜り抜ける実測距離を取れない
+  // ——hash 遷移はブラウザの純正経路なので scroll-mt 効果込みで測れる。
+  test('アンカー遷移後にヘッダーが会社見出しと目次を隠さない', async ({ page }) => {
     const route = `/view/db/${viewSheetId}`;
     await authViewer(page, route);
-    await page.setViewportSize({ width: 390, height: 844 });
 
+    const jumpToFirstCompany = async () => {
+      const headingId = await page.locator('h2[id^="company-"][id$="-heading"]').first().getAttribute('id');
+      expect(headingId, '会社見出し h2 の id が取れること').toBeTruthy();
+      await page.evaluate((id) => {
+        location.hash = `#${id}`;
+      }, headingId as string);
+      // アンカー遷移のスクロールと描画の安定待ち
+      await page.waitForTimeout(400);
+    };
+
+    const measure = () =>
+      page.evaluate(() => {
+        const h = document.querySelector('header')?.getBoundingClientRect();
+        const h2 = document.querySelector('h2[id^="company-"][id$="-heading"]')?.getBoundingClientRect();
+        return { headerBottom: h?.bottom ?? -1, headerHeight: h?.height ?? -1, h2Top: h2?.top ?? -1 };
+      });
+
+    // 目次サイドバー（table-of-contents.tsx のデスクトップ aside）
+    const toc = page.locator('aside').filter({ has: page.getByRole('button', { name: /目次/ }) });
+
+    // 390px: ヘッダー ≤120px かつ会社見出しを隠さない（#397 本体の条件）
+    await page.setViewportSize({ width: 390, height: 844 });
     for (const theme of ['light', 'dark'] as const) {
       await setTheme(page, theme);
       await page.goto(route, { waitUntil: 'networkidle' });
       await page.waitForTimeout(1200);
+      await jumpToFirstCompany();
 
-      const header = page.locator('header');
-      const heading = page.locator('h2[id^="company-"][id$="-heading"]').first();
-      await expect(heading).toBeVisible();
-
-      const headerBox = await header.boundingBox();
-      expect(headerBox, 'ヘッダーの boundingBox が取れること').not.toBeNull();
+      const m = await measure();
+      console.log(`[397] 390px/${theme}: header=${m.headerHeight}px bottom=${m.headerBottom} h2Top=${m.h2Top}`);
+      expect(m.headerHeight, `390px/${theme}: ヘッダー高さが 120px 以下`).toBeLessThanOrEqual(120);
       expect(
-        headerBox?.height ?? 0,
-        `390px/${theme}: ヘッダー高さ ${headerBox?.height}px が 120px 以下であること`,
-      ).toBeLessThanOrEqual(120);
-
-      // 会社セクションへアンカー到着させる（scroll-mt-40 が効く到達点）。
-      // ヘッダーが 160px を超えると見出し上端がヘッダー下に潜る。
-      await heading.evaluate((el) => {
-        el.scrollIntoView({ block: 'start' });
-      });
-      await page.waitForTimeout(300);
-
-      const overlap = await page.evaluate(() => {
-        const h = document.querySelector('header');
-        const h2 = document.querySelector('h2[id^="company-"][id$="-heading"]');
-        if (!h || !h2) return { hiddenPx: -1 };
-        const hiddenPx = Math.max(0, h.getBoundingClientRect().bottom - h2.getBoundingClientRect().top);
-        return { hiddenPx };
-      });
-      console.log(`[397] 390px/${theme}: header=${headerBox?.height}px hidden=${overlap.hiddenPx}px`);
-      expect(overlap.hiddenPx, `390px/${theme}: 会社見出しがヘッダーに隠れないこと（0px）`).toBe(0);
+        m.headerBottom,
+        `390px/${theme}: 会社見出しがヘッダーに隠れない（header.bottom ${m.headerBottom} <= h2.top ${m.h2Top}）`,
+      ).toBeLessThanOrEqual(m.h2Top);
 
       await page.screenshot({ path: `test-results/playwright/397-header-${theme}-sp390.png` });
+    }
+
+    // デスクトップ: ラベル付きでも1段（≤76px）。会社見出しも目次も隠さない。
+    for (const width of [1024, 1280, 1440]) {
+      for (const theme of ['light', 'dark'] as const) {
+        await page.setViewportSize({ width, height: 800 });
+        await setTheme(page, theme);
+        await page.goto(route, { waitUntil: 'networkidle' });
+        await page.waitForTimeout(1200);
+        await jumpToFirstCompany();
+
+        const m = await measure();
+        const tocBox = await toc.boundingBox();
+        console.log(
+          `[397] ${width}px/${theme}: header=${m.headerHeight}px bottom=${m.headerBottom} h2Top=${m.h2Top} tocTop=${tocBox?.y ?? -1}`,
+        );
+        expect(m.headerHeight, `${width}px/${theme}: デスクトップヘッダーが1段（≤76px）`).toBeLessThanOrEqual(76);
+        expect(
+          m.headerBottom,
+          `${width}px/${theme}: 会社見出しがヘッダーに隠れない（header.bottom ${m.headerBottom} <= h2.top ${m.h2Top}）`,
+        ).toBeLessThanOrEqual(m.h2Top);
+        if (width === 1280) {
+          expect(tocBox, '1280px: 目次サイドバーが存在する').not.toBeNull();
+          expect(
+            tocBox?.y ?? -1,
+            `1280px/${theme}: 目次がヘッダーに隠れない（toc.top ${tocBox?.y ?? -1} >= header.bottom ${m.headerBottom}）`,
+          ).toBeGreaterThanOrEqual(m.headerBottom);
+          await page.screenshot({ path: `test-results/playwright/397-header-${theme}-desktop.png` });
+        }
+      }
     }
   });
 
