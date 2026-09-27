@@ -182,7 +182,7 @@ export interface ProjectItem {
   duties: string;
   acquired: string;
   comment: string;
-  /** 案件の要約（工程の俯瞰ダッシュボードのカードに表示）。未入力時は duties にフォールバック。 */
+  /** 案件の要約（工程の俯瞰ダッシュボード・案件カードの「概要」節）。閲覧カード・PDF では duties とは別欄で出す（#377 M4）。 */
   summary?: string;
   /** 表示用の期間の長さ（例: "3ヶ月"）。未入力時は period から resolveDuration で導出。 */
   duration?: string;

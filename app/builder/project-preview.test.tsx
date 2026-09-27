@@ -90,17 +90,22 @@ describe('ProjectPreview のキーボード移動', () => {
     expect(document.activeElement).toBe(first);
   });
 
-  it('移動先が重複せず、要約が担当業務の代替表示のときは移動先に入らない', () => {
+  it('要約が空なら要約節ごと出さず、担当業務は ≪担当業務≫ ブロックに一度だけ出る（#390）', () => {
     const withSummary = render(<ProjectPreview project={project()} company={undefined} no={1} />);
     const withSlots = slotsOf(withSummary.container);
     expect(new Set(withSlots).size).toBe(withSlots.length);
     expect(withSlots).toContain('summary');
 
+    // 要約欄が空でも duties を要約位置へ代替表示しない（閲覧側と同じく空なら節ごと非表示）。
+    // 代替すると ≪担当業務≫ ブロックと二重表示になり、閲覧時の見え方とずれる。
     const fallback = render(<ProjectPreview project={project({ summary: '' })} company={undefined} no={1} />);
     const fbSlots = slotsOf(fallback.container);
     expect(new Set(fbSlots).size).toBe(fbSlots.length);
     expect(fbSlots).not.toContain('summary');
     expect(fbSlots).toContain('duties');
+    expect(fallback.container.querySelector('.pv-summary')).toBeNull();
+    const occurrences = (fallback.container.textContent ?? '').split('設計と実装を担当した。').length - 1;
+    expect(occurrences).toBe(1);
   });
 
   it('要約が空でも飛び先キーが重複しない', () => {
