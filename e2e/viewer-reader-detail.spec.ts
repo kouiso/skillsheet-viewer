@@ -140,19 +140,23 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
 
   test('目次の項目が「…」省略で切れない — 1280px', async ({ page }) => {
     await openViewer(page, 1280);
-    const clipped = await page.evaluate(() => {
-      const spans = [...document.querySelectorAll<HTMLElement>('aside li button span:not([aria-hidden])')];
-      return spans
-        .map((s) => ({
-          text: s.textContent ?? '',
-          ellipsis: getComputedStyle(s).textOverflow === 'ellipsis',
-          clipped: s.scrollWidth > s.clientWidth + 1,
-        }))
-        .filter((i) => i.ellipsis && i.clipped);
-    });
-    expect(clipped, '省略記号で切れた目次項目がゼロであること').toEqual([]);
+    // 目次項目は非同期投入されるため、省略検査の前に投入を待つ（空集合への vacuous pass 防止）。
     // 長い会社名が折り返しで全文出ていること（省略なし）
     const longLabel = page.locator('aside li button', { hasText: 'グローバルシステムズグループ' }).first();
     await expect(longLabel).toBeVisible();
+    const clipped = await page.evaluate(() => {
+      const spans = [...document.querySelectorAll<HTMLElement>('aside li button span:not([aria-hidden])')];
+      return (
+        spans
+          // text-overflow の方式に依らず、横方向の切り詰め（scrollWidth）と
+          // line-clamp 系の縦方向の切り詰め（scrollHeight）の両方を検出する
+          .map((s) => ({
+            text: s.textContent ?? '',
+            clipped: s.scrollWidth > s.clientWidth + 1 || s.scrollHeight > s.clientHeight + 1,
+          }))
+          .filter((i) => i.clipped)
+      );
+    });
+    expect(clipped, '切り詰められた目次項目がゼロであること').toEqual([]);
   });
 });
