@@ -37,7 +37,7 @@ export interface CardFrame {
   padTop: number;
   padBottom: number;
   padHorizontal: number;
-  /** 習得スキル・実績ブロックの薄い塗り。 */
+  /** 習得スキルブロックの薄い塗り。 */
   surface: boolean;
   /** ブロックの仕切り（下罫線）。カードの最後のブロックには付けない。 */
   divider: boolean;

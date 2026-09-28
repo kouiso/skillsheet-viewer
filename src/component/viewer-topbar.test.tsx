@@ -295,6 +295,46 @@ describe('ViewerTopbar', () => {
     });
   });
 
+  describe('390px のヘッダー1段化（#397: 高さ ≤120px・会社見出しの埋没 0px）', () => {
+    it('ビュートグルは1段の横スクロール（折返しなし・スクロールバー非表示）にする', () => {
+      const { container } = renderTopbar();
+      const fieldset = container.querySelector('fieldset') as HTMLElement;
+      expect(fieldset.className).toContain('flex-nowrap');
+      expect(fieldset.className).toContain('overflow-x-auto');
+      expect(fieldset.className).not.toContain('flex-wrap');
+      // classic スクロールバーは高さに加算されて ≤120px を超えるため非表示を固定する。
+      expect(fieldset.className).toContain('[scrollbar-width:none]');
+      expect(fieldset.className).toContain('[&::-webkit-scrollbar]:hidden');
+    });
+
+    it('ヘッダー実高を --viewer-topbar-h として documentElement へ書き込む', () => {
+      renderTopbar();
+      // jsdom では offsetHeight=0。実測値の形式（Npx）で書き込まれることだけを固定し、
+      // 会社見出し側のずらし量と値の源を一元化したことを担保する。
+      expect(document.documentElement.style.getPropertyValue('--viewer-topbar-h')).toMatch(/^\d+(\.\d+)?px$/);
+    });
+  });
+
+  describe('デスクトップ出力ボタンの文字ラベル（#397）', () => {
+    it('PDF / Excel / 要約版 / テーマ に文字が付き、要約版はメニューと分かる見た目になる', () => {
+      renderTopbar({
+        onDownloadPdf: vi.fn(),
+        onDownloadExcel: vi.fn(),
+        onDownloadPdfDigest: vi.fn(),
+      });
+      // デスクトップ側は文字ラベル付き（SP 側はアイコンのみのまま）。
+      const desktopPdf = getIconCopies('PDFダウンロード')[0];
+      expect(desktopPdf.textContent).toContain('PDF');
+      expect(getIconCopies('Excelダウンロード')[0].textContent).toContain('Excel');
+      expect(getIconCopies('テーマ切り替え').map((b) => b.textContent)).toEqual(['', 'テーマ']);
+
+      // 要約版はメニューを開くことを ChevronDown（下向き矢印）で示す。
+      const digest = getIconCopies('要約版をダウンロード')[0];
+      expect(digest.textContent).toContain('要約版');
+      expect(digest.querySelector('svg.lucide-chevron-down')).not.toBeNull();
+    });
+  });
+
   describe('SP 用ダウンロードメニュー（320px 幅でも戻るリンクのタップターゲットを確保）', () => {
     it('開くと PDF / Excel / 要約版の選択肢が出て、押すと閉じてからコールバックされる', async () => {
       const user = userEvent.setup();

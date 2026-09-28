@@ -81,9 +81,13 @@ export function CompanySection({
     <section
       id={`company-${companyId}${headingIdSuffix ?? ''}`}
       aria-label={tenure ? `${name}（${effectivePeriod}）` : name}
-      className="flex min-w-0 scroll-mt-40 flex-col gap-4 sm:scroll-mt-[4.75rem]"
+      // scroll-mt / sticky top は全帯でヘッダー実高 --viewer-topbar-h を引く。
+      // ViewerTopbar が ResizeObserver で実測値を書き込む（#397）。ブレークポイントごとに
+      // 直書きすると段数・パディングの変化で見出しがヘッダーへ潜るズレが再発する
+      // （390px で実測17px埋没。sm 帯の 4.75rem も 2 段時には既に不足していた）。
+      className="flex min-w-0 scroll-mt-(--viewer-topbar-h) flex-col gap-4"
     >
-      <div className="sticky top-40 z-20 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 border-b border-border bg-background py-2.5 sm:top-[4.75rem]">
+      <div className="sticky top-(--viewer-topbar-h) z-20 flex flex-wrap items-baseline gap-x-3.5 gap-y-1 border-b border-border bg-background py-2.5">
         {/* ToC は h1..h6[id] を拾う。section 側の id は #company-<id> リンクの
             到着点として残し（company-jump-nav と既存 e2e が参照）、h2 には
             派生 id を付けて目次へ出す（#355）。scroll-mt は sticky topbar の高さ分。 */}

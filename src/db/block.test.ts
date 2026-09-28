@@ -1026,7 +1026,7 @@ describe('projectBlockToMarkdown', () => {
     expect(md).toContain('Setext 見出し');
     expect(md).toContain('4段見出し');
     expect(md).toContain('- 箇条書き');
-    // 見出しにはならない（`**業務内容**` 等の構造行と衝突しないよう行単位で見る）
+    // 見出しにはならない（`**担当業務**` 等の構造行と衝突しないよう行単位で見る）
     const lines = md.split('\n');
     expect(lines).not.toContain('### ATX 見出し');
     expect(lines).not.toContain('#### 4段見出し');

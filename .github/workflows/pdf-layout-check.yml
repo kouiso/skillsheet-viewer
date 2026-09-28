@@ -87,6 +87,19 @@ jobs:
           echo "PDF content and raster checks finished (exit $status)."
           exit "$status"
 
+      - name: Publish failed test names and per-rule counts
+        if: always()
+        # 公開ログへ出すのはテストの成否行（✓/×/FAIL の先頭印）と規則ごとの件数
+        # （PDF_LAYOUT_COUNTS 行）だけ。assertion の文や本文・座標は出さない。
+        run: |
+          if [[ -f "$RUNNER_TEMP/pdf-layout.log" ]]; then
+            # テスト名（✓/×/FAIL 行）と規則ごとの件数だけを転送する。行頭に
+            # アンカーする: 出力の途中に紛れた文字列（本文の断片やエラーメッセージ
+            # 内の文言）を拾わないため。テスト名行は src/ のパスを必ず含む。
+            sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/pdf-layout.log" |
+              grep -E '^[[:space:]]*(✓|×|✗)[[:space:]]+src/|^[[:space:]]*FAIL[[:space:]]+src/|^[[:space:]]*PDF_LAYOUT_COUNTS[[:space:]]' || true
+          fi
+
       - name: Remove private data and logs
         if: always()
         run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/pdf-dump.log" "$RUNNER_TEMP/pdf-layout.log"
