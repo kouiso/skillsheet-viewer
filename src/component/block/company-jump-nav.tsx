@@ -57,9 +57,11 @@ export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompan
             <a
               key={item.href}
               href={item.href}
-              className="inline-flex min-h-11 items-baseline gap-1.5 whitespace-nowrap rounded border border-border-strong bg-card px-2.5 py-2 text-[13px] leading-normal text-foreground hover:border-primary hover:text-accent-text"
+              className="inline-flex min-h-11 max-w-full items-baseline gap-1.5 whitespace-nowrap rounded border border-border-strong bg-card px-2.5 py-2 text-[13px] leading-normal text-foreground hover:border-primary hover:text-accent-text"
+              title={item.name}
             >
-              <span>{item.name}</span>
+              {/* 長い社名でもページ横スクロールを起こさないよう、チップ幅を抑えて省略する */}
+              <span className="min-w-0 truncate">{item.name}</span>
               {item.qual ? <span className="font-mono text-[12px] text-muted-foreground">{item.qual}</span> : null}
               <span className="font-mono text-[12px] text-muted-foreground">{item.count}</span>
             </a>
