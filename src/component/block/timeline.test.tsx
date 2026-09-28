@@ -36,7 +36,9 @@ describe('Timeline', () => {
     // sm 以上は行が親グリッドの 2 列を subgrid で引き継ぐ。日付列は最長ラベルに合う
     // 全行共有の 1 トラックなので、タイトル列の左端が全行で一致する（#393）。
     expect(row?.className).toContain('sm:col-span-2');
-    expect(row?.className).toContain('sm:grid');
+    // クラス名のトークン単位で比較する（'sm:grid-cols-subgrid' が 'sm:grid' を
+    // 部分文字列として含むため、toContain では sm:grid の脱落を検出できない）。
+    expect(row?.className.split(/\s+/)).toContain('sm:grid');
     expect(row?.className).toContain('sm:grid-cols-subgrid');
     // 行の間隔は縦方向だけ。column-gap を行側に置くと subgrid の溝幅
     // （親の sm:gap-x-4 = 16px）を上書きして日付とタイトルの間が詰まる（#393 F2）。
