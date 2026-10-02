@@ -1,34 +1,12 @@
 import { expect, type Locator, test } from '@playwright/test';
+import { contrastRatio, readBorderColors } from './contrast';
 
+// 輝度・実効色の計算は e2e/contrast.ts に集約（#369 の文字コントラスト計測と共有）。
+// 半透明色は evaluate 内で実効色へ合成済みなので、ここでは比率を取るだけ。
 async function borderContrast(input: Locator) {
-  return input.evaluate((element) => {
-    const style = getComputedStyle(element);
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 1;
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('色の計測用Canvasを作成できません');
-    const luminance = (color: string) => {
-      context.clearRect(0, 0, 1, 1);
-      context.fillStyle = color;
-      context.fillRect(0, 0, 1, 1);
-      const rgba = context.getImageData(0, 0, 1, 1).data;
-      if (rgba[3] !== 255) throw new Error('半透明色はこの境界線検査の対象外です');
-      return [0.2126, 0.7152, 0.0722].reduce((sum, weight, index) => {
-        const channel = rgba[index] / 255;
-        return sum + weight * (channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4);
-      }, 0);
-    };
-    const background = luminance(style.backgroundColor);
-    return Math.min(
-      ...(['top', 'right', 'bottom', 'left'] as const).map((side) => {
-        const width = Number.parseFloat(style.getPropertyValue(`border-${side}-width`));
-        const lineStyle = style.getPropertyValue(`border-${side}-style`);
-        if (width < 1 || lineStyle === 'none' || lineStyle === 'hidden') return 0;
-        const border = luminance(style.getPropertyValue(`border-${side}-color`));
-        return (Math.max(border, background) + 0.05) / (Math.min(border, background) + 0.05);
-      }),
-    );
-  });
+  const { background, borders } = await input.evaluate(readBorderColors);
+  if (!background) return 0;
+  return Math.min(...borders.map((border) => (border.color === null ? 0 : contrastRatio(border.color, background))));
 }
 
 for (const theme of ['light', 'dark'] as const) {
