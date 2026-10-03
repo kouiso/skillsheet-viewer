@@ -92,7 +92,7 @@ interface InlineOpts {
 function inlineRuns(node: MdNode, opts: InlineOpts = {}): ParagraphChild[] {
   const run = (text: string, extra: InlineOpts = {}): TextRun =>
     new TextRun({
-      text,
+      text: xmlSafe(text),
       font: extra.mono || opts.mono ? FONT_MONO : FONT,
       bold: extra.bold ?? opts.bold,
       italics: extra.italics ?? opts.italics,
@@ -127,7 +127,7 @@ function inlineRuns(node: MdNode, opts: InlineOpts = {}): ParagraphChild[] {
       const children = (node.children ?? []).flatMap((c) => inlineRuns(c, { ...opts, color: COLOR.primary }));
       const href = node.url ?? '';
       if (!isSafeLinkHref(href)) return children;
-      return [new ExternalHyperlink({ children, link: href })];
+      return [new ExternalHyperlink({ children, link: xmlSafe(href) })];
     }
     case 'image': {
       // PDF と同じく画像は貼らないが、代替テキストは本文として残す（内容を落とさない）。
@@ -144,6 +144,13 @@ function inlineRuns(node: MdNode, opts: InlineOpts = {}): ParagraphChild[] {
 
 const paragraph = (children: ParagraphChild[], opts: IParagraphOptions = {}): Paragraph =>
   new Paragraph({ children, spacing: { after: 100 }, ...opts });
+
+// XML 1.0 で許可されない文字（\x0b \f \x01-\x08 \x0e-\x1f 等）を除去する。
+// docx ライブラリは <>&"' をエスケープするが制御文字は素通しのため、
+// ユーザー markdown 由来の制御文字が document.xml を well-formed でなくし
+// Word がファイルを開けなくなる（PDF からのコピペで VT/FF が混入しうる）。
+const xmlSafe = (s: string): string =>
+  s.replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '');
 
 const stripHtml = (html: string): string => html.replace(/<[^>]*>/g, '').trim();
 
@@ -235,8 +242,8 @@ function renderList(node: MdNode, ctx: RenderCtx, level: number): (Paragraph | T
       const listProps =
         i === 0
           ? ordered
-            ? { numbering: { reference: 'docx-ordered', level, instance: ctx.listInstance } }
-            : { bullet: { level } }
+            ? { numbering: { reference: 'docx-ordered', level: Math.min(level, 8), instance: ctx.listInstance } }
+            : { bullet: { level: Math.min(level, 8) } }
           : undefined;
       out.push(...renderBlock(child, { ...ctx, listProps }));
     });
@@ -257,7 +264,8 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
             // 次の段落/表と一緒に改ページさせる。
             heading: HEADING_LEVELS[Math.min(Math.max(depth, 1), 6) - 1],
             keepNext: true,
-            indent,
+            ...ctx.listProps,
+            indent: ctx.listProps ? undefined : indent,
             spacing: { before: 240, after: 120 },
           },
         ),
@@ -295,20 +303,20 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
     case 'code':
       return [
         paragraph(
-          (node.value ?? '')
+          xmlSafe(node.value ?? '')
             .split('\n')
             .flatMap((line, i) => [
               ...(i > 0 ? [new TextRun({ break: 1 })] : []),
               new TextRun({ text: line, font: FONT_MONO, size: SIZE.body }),
             ]),
-          { indent, shading: { fill: COLOR.muted } },
+          { ...ctx.listProps, indent: ctx.listProps ? undefined : indent, shading: { fill: COLOR.muted } },
         ),
       ];
     case 'html': {
       // PDF（renderHtmlBlock）と同じくタグを剥がして本文だけ残す。
       // <h1>-<h6> を含むものは見出しとして描く。
       const raw = node.value ?? '';
-      const text = stripHtml(raw);
+      const text = xmlSafe(stripHtml(raw));
       if (!text) return [];
       const isHeading = /<h[1-6][\s>]/i.test(raw);
       return [
@@ -322,20 +330,27 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
               font: FONT,
             }),
           ],
-          { indent, keepNext: isHeading },
+          { ...ctx.listProps, indent: ctx.listProps ? undefined : indent, keepNext: isHeading },
         ),
       ];
     }
     default:
       if (node.children) return renderBlocks(node.children, ctx);
       return node.value
-        ? [paragraph([new TextRun({ text: node.value, font: FONT, size: SIZE.body, color: COLOR.text })], { indent })]
+        ? [
+            paragraph([new TextRun({ text: xmlSafe(node.value), font: FONT, size: SIZE.body, color: COLOR.text })], {
+              ...ctx.listProps,
+              indent: ctx.listProps ? undefined : indent,
+            }),
+          ]
         : [];
   }
 }
 
 function renderBlocks(nodes: MdNode[] | undefined, ctx: RenderCtx = {}): (Paragraph | Table)[] {
-  return (nodes ?? []).flatMap((node) => renderBlock(node, ctx));
+  // listProps（箇条書きマーカー）は先頭の子だけへ伝える。
+  // 全子に渡すと blockquote 内の全段落が bullet 化する（item 1 個 = マーカー 1 個の parity）。
+  return (nodes ?? []).flatMap((node, i) => renderBlock(node, i === 0 ? ctx : { ...ctx, listProps: undefined }));
 }
 
 /**
@@ -351,7 +366,7 @@ export async function buildSkillSheetDocx(blocks: Block[], title: string, refere
 
   const doc = new Document({
     creator: 'skillsheet-viewer',
-    title,
+    title: xmlSafe(title),
     numbering: {
       config: [
         {
@@ -387,10 +402,10 @@ export async function buildSkillSheetDocx(blocks: Block[], title: string, refere
           },
         },
         children: [
-          paragraph([new TextRun({ text: title, bold: true, size: SIZE.title, color: COLOR.primary, font: FONT })], {
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 280 },
-          }),
+          paragraph(
+            [new TextRun({ text: xmlSafe(title), bold: true, size: SIZE.title, color: COLOR.primary, font: FONT })],
+            { alignment: AlignmentType.CENTER, spacing: { after: 280 } },
+          ),
           ...renderBlocks(tree.children, { orderedListCounter: { value: 0 } }),
         ],
       },
