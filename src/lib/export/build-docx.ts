@@ -285,8 +285,12 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
           indent: ctx.listProps ? undefined : indent,
         }),
       ];
-    case 'list':
-      return renderList(node, ctx, 0);
+    case 'list': {
+      // list 自体は numPr を持てる段落を先頭に描かない（item の先頭ブロックが
+      // list/blockquote 内 list の場合）、外側 item のマーカーを空段落で残す。
+      const items = renderList(node, ctx, 0);
+      return ctx.listProps ? [paragraph([], { ...ctx.listProps }), ...items] : items;
+    }
     case 'table': {
       // 表は numPr を持てないため、item マーカーは先行の空段落で残す。
       const table = renderTable(node);
@@ -294,13 +298,14 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
     }
     case 'blockquote':
       return renderBlocks(node.children, { ...ctx, indentLeft: (ctx.indentLeft ?? 0) + 360 });
-    case 'thematicBreak':
-      return [
-        paragraph([], {
-          indent,
-          border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: COLOR.border } },
-        }),
-      ];
+    case 'thematicBreak': {
+      const rule = paragraph([], {
+        indent,
+        border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: COLOR.border } },
+      });
+      // 横線自体はマーカーを持てないため item 先頭なら空段落で残す。
+      return ctx.listProps ? [paragraph([], { ...ctx.listProps }), rule] : [rule];
+    }
     case 'code':
       return [
         paragraph(
