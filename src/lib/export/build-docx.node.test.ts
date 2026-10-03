@@ -323,5 +323,12 @@ describe('buildSkillSheetDocx', () => {
     expect(numPrCount(await docXmlOf(md('- | A |\n  | - |\n- n')))).toBe(2); // table
     expect(numPrCount(await docXmlOf(md('- <hr>\n- n')))).toBe(2); // html が空に strip
     expect(numPrCount(await docXmlOf(md('- - deep\n- n')))).toBe(3); // 外item空マーカー + deep + n
+
+    // blockquote 先頭の item で中身が list/横線でも外側マーカーが残る
+    expect(numPrCount(await docXmlOf(md('- > - x\n- n')))).toBe(3); // 外• + x• + n•
+    expect(numPrCount(await docXmlOf(md('- > 1. x\n  > 2. y\n- n')))).toBe(4); // 外• + x,y + n
+    expect(numPrCount(await docXmlOf(md('- > ---\n- n')))).toBe(2); // 外• + n
+    expect(numPrCount(await docXmlOf(md('1. > 1. x\n2. n')))).toBe(3); // 外1. + x + 2.
+    expect(numPrCount(await docXmlOf(md('- > > - x\n- n')))).toBe(3); // 入れ子BQも同型
   });
 });
