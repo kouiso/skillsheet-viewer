@@ -47,8 +47,8 @@ export function isLeadRole(role: string): boolean {
 }
 
 /** period から稼働月数を返す（両端を含む）。解釈できなければ null。 */
-export function periodMonths(period: string): number | null {
-  const bounds = parsePeriodBounds(period);
+export function periodMonths(period: string, referenceMonth: number): number | null {
+  const bounds = parsePeriodBounds(period, referenceMonth);
   if (!bounds) return null;
   return Math.round((bounds.end - bounds.start) * 12) + 1;
 }
@@ -57,13 +57,14 @@ export function periodMonths(period: string): number | null {
  * 「直近」の基準になる年月（parsePeriodBounds と同じ数値尺度）を、シート内の最も新しい
  * 終了月から決める。
  *
- * `new Date()` を使わないのは、日が変わるだけで PDF の中身が変わり、検証が再現しなく
- * なるため（同じシートからは常に同じ PDF が出る性質を保つ）。
+ * 「現在」終端を含む期間は引数の基準月で解釈し、この関数自体は時計を読まない。
+ * 日が変わるだけで PDF の中身が変わると検証が再現しないため
+ * （同じシートからは常に同じ PDF が出る性質を保つ）。
  */
-export function detailBaseline(items: ProjectItem[]): number | null {
+export function detailBaseline(items: ProjectItem[], referenceMonth: number): number | null {
   let latest: number | null = null;
   for (const item of items) {
-    const bounds = parsePeriodBounds(item.period);
+    const bounds = parsePeriodBounds(item.period, referenceMonth);
     if (!bounds) continue;
     if (latest === null || bounds.end > latest) latest = bounds.end;
   }
@@ -88,15 +89,15 @@ export interface DetailLevelResult {
  * period が解釈できない案件は簡約版に落とす（詳細版に上げると、期間不明のものが
  * 直近の実績と同じ重みで前に出てしまう）。
  */
-export function resolveDetailLevels(items: ProjectItem[]): DetailLevelResult {
-  const baseline = detailBaseline(items);
+export function resolveDetailLevels(items: ProjectItem[], referenceMonth: number): DetailLevelResult {
+  const baseline = detailBaseline(items, referenceMonth);
   const levelById = new Map<string, DetailLevel>();
 
   // 規則 2 の候補（規則 1 に当たらなかったもの）を、期間の長い順に選ぶために貯める。
   const seniorCandidates: { id: string; months: number }[] = [];
 
   for (const item of items) {
-    const bounds = parsePeriodBounds(item.period);
+    const bounds = parsePeriodBounds(item.period, referenceMonth);
     if (!bounds || baseline === null) {
       levelById.set(item.id, 'compact');
       continue;
@@ -107,7 +108,7 @@ export function resolveDetailLevels(items: ProjectItem[]): DetailLevelResult {
       continue;
     }
     levelById.set(item.id, 'compact');
-    const months = periodMonths(item.period);
+    const months = periodMonths(item.period, referenceMonth);
     if (isLeadRole(item.role) && months !== null && months >= SENIOR_MIN_MONTHS) {
       seniorCandidates.push({ id: item.id, months });
     }
