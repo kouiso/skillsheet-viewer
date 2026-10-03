@@ -149,8 +149,8 @@ const paragraph = (children: ParagraphChild[], opts: IParagraphOptions = {}): Pa
 // docx ライブラリは <>&"' をエスケープするが制御文字は素通しのため、
 // ユーザー markdown 由来の制御文字が document.xml を well-formed でなくし
 // Word がファイルを開けなくなる（PDF からのコピペで VT/FF が混入しうる）。
-const xmlSafe = (s: string): string =>
-  s.replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '');
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 除去対象が制御文字そのもののため意図的
+const xmlSafe = (s: string): string => s.replace(/[^\x09\x0A\x0D\x20-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, '');
 
 const stripHtml = (html: string): string => html.replace(/<[^>]*>/g, '').trim();
 
@@ -223,8 +223,6 @@ interface RenderCtx {
   // 同一 reference を共有する ordered list は Word では連続採番になるため、
   // リストごとに instance を分けて各リストが 1 から始まるようにする。
   orderedListCounter?: { value: number };
-  // このリスト系が属する numbering instance（入れ子リストは親と共有）。
-  listInstance?: number;
 }
 
 // 箇条書き。順序なしは bullet、順序ありは Decimal の numbering。
@@ -232,20 +230,29 @@ interface RenderCtx {
 // （自由記述に複数段落・入れ子リスト・表が混ざりうるため子要素を潰さない）。
 function renderList(node: MdNode, ctx: RenderCtx, level: number): (Paragraph | Table)[] {
   const ordered = Boolean(node.ordered);
+  // ordered list はリスト（サブリスト含む）ごとに新しい concrete instance を取る。
+  // 同一 instance を兄弟サブリストで共有すると Word で採番が続いてしまう
+  // （PDF は各リストを `${i + 1}.` で描き直す = 常に 1 始まり、という parity）。
+  let instance: number | undefined;
+  if (ordered) {
+    if (!ctx.orderedListCounter) ctx.orderedListCounter = { value: 0 };
+    ctx.orderedListCounter.value += 1;
+    instance = ctx.orderedListCounter.value;
+  }
+  const marker = ordered
+    ? { numbering: { reference: 'docx-ordered', level: Math.min(level, 8), instance } }
+    : { bullet: { level: Math.min(level, 8) } };
   const out: (Paragraph | Table)[] = [];
   for (const item of node.children ?? []) {
     (item.children ?? []).forEach((child, i) => {
       if (child.type === 'list') {
+        // 先頭が入れ子リストの item はマーカーを持てる段落を描かないため、
+        // 空のマーカー段落で item の箇条書きだけ残す（PDF の素 `•` 相当）。
+        if (i === 0) out.push(paragraph([], { ...marker }));
         out.push(...renderList(child, ctx, level + 1));
         return;
       }
-      const listProps =
-        i === 0
-          ? ordered
-            ? { numbering: { reference: 'docx-ordered', level: Math.min(level, 8), instance: ctx.listInstance } }
-            : { bullet: { level: Math.min(level, 8) } }
-          : undefined;
-      out.push(...renderBlock(child, { ...ctx, listProps }));
+      out.push(...renderBlock(child, { ...ctx, listProps: i === 0 ? marker : undefined }));
     });
   }
   return out;
@@ -278,19 +285,13 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
           indent: ctx.listProps ? undefined : indent,
         }),
       ];
-    case 'list': {
-      // ordered list ごとに新しい instance を採番し、先頭リストの続き採番を防ぐ。
-      // 入れ子リストは renderList 経由で ctx.listInstance を共有するためここでは進めない。
-      let nextCtx = ctx;
-      if (node.ordered) {
-        const counter = ctx.orderedListCounter ?? { value: 0 };
-        counter.value += 1;
-        nextCtx = { ...ctx, listInstance: counter.value, orderedListCounter: counter };
-      }
-      return renderList(node, nextCtx, 0);
+    case 'list':
+      return renderList(node, ctx, 0);
+    case 'table': {
+      // 表は numPr を持てないため、item マーカーは先行の空段落で残す。
+      const table = renderTable(node);
+      return ctx.listProps ? [paragraph([], { ...ctx.listProps }), table] : [table];
     }
-    case 'table':
-      return [renderTable(node)];
     case 'blockquote':
       return renderBlocks(node.children, { ...ctx, indentLeft: (ctx.indentLeft ?? 0) + 360 });
     case 'thematicBreak':
@@ -317,7 +318,9 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
       // <h1>-<h6> を含むものは見出しとして描く。
       const raw = node.value ?? '';
       const text = xmlSafe(stripHtml(raw));
-      if (!text) return [];
+      // strip で空になっても item マーカーが付くべき先頭ブロックなら空段落で残す
+      // （<hr> だけの item が丸ごと消失しないよう PDF の素 `•` に合わせる）。
+      if (!text) return ctx.listProps ? [paragraph([], { ...ctx.listProps })] : [];
       const isHeading = /<h[1-6][\s>]/i.test(raw);
       return [
         paragraph(
