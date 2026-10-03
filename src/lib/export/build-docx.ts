@@ -175,7 +175,10 @@ const TABLE_BORDERS = {
 
 function renderTable(node: MdNode): Table {
   const rows = node.children ?? [];
-  const columnCount = rows[0]?.children?.length ?? 0;
+  // GFM 表は行ごとのセル数が不一致になりうる（ユーザーmarkdown由来）。
+  // 先頭行基準だとはみ出たセルで width が undefined になり TableCell が例外を投げるため、
+  // 最もセル数の多い行に合わせる。
+  const columnCount = Math.max(0, ...rows.map((r) => r.children?.length ?? 0));
   const widths = columnWidths(columnCount);
   const align = node.align ?? [];
   return new Table({
@@ -206,9 +209,15 @@ function renderTable(node: MdNode): Table {
 
 interface RenderCtx {
   // リスト項目の先頭ブロックへ付ける箇条書き/番号指定。
-  listProps?: { bullet?: { level: number } } | { numbering?: { reference: string; level: number } };
+  listProps?: { bullet?: { level: number } } | { numbering?: { reference: string; level: number; instance?: number } };
   // blockquote 内の段落へ付ける左インデント（入れ子は累積）。
   indentLeft?: number;
+  // 文書内で ordered list が現れるたびに進むカウンタ（参照渡し）。
+  // 同一 reference を共有する ordered list は Word では連続採番になるため、
+  // リストごとに instance を分けて各リストが 1 から始まるようにする。
+  orderedListCounter?: { value: number };
+  // このリスト系が属する numbering instance（入れ子リストは親と共有）。
+  listInstance?: number;
 }
 
 // 箇条書き。順序なしは bullet、順序ありは Decimal の numbering。
@@ -224,7 +233,11 @@ function renderList(node: MdNode, ctx: RenderCtx, level: number): (Paragraph | T
         return;
       }
       const listProps =
-        i === 0 ? (ordered ? { numbering: { reference: 'docx-ordered', level } } : { bullet: { level } }) : undefined;
+        i === 0
+          ? ordered
+            ? { numbering: { reference: 'docx-ordered', level, instance: ctx.listInstance } }
+            : { bullet: { level } }
+          : undefined;
       out.push(...renderBlock(child, { ...ctx, listProps }));
     });
   }
@@ -257,8 +270,17 @@ function renderBlock(node: MdNode, ctx: RenderCtx = {}): (Paragraph | Table)[] {
           indent: ctx.listProps ? undefined : indent,
         }),
       ];
-    case 'list':
-      return renderList(node, ctx, 0);
+    case 'list': {
+      // ordered list ごとに新しい instance を採番し、先頭リストの続き採番を防ぐ。
+      // 入れ子リストは renderList 経由で ctx.listInstance を共有するためここでは進めない。
+      let nextCtx = ctx;
+      if (node.ordered) {
+        const counter = ctx.orderedListCounter ?? { value: 0 };
+        counter.value += 1;
+        nextCtx = { ...ctx, listInstance: counter.value, orderedListCounter: counter };
+      }
+      return renderList(node, nextCtx, 0);
+    }
     case 'table':
       return [renderTable(node)];
     case 'blockquote':
@@ -369,7 +391,7 @@ export async function buildSkillSheetDocx(blocks: Block[], title: string, refere
             alignment: AlignmentType.CENTER,
             spacing: { after: 280 },
           }),
-          ...renderBlocks(tree.children),
+          ...renderBlocks(tree.children, { orderedListCounter: { value: 0 } }),
         ],
       },
     ],
