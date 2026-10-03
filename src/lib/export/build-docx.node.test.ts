@@ -267,4 +267,39 @@ describe('buildSkillSheetDocx', () => {
     expect(numIds.length).toBe(5);
     expect(new Set(numIds).size).toBe(2);
   });
+
+  it('XML 1.0 不許可の制御文字を除去し、深いリスト入れ子・先頭非段落の item でも壊れない', async () => {
+    const md = (markdown: string): Block => ({
+      id: `b-${markdown.length}`,
+      type: 'markdown',
+      order: 0,
+      data: { markdown },
+    });
+    const docXmlOf = async (b: Block) => (await unzipDocx(await buildSkillSheetDocx([b], 't\x0bitle'))).xml;
+    const numPrCount = (xml: string) => (xml.match(/<w:numPr>/g) ?? []).length;
+
+    // \x0b 等の制御文字は document.xml / core.xml を破損させる（Word が開けない）
+    // → 有効な XML が生成されることを parse で確認する（JSZip で十分: 生文字が残れば well-formed でない）。
+    const xml = await docXmlOf(md('VTここ\x0bタブ\x09だけ残る\x01'));
+    const badChars = [...xml].filter((c) => {
+      const n = c.codePointAt(0) ?? 0;
+      return n < 0x20 && n !== 0x9 && n !== 0xa && n !== 0xd;
+    });
+    expect(badChars).toEqual([]);
+    expect(documentText(xml)).toContain('VTここ');
+    expect(documentText(xml)).toContain('タブ');
+
+    // 11 段ネストは docx の ilvl 上限（0-8）を超えて throw していた → クランプして 500 を防ぐ
+    const deep = await docXmlOf(md('1. a\n   1. b\n      1. c\n         1. d\n            1. e\n               1. f\n                  1. g\n                     1. h\n                        1. i\n                           1. j\n                              1. k'));
+    const levels = [...deep.matchAll(/<w:ilvl w:val="(\d+)"\/>/g)].map((m) => Number(m[1]));
+    expect(Math.max(...levels)).toBeLessThanOrEqual(8);
+
+    // item 先頭が blockquote なら bullet は先頭段落 1 個だけ（全段落に漏れない）
+    const quote = await docXmlOf(md('- > q1\n  >\n  > q2\n- n'));
+    expect(numPrCount(quote)).toBe(2);
+
+    // item 先頭が code fence でも item のマーカーが消えない
+    const codeFirst = await docXmlOf(md('- ```\n  code\n  ```\n- n'));
+    expect(numPrCount(codeFirst)).toBe(2);
+  });
 });
