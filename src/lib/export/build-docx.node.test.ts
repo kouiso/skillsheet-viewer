@@ -240,4 +240,31 @@ describe('buildSkillSheetDocx', () => {
     expect(text).not.toContain('非表示会社の案件');
     expect(text).not.toContain('隠し会社');
   });
+
+  it('ヘッダよりセル数の多い行を含む表でも落ちず、ordered list は各リストで採番がリセットされる', async () => {
+    // GFM 表は行ごとのセル数が不一致になりうる。先頭行基準の列幅だと
+    // はみ出たセルで width undefined → TableCell 例外（500）になっていた。
+    const ragged: Block = {
+      id: 'b-ragged',
+      type: 'markdown',
+      order: 0,
+      data: { markdown: '| A | B |\n| --- | --- |\n| 1 | 2 |\n| x | y | z | extra |' },
+    };
+    const buf = await buildSkillSheetDocx([ragged], '表');
+    const { xml } = await unzipDocx(buf);
+    expect(documentText(xml)).toContain('extra');
+
+    // 同一 numbering reference だけだと Word では全 ordered list が連続採番になる。
+    // リストごとに numbering instance を分け、各リストが 1 始まりになることを numId で見る。
+    const twoLists: Block = {
+      id: 'b-lists',
+      type: 'markdown',
+      order: 0,
+      data: { markdown: '1. a\n2. b\n\n段落区切り\n\n1. c\n2. d\n3. e' },
+    };
+    const listXml = (await unzipDocx(await buildSkillSheetDocx([twoLists], 'x'))).xml;
+    const numIds = [...listXml.matchAll(/<w:numId w:val="(\d+)"\/>/g)].map((m) => m[1]);
+    expect(numIds.length).toBe(5);
+    expect(new Set(numIds).size).toBe(2);
+  });
 });
