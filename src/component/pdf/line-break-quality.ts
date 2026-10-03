@@ -690,14 +690,22 @@ export function checkLineBreakQuality(pages: QualityPage[], options?: LineBreakC
     const first = para[0];
     let target: WorkSeg[] | undefined;
     if (first.page > 1 && first.y >= BODY_TOP - PAGE_TOP_BAND && isLaneTop(first, bodyByPage[first.page - 1])) {
-      for (const cand of merged) {
-        const last = cand[cand.length - 1];
-        if (last.page !== first.page - 1) continue;
-        if (last.y > CONTENT_BOTTOM + PAGE_BOTTOM_BAND * pitchOf(last.size)) continue;
-        if (!isLaneBottom(last, bodyByPage[last.page - 1])) continue;
-        if (!continuesAcrossPage(cand, first)) continue;
-        target = cand;
-        break;
+      // 継続表のヘッダ行は各頁の先頭で再掲されるため、複数の列が同じ行に頭を揃える。
+      // 本文の続き（1 列だけが頁上端に来る）と区別して、同じ行の列頭が 1 個のときだけ継ぐ。
+      // ヘッダ再掲を継ぐと「期間」などの細片が段落の最終行になり、runt-line / page-spill
+      // の偽陽性になる（実データで再現）。
+      const pageSegs = bodyByPage[first.page - 1];
+      const sameLineTopCount = pageSegs.filter((s) => s.lineIndex === first.lineIndex && isLaneTop(s, pageSegs)).length;
+      if (sameLineTopCount === 1) {
+        for (const cand of merged) {
+          const last = cand[cand.length - 1];
+          if (last.page !== first.page - 1) continue;
+          if (last.y > CONTENT_BOTTOM + PAGE_BOTTOM_BAND * pitchOf(last.size)) continue;
+          if (!isLaneBottom(last, bodyByPage[last.page - 1])) continue;
+          if (!continuesAcrossPage(cand, first)) continue;
+          target = cand;
+          break;
+        }
       }
     }
     if (target !== undefined) {
