@@ -290,7 +290,11 @@ describe('buildSkillSheetDocx', () => {
     expect(documentText(xml)).toContain('タブ');
 
     // 11 段ネストは docx の ilvl 上限（0-8）を超えて throw していた → クランプして 500 を防ぐ
-    const deep = await docXmlOf(md('1. a\n   1. b\n      1. c\n         1. d\n            1. e\n               1. f\n                  1. g\n                     1. h\n                        1. i\n                           1. j\n                              1. k'));
+    const deep = await docXmlOf(
+      md(
+        '1. a\n   1. b\n      1. c\n         1. d\n            1. e\n               1. f\n                  1. g\n                     1. h\n                        1. i\n                           1. j\n                              1. k',
+      ),
+    );
     const levels = [...deep.matchAll(/<w:ilvl w:val="(\d+)"\/>/g)].map((m) => Number(m[1]));
     expect(Math.max(...levels)).toBeLessThanOrEqual(8);
 
@@ -301,5 +305,23 @@ describe('buildSkillSheetDocx', () => {
     // item 先頭が code fence でも item のマーカーが消えない
     const codeFirst = await docXmlOf(md('- ```\n  code\n  ```\n- n'));
     expect(numPrCount(codeFirst)).toBe(2);
+
+    // 兄弟サブリストは別 concrete instance（各々 1 始まり。PDF の各リスト `${i+1}.` と同じ parity）
+    // 親 2 項目 + サブリスト 2+2 で numId は親/サブ1/サブ2 の 3 種類
+    const nestedOrdered = await docXmlOf(md('1. a\n   1. x\n   2. y\n2. b\n   1. p\n   2. q'));
+    const nestedIds = [...nestedOrdered.matchAll(/<w:numId w:val="(\d+)"\/>/g)].map((m) => m[1]);
+    expect(nestedIds.length).toBe(6);
+    expect(new Set(nestedIds).size).toBe(3);
+
+    // unordered 配下の ordered 兄弟も別 instance（undefined instance 共有で 3,4 続きになる問題の回帰）
+    const underBullet = await docXmlOf(md('- 1. x\n  2. y\n\n- 1. p\n  2. q'));
+    const underBulletIds = [...underBullet.matchAll(/<w:numId w:val="(\d+)"\/>/g)].map((m) => m[1]);
+    expect(new Set(underBulletIds).size).toBe(3); // 親 bullet + ordered×2
+
+    // 先頭が numPr を持てない形状でも item マーカーが残る
+    // （thematicBreak は item の先頭子になれない: '- ---' はリストを抜けてトップレベルの横線になる）
+    expect(numPrCount(await docXmlOf(md('- | A |\n  | - |\n- n')))).toBe(2); // table
+    expect(numPrCount(await docXmlOf(md('- <hr>\n- n')))).toBe(2); // html が空に strip
+    expect(numPrCount(await docXmlOf(md('- - deep\n- n')))).toBe(3); // 外item空マーカー + deep + n
   });
 });
