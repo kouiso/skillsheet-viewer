@@ -62,7 +62,9 @@ pnpm install
 pnpm dev
 ```
 
-### 3. DB の用意 — A. ローカル PostgreSQL（外部接続不要）
+### 3. DB の用意
+
+#### A. ローカル PostgreSQL（外部接続不要）
 
 手元に PostgreSQL 16+ がある環境では、ローカルスタックが DB 構築から権限付与まで全て行います。
 
@@ -73,7 +75,7 @@ sudo ./script/dev-local-stack.sh up
 NODE_EXTRA_CA_CERTS=$(./script/dev-local-stack.sh env | cut -d= -f2-) pnpm dev
 ```
 
-### 3. DB の用意 — B. 共有 DB（Neon）を使う
+#### B. 共有 DB（Neon）を使う
 
 ```bash
 cp .env.example .env   # DATABASE_URL などを埋める
