@@ -6,6 +6,10 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { PeriodRepairProposal } from './period-repair-proposal';
 import { persistRepairProposal, readPrivateRepairRecord } from './repair-proposal-file';
 
+// persistPrivateRepairRecord は /proc/self/fd 経由でディレクトリ差し替えを防ぐ Linux 専用。
+// Linux 以外では fd 経由の書き込み自体が成立しないため、その経路を通るテストだけ skip する。
+const itLinux = it.skipIf(process.platform !== 'linux');
+
 const directories: string[] = [];
 const setup = () => {
   const dir = mkdtempSync(join(tmpdir(), 'repair-test-'));
@@ -30,7 +34,7 @@ afterEach(() =>
   }),
 );
 describe('未承認修復案の非公開保存', () => {
-  it('固定した記録だけを読み、公開ファイル・壊れたJSON・重複キー・symlinkを拒否する', () => {
+  itLinux('固定した記録だけを読み、公開ファイル・壊れたJSON・重複キー・symlinkを拒否する', () => {
     const path = setup();
     persistRepairProposal(path, proposal);
     expect(readPrivateRepairRecord(path)).toEqual(proposal);
@@ -45,7 +49,7 @@ describe('未承認修復案の非公開保存', () => {
     symlinkSync('missing', path);
     expect(() => readPrivateRepairRecord(path)).toThrow();
   });
-  it('同一案の再保存は許可し、別案の上書きは拒否する', () => {
+  itLinux('同一案の再保存は許可し、別案の上書きは拒否する', () => {
     const path = setup();
     persistRepairProposal(path, proposal);
     const before = readFileSync(path, 'utf8');
@@ -54,7 +58,7 @@ describe('未承認修復案の非公開保存', () => {
     expect(() => persistRepairProposal(path, { ...proposal, owner: 'owner-b' })).toThrow('PROPOSAL_FILE_CONFLICT');
     expect(readFileSync(path, 'utf8')).toBe(before);
   });
-  it('既存FIFOは書き手を待たず拒否する', () => {
+  itLinux('既存FIFOは書き手を待たず拒否する', () => {
     const path = setup();
     execFileSync('mkfifo', ['-m', '600', path]);
     // 同期openの停止はテストランナーのtimeoutでは止まらないため、子processで期限を設ける。
