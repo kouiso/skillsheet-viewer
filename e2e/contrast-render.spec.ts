@@ -104,3 +104,20 @@ test('不透明な子が隠す祖先のグラデーションは計測を妨げ�
   expect(result.samples[0].color).toEqual([0, 0, 0, 1]);
   expect(result.samples[0].background).toEqual([127.5, 127.5, 127.5, 1]);
 });
+
+test('自身の不透明な背景に隠れる背景ぼかしは計測を妨げない', async ({ page }) => {
+  await page.setContent('<div style="background:white;backdrop-filter:blur(8px);color:black">不透明面</div>');
+  const result = await page.evaluate(readContrastColors, undefined);
+  expect(result.unsupported).toEqual([]);
+  expect(result.samples).toHaveLength(1);
+  expect(contrastRatio(result.samples[0].color, result.samples[0].background)).toBe(21);
+});
+
+test('ゼロ面積clipの読み上げ専用文字を可視文字として計測しない', async ({ page }) => {
+  await page.setContent(
+    '<div style="position:absolute;clip:rect(0,0,0,0);overflow:hidden;width:1px;height:1px;color:white;background:white"><span>読み上げ専用</span></div><p style="background:white;color:black">可視本文</p>',
+  );
+  const result = await page.evaluate(readContrastColors, undefined);
+  expect(result.unsupported).toEqual([]);
+  expect(result.samples.map((s) => s.text)).toEqual(['可視本文']);
+});

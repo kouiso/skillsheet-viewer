@@ -245,8 +245,9 @@ export function ViewerTopbar({
       // 折返しにするとヘッダーが 177px まで膨れて会社見出しに被さる（実測 17px 埋没）。
       // スクロールバーは表示しない — classic スクロールバーは要素の高さに加算され、
       // ≤120px のヘッダー高条件を超えてしまう。
+      // 右端の文字まで薄めるマスクは使わず、次のボタンの見切れをスクロールの手掛かりにする。
       // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
-      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 [scrollbar-width:none] max-sm:[mask-image:linear-gradient(to_right,black_calc(100%_-_16px),transparent_100%)] sm:w-auto [&::-webkit-scrollbar]:hidden"
+      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden"
     >
       <legend className="sr-only">表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
@@ -375,8 +376,8 @@ export function ViewerTopbar({
       initial={reduceMotion ? false : { y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      // design: 背景は下地を 88% 残した色 + blur 8px（カード色ではなくページ地の色を敷く）
-      className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
+      // スクロール下の本文に左右されず文字を読めるよう、テーマの背景を不透明に敷く。
+      className="no-print sticky top-0 z-40 border-b border-border bg-background"
       ref={headerRef}
     >
       {/* py-2（SP）: 390px でヘッダー高を ≤120px に収める（#397）。sm 以上は従来の py-3.5。 */}
