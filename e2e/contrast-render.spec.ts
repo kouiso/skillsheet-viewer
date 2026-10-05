@@ -121,3 +121,10 @@ test('ゼロ面積clipの読み上げ専用文字を可視文字として計測�
   expect(result.unsupported).toEqual([]);
   expect(result.samples.map((s) => s.text)).toEqual(['可視本文']);
 });
+
+test('clipが作用しないstatic要素の可視文字は除外しない', async ({ page }) => {
+  await page.setContent('<div style="clip:rect(0,0,0,0);color:white;background:white">可視の低コントラスト文字</div>');
+  const result = await page.evaluate(readContrastColors, undefined);
+  expect(result.samples).toHaveLength(1);
+  expect(contrastRatio(result.samples[0].color, result.samples[0].background)).toBe(1);
+});

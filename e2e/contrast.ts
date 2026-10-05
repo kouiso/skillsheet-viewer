@@ -206,7 +206,9 @@ export function readContrastColors(root: Element | null | undefined): TextColorR
     // sr-only の文字Rangeは大きさを持っていても、祖先のゼロ面積clipで全て隠れる。
     let fullyClipped = false;
     for (let ancestor: Element | null = el; ancestor; ancestor = ancestor.parentElement) {
-      const clip = getComputedStyle(ancestor).clip;
+      const ancestorStyle = getComputedStyle(ancestor);
+      if (!['absolute', 'fixed'].includes(ancestorStyle.position)) continue;
+      const clip = ancestorStyle.clip;
       const match = clip.match(/^rect\(([^)]+)\)$/);
       if (!match) continue;
       const edges = match[1].split(/[,\s]+/).map(Number.parseFloat);
