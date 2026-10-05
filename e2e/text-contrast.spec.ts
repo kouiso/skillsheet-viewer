@@ -2,7 +2,7 @@ import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
 import { createRealVolumeDemoSheet } from '@/db/fixture';
 import { authFile } from './auth';
-import { contrastRatio, readTextColors, requiredTextRatio } from './contrast';
+import { contrastRatio, readContrastColors, requiredTextRatio } from './contrast';
 
 // #369: 閲覧画面（/view/db/:id）の本文・メタ文字のコントラストを機械ゲート化する。
 // これまで入力境界（input-contrast.spec.ts）だけが機械計測で、採用担当者が実際に
@@ -49,7 +49,8 @@ test.describe('/view/db/:id の文字コントラスト', () => {
           // クライアント描画を待てないことがある）。フィクスチャ固有のスキル名を見る。
           await page.locator('[title="TypeScript/JavaScript"]').first().waitFor();
 
-          const result = await page.evaluate(readTextColors, undefined);
+          const result = await page.evaluate(readContrastColors, undefined);
+          expect(result.unsupported, '未対応の背景を合格として扱わないこと').toEqual([]);
           // 計測対象がゼロだと「違反ゼロ」で vacuous pass する。フィクスチャの
           // 文字量から数十要素は必ずあるはずなので下限で枯れを検出する。
           expect(result.measured, '計測対象のテキスト要素が存在すること').toBeGreaterThan(30);
