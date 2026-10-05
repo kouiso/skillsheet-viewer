@@ -69,6 +69,21 @@ describe('detailBaseline', () => {
     expect(baseline).toBeCloseTo(2026 + 8 / 12, 6);
   });
 
+  it('終端「現在」の案件は基準に実行時点を混ぜず、確定済みの開始月を使う', () => {
+    // 「現在」を実行時点で比べると、実行した月で基準がずれて結果が変わる
+    // （月末・月初の境界で詳細/簡約が入れ替わった不具合）。基準に寄与できる
+    // 確定値は開始月だけなので、継続中の案件は開始月で基準に参加する。
+    const baseline = detailBaseline([item('ongoing', '2026.03 — 現在'), item('closed', '2020.01 — 2020.12')]);
+    // 2026.03 = 2026 + 2/12（実行月ではなく開始月）
+    expect(baseline).toBeCloseTo(2026 + 2 / 12, 6);
+  });
+
+  it('終端「現在」しか無くても確定済みの開始月から基準が立つ', () => {
+    const baseline = detailBaseline([item('a', '2019.05 — 現在'), item('b', '2023.07 — 現在')]);
+    // 2023.07 = 2023 + 6/12
+    expect(baseline).toBeCloseTo(2023 + 6 / 12, 6);
+  });
+
   it('1 件も解釈できなければ null', () => {
     expect(detailBaseline([item('a', '')])).toBeNull();
   });
@@ -115,6 +130,25 @@ describe('resolveDetailLevels', () => {
   it('period が解釈できない案件は簡約版に落とす', () => {
     const items = [item('recent', '2026.01 — 2026.09'), item('unknown', '', 'PL')];
     expect(resolveDetailLevels(items).levelById.get('unknown')).toBe('compact');
+  });
+
+  it('継続中の案件は基準との差を取らず常に詳細版', () => {
+    // 終端「現在」の end は実行時点なので、差分を取ると時計が漏れる。
+    // 継続中は「今も稼働している」以上に直近になりようがないので常に詳細版。
+    const items = [item('ongoing', '2010.01 — 現在'), item('recent', '2026.01 — 2026.09')];
+    expect(resolveDetailLevels(items).levelById.get('ongoing')).toBe('detail');
+  });
+
+  it('基準が実行日で動かないので、カットオフ境界の案件は月をまたいでも詳細/簡約が不変', () => {
+    // 不具合の再現: 終了が基準からちょうど 24 ヶ月前の案件は、基準が実行月で
+    // 動くと月末・月初の境界で詳細→簡約へ転落した。基準はシート内の確定値
+    // （この例では継続中案件の開始月 2026.10）に固定される。
+    const items = [item('ongoing', '2026.10 — 現在'), item('edge', '2024.09 — 2024.10', 'SE')];
+    // 基準 2026.10 から 24 ヶ月前 — カットオフちょうど内側なので詳細版
+    expect(resolveDetailLevels(items).levelById.get('edge')).toBe('detail');
+    // 25 ヶ月前なら簡約版
+    const older = [item('ongoing', '2026.10 — 現在'), item('edge', '2024.08 — 2024.09', 'SE')];
+    expect(resolveDetailLevels(older).levelById.get('edge')).toBe('compact');
   });
 
   it('detailCount は詳細版の件数と一致する', () => {

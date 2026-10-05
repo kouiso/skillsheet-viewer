@@ -467,7 +467,9 @@ function buildProject(
  * 順序は「エディタでの会社の並び順」であって期間の新しさではない
  * （group-by-company.ts のコメント: 「companies 順を正とし」）。エディタで会社の並びを
  * 変えると、期間上は最新でない会社に塗り帯が付いたままになる欠陥だった（レビュー指摘）。
- * 期間の終了年月（`parsePeriodBounds` — 「現在」は実行時点扱い）が最大の会社を選ぶ。
+ * 期間の終了年月が最大の会社を選ぶ。終端「現在」の会社は終わっていないので、
+ * `parsePeriodBounds` が返す実行時点ではなく常に最新側として扱う（実行時点で
+ * 比べると、未来の確定終了月を持つ会社との間で月をまたいだ日に順位が入れ替わる）。
  * 同着は開始が遅い方を優先し、それも同着なら先に見つかった方（配列順）を保つ。
  * 期間を解釈できない会社は最新候補にしない。
  */
@@ -478,9 +480,10 @@ function resolveLatestIndex(groups: { company: CompanyInfo | undefined; items: P
   groups.forEach((g, index) => {
     const bounds = parsePeriodBounds(resolveCompanyPeriod(g.company, g.items));
     if (!bounds) return;
-    if (bounds.end > latestEnd || (bounds.end === latestEnd && bounds.start > latestStart)) {
+    const end = bounds.openEnded ? Number.POSITIVE_INFINITY : bounds.end;
+    if (end > latestEnd || (end === latestEnd && bounds.start > latestStart)) {
       latest = index;
-      latestEnd = bounds.end;
+      latestEnd = end;
       latestStart = bounds.start;
     }
   });
