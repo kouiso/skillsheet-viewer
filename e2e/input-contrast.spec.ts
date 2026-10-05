@@ -1,10 +1,11 @@
 import { expect, type Locator, test } from '@playwright/test';
-import { contrastRatio, readBorderColors } from './contrast';
+import { contrastRatio, readContrastColors } from './contrast';
 
 // 輝度・実効色の計算は e2e/contrast.ts に集約（#369 の文字コントラスト計測と共有）。
 // 半透明色は evaluate 内で実効色へ合成済みなので、ここでは比率を取るだけ。
 async function borderContrast(input: Locator) {
-  const { background, borders } = await input.evaluate(readBorderColors);
+  const { background, borders, unsupported } = await input.evaluate(readContrastColors);
+  expect(unsupported, '境界線の背景が計測可能であること').toEqual([]);
   if (!background) return 0;
   return Math.min(...borders.map((border) => (border.color === null ? 0 : contrastRatio(border.color, background))));
 }

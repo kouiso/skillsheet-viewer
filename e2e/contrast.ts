@@ -4,7 +4,7 @@
  * 構成は 2 層:
  * - `relativeLuminance` / `contrastRatio` / `requiredTextRatio`
  *   …純粋な数値計算。DOM 計測の結果（実効 RGBA）を受けて Node 側で使う。
- * - `readBorderColors` / `readTextColors`
+ * - `readContrastColors`
  *   …locator.evaluate / page.evaluate に渡してブラウザ内で実行する DOM 計測関数。
  *   Playwright は渡した関数を文字列化して送るため、これらは他の export や
  *   import した実行時値を参照しない自己完結コードにする必要がある。
@@ -40,91 +40,13 @@ export function requiredTextRatio(fontSizePx: number, fontWeight: number): numbe
   return large ? 3 : 4.5;
 }
 
-/** locator.evaluate() に渡す、入力要素の境界色・実効背景色の読み取り結果。 */
-export interface BorderColors {
-  /** 要素自身〜祖先の background-color を合成した実効背景（不透明）。分解不能時は null。 */
-  background: Rgba | null;
-  /** 4辺ぶん。幅 1px 未満・none/hidden の辺は color:null（旧実装どおり 0 扱いにする）。 */
-  borders: { side: string; color: Rgba | null }[];
+/** 未対応の描画効果は計測成功として扱わず、呼び出し側のゲートで失敗させる。 */
+export interface UnsupportedPaint {
+  path: string;
+  reason: string;
 }
 
-/**
- * 要素の border 4 辺と実効背景色を読み取る。半透明色は実効色へ合成する
- * （旧 borderContrast は半透明で throw していた）。背景側は祖先の背景層と
- * opacity を考慮する。evaluate 転送のため自己完結。
- */
-export function readBorderColors(element: Element): BorderColors {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 1;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('色の計測用Canvasを作成できません');
-
-  const parse = (css: string): [number, number, number, number] | null => {
-    if (!css || css === 'transparent' || !CSS.supports('color', css)) return null;
-    ctx.clearRect(0, 0, 1, 1);
-    ctx.fillStyle = css;
-    ctx.fillRect(0, 0, 1, 1);
-    const d = ctx.getImageData(0, 0, 1, 1).data;
-    return [d[0], d[1], d[2], d[3] / 255];
-  };
-  const compositeOver = (
-    fg: readonly [number, number, number, number],
-    bg: readonly [number, number, number, number],
-  ): [number, number, number, number] => {
-    const a = fg[3] + bg[3] * (1 - fg[3]);
-    if (a <= 0) return [0, 0, 0, 0];
-    const mix = (i: number) => (fg[i] * fg[3] + bg[i] * bg[3] * (1 - fg[3])) / a;
-    return [mix(0), mix(1), mix(2), a];
-  };
-  // el から html まで遡り、各層の background-color を「その層とその祖先の
-  // opacity を掛けた実効 α」で上から順に合成する。最初の不透明層で打ち切り、
-  // 全て透明なら UA の canvas 色（白）を下敷きにする。
-  const effectiveBackground = (el: Element): [number, number, number, number] | null => {
-    const chain: Element[] = [];
-    for (let e: Element | null = el; e; e = e.parentElement) chain.push(e);
-    const styles = chain.map((e) => getComputedStyle(e));
-    // chain[i] とその祖先すべての opacity 積（i 以降の suffix 積）
-    const suffix = new Array<number>(chain.length).fill(1);
-    let acc = 1;
-    for (let i = chain.length - 1; i >= 0; i--) {
-      const op = Number.parseFloat(styles[i].opacity);
-      acc *= Number.isFinite(op) ? op : 1;
-      suffix[i] = acc;
-    }
-    const layers: [number, number, number, number][] = [];
-    let bottom: [number, number, number, number] = [255, 255, 255, 1];
-    for (let i = 0; i < chain.length; i++) {
-      if (styles[i].display === 'contents') continue;
-      const parsed = parse(styles[i].backgroundColor);
-      if (!parsed || parsed[3] <= 0) continue;
-      const a = parsed[3] * suffix[i];
-      if (a <= 0) continue;
-      if (a >= 1) {
-        bottom = [parsed[0], parsed[1], parsed[2], 1];
-        break;
-      }
-      layers.push([parsed[0], parsed[1], parsed[2], a]);
-    }
-    let bg = bottom;
-    for (let i = layers.length - 1; i >= 0; i--) bg = compositeOver(layers[i], bg);
-    return [bg[0], bg[1], bg[2], 1];
-  };
-
-  const style = getComputedStyle(element);
-  const background = effectiveBackground(element);
-  const borders = (['top', 'right', 'bottom', 'left'] as const).map((side) => {
-    const width = Number.parseFloat(style.getPropertyValue(`border-${side}-width`));
-    const lineStyle = style.getPropertyValue(`border-${side}-style`);
-    if (width < 1 || lineStyle === 'none' || lineStyle === 'hidden') return { side, color: null };
-    const parsed = parse(style.getPropertyValue(`border-${side}-color`));
-    if (!parsed || !background) return { side, color: null };
-    const color = compositeOver(parsed, background);
-    return { side, color: [color[0], color[1], color[2], 1] as Rgba };
-  });
-  return { background, borders };
-}
-
-/** readTextColors() が返す、1 要素ぶんの計測結果。比較としきい値判定は Node 側で行う。 */
+/** readContrastColors() が返す、1 要素ぶんの計測結果。比較としきい値判定は Node 側で行う。 */
 export interface TextColorSample {
   /** 人が読める簡易パス（tag#id / tag.class を親 2 段まで連結） */
   path: string;
@@ -141,6 +63,9 @@ export interface TextColorSample {
 }
 
 export interface TextColorReadResult {
+  unsupported: UnsupportedPaint[];
+  background: Rgba | null;
+  borders: { side: string; color: Rgba | null }[];
   /** 計測できたテキスト要素数（セレクタ枯れの vacuous pass 防止に使う） */
   measured: number;
   samples: TextColorSample[];
@@ -148,13 +73,13 @@ export interface TextColorReadResult {
 
 /**
  * 画面内の「直接のテキストノードを持つ可視要素」をすべて走査し、実効文字色・
- * 実効背景色・書体メトリクスを返す。page.evaluate(readTextColors) で使う。
+ * 実効背景色・書体メトリクスを返す。page.evaluate(readContrastColors) で使う。
  * 画像内の文字・svg は対象外、0 サイズ（sr-only 等）や祖先の display:none /
  * visibility:hidden / opacity:0 はスキップする。自己完結（evaluate 転送）。
  */
 // Playwright の evaluate(fn, arg) は arg を省略できないため、引数は nullable にして
 // 呼び出し側で undefined を渡す形にする（型付きオーバーロードに合わせるため）。
-export function readTextColors(root: Element | null | undefined): TextColorReadResult {
+export function readContrastColors(root: Element | null | undefined): TextColorReadResult {
   const scope: ParentNode = root ?? document.body;
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 1;
@@ -178,39 +103,43 @@ export function readTextColors(root: Element | null | undefined): TextColorReadR
     const mix = (i: number) => (fg[i] * fg[3] + bg[i] * bg[3] * (1 - fg[3])) / a;
     return [mix(0), mix(1), mix(2), a];
   };
-  const effectiveColors = (el: Element) => {
-    const chain: Element[] = [];
-    for (let e: Element | null = el; e; e = e.parentElement) chain.push(e);
-    const styles = chain.map((e) => getComputedStyle(e));
-    const suffix = new Array<number>(chain.length).fill(1);
-    let acc = 1;
-    for (let i = chain.length - 1; i >= 0; i--) {
-      const op = Number.parseFloat(styles[i].opacity);
-      acc *= Number.isFinite(op) ? op : 1;
-      suffix[i] = acc;
-    }
-    const layers: [number, number, number, number][] = [];
-    let bottom: [number, number, number, number] = [255, 255, 255, 1];
-    let assumedBase = true;
-    for (let i = 0; i < chain.length; i++) {
-      if (styles[i].display === 'contents') continue;
-      const parsed = parse(styles[i].backgroundColor);
-      if (!parsed || parsed[3] <= 0) continue;
-      const a = parsed[3] * suffix[i];
-      if (a <= 0) continue;
-      if (a >= 1) {
-        bottom = [parsed[0], parsed[1], parsed[2], 1];
-        assumedBase = false;
-        break;
+  // 子孫の描画を親の背景へ合成してから、そのグループ全体に親の opacity を
+  // 一度だけ適用する。各層へ祖先 opacity の積を配ると背景と文字を二重に薄める。
+  const transparent: Rgba = [0, 0, 0, 0];
+  const effectiveColors = (
+    el: Element,
+    paint: string,
+  ): { color: Rgba; background: Rgba; assumedBase: boolean } | { reason: string } => {
+    let background: Rgba = transparent;
+    let color: Rgba = parse(paint) ?? transparent;
+    for (let e: Element | null = el; e; e = e.parentElement) {
+      const st = getComputedStyle(e);
+      const effects = [
+        ['background-image', st.backgroundImage, 'none'],
+        ['filter', st.filter, 'none'],
+        ['backdrop-filter', st.backdropFilter, 'none'],
+        ['mix-blend-mode', st.mixBlendMode, 'normal'],
+        ['mask-image', st.maskImage, 'none'],
+      ];
+      for (const [property, value, normal] of effects) {
+        // 子の不透明面で隠れていれば祖先の背景画像・背景ぼかしは結果に寄与しない。
+        if ((property === 'background-image' || property === 'backdrop-filter') && background[3] >= 1) continue;
+        if (value && value !== normal) return { reason: `${property}: ${value}` };
       }
-      layers.push([parsed[0], parsed[1], parsed[2], a]);
+      const bg = st.display === 'contents' ? transparent : (parse(st.backgroundColor) ?? transparent);
+      background = compositeOver(background, bg);
+      color = compositeOver(color, bg);
+      // display:contents は自身のボックスを描画しないため opacity も作用しない。
+      const opacity = st.display === 'contents' ? 1 : Number.parseFloat(st.opacity);
+      background = [background[0], background[1], background[2], background[3] * opacity];
+      color = [color[0], color[1], color[2], color[3] * opacity];
     }
-    let background = bottom;
-    for (let i = layers.length - 1; i >= 0; i--) background = compositeOver(layers[i], background);
-
-    const parsedFg = parse(styles[0].color) ?? ([0, 0, 0, 1] as const);
-    const fg = compositeOver([parsedFg[0], parsedFg[1], parsedFg[2], parsedFg[3] * suffix[0]], background);
-    return { color: [fg[0], fg[1], fg[2], 1] as Rgba, background, assumedBase };
+    const canvasBase: Rgba = [255, 255, 255, 1];
+    return {
+      color: compositeOver(color, canvasBase),
+      background: compositeOver(background, canvasBase),
+      assumedBase: background[3] < 1,
+    };
   };
 
   const pathOf = (el: Element) => {
@@ -232,7 +161,36 @@ export function readTextColors(root: Element | null | undefined): TextColorReadR
   // 装飾用途で読み上げ対象外に指定された領域（SC 1.4.3 は装飾・偶発的な文字を除外する）。
   const SKIP_SELECTOR = 'svg,script,style,noscript,template,select,option,head,[aria-hidden="true"]';
   const samples: TextColorSample[] = [];
-  for (const el of scope.querySelectorAll('*')) {
+  const unsupported: UnsupportedPaint[] = [];
+  const borders: { side: string; color: Rgba | null }[] = [];
+  let borderBackground: Rgba | null = null;
+  if (root) {
+    const st = getComputedStyle(root);
+    for (const side of ['top', 'right', 'bottom', 'left']) {
+      const width = Number.parseFloat(st.getPropertyValue(`border-${side}-width`));
+      const lineStyle = st.getPropertyValue(`border-${side}-style`);
+      const result = effectiveColors(root, st.getPropertyValue(`border-${side}-color`));
+      // border-box 以外では境界線の下に自身の背景が無い。未対応の合成を推測しない。
+      const reason =
+        'reason' in result
+          ? result.reason
+          : st.backgroundClip !== 'border-box'
+            ? `background-clip: ${st.backgroundClip}`
+            : null;
+      if (reason) {
+        unsupported.push({ path: pathOf(root), reason });
+        borders.push({ side, color: null });
+      } else if ('color' in result) {
+        borderBackground = result.background;
+        borders.push({
+          side,
+          color: width < 1 || lineStyle === 'none' || lineStyle === 'hidden' ? null : result.color,
+        });
+      }
+    }
+  }
+  const elements = root ? [root, ...scope.querySelectorAll('*')] : [...scope.querySelectorAll('*')];
+  for (const el of elements) {
     if (el.closest(SKIP_SELECTOR)) continue;
     // 直接のテキストノードだけ見る — 子要素に含まれる文字は子側で計測するので
     // これで画面内の可視テキストを重複なく網羅できる。
@@ -281,7 +239,12 @@ export function readTextColors(root: Element | null | undefined): TextColorReadR
     const st = getComputedStyle(el);
     const weightRaw = Number.parseFloat(st.fontWeight);
     const fontWeight = Number.isFinite(weightRaw) ? weightRaw : st.fontWeight === 'bold' ? 700 : 400;
-    const { color, background, assumedBase } = effectiveColors(el);
+    const result = effectiveColors(el, st.color);
+    if ('reason' in result) {
+      unsupported.push({ path: pathOf(el), reason: result.reason });
+      continue;
+    }
+    const { color, background, assumedBase } = result;
     samples.push({
       path: pathOf(el),
       text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40),
@@ -292,5 +255,5 @@ export function readTextColors(root: Element | null | undefined): TextColorReadR
       assumedBase,
     });
   }
-  return { measured: samples.length, samples };
+  return { measured: samples.length, samples, unsupported, background: borderBackground, borders };
 }
