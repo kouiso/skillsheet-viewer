@@ -143,10 +143,7 @@ describe('resolveDetailLevels', () => {
     // 不具合の再現: 終了が基準からちょうど 24 ヶ月前の案件は、基準が実行月で
     // 動くと月末・月初の境界で詳細→簡約へ転落した。基準はシート内の確定値
     // （この例では継続中案件の開始月 2026.10）に固定される。
-    const items = [
-      item('ongoing', '2026.10 — 現在'),
-      item('edge', '2024.09 — 2024.10', 'SE'),
-    ];
+    const items = [item('ongoing', '2026.10 — 現在'), item('edge', '2024.09 — 2024.10', 'SE')];
     // 基準 2026.10 から 24 ヶ月前 — カットオフちょうど内側なので詳細版
     expect(resolveDetailLevels(items).levelById.get('edge')).toBe('detail');
     // 25 ヶ月前なら簡約版
