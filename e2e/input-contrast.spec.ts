@@ -1,5 +1,6 @@
 import { expect, type Locator, test } from '@playwright/test';
 import { contrastRatio, readContrastColors } from './contrast';
+import { hasStableOpaquePaint } from './paint-stability';
 
 // 輝度・実効色の計算は e2e/contrast.ts に集約（#369 の文字コントラスト計測と共有）。
 // 半透明色は evaluate 内で実効色へ合成済みなので、ここでは比率を取るだけ。
@@ -26,11 +27,19 @@ for (const theme of ['light', 'dark'] as const) {
           await expect(inputs.first()).toBeVisible();
           expect(await inputs.count()).toBeGreaterThan(0);
           for (const input of await inputs.all()) {
+            // toBeVisibleはopacity:0も可視と扱う。祖先のfadeが完了してから確定色を測る。
+            await expect
+              .poll(() => input.evaluate(hasStableOpaquePaint), {
+                message: '入力欄と祖先の登場モーションが完了すること',
+              })
+              .toBe(true);
             await expect.poll(() => borderContrast(input)).toBeGreaterThanOrEqual(3);
             await input.hover();
+            await expect.poll(() => input.evaluate(hasStableOpaquePaint)).toBe(true);
             await expect.poll(() => borderContrast(input)).toBeGreaterThanOrEqual(3);
             await page.mouse.move(0, 0);
             await input.focus();
+            await expect.poll(() => input.evaluate(hasStableOpaquePaint)).toBe(true);
             await expect.poll(() => borderContrast(input)).toBeGreaterThanOrEqual(3);
             await input.evaluate((element) => element.blur());
           }

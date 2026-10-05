@@ -99,11 +99,17 @@ test.describe('/view/db/:id の文字コントラスト', () => {
           ).toEqual([]);
           // 案件のない一覧は共通Header経路。こちらも内容に左右されない不透明面を保つ。
           await page.goto('/view');
-          await expect(page.locator('header')).toHaveCSS(
-            'background-color',
-            theme === 'dark' ? 'rgb(15, 19, 22)' : 'rgb(255, 255, 255)',
-          );
-          await expect(page.locator('header')).toHaveCSS('backdrop-filter', 'none');
+          await expect(page.getByRole('textbox', { name: 'シート名で検索' })).toBeVisible();
+          // ストリーミングの隠し重複と可視ヘッダーを区別する。可視2件をfirstで隠さない。
+          const listHeaders = page.locator('header:visible');
+          await expect(listHeaders).toHaveCount(1);
+          for (const header of await listHeaders.all()) {
+            await expect(header).toHaveCSS(
+              'background-color',
+              theme === 'dark' ? 'rgb(15, 19, 22)' : 'rgb(255, 255, 255)',
+            );
+            await expect(header).toHaveCSS('backdrop-filter', 'none');
+          }
         } finally {
           await context.close();
         }
