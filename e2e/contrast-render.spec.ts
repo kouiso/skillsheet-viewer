@@ -128,3 +128,25 @@ test('clipが作用しないstatic要素の可視文字は除外しない', asyn
   expect(result.samples).toHaveLength(1);
   expect(contrastRatio(result.samples[0].color, result.samples[0].background)).toBe(1);
 });
+
+for (const [label, markup] of [
+  ['text-fill-color', '<p style="color:black;-webkit-text-fill-color:white;background:white">実際の字色</p>'],
+  ['display:contents', '<div style="display:contents;color:#eee">ボックスなしの可視文字</div>'],
+  ['aria-hidden', '<p aria-hidden="true" style="color:white;background:white">可視文字</p>'],
+]) {
+  test(`可視グリフの低コントラストを見逃さない: ${label}`, async ({ page }) => {
+    await page.setContent(`<body style="background:white">${markup}</body>`);
+    const result = await page.evaluate(readContrastColors, undefined);
+    expect(result.unsupported).toEqual([]);
+    expect(result.samples).toHaveLength(1);
+    expect(contrastRatio(result.samples[0].color, result.samples[0].background)).toBeLessThan(1.2);
+  });
+}
+
+for (const hiddenStyle of ['display:none', 'opacity:0']) {
+  test(`display:contentsの文字も非表示の祖先では除外する: ${hiddenStyle}`, async ({ page }) => {
+    await page.setContent(`<div style="${hiddenStyle}"><div style="display:contents">非表示</div></div>`);
+    const result = await page.evaluate(readContrastColors, undefined);
+    expect(result.samples).toEqual([]);
+  });
+}

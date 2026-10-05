@@ -84,6 +84,19 @@ test.describe('/view/db/:id の文字コントラスト', () => {
             violations,
             `AA 未満の文字が ${violations.length} 件:\n${violations.map(describe).join('\n')}`,
           ).toEqual([]);
+          // 技術候補の分類見出しはaria-hiddenでも視覚表示されるため計測対象に含める。
+          await page.getByRole('combobox', { name: '技術を選ぶ' }).focus();
+          const options = page.getByRole('listbox', { name: '技術の候補' });
+          await expect(options).toBeVisible();
+          const optionColors = await options.evaluate(readContrastColors);
+          expect(optionColors.unsupported).toEqual([]);
+          expect(optionColors.measured).toBeGreaterThan(0);
+          expect(
+            optionColors.samples.filter(
+              (sample) =>
+                contrastRatio(sample.color, sample.background) < requiredTextRatio(sample.fontSize, sample.fontWeight),
+            ),
+          ).toEqual([]);
           // 案件のない一覧は共通Header経路。こちらも内容に左右されない不透明面を保つ。
           await page.goto('/view');
           await expect(page.locator('header')).toHaveCSS(

@@ -159,8 +159,8 @@ export function readContrastColors(root: Element | null | undefined): TextColorR
   };
 
   // fill/stroke 駆動で color を見ても意味がない領域、レンダリングされない領域、
-  // 装飾用途で読み上げ対象外に指定された領域（SC 1.4.3 は装飾・偶発的な文字を除外する）。
-  const SKIP_SELECTOR = 'svg,script,style,noscript,template,select,option,head,[aria-hidden="true"]';
+  // aria-hidden は読み上げの指定に過ぎず、見える文字を除外する根拠にはしない。
+  const SKIP_SELECTOR = 'svg,script,style,noscript,template,select,option,head';
   const samples: TextColorSample[] = [];
   const unsupported: UnsupportedPaint[] = [];
   const borders: { side: string; color: Rgba | null }[] = [];
@@ -221,14 +221,20 @@ export function readContrastColors(root: Element | null | undefined): TextColorR
 
     const htmlEl = el as HTMLElement;
     // display:none・visibility:hidden・opacity:0（祖先含む）をまとめて弾く。
-    if (typeof htmlEl.checkVisibility === 'function') {
+    if (getComputedStyle(el).display !== 'contents' && typeof htmlEl.checkVisibility === 'function') {
       if (!htmlEl.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
     } else {
-      // 古いブラウザ向けフォールバック（実際は Chromium のみで動かす想定）。
-      let hidden = false;
+      // display:contents は自身のボックスが無くても直接の文字が描画される。
+      // 文字のvisibilityと、祖先による非描画だけを確認する。
+      const ownVisibility = getComputedStyle(el).visibility;
+      let hidden = ownVisibility === 'hidden' || ownVisibility === 'collapse';
       for (let e: Element | null = el; e; e = e.parentElement) {
         const st = getComputedStyle(e);
-        if (st.display === 'none' || st.visibility === 'hidden' || st.visibility === 'collapse') {
+        if (
+          st.display === 'none' ||
+          st.contentVisibility === 'hidden' ||
+          (st.display !== 'contents' && Number.parseFloat(st.opacity) === 0)
+        ) {
           hidden = true;
           break;
         }
@@ -255,7 +261,9 @@ export function readContrastColors(root: Element | null | undefined): TextColorR
     const st = getComputedStyle(el);
     const weightRaw = Number.parseFloat(st.fontWeight);
     const fontWeight = Number.isFinite(weightRaw) ? weightRaw : st.fontWeight === 'bold' ? 700 : 400;
-    const result = effectiveColors(el, st.color);
+    // text-fill-color は color と独立して実際のグリフを塗る（通常はcurrentColor）。
+    const fill = st.getPropertyValue('-webkit-text-fill-color');
+    const result = effectiveColors(el, fill && fill !== 'currentcolor' ? fill : st.color);
     if ('reason' in result) {
       unsupported.push({ path: pathOf(el), reason: result.reason });
       continue;
