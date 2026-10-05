@@ -1,4 +1,5 @@
 import { act, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeModeProvider, useThemeMode } from './theme-context';
 
@@ -139,6 +140,108 @@ describe('ThemeContext', () => {
       expect(result.current.mode).toBe('dark');
       expect(document.documentElement.classList.contains('dark')).toBe(true);
       expect(localStorage.getItem('theme-mode')).toBe('dark');
+    });
+
+    it.each(['unexpected-value', 'DARK', 'null', ''])('不正な保存値 %s は OS のテーマへ戻すこと', (saved) => {
+      localStorage.setItem('theme-mode', saved);
+      vi.mocked(global.matchMedia).mockReturnValue({ matches: true } as ReturnType<typeof global.matchMedia>);
+      const { result } = renderHook(() => useThemeMode(), { wrapper: ThemeModeProvider });
+      expect(result.current.mode).toBe('dark');
+      expect(document.documentElement).toHaveClass('dark');
+      act(() => result.current.toggleTheme());
+      expect(result.current.mode).toBe('light');
+      expect(document.documentElement).not.toHaveClass('dark');
+    });
+
+    it('保存値の読取を拒否されても OS 設定で表示し、切り替えできること', () => {
+      vi.mocked(global.matchMedia).mockReturnValue({ matches: true } as ReturnType<typeof global.matchMedia>);
+      const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new DOMException('保存領域を利用できません', 'SecurityError');
+      });
+      try {
+        const { result } = renderHook(() => useThemeMode(), { wrapper: ThemeModeProvider });
+        expect(result.current.mode).toBe('dark');
+        expect(document.documentElement).toHaveClass('dark');
+        act(() => result.current.toggleTheme());
+        expect(result.current.mode).toBe('light');
+        expect(document.documentElement).not.toHaveClass('dark');
+      } finally {
+        read.mockRestore();
+      }
+    });
+
+    it.each([false, true])('保存拒否でも表示と連続切り替えを保つこと（途中から拒否: %s）', (afterMount) => {
+      localStorage.setItem('theme-mode', 'dark');
+      const write = vi.spyOn(Storage.prototype, 'setItem');
+      const denyWrite = () =>
+        write.mockImplementation(() => {
+          throw new DOMException('保存容量が不足しています', 'QuotaExceededError');
+        });
+      try {
+        if (!afterMount) denyWrite();
+        const { result } = renderHook(() => useThemeMode(), { wrapper: ThemeModeProvider });
+        expect(result.current.mode).toBe('dark');
+        expect(document.documentElement).toHaveClass('dark');
+        if (afterMount) denyWrite();
+        act(() => result.current.toggleTheme());
+        expect(result.current.mode).toBe('light');
+        expect(document.documentElement).not.toHaveClass('dark');
+        act(() => result.current.toggleTheme());
+        expect(result.current.mode).toBe('dark');
+        expect(document.documentElement).toHaveClass('dark');
+      } finally {
+        write.mockRestore();
+      }
+    });
+
+    it.each([false, true])('保存領域自体の getter 拒否でも OS 設定を使うこと（dark: %s）', (systemDark) => {
+      vi.mocked(global.matchMedia).mockReturnValue({ matches: systemDark } as ReturnType<typeof global.matchMedia>);
+      const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage');
+      Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        get() {
+          throw new DOMException('保存領域を利用できません', 'SecurityError');
+        },
+      });
+      try {
+        const { result } = renderHook(() => useThemeMode(), { wrapper: ThemeModeProvider });
+        expect(result.current.mode).toBe(systemDark ? 'dark' : 'light');
+        expect(document.documentElement.classList.contains('dark')).toBe(systemDark);
+        act(() => result.current.toggleTheme());
+        expect(document.documentElement.classList.contains('dark')).toBe(!systemDark);
+      } finally {
+        if (descriptor) Object.defineProperty(window, 'localStorage', descriptor);
+      }
+    });
+
+    it('不正値かつ OS light では light を選ぶこと', () => {
+      localStorage.setItem('theme-mode', 'invalid');
+      vi.mocked(global.matchMedia).mockReturnValue({ matches: false } as ReturnType<typeof global.matchMedia>);
+      const { result } = renderHook(() => useThemeMode(), { wrapper: ThemeModeProvider });
+      expect(result.current.mode).toBe('light');
+      expect(document.documentElement).not.toHaveClass('dark');
+    });
+
+    it('SSR は保存領域へアクセスせず一定の初期表示を返すこと', () => {
+      const read = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new DOMException('SSR で保存領域へ触れてはいけません', 'SecurityError');
+      });
+      const write = vi.spyOn(Storage.prototype, 'setItem');
+      const Probe = () => <span>{useThemeMode().mode}</span>;
+      try {
+        expect(
+          renderToString(
+            <ThemeModeProvider>
+              <Probe />
+            </ThemeModeProvider>,
+          ),
+        ).toBe('<span>light</span>');
+        expect(read).not.toHaveBeenCalled();
+        expect(write).not.toHaveBeenCalled();
+      } finally {
+        read.mockRestore();
+        write.mockRestore();
+      }
     });
 
     it('テーマ変更時にlocalStorageに保存されること', async () => {

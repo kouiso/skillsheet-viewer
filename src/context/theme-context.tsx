@@ -36,8 +36,13 @@ export const ThemeModeProvider = ({ children }: ThemeModeProviderProps) => {
 
   // マウント時に localStorage / システム設定から初期テーマを復元する
   useEffect(() => {
-    const saved = localStorage.getItem('theme-mode') as ThemeMode | null;
-    if (saved) {
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem('theme-mode');
+    } catch {
+      // 保存領域の利用拒否は閲覧の失敗にせず、OS の設定へフォールバックする。
+    }
+    if (saved === 'light' || saved === 'dark') {
       setMode(saved);
     } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
       setMode('dark');
@@ -49,13 +54,17 @@ export const ThemeModeProvider = ({ children }: ThemeModeProviderProps) => {
     if (!restored) {
       return;
     }
-    // テーマが変更されたらlocalStorageに保存し、html要素の dark クラスを切り替える
-    localStorage.setItem('theme-mode', mode);
+    // 永続化できない環境でも、この画面で選んだテーマは利用できるようにする。
     const root = document.documentElement;
     if (mode === 'dark') {
       root.classList.add('dark');
     } else {
       root.classList.remove('dark');
+    }
+    try {
+      localStorage.setItem('theme-mode', mode);
+    } catch {
+      // 容量不足・利用拒否時は再訪時の保存を諦め、現在の表示と操作を保つ。
     }
   }, [mode, restored]);
 
