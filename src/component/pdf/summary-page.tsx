@@ -246,7 +246,10 @@ export function SummaryPage({
       )}
 
       {summary.profileRows.length > 0 && (
-        <View style={styles.profileBand}>
+        // wrap={false}: flex:1 のスペーサーで下端に揃えた帯が頁境界にまたがると、
+        // 行だけ残して帯の残骸（空の殻）が次頁を作り「見出しとフッタだけの空頁」になる。
+        // 帯ごと次頁へ送って空頁・行の分断を防ぐ。
+        <View wrap={false} style={styles.profileBand}>
           {summary.profileRows.map((row) => (
             <View key={row.label} style={styles.profileCell}>
               <PrintText style={styles.profileLabel}>{row.label}</PrintText>
