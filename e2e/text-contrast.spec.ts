@@ -63,9 +63,7 @@ test.describe('/view/db/:id の文字コントラスト', () => {
             .filter((sample) => sample.ratio < sample.required);
 
           // 監視が効いている証跡を CI ログに残す（違反ゼロ＝ vacuous pass の区別用）。
-          const minRatio = Math.min(
-            ...result.samples.map((s) => contrastRatio(s.color, s.background)),
-          );
+          const minRatio = Math.min(...result.samples.map((s) => contrastRatio(s.color, s.background)));
           console.log(
             `[text-contrast] ${theme} ${width}px: measured=${result.measured}, min-ratio=${minRatio.toFixed(2)}`,
           );
