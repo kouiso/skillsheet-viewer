@@ -6,7 +6,10 @@ describe('ThemeContext', () => {
   beforeEach(() => {
     // localStorageをクリア
     localStorage.clear();
+    // 前テストで html に残った dark クラスを戻す
+    document.documentElement.classList.remove('dark');
     // matchMediaのモックをリセット
+    // （vi.restoreAllMocks() は setup.ts 側の matchMedia モック実装まで消すため使わない）
     vi.clearAllMocks();
   });
 
@@ -115,6 +118,27 @@ describe('ThemeContext', () => {
       await waitFor(() => {
         expect(result.current.mode).toBe('light');
       });
+    });
+
+    it('保存済みテーマの復元完了前に SSR 初期値で localStorage を上書きしないこと（#374）', () => {
+      localStorage.setItem('theme-mode', 'dark');
+      // act() は全 effect をフラッシュするため、マウントコミットで一瞬だけ行われる
+      // 誤った 'light' 書き込みは最終値からは見えない。setItem の呼び出し履歴で検証する。
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
+
+      const { result } = renderHook(() => useThemeMode(), {
+        wrapper: ThemeModeProvider,
+      });
+
+      const themeWrites = setItemSpy.mock.calls.filter(([key]) => key === 'theme-mode').map(([, value]) => value);
+      // 期待失敗で中断される前にスパイを戻し、以降のテストへ漏れないようにする
+      setItemSpy.mockRestore();
+      // バグがあると最初に 'light'（SSR 初期値）を書き込んでから 'dark' に訂正する
+      expect(themeWrites, '復元前に light を書き込まないこと').not.toContain('light');
+      // 復元完了後は保存値が反映されていること
+      expect(result.current.mode).toBe('dark');
+      expect(document.documentElement.classList.contains('dark')).toBe(true);
+      expect(localStorage.getItem('theme-mode')).toBe('dark');
     });
 
     it('テーマ変更時にlocalStorageに保存されること', async () => {
