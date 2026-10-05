@@ -1,0 +1,118 @@
+name: Real Data Check (PR)
+
+# PR の変更で PDF / XLSX が実データ上で崩れないかを見る。ci.yml の test は合成 fixture しか
+# 使わないため、実データの長さや件数でだけ起きる崩れはここでしか捕まらない。
+#
+# DB の本文は PR と無関係に変わるので、head だけで判定すると「データが原因の失敗」で
+# 無関係な PR まで赤になる。同じ時点の実データで base（main 側）と head（merge 結果）の両方を
+# 検査し、base は通るのに head で落ちた時だけこの PR の責任として赤にする。
+# base でも落ちている失敗は夜間の検査（pdf-layout-check.yml / xlsx-format-check.yml）と
+# ci-failure-notify.yml の Devin 依頼が拾う。
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    paths-ignore:
+      - '**/*.md'
+      - 'doc/**'
+
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
+concurrency:
+  group: real-data-pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # fork からの PR には secret が渡らず検査できない。draft は ci.yml と同じく待つ。
+  pdf-head:
+    name: PDF (head)
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
+    uses: ./.github/workflows/real-data-check.yml
+    with:
+      name: pdf
+      sheet-id: ${{ vars.PDF_CHECK_SHEET_ID }}
+      raster-deps: true
+      fail-on-error: false
+    secrets:
+      database-url: ${{ secrets.PDF_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}
+
+  pdf-base:
+    name: PDF (base)
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
+    uses: ./.github/workflows/real-data-check.yml
+    with:
+      name: pdf
+      sheet-id: ${{ vars.PDF_CHECK_SHEET_ID }}
+      raster-deps: true
+      ref: ${{ github.event.pull_request.base.sha }}
+      fail-on-error: false
+    secrets:
+      database-url: ${{ secrets.PDF_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}
+
+  xlsx-head:
+    name: XLSX (head)
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
+    uses: ./.github/workflows/real-data-check.yml
+    with:
+      name: xlsx
+      sheet-id: ${{ vars.XLSX_CHECK_SHEET_ID }}
+      test-paths: src/lib/export/xlsx-format-check.node.test.tsx
+      fail-on-error: false
+    secrets:
+      database-url: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}
+
+  xlsx-base:
+    name: XLSX (base)
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.draft == false
+    uses: ./.github/workflows/real-data-check.yml
+    with:
+      name: xlsx
+      sheet-id: ${{ vars.XLSX_CHECK_SHEET_ID }}
+      test-paths: src/lib/export/xlsx-format-check.node.test.tsx
+      ref: ${{ github.event.pull_request.base.sha }}
+      fail-on-error: false
+    secrets:
+      database-url: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}
+
+  verdict:
+    name: Real data check verdict
+    needs: [pdf-head, pdf-base, xlsx-head, xlsx-base]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Compare head with base
+        env:
+          PDF_HEAD: ${{ needs.pdf-head.outputs.result }}
+          PDF_BASE: ${{ needs.pdf-base.outputs.result }}
+          XLSX_HEAD: ${{ needs.xlsx-head.outputs.result }}
+          XLSX_BASE: ${{ needs.xlsx-base.outputs.result }}
+          HEAD_JOB: ${{ needs.pdf-head.result }}
+        run: |
+          if [[ "$HEAD_JOB" == skipped ]]; then
+            echo '::notice::fork からの PR か draft のため、実データ検査は行っていない。'
+            exit 0
+          fi
+          # 結果が空（検査の前に job ごと落ちた）は passed 以外として扱う。
+          judge() {
+            local label=$1 head=$2 base=$3
+            if [[ "$head" == passed ]]; then
+              echo "$label: head で通過"
+              return 0
+            fi
+            if [[ "$base" == passed ]]; then
+              echo "::error::$label: base（main 側）では通るのに、この PR の変更で落ちた。head の job ログで落ちたテスト名を確認すること。"
+              return 1
+            fi
+            echo "::warning::$label: base（main 側）でも落ちているため、この PR の変更が原因ではない（実データや設定が原因）。夜間の検査と Devin 依頼で扱う。"
+            return 0
+          }
+          status=0
+          judge PDF "$PDF_HEAD" "$PDF_BASE" || status=1
+          judge XLSX "$XLSX_HEAD" "$XLSX_BASE" || status=1
+          exit "$status"

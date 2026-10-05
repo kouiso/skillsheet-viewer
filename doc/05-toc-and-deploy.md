@@ -133,7 +133,7 @@ baseline 後は、新規・既存どちらも `pnpm db:migrate` を通常のデ�
 4. `psql -f script/sql/install-runtime-role.sql`（runtime LOGIN role・EXECUTE 付与・principals 登録。`-v runtime_role=... -v runtime_password=... -v owner_id=<SKILLSHEET_OWNER_ID>` が必須）
 5. `DATABASE_URL` を runtime role の接続文字列へ切り替えて redeploy
 
-定期チェック（PDF Layout Check / XLSX Format Check）を載せる環境では、上記に加えて
+定期チェック（PDF Layout Check / XLSX Format Check）と、同じ secret で動く PR の実データ検査（Real Data Check (PR)）を載せる環境では、上記に加えて
 `psql -f script/sql/install-check-role.sql` でチェック用 LOGIN role を用意する
 （`-v check_role=... -v check_password=... -v owner_id=<SKILLSHEET_OWNER_ID>` が必須）。
 権限は `skillsheet_private` の USAGE と read_snapshot / list_sheets の EXECUTE のみで、

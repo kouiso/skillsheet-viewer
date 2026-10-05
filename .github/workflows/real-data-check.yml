@@ -1,0 +1,166 @@
+name: Real Data Check
+
+# 実データ（DB の本番シート）で PDF / XLSX の崩れを検査する共通の本体。
+# 夜間の pdf-layout-check.yml / xlsx-format-check.yml と、PR の real-data-pr-check.yml から呼ぶ。
+# 公開リポジトリなので、経歴の本文が公開ログへ出ない仕組み（出力の非公開ファイル化・後片付け）を
+# ここ 1 か所で持つ。呼び出し側ごとに書き写すと、どれか 1 本で漏れたら終わりになるため。
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: 'ログファイル名の接頭辞（pdf / xlsx など）'
+        type: string
+        required: true
+      sheet-id:
+        description: '検査するシートの UUID'
+        type: string
+        required: true
+      test-paths:
+        description: 'vitest に渡すテストファイル（空白区切り）。空なら *.node.test.tsx をすべて流す'
+        type: string
+        default: ''
+      raster-deps:
+        description: 'PDF ページをビットマップ化する検査のために poppler / ghostscript / imagemagick を入れる'
+        type: boolean
+        default: false
+      ref:
+        description: 'checkout する ref。空ならイベントの既定（PR なら merge commit）'
+        type: string
+        default: ''
+      fail-on-error:
+        description: 'false なら検査が落ちても job は成功させ、結果を outputs.result で返す（PR で base と比べるため）'
+        type: boolean
+        default: true
+    secrets:
+      # 未設定でも起動はさせ、Validate で原因を名指しして止める。
+      database-url:
+        required: false
+      owner-id:
+        required: false
+    outputs:
+      result:
+        description: 'passed / failed'
+        value: ${{ jobs.check.outputs.result }}
+
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      result: ${{ steps.summary.outputs.result }}
+    env:
+      LOG_PREFIX: ${{ inputs.name }}
+      CHECK_SHEET_ID: ${{ inputs.sheet-id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.ref }}
+          # 後続の pnpm install / tsx / vitest が実行する第三者コードへ
+          # Git 認証情報を渡さない。この job は push しない。
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          # ci.yml と同じ理由で mise.toml を読めないため、バージョンを手動で同期させる。
+          node-version: '22.21.1'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install system dependencies for PDF rasterization
+        if: inputs.raster-deps
+        # ci.yml の test ジョブと同じ依存。ラスタ検査が PDF ページをビットマップ化する。
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
+
+      - name: Validate target sheet
+        id: validate
+        continue-on-error: ${{ !inputs.fail-on-error }}
+        env:
+          CHECK_DATABASE_URL: ${{ secrets.database-url }}
+        run: |
+          if [[ -z "$CHECK_DATABASE_URL" ]]; then
+            echo '::error::The check database URL secret must be configured.'
+            exit 1
+          fi
+          if [[ ! "$CHECK_SHEET_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo '::error::The check sheet id must be configured with a sheet UUID.'
+            exit 1
+          fi
+
+      - name: Dump blocks from database
+        id: dump
+        if: steps.validate.outcome == 'success'
+        continue-on-error: ${{ !inputs.fail-on-error }}
+        env:
+          DATABASE_URL: ${{ secrets.database-url }}
+          SKILLSHEET_OWNER_ID: ${{ secrets.owner-id }}
+        # 本文やDBエラーは非公開の一時ファイルに限定する。成果物へはアップロードしない。
+        # シートは --sheet-id で明示する（正本の全件 dump はしない #348）。
+        run: |
+          umask 077
+          status=0
+          pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/$LOG_PREFIX-dump.log" 2>&1 || status=$?
+          echo "Database dump finished (exit $status)."
+          exit "$status"
+
+      - name: Record dump evidence
+        if: steps.dump.outcome == 'success'
+        # M07 の完了条件（接続先識別・owner一致・件数・スナップショット）を
+        # 非秘密の識別子だけで実行ログへ残す。内容は dump-block.ts が
+        # 非秘密値だけを書く evidence ファイルで、本文・認証情報は入らない。
+        run: cat "$RUNNER_TEMP/blocks.evidence"
+
+      - name: Run checks against real data
+        id: test
+        if: steps.dump.outcome == 'success'
+        continue-on-error: ${{ !inputs.fail-on-error }}
+        env:
+          REAL_BLOCKS_JSON: ${{ runner.temp }}/blocks.json
+          TEST_PATHS: ${{ inputs.test-paths }}
+        # assertion の失敗文には実経歴が含まれうるため、成功時も公開ログへ転送しない。
+        run: |
+          umask 077
+          read -ra paths <<< "$TEST_PATHS"
+          status=0
+          pnpm exec vitest run --config vitest.config.pdf.ts "${paths[@]}" > "$RUNNER_TEMP/$LOG_PREFIX-check.log" 2>&1 || status=$?
+          echo "Real data checks finished (exit $status)."
+          exit "$status"
+
+      - name: Publish failed test names and per-rule counts
+        if: always()
+        # 公開ログへ出すのはテストの成否行（✓/×/FAIL の先頭印）と規則ごとの件数
+        # （PDF_LAYOUT_COUNTS 行）だけ。assertion の文や本文・座標は出さない。
+        run: |
+          if [[ -f "$RUNNER_TEMP/$LOG_PREFIX-check.log" ]]; then
+            # テスト名（✓/×/FAIL 行）と規則ごとの件数だけを転送する。行頭に
+            # アンカーする: 出力の途中に紛れた文字列（本文の断片やエラーメッセージ
+            # 内の文言）を拾わないため。テスト名行は src/ のパスを必ず含む。
+            sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/$LOG_PREFIX-check.log" |
+              grep -E '^[[:space:]]*(✓|×|✗)[[:space:]]+src/|^[[:space:]]*FAIL[[:space:]]+src/|^[[:space:]]*PDF_LAYOUT_COUNTS[[:space:]]' || true
+          fi
+
+      - name: Summarize result
+        id: summary
+        if: always()
+        env:
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+        run: |
+          if [[ "$TEST_OUTCOME" == success ]]; then
+            echo "result=passed" >> "$GITHUB_OUTPUT"
+          else
+            echo "result=failed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Remove private data and logs
+        if: always()
+        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/$LOG_PREFIX-dump.log" "$RUNNER_TEMP/$LOG_PREFIX-check.log"

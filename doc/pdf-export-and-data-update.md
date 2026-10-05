@@ -59,7 +59,7 @@ experience 等）を含むと、この構造描画ではなく旧 markdown 経�
 psql service=sheet -tA -c "SELECT COALESCE(json_agg(json_build_object('id',id,'type',type,'order',\"order\",'data',data) ORDER BY \"order\"), '[]'::json) FROM public.blocks WHERE sheet_id='<シート ID>'" > blocks.json
 ```
 
-CI の実データ検査（`.github/workflows/pdf-layout-check.yml`）は、同じ用途に `script/dump-block.ts` を使っている。
+CI の実データ検査（本体は `.github/workflows/real-data-check.yml`。夜間の `pdf-layout-check.yml` / `xlsx-format-check.yml` と PR の `real-data-pr-check.yml` から呼ぶ）は、同じ用途に `script/dump-block.ts` を使っている。
 
 ### 2. 印刷コードを呼ぶ
 
