@@ -49,6 +49,13 @@ test.describe('/view/db/:id の文字コントラスト', () => {
           // クライアント描画を待てないことがある）。フィクスチャ固有のスキル名を見る。
           await page.locator('[title="TypeScript/JavaScript"]').first().waitFor();
 
+          // 半透明の固定ヘッダーはスクロール下の内容でコントラストが変わる。
+          await expect(page.locator('header')).toHaveCSS(
+            'background-color',
+            theme === 'dark' ? 'rgb(10, 13, 15)' : 'rgb(246, 248, 248)',
+          );
+          await expect(page.locator('header')).toHaveCSS('backdrop-filter', 'none');
+          await expect(page.locator('header fieldset')).toHaveCSS('mask-image', 'none');
           const result = await page.evaluate(readContrastColors, undefined);
           expect(result.unsupported, '未対応の背景を合格として扱わないこと').toEqual([]);
           // 計測対象がゼロだと「違反ゼロ」で vacuous pass する。フィクスチャの
@@ -77,6 +84,13 @@ test.describe('/view/db/:id の文字コントラスト', () => {
             violations,
             `AA 未満の文字が ${violations.length} 件:\n${violations.map(describe).join('\n')}`,
           ).toEqual([]);
+          // 案件のない一覧は共通Header経路。こちらも内容に左右されない不透明面を保つ。
+          await page.goto('/view');
+          await expect(page.locator('header')).toHaveCSS(
+            'background-color',
+            theme === 'dark' ? 'rgb(15, 19, 22)' : 'rgb(255, 255, 255)',
+          );
+          await expect(page.locator('header')).toHaveCSS('backdrop-filter', 'none');
         } finally {
           await context.close();
         }

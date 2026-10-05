@@ -124,6 +124,7 @@ export function readContrastColors(root: Element | null | undefined): TextColorR
       for (const [property, value, normal] of effects) {
         // 子の不透明面で隠れていれば祖先の背景画像・背景ぼかしは結果に寄与しない。
         if ((property === 'background-image' || property === 'backdrop-filter') && background[3] >= 1) continue;
+        if (property === 'backdrop-filter' && parse(st.backgroundColor)?.[3] === 1) continue;
         if (value && value !== normal) return { reason: `${property}: ${value}` };
       }
       const bg = st.display === 'contents' ? transparent : (parse(st.backgroundColor) ?? transparent);
@@ -202,6 +203,19 @@ export function readContrastColors(root: Element | null | undefined): TextColorR
       }
     }
     if (!hasText) continue;
+    // sr-only の文字Rangeは大きさを持っていても、祖先のゼロ面積clipで全て隠れる。
+    let fullyClipped = false;
+    for (let ancestor: Element | null = el; ancestor; ancestor = ancestor.parentElement) {
+      const clip = getComputedStyle(ancestor).clip;
+      const match = clip.match(/^rect\(([^)]+)\)$/);
+      if (!match) continue;
+      const edges = match[1].split(/[,\s]+/).map(Number.parseFloat);
+      if (edges.length === 4 && (edges[2] <= edges[0] || edges[1] <= edges[3])) {
+        fullyClipped = true;
+        break;
+      }
+    }
+    if (fullyClipped) continue;
 
     const htmlEl = el as HTMLElement;
     // display:none・visibility:hidden・opacity:0（祖先含む）をまとめて弾く。
