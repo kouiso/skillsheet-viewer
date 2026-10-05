@@ -58,14 +58,18 @@ export function periodMonths(period: string): number | null {
  * 終了月から決める。
  *
  * `new Date()` を使わないのは、日が変わるだけで PDF の中身が変わり、検証が再現しなく
- * なるため（同じシートからは常に同じ PDF が出る性質を保つ）。
+ * なるため（同じシートからは常に同じ PDF が出る性質を保つ）。終端「現在」の `end` は
+ * parsePeriodBounds が実行時点を返すので基準には使えず、継続中の案件が基準に寄与
+ * できるのは確定済みの開始日まで（継続中は resolveDetailLevels で常に「直近」扱いに
+ * なるので、基準が開始日に留まってもその案件自身の判定は変わらない）。
  */
 export function detailBaseline(items: ProjectItem[]): number | null {
   let latest: number | null = null;
   for (const item of items) {
     const bounds = parsePeriodBounds(item.period);
     if (!bounds) continue;
-    if (latest === null || bounds.end > latest) latest = bounds.end;
+    const end = bounds.openEnded ? bounds.start : bounds.end;
+    if (latest === null || end > latest) latest = end;
   }
   return latest;
 }
@@ -101,7 +105,9 @@ export function resolveDetailLevels(items: ProjectItem[]): DetailLevelResult {
       levelById.set(item.id, 'compact');
       continue;
     }
-    const monthsSinceBaseline = Math.round((baseline - bounds.end) * 12);
+    // 継続中の案件は常に「直近」扱い。end（＝実行時点）との差分を取ると
+    // detailBaseline と同じく時計が漏れるので openEnded で弾く。
+    const monthsSinceBaseline = bounds.openEnded ? 0 : Math.round((baseline - bounds.end) * 12);
     if (monthsSinceBaseline <= DETAIL_CUTOFF_MONTHS) {
       levelById.set(item.id, 'detail');
       continue;
