@@ -1,5 +1,6 @@
 import { expect, type Page, test } from '@playwright/test';
 import { contrastRatio, readContrastColors } from './contrast';
+import { hasStableOpaquePaint } from './paint-stability';
 
 // ブラウザ自身にスクリーンショットPNGをデコードさせ、CSS計算とは独立に実画素を読む。
 async function screenshotPixel(page: Page, x: number, y: number) {
@@ -150,3 +151,33 @@ for (const hiddenStyle of ['display:none', 'opacity:0']) {
     expect(result.samples).toEqual([]);
   });
 }
+
+test('遅延fade中の不透明入力は確定色の計測まで待つ', async ({ page }) => {
+  await page.setContent(
+    '<div style="backdrop-filter:blur(12px);background:rgb(255 255 255 / 95%)"><form><input style="background:white;border:2px solid black" /></form></div>',
+  );
+  await page
+    .locator('form')
+    .evaluate((el) => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 100, delay: 100, fill: 'both' }));
+  const input = page.locator('input');
+  expect(await input.evaluate(hasStableOpaquePaint)).toBe(false);
+  await page.locator('form').evaluate((el) => {
+    for (const animation of el.getAnimations()) animation.play();
+  });
+  await expect.poll(() => input.evaluate(hasStableOpaquePaint)).toBe(true);
+  const colors = await input.evaluate(readContrastColors);
+  expect(colors.unsupported).toEqual([]);
+  expect(colors.background).toEqual([255, 255, 255, 1]);
+});
+
+test('無限の兄弟装飾は待たず、恒久的な未対応背景は合格させない', async ({ page }) => {
+  await page.setContent(
+    '<aside></aside><input style="background:transparent;border:2px solid black" /><style>body{background-image:linear-gradient(white,black)}</style>',
+  );
+  await page
+    .locator('aside')
+    .evaluate((el) => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 100, iterations: Infinity }));
+  const input = page.locator('input');
+  expect(await input.evaluate(hasStableOpaquePaint)).toBe(true);
+  expect((await input.evaluate(readContrastColors)).unsupported.length).toBeGreaterThan(0);
+});
