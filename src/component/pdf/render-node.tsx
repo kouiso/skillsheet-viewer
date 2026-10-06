@@ -383,6 +383,23 @@ export function renderBlocks(nodes: MdNode[] | undefined, width: number = CONTEN
       i = j - 1;
       continue;
     }
+    // 通常見出しと短い導入段落は一緒に送る。minPresenceAhead だけでは、
+    // 本文の再配置後に見出しが前ページ末尾へ残る場合がある。
+    // 長い段落は結合せず、1ページを超える分割不可ノードを作らない。
+    if (
+      node.type === 'heading' &&
+      next?.type === 'paragraph' &&
+      fitsWithinPage(estimateBlocksHeight([node, next], width))
+    ) {
+      out.push(
+        <View key={i} wrap={false}>
+          {renderHeading(node, i, width)}
+          {renderParagraph(next, i + 1, width)}
+        </View>,
+      );
+      i += 1;
+      continue;
+    }
     const renderer = BLOCK_RENDERERS.get(node.type);
     out.push(renderer ? renderer(node, i, width) : null);
   }

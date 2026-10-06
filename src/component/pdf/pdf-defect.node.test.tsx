@@ -441,11 +441,11 @@ describe('PDF 欠陥 A〜G の回帰防止（Issue #262 / #263）', () => {
     RENDER_TIMEOUT_MS,
   );
 
-  // G: 本文が 10.5pt で描かれていること（旧 9.5pt は小さすぎた）。
+  // G: 本文が 11pt で描かれていること（旧 9.5pt は小さすぎた）。
   it(
-    'G: 本文が 10.5pt 以上で描画され、見出し・表・フッタとの大小関係が保たれる（Issue #263 G）',
+    'G: 本文が 11pt 以上で描画され、見出し・表・フッタとの大小関係が保たれる（Issue #263 G）',
     async () => {
-      expect(FONT_SIZE.BODY).toBeGreaterThanOrEqual(10.5);
+      expect(FONT_SIZE.BODY).toBeGreaterThanOrEqual(11);
       // 見出しは本文より大きく、表セル・コード・フッタは本文以下（ただし小さすぎない）。
       expect(FONT_SIZE.H4).toBeGreaterThan(FONT_SIZE.BODY);
       expect(FONT_SIZE.H3).toBeGreaterThan(FONT_SIZE.H4);
@@ -453,9 +453,9 @@ describe('PDF 欠陥 A〜G の回帰防止（Issue #262 / #263）', () => {
       expect(FONT_SIZE.H1).toBeGreaterThan(FONT_SIZE.H2);
       expect(FONT_SIZE.TITLE).toBeGreaterThan(FONT_SIZE.H1);
       expect(FONT_SIZE.CELL).toBeLessThanOrEqual(FONT_SIZE.BODY);
-      expect(FONT_SIZE.CELL).toBeGreaterThanOrEqual(10);
-      expect(FONT_SIZE.CODE).toBeGreaterThanOrEqual(9.5);
-      expect(FONT_SIZE.FOOTER).toBeGreaterThanOrEqual(9);
+      expect(FONT_SIZE.CELL).toBeGreaterThanOrEqual(11);
+      expect(FONT_SIZE.CODE).toBeGreaterThanOrEqual(11);
+      expect(FONT_SIZE.FOOTER).toBeGreaterThanOrEqual(11);
 
       // CJK は改行機会ごとにテキストアイテムが分かれるため、サイズの実測には
       // 分割されないラテン文字の目印を使う。
