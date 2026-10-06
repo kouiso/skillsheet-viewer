@@ -134,6 +134,12 @@ const SEGMENT_GAP_EM = 1.0;
 const CONTINUATION_INDENT = 24;
 /** 「右端の余白が2字以上」: 字 = その行のフォントサイズの em。 */
 const EARLY_BREAK_MIN_SLACK_CHARS = 2;
+/**
+ * 簡約表の列見出し行の空白なし文字列（CompactTableHeader: `期間 | 案件 | チーム`）。
+ * 続き頁の先頭に複写される見出しは本文の段落ではないので、段落推定の対象から外す。
+ * 見出しの語が変わったら project-card-compact.tsx 側と合わせて直す。
+ */
+const COMPACT_HEADER_SQUASH = '期間案件チーム';
 /** 改行を含まない段落の長さの上限（字）。 */
 const LONG_PARAGRAPH_MAX_CHARS = 137;
 /**
@@ -483,15 +489,24 @@ function unitStart(text: string, headIndex: number): number {
  * 行末・行頭の空白を除いた文字の切れ端が、元の文のどの位置に連続して出るかを探す。
  * まず `tail+head` の連続一致を試し、見つからなければ空白（半角空白・全角空白・
  * U+00A0・改行）を挟む一致を試す——抽出では折り返し位置の空白が行末から
- * 落ちるため、空白での折り返しはこちらにしか当たらない。元の文にあった強制
- * 改行（段落の切れ目）は行送りのギャップで別の段落になるためここには来ない。
+ * 落ちるため、空白での折り返しはこちらにしか当たらない。段落切れの `\n\n` は
+ * 行送りギャップで別の段落になるが、単独の `\n` は Text の中でタイトな改行と
+ * して描かれるので、段落推定で連結した行同士の切れ目としてここに現れる。
  * 返す `headIndex` は切れ目単位の先頭（`unitStart` で遡った位置）。
  */
-function boundarySource(
-  a: WorkSeg,
-  b: WorkSeg,
-  sourceTexts: string[] | undefined,
-): { text: string; headIndex: number } | undefined {
+interface BoundarySource {
+  text: string;
+  headIndex: number;
+  /**
+   * 切れ目が出典の `\n`（作者が引いた強制改行）の上にあったか。
+   * Text 内の `\n` は行送りギャップを伴わないタイトな改行として描かれるので、
+   * 幾何で連結した段落の中では「早すぎる折り返し」と区別が付かない——出典で
+   * `\n` が挟まっている切れ目は作者の意図した改行であって崩れではない。
+   */
+  brokeAtNewline: boolean;
+}
+
+function boundarySource(a: WorkSeg, b: WorkSeg, sourceTexts: string[] | undefined): BoundarySource | undefined {
   if (sourceTexts === undefined) return undefined;
   const tail = [...a.text]
     .slice(-6)
@@ -506,34 +521,44 @@ function boundarySource(
   // 空白での折り返し用の緩い一致: tail の直後に空白系の字が 1 字以上、
   // その直後に head が続くとき、その head の UTF-16 位置を返す。
   // （リテラルの走査で、動的な RegExp は作らない——Code Scan の対策でもある）
-  const looseAt = (text: string): number => {
+  const looseAt = (text: string): { index: number; newline: boolean } => {
     for (let at = 0; ; at += 1) {
       at = text.indexOf(tail, at);
-      if (at < 0) return -1;
+      if (at < 0) return { index: -1, newline: false };
       let i = at + tail.length;
       let ws = 0;
+      let newline = false;
       while (i < text.length && /[\s\u00a0]/.test(text[i])) {
+        if (text[i] === '\n' || text[i] === '\r') newline = true;
         i += 1;
         ws += 1;
       }
-      if (ws > 0 && text.startsWith(head, i)) return i;
+      if (ws > 0 && text.startsWith(head, i)) return { index: i, newline };
     }
   };
   // 同じ切れ端が複数の出典に当たることがある（例: 値 'A / バックエンド' が
   // 別の値 'A / バックエンド / 管理画面' の部分文字列）。そのとき b が出典の
   // 残り全部に一致するもの——b がその段落の最終行——を優先し、なければ
   // b の内容で始まる残りが短い順に採用する。
-  const candidates: { text: string; headIndex: number }[] = [];
+  const candidates: BoundarySource[] = [];
   for (const text of sourceTexts) {
     const index = text.indexOf(joined);
     if (index >= 0) {
       // indexOf の結果は UTF-16 の位置なので code point 数に直す。
-      candidates.push({ text, headIndex: unitStart(text, [...text.slice(0, index + tail.length)].length) });
+      candidates.push({
+        text,
+        headIndex: unitStart(text, [...text.slice(0, index + tail.length)].length),
+        brokeAtNewline: false,
+      });
       continue;
     }
-    const looseIndex = looseAt(text);
-    if (looseIndex >= 0) {
-      candidates.push({ text, headIndex: unitStart(text, [...text.slice(0, looseIndex)].length) });
+    const loose = looseAt(text);
+    if (loose.index >= 0) {
+      candidates.push({
+        text,
+        headIndex: unitStart(text, [...text.slice(0, loose.index)].length),
+        brokeAtNewline: loose.newline,
+      });
     }
   }
   if (candidates.length === 0) return undefined;
@@ -610,7 +635,14 @@ function checkSegPairs(
       const unitLength = firstBreakUnitLength(rest ?? b.text, bIsLastLine);
       const slack = a.bound - a.right;
       const sourceOk = sourceTexts === undefined || boundary !== undefined;
-      if (slack >= EARLY_BREAK_MIN_SLACK_CHARS * a.size && firstBreakUnitWidth(b, unitLength) <= slack && sourceOk) {
+      // brokeAtNewline: 作者が引いた強制改行（出典の \n）。行が途中で止まるのは
+      // エンジンの折り返しではなく意図した改行なので「早すぎる折り返し」ではない。
+      if (
+        boundary?.brokeAtNewline !== true &&
+        slack >= EARLY_BREAK_MIN_SLACK_CHARS * a.size &&
+        firstBreakUnitWidth(b, unitLength) <= slack &&
+        sourceOk
+      ) {
         hits['early-break'].add(`${a.page}:${a.lineIndex}`);
       }
       // 英数字の途中: 行末・行頭がともに英数字で、splitLongRun の分割点でない。
@@ -638,6 +670,32 @@ function checkSegPairs(
   }
 }
 
+/**
+ * 段落の長さを「改行を含まない部分」ごとに測り、最長チャンクを返す。
+ * 規則の対象は「改行を含まない段落」だが、単独の `\n` で切れた行同士は
+ * 行送りギャップが無く、幾何の段落推定では 1 つの段落に連なる。出典が
+ * 渡されているときは `brokeAtNewline` の位置で区切って各チャンクを測る。
+ * 出典が無いときは従来どおり段落全体の長さ。
+ */
+function longestChunkLength(para: WorkSeg[], sourceTexts: string[] | undefined): number {
+  const segLength = (seg: WorkSeg, index: number) =>
+    visibleLength(index === 0 ? seg.text.replace(LIST_MARKER, '') : seg.text);
+  if (sourceTexts === undefined || para.length < 2) {
+    return para.reduce((sum, seg, index) => sum + segLength(seg, index), 0);
+  }
+  let longest = 0;
+  let current = segLength(para[0], 0);
+  for (let i = 0; i + 1 < para.length; i += 1) {
+    const boundary = boundarySource(para[i], para[i + 1], sourceTexts);
+    if (boundary?.brokeAtNewline) {
+      longest = Math.max(longest, current);
+      current = 0;
+    }
+    current += segLength(para[i + 1], i + 1);
+  }
+  return Math.max(longest, current);
+}
+
 function emptyHits(): Record<LineBreakMetric, Set<string>> {
   const hits = {} as Record<LineBreakMetric, Set<string>>;
   for (const metric of [...LINE_BREAK_RULES, 'page-spill'] as LineBreakMetric[]) {
@@ -653,8 +711,21 @@ export function checkLineBreakQuality(pages: QualityPage[], options?: LineBreakC
   const hits = emptyHits();
   const footerText = options?.footerText ?? '';
   const linesByPage = pages.map((page, i) => toWorkLines(page, i + 1));
+  // 簡約表の列見出し（project-card-compact.tsx の CompactTableHeader）は続き頁の
+  // 先頭に複写される UI であって本文ではない。段落推定へ混ぜると、直前頁の列の
+  // セグメント鎖へ見出しが継ぎ足され、最終行の 2 字（「チーム」）を「短い最後の行」
+  // と誤検出する。行全体が見出しの文字だけの行を本文から外す。
+  const chromeLineKeys = new Set(
+    linesByPage.flatMap((lines) =>
+      lines
+        .filter((line) => squashVisible(line.items.map((i) => i.text).join('')) === COMPACT_HEADER_SQUASH)
+        .map((line) => `${line.page}:${line.index}`),
+    ),
+  );
   const segsByPage = linesByPage.map((lines) => lines.flatMap(toSegments));
-  const bodyByPage = segsByPage.map((segs) => segs.filter((seg) => isBodySeg(seg, footerText)));
+  const bodyByPage = segsByPage.map((segs) =>
+    segs.filter((seg) => isBodySeg(seg, footerText) && !chromeLineKeys.has(`${seg.page}:${seg.lineIndex}`)),
+  );
   for (const segs of bodyByPage) annotateBounds(segs);
 
   // セグメントを段落に連結する（頁内 → 頁またぎの順）。
@@ -731,10 +802,7 @@ export function checkLineBreakQuality(pages: QualityPage[], options?: LineBreakC
     const isBodyPara =
       para.every((seg) => seg.size >= PARA_MIN_SIZE && seg.size < LONG_PARAGRAPH_MAX_SIZE) &&
       para[0].left <= LONG_PARAGRAPH_LEFT_MAX;
-    const length = para.reduce((sum, seg, i) => {
-      const text = i === 0 ? seg.text.replace(LIST_MARKER, '') : seg.text;
-      return sum + visibleLength(text);
-    }, 0);
+    const length = longestChunkLength(para, options?.sourceTexts);
     if (isBodyPara && length > LONG_PARAGRAPH_MAX_CHARS) {
       hits['long-paragraph'].add(`${para[0].page}:${para[0].lineIndex}`);
     }

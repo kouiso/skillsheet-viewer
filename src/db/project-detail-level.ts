@@ -57,16 +57,20 @@ export function periodMonths(period: string, referenceMonth: number): number | n
  * 「直近」の基準になる年月（parsePeriodBounds と同じ数値尺度）を、シート内の最も新しい
  * 終了月から決める。
  *
- * 「現在」終端を含む期間は引数の基準月で解釈し、この関数自体は時計を読まない。
- * 日が変わるだけで PDF の中身が変わると検証が再現しないため
- * （同じシートからは常に同じ PDF が出る性質を保つ）。
+ * `new Date()` を使わないのは、日が変わるだけで PDF の中身が変わり、検証が再現しなく
+ * なるため（同じシートからは常に同じ PDF が出る性質を保つ）。終端「現在」の `end` は
+ * parsePeriodBounds が引数の基準月を返すが、それでも基準には使わず、継続中の案件が
+ * 基準に寄与できるのは確定済みの開始日まで（継続中は resolveDetailLevels で常に
+ * 「直近」扱いになるので、基準が開始日に留まってもその案件自身の判定は変わらない）。
+ * この関数自体は時計を読まない。
  */
 export function detailBaseline(items: ProjectItem[], referenceMonth: number): number | null {
   let latest: number | null = null;
   for (const item of items) {
     const bounds = parsePeriodBounds(item.period, referenceMonth);
     if (!bounds) continue;
-    if (latest === null || bounds.end > latest) latest = bounds.end;
+    const end = bounds.openEnded ? bounds.start : bounds.end;
+    if (latest === null || end > latest) latest = end;
   }
   return latest;
 }
@@ -102,7 +106,9 @@ export function resolveDetailLevels(items: ProjectItem[], referenceMonth: number
       levelById.set(item.id, 'compact');
       continue;
     }
-    const monthsSinceBaseline = Math.round((baseline - bounds.end) * 12);
+    // 継続中の案件は常に「直近」扱い。end（＝基準月）との差分を取ると
+    // detailBaseline と同じく基準月が判定に漏れるので openEnded で弾く。
+    const monthsSinceBaseline = bounds.openEnded ? 0 : Math.round((baseline - bounds.end) * 12);
     if (monthsSinceBaseline <= DETAIL_CUTOFF_MONTHS) {
       levelById.set(item.id, 'detail');
       continue;
