@@ -62,7 +62,7 @@ const Header = ({
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: 'easeOut' }}
-      className="no-print sticky top-0 z-40 border-b border-border bg-card/80 backdrop-blur-md"
+      className="no-print sticky top-0 z-40 border-b border-border bg-card"
       ref={headerRef}
     >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
