@@ -156,9 +156,12 @@ test('遅延fade中の不透明入力は確定色の計測まで待つ', async (
   await page.setContent(
     '<div style="backdrop-filter:blur(12px);background:rgb(255 255 255 / 95%)"><form><input style="background:white;border:2px solid black" /></form></div>',
   );
-  await page
-    .locator('form')
-    .evaluate((el) => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 100, delay: 100, fill: 'both' }));
+  // duration+delay 合計200msのフェードを即 pause する。
+  // ブラウザ往復が遅いと最初の判定前に完了してフレークになるため、判定までは停止状態に固定する。
+  await page.locator('form').evaluate((el) => {
+    const animation = el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 100, delay: 100, fill: 'both' });
+    animation.pause();
+  });
   const input = page.locator('input');
   expect(await input.evaluate(hasStableOpaquePaint)).toBe(false);
   await page.locator('form').evaluate((el) => {
