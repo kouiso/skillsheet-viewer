@@ -95,7 +95,7 @@ TO approved_runtime_role;
 2. 旧CASコード稼働、0010適用、専用role/principal、既定シート制約、削除tombstone列を確認する。今回installは旧境界installerの再実行を必要としない。旧installerは既存roleで停止するため、無条件に再実行しない。
 3. 管理用direct接続を用意し、role membership/owner/ACL/default ACL/関数定義/trigger/migration台帳を非公開保存する。新tableがruntime/PUBLIC/不要な継承roleへ自動公開されないことを作成roleのdefault ACLまで確認する。アプリ用pooled接続をmigrationやdumpに使わない。
 4. 本番相当の隔離ブランチで、実際と同じ非superuser installerとruntimeを使用し、0011→install→6関数GRANT→旧保存→履歴read/restoreを検証する。合成または非公開管理したデータを使う。新規ローカルclusterの成功をmanaged権限・容量・既存ACLの代用にしない。
-5. 全writerを保守状態にし、実行中の保存transaction終了を確認する。その後、整合したバックアップを取得する。Neonの復旧地点と保持期限を確認し、direct接続のpg_dumpで本体・状態・認証・private境界・migration台帳を含むDBを非公開保存する。role定義/membershipは別保存。導入後は履歴2tableも含める。暗号化・0700/0600相当・checksumを設定し、別DBへの復元を先に確認する。
+5. 全writerを保守状態にし、実行中の保存transaction終了を確認する。本人承認の対象シートだけを、一貫したREAD ONLY snapshotでバックアップする。対象は本体・blocks・ownerの状態行・必要なprincipal対応行と、復元に必要なschema/旧関数定義/ACL/membershipの非秘密metadataに限定する。認証user/account/session/verification、OAuth、閲覧試行、role passwordは含めない。秘密を引数へ置かず、0700/0600・checksum・Git対象外を維持し、TCP無効の新規ローカルclusterへの復元と本文・ID・順序・revision・ACL一致を先に確認する。承認後に対象件数やrevisionが変わっていれば古いbackupを導入直前の状態と扱わない。Neonの復旧地点・保持期限や全DB復旧は、この限定バックアップとは別の未確認事項として残す。導入後の履歴backupも対象・保持方針を別途明示する。
 6. 正本Drizzle経路の pnpm db:migrate で drizzle/migration/0011_document_versions.sql を適用し台帳を読み戻す。db:pushや台帳を更新しない手書きDDLで代用しない。migration後とtrigger導入前の間にwriterを再開しない。
 7. psql -X -v ON_ERROR_STOP=1 相当で script/sql/install-document-history.sql を適用する。BEGIN内でtriggerとraw baselineを記録する。lock_timeout=5秒、statement_timeout=30秒の失敗を成功扱いしない。切断したら別接続でCOMMIT済みか確認してから次へ進む。
 8. 同定済みruntimeへ前掲6関数のEXECUTEだけ付与する。PUBLIC/runtimeのhistorytable直接SELECT/DML禁止、内部capture呼出禁止、owner分離を実runtimeで確認する。一時membershipが残っていないことも確認する。
@@ -123,3 +123,23 @@ installerはCREATE FUNCTION/CREATE TRIGGERを使うため、成功後の丸ご�
 600ms自動保存ごとに全文版が増え、自動retentionは無い。statement単位triggerは行数回の集計を減らすが、親更新・子delete/insertで同版を複数回集計するため負荷/WALはゼロではない。実規模の保存頻度とサイズで容量・遅延を測り、保持期間を判断する。bigint上限近くのrevision+1はDBが拒否してrollbackするので、上限余裕も確認する。
 
 これらが解消するまで、本番適用準備完了・無停止互換・完全復旧可能とは扱わない。
+
+## 追加の検証結果と残るゲート（2026-10-06）
+
+先の「未検証」は次の範囲で更新する。本番へのDDL・GRANT・本文更新は行っていない。
+
+| 条件 | 得られた証拠 | 残る限界 |
+| --- | --- | --- |
+| 管理接続の対象 | Neon primary branch の live compute と管理接続hostが一致。旧6関数の定義hashは隔離環境と全件一致。 | canonical Vercel runtimeの秘密接続値は取得できず、canonical→DB/loginの直接対応は未確定。 |
+| 限定バックアップ | 承認された1シートに関する15行を同一READ ONLY snapshotで取得。新規ローカルPG17で全行の原文hash、旧6関数定義、schema/table/function ACLを照合し一致。runtime直接table拒否も確認。 | 認証payloadとrole passwordは完全除外。全DB災害復旧やPITRの証明ではない。復元clusterは停止済み。 |
+| managed導入 | 空の専用Neon DBへ正本Drizzle migrationを適用し、12件の台帳hashを確認。非superuser管理接続による履歴installerと限定runtimeでCRUD、restore、Undo、CAS拒否が成功。 | production branchの権限・default ACL・全writerについて無条件に同一とは扱わない。 |
+| 既存ACLと導入失敗 | 非superuser管理roleの隔離試験で、成功・途中失敗・再実行拒否後のmembershipとschema/旧関数ACLの保持を確認。継承CREATEによるACL差異は導入全体をrollback。 | 本番で既存権限を緩めて通すことは禁止。 |
+| 保存負荷 | 公開合成33案件（JSON約33KB）で10連続保存、履歴10版増加、最小423ms・中央値796ms・最大/p95 2229ms。 | 少数測定であり600ms以内の保証ではない。本番約94KBや長時間負荷・retention容量は未解決。WAL観測は同一branchの他DB活動を含み得る。 |
+
+復元済み本番限定backupへ新installerを適用する一連のdry-runは未実施である。既存の「正確な旧状態の復元」と「同じ旧境界＋新履歴のmanaged導入/CAS」を組み合わせた証拠であり、両者を一つの実行として報告しない。必要性を判断せず既存隔離試験を繰り返すこともしない。
+
+導入直前には、私用チェックリストで固定した対象シート・owner・承認時revisionを、保存transaction終了後の同一管理transaction内で再照合する。基準revisionは承認済みbackupの実記録で固定し、導入直前値と違えば適用を中断して差分とbackupの鮮度を確認する。単に事前SELECTしただけでは同時保存を排除できない。writer停止を維持し、installerの対象table lock取得後の照合を行う。migrationとinstallerの間にもwriterを再開しない。確認用ラッパーを実行する場合、既存installerのBEGIN/COMMITをそのまま外側transactionへ入れて原子性を得たと誤認しない。
+
+runtimeの追加権限は前掲6関数のEXECUTEだけで、旧5境界・認証権限・table直読・role membershipは変更しない。旧CASコードは同じ関数署名を使えるため、コードrollback時には履歴table/triggerを保持する。trigger障害時の5trigger除去は全writer停止と障害時点backup後の別承認操作とし、履歴の空白期間を記録する。新しい編集があれば古い15行を一括上書きして戻さない。
+
+本番PRの最終CI・preview、canonical/runtimeの直接照合、全writerの保守とlock後revision照合、default ACL、必要負荷/保持方針が揃うまで導入を実行しない。履歴機能のDDL導入は依頼済み実装の範囲内であり、追加の承認待ちを設けない。経歴文言の変更に必要な本人確認と、DDL導入前の検証ゲートは分けて扱う。
