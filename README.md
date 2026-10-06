@@ -56,15 +56,48 @@ mise install
 # 2. 依存インストール
 pnpm install
 
-# 3. 環境変数を設定（.env.example をコピーして値を埋める）
-cp .env.example .env
-#   最低限: DATABASE_URL / SESSION_SECRET / VIEWER_CODE / BETTER_AUTH_SECRET / SKILLSHEET_OWNER_ID
+# 3. DB を用意する（下の A または B。詳細は setup.md）
 
-# 4. DB マイグレーションを適用（Neon Postgres が必要）
-pnpm db:migrate
-
-# 5. 開発サーバー起動（http://localhost:3000）
+# 4. 開発サーバー起動（http://localhost:3000）
 pnpm dev
+```
+
+### 3. DB の用意
+
+#### A. ローカル PostgreSQL（外部接続不要）
+
+手元に PostgreSQL 16+ がある環境では、ローカルスタックが DB 構築から権限付与まで全て行います。
+
+```bash
+sudo ./script/dev-local-stack.sh up
+# PostgreSQL 起動 → drizzle migrations → 文書境界（skillsheet_private の関数群）の
+# install → 接続 role への EXECUTE + principals 登録 → .env.local の生成まで行う。
+NODE_EXTRA_CA_CERTS=$(./script/dev-local-stack.sh env | cut -d= -f2-) pnpm dev
+```
+
+#### B. 共有 DB（Neon）を使う
+
+```bash
+cp .env.example .env   # DATABASE_URL などを埋める
+pnpm db:migrate
+```
+
+スキルシートの閲覧・編集は `skillsheet_private` スキーマの文書境界
+（SECURITY DEFINER 関数群）を経由します。境界は `pnpm db:migrate` の対象外で、
+**未 install または権限不足のままだと `/view` が ACCESS_DENIED / 設定不備バナーになります**
+（Issue #373）。共有 DB では管理者側で次を適用してもらってください。
+
+```bash
+# 境界本体（未適用の DB のみ。詳細は doc/05-toc-and-deploy.md の「適用順序」）
+psql "$ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-read-boundary.sql
+psql "$ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-skillsheet-write-boundary.sql
+
+# あなたの接続 role へ EXECUTE + principals 写像を付与（値は管理者が発行する）
+psql "$ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -v runtime_role='<接続 role 名>' \
+  -v runtime_password='<生成したパスワード>' \
+  -v owner_id='<SKILLSHEET_OWNER_ID>' \
+  -f script/sql/install-runtime-role.sql
 ```
 
 詳細な手順・環境変数・デプロイは [setup.md](./setup.md) を参照してください。
