@@ -58,6 +58,9 @@ interface ViewerTopbarProps {
   /** Excel ダウンロード（DB シートのみ。未指定ならボタンを出さない）。 */
   onDownloadExcel?: () => void | Promise<void>;
   excelLoading?: boolean;
+  /** Word ダウンロード（DB シートのみ。未指定なら Excel メニュー内の選択肢を出さない）。 */
+  onDownloadDocx?: () => void | Promise<void>;
+  docxLoading?: boolean;
   /** 要約版 PDF ダウンロード。未指定なら要約版ボタンを出さない。 */
   onDownloadPdfDigest?: () => void | Promise<void>;
   /** 要約版 Excel ダウンロード（DB シートのみ）。未指定なら Popover 内の選択肢を出さない。 */
@@ -153,12 +156,14 @@ function DigestDownloadMenu({
 function DownloadMenu({
   onDownloadPdf,
   onDownloadExcel,
+  onDownloadDocx,
   onDownloadPdfDigest,
   onDownloadExcelDigest,
   loading,
 }: {
   onDownloadPdf?: () => void | Promise<void>;
   onDownloadExcel?: () => void | Promise<void>;
+  onDownloadDocx?: () => void | Promise<void>;
   onDownloadPdfDigest?: () => void | Promise<void>;
   onDownloadExcelDigest?: () => void | Promise<void>;
   loading: boolean;
@@ -194,8 +199,72 @@ function DownloadMenu({
         <div className="flex flex-col">
           {onDownloadPdf && item('PDF', onDownloadPdf, 'PDFダウンロード')}
           {onDownloadExcel && item('Excel', onDownloadExcel, 'Excelダウンロード')}
+          {onDownloadDocx && item('Word', onDownloadDocx, 'Wordダウンロード')}
           {onDownloadPdfDigest && item('PDF（要約版）', onDownloadPdfDigest, 'PDF（要約版）ダウンロード')}
           {onDownloadExcelDigest && item('Excel（要約版）', onDownloadExcelDigest, 'Excel（要約版）ダウンロード')}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * デスクトップ用の Excel / Word メニュー。docx 追加でボタン枠を増やさないため、
+ * Excel ボタンのあった1枠を Popover 化して Office 形式を畳む（要約版メニューと同じ構造）。
+ */
+function OfficeDownloadMenu({
+  onDownloadExcel,
+  onDownloadDocx,
+  excelLoading,
+  docxLoading,
+}: {
+  onDownloadExcel: () => void | Promise<void>;
+  onDownloadDocx?: () => void | Promise<void>;
+  excelLoading: boolean;
+  docxLoading: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const loading = excelLoading || docxLoading;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          disabled={loading}
+          aria-busy={loading}
+          aria-label={loading ? 'Excel / Wordを生成中' : 'Excel / Wordをダウンロード'}
+          title={loading ? 'Excel / Wordを生成中' : 'Excel / Wordをダウンロード'}
+          className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
+        >
+          {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
+          <span className="hidden xl:inline">Excel</span>
+          <ChevronDown className="hidden size-3.5 text-muted-foreground xl:inline" aria-hidden />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent>
+        <div className="flex flex-col">
+          <Button
+            variant="ghost"
+            aria-label="Excelダウンロード"
+            onClick={() => {
+              setOpen(false);
+              void onDownloadExcel();
+            }}
+          >
+            Excel
+          </Button>
+          {onDownloadDocx && (
+            <Button
+              variant="ghost"
+              aria-label="Wordダウンロード"
+              onClick={() => {
+                setOpen(false);
+                void onDownloadDocx();
+              }}
+            >
+              Word
+            </Button>
+          )}
         </div>
       </PopoverContent>
     </Popover>
@@ -214,6 +283,8 @@ export function ViewerTopbar({
   pdfLoading = false,
   onDownloadExcel,
   excelLoading = false,
+  onDownloadDocx,
+  docxLoading = false,
   onDownloadPdfDigest,
   onDownloadExcelDigest,
   digestLoading = false,
@@ -291,13 +362,15 @@ export function ViewerTopbar({
         editButton
       )}
 
-      {compact && (onDownloadPdf || onDownloadExcel || onDownloadPdfDigest || onDownloadExcelDigest) ? (
+      {compact &&
+      (onDownloadPdf || onDownloadExcel || onDownloadDocx || onDownloadPdfDigest || onDownloadExcelDigest) ? (
         <DownloadMenu
           onDownloadPdf={onDownloadPdf}
           onDownloadExcel={onDownloadExcel}
+          onDownloadDocx={onDownloadDocx}
           onDownloadPdfDigest={onDownloadPdfDigest}
           onDownloadExcelDigest={onDownloadExcelDigest}
-          loading={pdfLoading || excelLoading || digestLoading}
+          loading={pdfLoading || excelLoading || docxLoading || digestLoading}
         />
       ) : (
         <>
@@ -322,23 +395,12 @@ export function ViewerTopbar({
           )}
 
           {onDownloadExcel && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size={compact ? 'icon' : undefined}
-                  onClick={() => void onDownloadExcel()}
-                  disabled={excelLoading}
-                  aria-busy={excelLoading}
-                  aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
-                  className={compact ? 'min-h-11 min-w-11' : 'min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]'}
-                >
-                  {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
-                  {!compact && <span className="hidden xl:inline">Excel</span>}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{excelLoading ? 'Excelを生成中…' : 'Excelをダウンロード'}</TooltipContent>
-            </Tooltip>
+            <OfficeDownloadMenu
+              onDownloadExcel={onDownloadExcel}
+              onDownloadDocx={onDownloadDocx}
+              excelLoading={excelLoading}
+              docxLoading={docxLoading}
+            />
           )}
 
           {onDownloadPdfDigest && (

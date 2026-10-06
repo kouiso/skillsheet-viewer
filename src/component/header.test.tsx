@@ -92,15 +92,18 @@ describe('Header', () => {
       expect(screen.getByLabelText('PDFを生成中')).toHaveAttribute('aria-busy', 'true');
     });
 
-    it('デスクトップ幅では出力ボタンに PDF / Excel の文字ラベルが付く（#377 D）', () => {
-      renderHeader({ onDownloadPdf: vi.fn(), onDownloadExcel: vi.fn() });
+    it('デスクトップ幅では出力ボタンに PDF / Excel / Word の文字ラベルが付く（#377 D）', () => {
+      renderHeader({ onDownloadPdf: vi.fn(), onDownloadExcel: vi.fn(), onDownloadDocx: vi.fn() });
       // 絵だけでは何が出るか分からないため、xl 以上で文字を併記する（ViewerTopbar と同じ規則）。
       const pdfLabel = screen.getByLabelText('PDFダウンロード').querySelector('span');
       const excelLabel = screen.getByLabelText('Excelダウンロード').querySelector('span');
+      const wordLabel = screen.getByLabelText('Wordダウンロード').querySelector('span');
       expect(pdfLabel).toHaveTextContent('PDF');
       expect(pdfLabel).toHaveClass('hidden', 'xl:inline');
       expect(excelLabel).toHaveTextContent('Excel');
       expect(excelLabel).toHaveClass('hidden', 'xl:inline');
+      expect(wordLabel).toHaveTextContent('Word');
+      expect(wordLabel).toHaveClass('hidden', 'xl:inline');
     });
 
     it('pdfLoading でない場合はボタンが有効であること', () => {
