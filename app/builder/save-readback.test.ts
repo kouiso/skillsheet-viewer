@@ -23,6 +23,17 @@ describe('保存応答喪失の読戻し', () => {
     expect(read).toHaveBeenCalledWith(payload.sheetId);
   });
   it.each([
+    new Error('CONFLICT'),
+    new Error('UNAUTHORIZED'),
+    { data: { code: 'CONFLICT' } },
+    { data: { code: 'FORBIDDEN' } },
+    { shape: { data: { code: 'BAD_REQUEST' } } },
+  ])('明示的な拒否は別タブの同じ内容で成功扱いにしない', async (error) => {
+    const read = vi.fn().mockResolvedValue({ status: 'OK', snapshot });
+    await expect(saveWithReadback(payload, vi.fn().mockRejectedValue(error), read)).rejects.toBe(error);
+    expect(read).not.toHaveBeenCalled();
+  });
+  it.each([
     { ...snapshot, sheetId: 'sheet-b' },
     { ...snapshot, title: '別編集' },
     { ...snapshot, revision: payload.expectedRevision },
