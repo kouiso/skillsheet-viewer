@@ -29,7 +29,8 @@ describe('修復dry-runの明示対象', () => {
 });
 
 describe('修復dry-runの読取と保存', () => {
-  it('明示IDの取得結果を未承認案として保存する', async () => {
+  // 保存経路は persistRepairProposal→/proc/self/fd の Linux 専用。
+  it.skipIf(process.platform !== 'linux')('明示IDの取得結果を未承認案として保存する', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'repair-cli-'));
     try {
       const out = join(directory, 'proposal.json');

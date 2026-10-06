@@ -14,6 +14,7 @@
 import type { Block, CompanyInfo, ProfileBlockData, ProjectItem, ProjectTech, StatsBlockData } from '@/db/block';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/block';
 import {
+  currentMonthKey,
   experienceSourceLabel,
   resolveCompanyPeriod,
   resolveDisplayedSkillExperience,
@@ -467,18 +468,22 @@ function buildProject(
  * 順序は「エディタでの会社の並び順」であって期間の新しさではない
  * （group-by-company.ts のコメント: 「companies 順を正とし」）。エディタで会社の並びを
  * 変えると、期間上は最新でない会社に塗り帯が付いたままになる欠陥だった（レビュー指摘）。
- * 期間の終了年月が最大の会社を選ぶ。終端「現在」の会社は終わっていないので、
- * `parsePeriodBounds` が返す実行時点ではなく常に最新側として扱う（実行時点で
- * 比べると、未来の確定終了月を持つ会社との間で月をまたいだ日に順位が入れ替わる）。
+ * 期間の終了年月（`parsePeriodBounds` — 「現在」は基準月扱い）が最大の会社を選ぶ。
+ * 終端「現在」の会社は終わっていないので、parsePeriodBounds が返す値ではなく
+ * 常に最新側として扱う（+∞ で比べる。未来の確定終了月を持つ会社との間で順位が
+ * 入れ替わらないため）。
  * 同着は開始が遅い方を優先し、それも同着なら先に見つかった方（配列順）を保つ。
  * 期間を解釈できない会社は最新候補にしない。
  */
-function resolveLatestIndex(groups: { company: CompanyInfo | undefined; items: ProjectItem[] }[]): number {
+function resolveLatestIndex(
+  groups: { company: CompanyInfo | undefined; items: ProjectItem[] }[],
+  referenceMonth: number,
+): number {
   let latest = -1;
   let latestEnd = -Infinity;
   let latestStart = -Infinity;
   groups.forEach((g, index) => {
-    const bounds = parsePeriodBounds(resolveCompanyPeriod(g.company, g.items));
+    const bounds = parsePeriodBounds(resolveCompanyPeriod(g.company, g.items), referenceMonth);
     if (!bounds) return;
     const end = bounds.openEnded ? Number.POSITIVE_INFINITY : bounds.end;
     if (end > latestEnd || (end === latestEnd && bounds.start > latestStart)) {
@@ -652,9 +657,12 @@ export function buildPrintViewModel(
     ? 'featured'
     : 'level';
 
-  const { levelById } = resolveDetailLevels(visible.items);
+  // 基準月が未指定でも「現在」終端を今月（JST）で解釈する。ここだけ時計を読み、
+  // 下流（詳細度・最新会社判定）は常に同じ月を見る。
+  const effectiveMonth = referenceMonth ?? currentMonthKey();
+  const { levelById } = resolveDetailLevels(visible.items, effectiveMonth);
   const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
-  const latestIndex = resolveLatestIndex(groups);
+  const latestIndex = resolveLatestIndex(groups, effectiveMonth);
   // 案件の通し番号は会社をまたいで連番にする（会社ごとに 1 に戻さない）。
   let nextProjectIndex = 1;
   const companies = groups.map((g, index) => {
