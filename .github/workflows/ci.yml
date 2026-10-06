@@ -202,6 +202,34 @@ jobs:
           REVOKE skillsheet_document_reader, skillsheet_document_writer FROM CURRENT_USER;
           SQL
 
+      # migration 0011 はテーブルだけを作る。履歴関数・snapshot trigger は正本の
+      # installer で導入しないと、保存が履歴を残さないDBでE2Eが通ってしまう。
+      # この時点のDBは直前の Reset E2E database が作り直した専用DBのみ。
+      - name: Install document history
+        if: matrix.check-type == 'e2e'
+        env:
+          DATABASE_URL: ${{ secrets.E2E_DATABASE_URL }}
+        run: |
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f script/sql/install-document-history.sql
+          # runtimeへ与えるのは公開入口6関数のEXECUTEのみ。helperや履歴テーブル、
+          # role membershipを残さない。失敗時の一時membershipもtransactionで戻す。
+          psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          BEGIN;
+          GRANT skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
+          SET ROLE skillsheet_document_writer;
+          GRANT EXECUTE ON FUNCTION
+            skillsheet_private.history_list(uuid,text,integer,text),
+            skillsheet_private.history_read(uuid,text,text),
+            skillsheet_private.history_count_after(uuid,text,text,text),
+            skillsheet_private.history_restore(uuid,text,text,text),
+            skillsheet_private.deleted_document_list(text),
+            skillsheet_private.restore_deleted_document(uuid,text,text)
+          TO SESSION_USER;
+          RESET ROLE;
+          REVOKE skillsheet_document_writer FROM CURRENT_USER;
+          COMMIT;
+          SQL
+
       - name: Playwright E2E
         if: matrix.check-type == 'e2e'
         env:
