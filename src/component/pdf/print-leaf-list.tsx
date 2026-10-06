@@ -213,7 +213,8 @@ function compactProjectDrafts(project: PrintProject): LeafDraft[] {
     {
       kind: 'compact-row',
       el: <CompactRow project={project} />,
-      keepWithNext: false,
+      // 本文がある案件は先頭のメタ情報等と同居させ、表の見出し行だけをページ末に残さない。
+      keepWithNext: body.length > 0,
       frame: groupFrame(body.length === 0),
     },
   ];

@@ -47,8 +47,8 @@ export function isLeadRole(role: string): boolean {
 }
 
 /** period から稼働月数を返す（両端を含む）。解釈できなければ null。 */
-export function periodMonths(period: string): number | null {
-  const bounds = parsePeriodBounds(period);
+export function periodMonths(period: string, referenceMonth: number): number | null {
+  const bounds = parsePeriodBounds(period, referenceMonth);
   if (!bounds) return null;
   return Math.round((bounds.end - bounds.start) * 12) + 1;
 }
@@ -59,14 +59,15 @@ export function periodMonths(period: string): number | null {
  *
  * `new Date()` を使わないのは、日が変わるだけで PDF の中身が変わり、検証が再現しなく
  * なるため（同じシートからは常に同じ PDF が出る性質を保つ）。終端「現在」の `end` は
- * parsePeriodBounds が実行時点を返すので基準には使えず、継続中の案件が基準に寄与
- * できるのは確定済みの開始日まで（継続中は resolveDetailLevels で常に「直近」扱いに
- * なるので、基準が開始日に留まってもその案件自身の判定は変わらない）。
+ * parsePeriodBounds が引数の基準月を返すが、それでも基準には使わず、継続中の案件が
+ * 基準に寄与できるのは確定済みの開始日まで（継続中は resolveDetailLevels で常に
+ * 「直近」扱いになるので、基準が開始日に留まってもその案件自身の判定は変わらない）。
+ * この関数自体は時計を読まない。
  */
-export function detailBaseline(items: ProjectItem[]): number | null {
+export function detailBaseline(items: ProjectItem[], referenceMonth: number): number | null {
   let latest: number | null = null;
   for (const item of items) {
-    const bounds = parsePeriodBounds(item.period);
+    const bounds = parsePeriodBounds(item.period, referenceMonth);
     if (!bounds) continue;
     const end = bounds.openEnded ? bounds.start : bounds.end;
     if (latest === null || end > latest) latest = end;
@@ -92,28 +93,28 @@ export interface DetailLevelResult {
  * period が解釈できない案件は簡約版に落とす（詳細版に上げると、期間不明のものが
  * 直近の実績と同じ重みで前に出てしまう）。
  */
-export function resolveDetailLevels(items: ProjectItem[]): DetailLevelResult {
-  const baseline = detailBaseline(items);
+export function resolveDetailLevels(items: ProjectItem[], referenceMonth: number): DetailLevelResult {
+  const baseline = detailBaseline(items, referenceMonth);
   const levelById = new Map<string, DetailLevel>();
 
   // 規則 2 の候補（規則 1 に当たらなかったもの）を、期間の長い順に選ぶために貯める。
   const seniorCandidates: { id: string; months: number }[] = [];
 
   for (const item of items) {
-    const bounds = parsePeriodBounds(item.period);
+    const bounds = parsePeriodBounds(item.period, referenceMonth);
     if (!bounds || baseline === null) {
       levelById.set(item.id, 'compact');
       continue;
     }
-    // 継続中の案件は常に「直近」扱い。end（＝実行時点）との差分を取ると
-    // detailBaseline と同じく時計が漏れるので openEnded で弾く。
+    // 継続中の案件は常に「直近」扱い。end（＝基準月）との差分を取ると
+    // detailBaseline と同じく基準月が判定に漏れるので openEnded で弾く。
     const monthsSinceBaseline = bounds.openEnded ? 0 : Math.round((baseline - bounds.end) * 12);
     if (monthsSinceBaseline <= DETAIL_CUTOFF_MONTHS) {
       levelById.set(item.id, 'detail');
       continue;
     }
     levelById.set(item.id, 'compact');
-    const months = periodMonths(item.period);
+    const months = periodMonths(item.period, referenceMonth);
     if (isLeadRole(item.role) && months !== null && months >= SENIOR_MIN_MONTHS) {
       seniorCandidates.push({ id: item.id, months });
     }

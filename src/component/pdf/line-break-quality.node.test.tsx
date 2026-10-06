@@ -166,6 +166,25 @@ describe('checkLineBreakQuality: 規則ごとの当たり', () => {
     expect(report.hits['page-spill']).toEqual([{ page: 2, line: 1 }]);
   });
 
+  it('頁またぎ: 次頁の先頭で複数列が同じ行に並ぶ表ヘッダ再掲は段落に継がない', () => {
+    // 実データで出た偽陽性: 継続表のヘッダ行（期間|案件|チーム）が頁の先頭に再掲されると、
+    // 前頁の最終行が列の右端まで埋まっているので本文の続きと誤認され、2 字の「期間」が
+    // 段落の最終行になり runt-line（とこぼれの偽計上）に当たった。
+    const page1: QualityPage = [
+      item('頁の終わりまで埋まった本文の行です', 64, 80, RIGHT - 64),
+      item('まだ埋まって続いている行ですよね', 64, 80 - PITCH, RIGHT - 64),
+    ];
+    const page2: QualityPage = [
+      item('期間', 64, 800, 2 * BODY),
+      item('案件', 152, 800, 2 * BODY),
+      item('チーム', 512, 800, 2 * BODY),
+      lineAt('ヘッダの次の本文行です。', 800 - PITCH, 300),
+    ];
+    const report = checkLineBreakQuality([page1, page2]);
+    expect(report.counts['runt-line']).toBe(0);
+    expect(report.counts['page-spill']).toBe(0);
+  });
+
   it('複数列: 同じ行に並ぶ別の列に紛れても、列ごとの段落を追って当たる', () => {
     // 左列 3 行（1 行目だけ早く切れる）と右列 3 行を行順に並べる。
     // 右列は頁の右端まで届くので、左列の早い改行は「列の右端」に対して計る。
