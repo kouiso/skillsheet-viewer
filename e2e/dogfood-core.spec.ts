@@ -5,6 +5,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { buildConsoleDemoBlocks } from '@/db/fixture';
 import { authFile, login } from './auth';
 import { createSheet, deleteSheet, listSheets } from './document-fixture';
+import { addBlock, chooseTemplate, openCreateSheet, selectBlock } from './workspace';
 
 const viewerCode = process.env.VIEWER_CODE ?? 'viewer-code-local';
 const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
@@ -131,10 +132,10 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   await login(page);
 
   // 新規シート作成（フルスキルシート）
-  await page.getByRole('button', { name: '新規シート' }).click();
+  await openCreateSheet(page);
   await expect(page.getByText('新規シートを作成')).toBeVisible();
   await page.locator('#new-sheet-title').fill(FULL_TEMPLATE_TITLE);
-  await page.locator('#new-sheet-template').selectOption('full');
+  await chooseTemplate(page, 'full');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const url = page.url();
@@ -146,20 +147,21 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   // タイトル編集
   await page.locator('#sheet-title').fill(`${FULL_TEMPLATE_TITLE} 編集済`);
 
-  // スキルブロックに 1 行追加
+  // アウトラインで対象ブロックを選択して編集する。
+  await selectBlock(page, 'スキル');
   await page.getByRole('button', { name: 'スキルを追加' }).first().click();
   const skillInputs = page.getByLabel(/スキル\d+の名称/);
   await skillInputs.last().fill('Playwright');
 
   // 職務経歴ブロック追加
-  await page.getByRole('button', { name: '職務経歴' }).click();
+  await addBlock(page, '職務経歴（簡易）');
   await page.getByLabel('会社名').last().fill('Dogfood 株式会社');
   await page.getByLabel('職種').last().fill('QA エンジニア');
   await page.getByLabel('業務内容').last().fill('E2E 自動化テストの設計・実装');
 
   // 保存
   await page.getByRole('button', { name: '保存' }).first().click();
-  await expect(page.getByText(/保存済|保存しました/)).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-slot="autosave-indicator"]')).toContainText('保存済み', { timeout: 15000 });
 
   await capture(page, 'A-editor-after-save-light.png');
 
@@ -168,7 +170,7 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
     page.waitForEvent('popup'),
     page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click(),
   ]);
-  await previewPage.waitForURL('/builder/preview');
+  await previewPage.waitForURL(/\/builder\/preview\?session=/);
   await previewPage.waitForLoadState('networkidle');
   await capture(previewPage, 'A-preview-light.png');
   const previewText = await previewPage.locator('body').innerText();
@@ -201,7 +203,6 @@ test('editor: edit all block types on dashboard sheet', async ({ page }) => {
   await capture(page, 'B-editor-profile-light.png');
 
   // 案件エディタタブで会社・案件追加
-  await page.getByRole('button', { name: '案件エディタ' }).click();
   await page.getByRole('button', { name: '＋ 会社' }).click();
   await page.locator('input[aria-label="会社名"]').first().fill('Dogfood クライアント');
 
@@ -224,7 +225,7 @@ test('editor: edit all block types on dashboard sheet', async ({ page }) => {
 
   // 保存
   await page.getByRole('button', { name: '保存' }).first().click();
-  await expect(page.getByText(/保存済|保存しました/)).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('[data-slot="autosave-indicator"]')).toContainText('保存済み', { timeout: 15000 });
 
   await capture(page, 'B-editor-after-save-light.png');
 
