@@ -62,6 +62,7 @@ const SheetViewClient = ({
 }: SheetViewClientProps) => {
   const [pdfLoading, setPdfLoading] = useState(false);
   const [excelLoading, setExcelLoading] = useState(false);
+  const [docxLoading, setDocxLoading] = useState(false);
   // 要約版（PDF / Excel）のどちらかを生成中のあいだ真。全文版の busy とは別系統にする。
   const [digestLoading, setDigestLoading] = useState(false);
   // project ブロックを含むシートはダッシュボード扱いにし、Console トップバー＋ビュートグルを出す。
@@ -214,6 +215,53 @@ const SheetViewClient = ({
   const handleDownloadExcel = () => downloadExcel('full');
   const handleDownloadExcelDigest = () => downloadExcel('digest');
 
+  // Word 出力は全量版のみ（要約版は route 側が 400 で明示拒否する設計）。
+  const downloadDocx = async () => {
+    const toastId = toast.loading('Wordを生成中…');
+    const startedAt = performance.now();
+    try {
+      setDocxLoading(true);
+      const params = new URLSearchParams();
+      if (sheetId) params.set('id', sheetId);
+      const query = params.size > 0 ? `?${params}` : '';
+      const res = await fetch(`/api/sheet/export-docx${query}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${title}.docx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, REVOKE_OBJECT_URL_DELAY_MS);
+
+      toast.success('Wordをダウンロードしました', { id: toastId });
+      track({
+        name: 'docx_exported',
+        result: 'success',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+      });
+    } catch (err) {
+      console.error('Error generating Word:', err);
+      toast.error('Wordの生成に失敗しました', { id: toastId });
+      track({
+        name: 'docx_exported',
+        result: 'failure',
+        durationBucket: toSecondsBucket(performance.now() - startedAt),
+        reason: exportFailureReason(err),
+      });
+      captureError(err, { feature: 'docx-export' });
+    } finally {
+      setDocxLoading(false);
+    }
+  };
+
+  const handleDownloadDocx = () => downloadDocx();
+
   return (
     <div>
       {stale && (
@@ -234,6 +282,8 @@ const SheetViewClient = ({
           pdfLoading={pdfLoading}
           onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
           excelLoading={excelLoading}
+          onDownloadDocx={canExportExcel ? handleDownloadDocx : undefined}
+          docxLoading={docxLoading}
           onDownloadPdfDigest={handleDownloadPdfDigest}
           onDownloadExcelDigest={canExportExcel ? handleDownloadExcelDigest : undefined}
           digestLoading={digestLoading}
@@ -241,12 +291,14 @@ const SheetViewClient = ({
           reserveEditSlot={reserveEditSlot}
         />
       ) : (
-        // project ブロックを持たない DB シート（Header 側）でも Excel 出力は出す
+        // project ブロックを持たない DB シート（Header 側）でも Excel / Word 出力は出す
         <Header
           onDownloadPdf={handleDownloadPdf}
           pdfLoading={pdfLoading}
           onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
           excelLoading={excelLoading}
+          onDownloadDocx={canExportExcel ? handleDownloadDocx : undefined}
+          docxLoading={docxLoading}
           canEdit={canEdit}
           reserveEditSlot={reserveEditSlot}
           backHref="/view"

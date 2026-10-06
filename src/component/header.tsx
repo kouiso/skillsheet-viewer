@@ -15,7 +15,10 @@ interface HeaderProps {
   pdfLoading?: boolean;
   /** Excel ダウンロード（DB シートのみ。未指定ならボタンを出さない）。 */
   onDownloadExcel?: () => void | Promise<void>;
+  /** Word ダウンロード（DB シートのみ。未指定ならボタンを出さない）。 */
+  onDownloadDocx?: () => void | Promise<void>;
   excelLoading?: boolean;
+  docxLoading?: boolean;
   /** 編集者ログイン済みか。false のときは編集導線（ビルダーリンク）を出さない。 */
   canEdit?: boolean;
   /** 編集者判定の前後で編集ボタン分の幅を固定する。 */
@@ -29,7 +32,9 @@ const Header = ({
   onDownloadPdf,
   pdfLoading = false,
   onDownloadExcel,
+  onDownloadDocx,
   excelLoading = false,
+  docxLoading = false,
   canEdit = true,
   reserveEditSlot = false,
   backHref,
@@ -122,6 +127,25 @@ const Header = ({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Excelをダウンロード</TooltipContent>
+            </Tooltip>
+          )}
+
+          {onDownloadDocx && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => void onDownloadDocx()}
+                  disabled={docxLoading}
+                  aria-busy={docxLoading}
+                  aria-label={docxLoading ? 'Wordを生成中' : 'Wordダウンロード'}
+                  className="min-h-11 min-w-11"
+                >
+                  {docxLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileText />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Wordをダウンロード</TooltipContent>
             </Tooltip>
           )}
 
