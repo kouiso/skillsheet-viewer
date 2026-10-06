@@ -50,4 +50,11 @@ export type ObservabilityEvent =
       durationBucket: SecondsBucket;
       reason?: ExportFailureReason;
     }
+  | {
+      // docx は要約版を持たないため edition を乗せない（route 側が edition=digest を 400 で拒否）
+      name: 'docx_exported';
+      result: ExportResult;
+      durationBucket: SecondsBucket;
+      reason?: ExportFailureReason;
+    }
   | { name: 'viewer_auth_submitted'; outcome: ViewerAuthOutcome };
