@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Block } from '@/db/block';
 
-vi.mock('@/component/viewer-fonts', () => ({ atlasFontClasses: '' }));
+vi.mock('@/component/viewer-fonts', () => ({ consoleFontClasses: '' }));
 
 import SheetViewClient from './sheet-view-client';
 

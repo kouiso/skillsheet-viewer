@@ -372,7 +372,7 @@ it('単独リンクだけを操作領域の拡張対象にし、本文内リン�
   expect(screen.getByRole('link', { name: '本文内' }).parentElement).not.toHaveClass('standalone-link');
 });
 
-it('Atlas指定をプロフィールへ伝搬し、目次を本文内に置く', async () => {
+it('Console指定をプロフィールへ伝搬し、目次を本文内に置く', async () => {
   render(
     <SkillSheetViewer
       navigationLayout="inline"
@@ -399,5 +399,5 @@ it('Atlas指定をプロフィールへ伝搬し、目次を本文内に置く',
     profile.getByText('合成強み').compareDocumentPosition(profile.getByText('合成自己PR')) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
-  await waitFor(() => expect(document.querySelector('.atlas-toc')).toBeInTheDocument());
+  await waitFor(() => expect(document.querySelector('.console-toc')).toBeInTheDocument());
 });

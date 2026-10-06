@@ -29,7 +29,7 @@ vi.mock('framer-motion', () => ({
   useReducedMotion: () => false,
 }));
 
-vi.mock('./viewer-fonts', () => ({ atlasFontClasses: '' }));
+vi.mock('./viewer-fonts', () => ({ consoleFontClasses: '' }));
 
 const renderTopbar = (props = {}) =>
   render(
@@ -109,7 +109,7 @@ describe('ViewerTopbar', () => {
     });
   });
 
-  describe('Atlasの操作順とモバイルメニュー', () => {
+  describe('Consoleの操作順とモバイルメニュー', () => {
     it('戻る・表示切替・出力のDOM順を保つ', () => {
       renderTopbar();
       const back = screen.getByLabelText('シート一覧へ戻る');
@@ -121,7 +121,7 @@ describe('ViewerTopbar', () => {
     it('メニューを開いても表示状態を保持しEscapeで起点へ戻る', async () => {
       const user = userEvent.setup();
       const view = renderTopbar({ views: ['skills'] });
-      (view.container.querySelector('.atlas-mobile-bar') as HTMLElement).style.display = 'flex';
+      (view.container.querySelector('.console-mobile-bar') as HTMLElement).style.display = 'flex';
       const trigger = screen.getByRole('button', { name: '表示・出力メニューを開く' });
       await user.click(trigger);
       const dialog = screen.getByRole('dialog', { name: 'スキルシートの表示と出力' });
