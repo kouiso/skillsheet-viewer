@@ -1,5 +1,6 @@
 'use client';
 
+import { currentMonthKey } from '@/db/derived-display';
 import { formatMonthToken, type PeriodBounds, parsePeriodBounds, splitPeriodRange } from '@/db/process';
 
 export interface LaneItem {
@@ -19,17 +20,19 @@ export function buildCompanyLane(
   companyPeriod: string,
   items: LaneItem[],
 ): { startLabel: string; endLabel: string; rows: LaneRow[] } | null {
-  const bounds = parsePeriodBounds(companyPeriod);
+  // 「現在」終端は JST の今月で解釈する（parsePeriodBounds は時計を読まないため、ここで渡す）。
+  const referenceMonth = currentMonthKey();
+  const bounds = parsePeriodBounds(companyPeriod, referenceMonth);
   if (!bounds) return null;
   // 期間を解釈できない案件はレーンに出さない。以前は会社の期間へフォールバックしており、
   // 期間「不明」の案件が在籍期間いっぱいのバーになって、ずっと在籍したように見えていた。
   const parsed = items
-    .map((item) => ({ item, itemBounds: parsePeriodBounds(item.period) }))
+    .map((item) => ({ item, itemBounds: parsePeriodBounds(item.period, referenceMonth) }))
     .filter((row): row is { item: LaneItem; itemBounds: PeriodBounds } => row.itemBounds !== null);
   if (parsed.length < 2) return null;
   const startM = Math.round(bounds.start * 12);
-  // 終端「現在」は実行時点の月なので、サーバとブラウザで月をまたぐと幅が変わる（hydration ずれ）。
-  // 描画に使う終端は案件側の最大値から決めて、時計を描画から外す。
+  // 終端「現在」は基準月で決まるが、描画に使う終端は案件側の最大値から決める。
+  // 月をまたぐ実行でも幅が変わらず、同じデータからは常に同じレーンが出る。
   const itemEndM = Math.max(...parsed.map((row) => Math.round(row.itemBounds.end * 12)));
   const endM = bounds.openEnded ? Math.max(itemEndM, startM) : Math.round(bounds.end * 12);
   const total = endM - startM + 1;
