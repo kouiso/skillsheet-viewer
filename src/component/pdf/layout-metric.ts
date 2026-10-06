@@ -17,17 +17,17 @@ export const CONTENT_WIDTH = PAGE.WIDTH - PAGE.PADDING_HORIZONTAL * 2;
 /** 1 ページに載せられる縦幅（pt）。 */
 export const CONTENT_HEIGHT = PAGE.HEIGHT - PAGE.PADDING_TOP - PAGE.PADDING_BOTTOM;
 
-// 本文 10.5pt を基準に、見出し・表・コードのバランスを取り直したサイズ（Issue #263 G）。
+// 本文・表・コード・ページ番号も最小 11pt を維持し、必要ならページを増やす。
 export const FONT_SIZE = {
-  BODY: 10.5,
+  BODY: 11,
   TITLE: 21,
   H1: 17,
   H2: 14,
   H3: 12.5,
   H4: 11.5,
-  CELL: 10,
-  CODE: 9.5,
-  FOOTER: 9,
+  CELL: 11,
+  CODE: 11,
+  FOOTER: 11,
 } as const;
 
 export const LINE_HEIGHT = 1.6;

@@ -269,16 +269,20 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
     expect(merged.props.children).toHaveLength(2);
   });
 
-  it('見出しの直後が表でない場合（通常の段落など）は結合せず、見出しを単独描画する', () => {
-    const nodes = parseMarkdown(['## 概要', '', '通常の説明文です。', ''].join('\n'));
-    const rendered = renderBlocks(nodes) as unknown[];
+  it('見出しと短い導入段落を結合し、1ページを超える段落は分割できるままにする', () => {
+    const short = renderBlocks(parseMarkdown('## 概要\n\n通常の説明文です。')) as unknown[];
+    expect(short).toHaveLength(1);
+    const merged = short[0] as { type: unknown; props: { wrap?: boolean; children: unknown[] } };
+    expect(merged.type).toBe(View);
+    expect(merged.props.wrap).toBe(false);
+    expect(flattenText(merged)).toBe('概要通常の説明文です。');
+    expect(merged.props.children).toHaveLength(2);
 
-    // 見出しと段落、それぞれ独立した要素として出力される（結合されない）。
-    expect(rendered).toHaveLength(2);
-    const heading = rendered[0] as { type: unknown; props: { wrap?: boolean; minPresenceAhead?: number } };
-    expect(heading.type).toBe(View);
-    // 表と結合されていないので wrap は明示設定されない（結合ケースのように boolean が入らない）。
+    const long = renderBlocks(parseMarkdown(`## 長い導入\n\n${'長い本文を省略しません。'.repeat(500)}`)) as unknown[];
+    expect(long).toHaveLength(2);
+    const heading = long[0] as { props: { wrap?: boolean; minPresenceAhead?: number } };
     expect(heading.props.wrap).toBeUndefined();
+    expect(heading.props.minPresenceAhead).toBe(NUM.MIN_PRESENCE_HEADING);
   });
 
   // Issue #263 D の回帰防止。旧実装は案件見出し（■接頭辞）のときだけ minPresenceAhead を
@@ -286,8 +290,11 @@ describe('renderBlocks（見出し+表の結合 wrap 制御の構造検証）', 
   it('■ を持たない通常の見出しにも minPresenceAhead を設定する（Issue #263 D）', () => {
     const plain = parseMarkdown('## 概要\n\n本文。\n') as MdNode[];
     const project = parseMarkdown('## ■ 案件A\n\n本文。\n') as MdNode[];
-    const plainHeading = (renderBlocks(plain) as unknown[])[0] as { props: { minPresenceAhead?: number } };
-    const projectHeading = (renderBlocks(project) as unknown[])[0] as { props: { minPresenceAhead?: number } };
+    const [plainGroup, projectGroup] = [plain, project].map(
+      (nodes) => (renderBlocks(nodes) as { props: { children: { props: { minPresenceAhead?: number } }[] } }[])[0],
+    );
+    const plainHeading = plainGroup.props.children[0];
+    const projectHeading = projectGroup.props.children[0];
 
     expect(plainHeading.props.minPresenceAhead).toBe(NUM.MIN_PRESENCE_HEADING);
     // 案件見出しと同じ扱いになっていること（片方だけ 0 に戻る退行を検出する）。
