@@ -114,6 +114,10 @@ function SnapshotPreview({ snapshot, referenceMonth }: { snapshot: DocumentSnaps
   const blocks = snapshot.blocks as Block[];
   return (
     <div className="min-w-0 space-y-4">
+      <div>
+        <p className="text-xs text-muted-foreground">シートタイトル</p>
+        <h3 className="break-words text-base font-semibold">{snapshot.title}</h3>
+      </div>
       {!valid && (
         <div role="alert" className="rounded border border-destructive p-3 text-foreground">
           この版は今の入力ルールに合わないため戻せません。原文と問題箇所を確認できます。
@@ -180,6 +184,7 @@ export function VersionHistory({
   const [restoreError, setRestoreError] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [undo, setUndo] = useState<{ target: string; expected: string } | null>(null);
+  const [confirmationReviewOpen, setConfirmationReviewOpen] = useState(false);
   const [notice, setNotice] = useState(false);
   const [noticeSeconds, setNoticeSeconds] = useState(10);
   const [noticeSerial, setNoticeSerial] = useState(0);
@@ -255,7 +260,7 @@ export function VersionHistory({
       valid = false;
     };
   }, [from, to, revision, compareAttempt]);
-  async function prepare(target = to, expected = revision) {
+  async function prepare(target = to, expected = revision, reviewTarget = false) {
     if (busyRef.current || restoreBlockedReason) return;
     returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     busyRef.current = true;
@@ -263,7 +268,10 @@ export function VersionHistory({
     setRestoreError(false);
     try {
       const result = await apiRef.current.previewRestore(target, expected);
-      if (alive.current) setConfirmation(result);
+      if (alive.current) {
+        setConfirmationReviewOpen(reviewTarget);
+        setConfirmation(result);
+      }
     } catch (error) {
       if (alive.current) {
         if (failed(error)) setConflict(true);
@@ -344,7 +352,7 @@ export function VersionHistory({
               type="button"
               className={control}
               disabled={busy || Boolean(restoreBlockedReason)}
-              onClick={() => void prepare(undo.target, undo.expected)}
+              onClick={() => void prepare(undo.target, undo.expected, true)}
             >
               戻す前に戻す
             </button>
@@ -430,7 +438,7 @@ export function VersionHistory({
                     className={`${control} mt-1 w-full`}
                     disabled={busy || Boolean(restoreBlockedReason)}
                     onClick={() => {
-                      if (row.restoredBefore !== null) void prepare(row.restoredBefore, row.revision);
+                      if (row.restoredBefore !== null) void prepare(row.restoredBefore, row.revision, true);
                     }}
                   >
                     版 {row.revision} の復元前（版 {row.restoredBefore}）を確認
@@ -454,7 +462,7 @@ export function VersionHistory({
               type="button"
               className={`${control} mt-3 w-full`}
               disabled={busy || Boolean(restoreBlockedReason)}
-              onClick={() => void prepare(undo.target, undo.expected)}
+              onClick={() => void prepare(undo.target, undo.expected, true)}
             >
               復元前の版 {undo.target} を確認
             </button>
@@ -628,6 +636,32 @@ export function VersionHistory({
                   ))}
                 </ul>
               </div>
+            )}
+            {confirmation && (
+              <details
+                className="my-3 min-w-0 rounded border border-border p-3"
+                open={confirmationReviewOpen}
+                onToggle={(event) => setConfirmationReviewOpen(event.currentTarget.open)}
+              >
+                <summary className="cursor-pointer py-2 text-sm font-semibold">戻す内容と変更点を確認</summary>
+                <div className="mt-3 min-w-0 space-y-4">
+                  <SnapshotPreview snapshot={confirmation.target} referenceMonth={referenceMonth} />
+                  <h3 className="text-sm font-semibold">いまの内容から変わる項目</h3>
+                  {documentDifferences(
+                    { title: confirmation.current.title, blocks: confirmation.current.blocks },
+                    { title: confirmation.target.title, blocks: confirmation.target.blocks },
+                  ).map((difference) => (
+                    <section key={difference.path} className="min-w-0 rounded border border-border p-3 text-sm">
+                      <h4 className="break-all font-semibold">{fieldLabel(difference.path)}</h4>
+                      <p className="mt-2 text-xs text-muted-foreground">現在の内容</p>
+                      <del className="block whitespace-pre-wrap break-all">{difference.before}</del>
+                      <p className="mt-2 text-xs text-muted-foreground">戻した後の内容</p>
+                      <ins className="block whitespace-pre-wrap break-all">{difference.after}</ins>
+                    </section>
+                  ))}
+                  {confirmation.sameContent && <p className="text-sm">いまの内容と同じです。</p>}
+                </div>
+              </details>
             )}
             {confirmation && !confirmation.canRestore && (
               <p role="alert">

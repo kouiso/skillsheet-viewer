@@ -82,6 +82,31 @@ describe('シート全体の版の履歴', () => {
     expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('1');
   });
 
+  it('ブロック描画でも選択した版のシートタイトルを明示する', async () => {
+    setup({
+      read: vi
+        .fn()
+        .mockImplementation(async (revision) => ({ ...snapshot(revision), title: `版${revision}のタイトル` })),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /版 1/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '選択した版の全体プレビュー' }));
+    expect(await screen.findByRole('heading', { name: '版1のタイトル' })).toBeVisible();
+  });
+
+  it('通常の復元確認は内容詳細を折りたたみ、開くと確認tokenの対象原文と差分を表示する', async () => {
+    setup();
+    const dialog = await confirmOld();
+    const summary = within(dialog).getByText('戻す内容と変更点を確認');
+    const details = summary.closest('details');
+    expect(details).not.toHaveAttribute('open');
+    fireEvent.click(summary);
+    expect(within(dialog).getByRole('heading', { name: '合成文書' })).toBeVisible();
+    expect(within(dialog).getByText(/"markdown": "本文1/)).toBeInTheDocument();
+    expect(within(dialog).getByText('いまの内容から変わる項目')).toBeVisible();
+    expect(within(dialog).getByText(/本文2/, { selector: 'del' })).toBeVisible();
+    expect(within(dialog).getByText(/本文1/, { selector: 'ins' })).toBeVisible();
+  });
+
   it('再読込後も履歴の復元前リンクが残り、復元した版を期待版に固定する', async () => {
     const { api } = setup({
       list: vi.fn().mockResolvedValue([
@@ -97,6 +122,11 @@ describe('シート全体の版の履歴', () => {
     });
     fireEvent.click(await screen.findByRole('button', { name: '版 3 の復元前（版 2）を確認' }));
     await waitFor(() => expect(api.previewRestore).toHaveBeenCalledWith('2', '3'));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(within(dialog).getByText('戻す内容と変更点を確認').closest('details')).toHaveAttribute('open');
+    expect(within(dialog).getByRole('heading', { name: '合成文書' })).toBeVisible();
+    expect(within(dialog).getByText(/本文2/, { selector: 'ins' })).toBeVisible();
+    expect(api.restore).not.toHaveBeenCalled();
   });
 
   it('未保存入力のguardは比較を許可し、復元開始を禁止する', async () => {
@@ -195,6 +225,10 @@ describe('シート全体の版の履歴', () => {
     fireEvent.click(await screen.findByRole('button', { name: '通知を閉じる' }));
     fireEvent.click(screen.getByRole('button', { name: '復元前の版 2 を確認' }));
     await waitFor(() => expect(api.previewRestore).toHaveBeenLastCalledWith('2', '3'));
+    const undoDialog = await screen.findByRole('alertdialog');
+    expect(within(undoDialog).getByText('戻す内容と変更点を確認').closest('details')).toHaveAttribute('open');
+    expect(within(undoDialog).getByText(/本文2/, { selector: 'ins' })).toBeVisible();
+    expect(api.restore).toHaveBeenCalledTimes(1);
   });
   it('未知版は原文を閲覧できるが復元できない', async () => {
     setup({ read: vi.fn().mockImplementation(async (rev) => snapshot(rev, rev !== '1')) });
