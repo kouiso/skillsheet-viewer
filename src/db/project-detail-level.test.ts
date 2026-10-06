@@ -12,6 +12,9 @@ import {
 
 const emptyTech: ProjectTech = { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] };
 
+// 基準月キー: year*12 + monthIndex（currentMonthKey と同じ約束）。2026 年 9 月 = 24320。
+const REF_MONTH = 2026 * 12 + 8;
+
 function item(id: string, period: string, role = ''): ProjectItem {
   return {
     id,
@@ -52,47 +55,50 @@ describe('isLeadRole', () => {
 
 describe('periodMonths', () => {
   it('両端を含む月数を返す', () => {
-    expect(periodMonths('2025.11 — 2026.07')).toBe(9);
-    expect(periodMonths('2024.01 — 2024.01')).toBe(1);
+    expect(periodMonths('2025.11 — 2026.07', REF_MONTH)).toBe(9);
+    expect(periodMonths('2024.01 — 2024.01', REF_MONTH)).toBe(1);
   });
 
   it('解釈できない period は null', () => {
-    expect(periodMonths('')).toBeNull();
-    expect(periodMonths('いつか')).toBeNull();
+    expect(periodMonths('', REF_MONTH)).toBeNull();
+    expect(periodMonths('いつか', REF_MONTH)).toBeNull();
   });
 });
 
 describe('detailBaseline', () => {
   it('シート内の最も新しい終了月を返す（実行日に依存しない）', () => {
-    const baseline = detailBaseline([item('a', '2020.01 — 2020.06'), item('b', '2026.01 — 2026.09')]);
+    const baseline = detailBaseline([item('a', '2020.01 — 2020.06'), item('b', '2026.01 — 2026.09')], REF_MONTH);
     // 2026.09 = 2026 + 8/12
     expect(baseline).toBeCloseTo(2026 + 8 / 12, 6);
   });
 
   it('終端「現在」の案件は基準に実行時点を混ぜず、確定済みの開始月を使う', () => {
-    // 「現在」を実行時点で比べると、実行した月で基準がずれて結果が変わる
+    // 「現在」を基準月で比べると、参照した月で基準がずれて結果が変わる
     // （月末・月初の境界で詳細/簡約が入れ替わった不具合）。基準に寄与できる
     // 確定値は開始月だけなので、継続中の案件は開始月で基準に参加する。
-    const baseline = detailBaseline([item('ongoing', '2026.03 — 現在'), item('closed', '2020.01 — 2020.12')]);
-    // 2026.03 = 2026 + 2/12（実行月ではなく開始月）
+    const baseline = detailBaseline(
+      [item('ongoing', '2026.03 — 現在'), item('closed', '2020.01 — 2020.12')],
+      REF_MONTH,
+    );
+    // 2026.03 = 2026 + 2/12（基準月ではなく開始月）
     expect(baseline).toBeCloseTo(2026 + 2 / 12, 6);
   });
 
   it('終端「現在」しか無くても確定済みの開始月から基準が立つ', () => {
-    const baseline = detailBaseline([item('a', '2019.05 — 現在'), item('b', '2023.07 — 現在')]);
+    const baseline = detailBaseline([item('a', '2019.05 — 現在'), item('b', '2023.07 — 現在')], REF_MONTH);
     // 2023.07 = 2023 + 6/12
     expect(baseline).toBeCloseTo(2023 + 6 / 12, 6);
   });
 
   it('1 件も解釈できなければ null', () => {
-    expect(detailBaseline([item('a', '')])).toBeNull();
+    expect(detailBaseline([item('a', '')], REF_MONTH)).toBeNull();
   });
 });
 
 describe('resolveDetailLevels', () => {
   it('直近 24 ヶ月以内に稼働した案件は詳細版', () => {
     const items = [item('recent', '2026.01 — 2026.09'), item('twoYears', '2024.09 — 2024.10')];
-    const { levelById } = resolveDetailLevels(items);
+    const { levelById } = resolveDetailLevels(items, REF_MONTH);
     expect(levelById.get('recent')).toBe('detail');
     // 基準 2026.09 から 23 ヶ月前なので、まだ直近の枠に入る
     expect(levelById.get('twoYears')).toBe('detail');
@@ -100,17 +106,17 @@ describe('resolveDetailLevels', () => {
 
   it('直近の枠から外れた担当者ロールの案件は簡約版', () => {
     const items = [item('recent', '2026.01 — 2026.09'), item('old', '2019.01 — 2019.06', 'SE')];
-    expect(resolveDetailLevels(items).levelById.get('old')).toBe('compact');
+    expect(resolveDetailLevels(items, REF_MONTH).levelById.get('old')).toBe('compact');
   });
 
   it('古くても PL 以上かつ 6 ヶ月以上なら詳細版に上がる', () => {
     const items = [item('recent', '2026.01 — 2026.09'), item('oldLead', '2021.07 — 2023.03', 'PL')];
-    expect(resolveDetailLevels(items).levelById.get('oldLead')).toBe('detail');
+    expect(resolveDetailLevels(items, REF_MONTH).levelById.get('oldLead')).toBe('detail');
   });
 
   it('PL 以上でも 6 ヶ月未満なら上がらない', () => {
     const items = [item('recent', '2026.01 — 2026.09'), item('shortLead', '2019.01 — 2019.03', 'PL')];
-    expect(resolveDetailLevels(items).levelById.get('shortLead')).toBe('compact');
+    expect(resolveDetailLevels(items, REF_MONTH).levelById.get('shortLead')).toBe('compact');
   });
 
   it('規則 2 で上がるのは期間の長い順に SENIOR_MAX_COUNT 件まで', () => {
@@ -121,7 +127,7 @@ describe('resolveDetailLevels', () => {
       item('lead12m', '2018.01 — 2018.12', 'PL'),
       item('lead06m', '2018.01 — 2018.06', 'PL'),
     ];
-    const { levelById } = resolveDetailLevels(items);
+    const { levelById } = resolveDetailLevels(items, REF_MONTH);
     const promoted = ['lead20m', 'lead18m', 'lead12m', 'lead06m'].filter((id) => levelById.get(id) === 'detail');
     expect(promoted).toEqual(['lead20m', 'lead18m', 'lead12m']);
     expect(promoted).toHaveLength(SENIOR_MAX_COUNT);
@@ -129,14 +135,14 @@ describe('resolveDetailLevels', () => {
 
   it('period が解釈できない案件は簡約版に落とす', () => {
     const items = [item('recent', '2026.01 — 2026.09'), item('unknown', '', 'PL')];
-    expect(resolveDetailLevels(items).levelById.get('unknown')).toBe('compact');
+    expect(resolveDetailLevels(items, REF_MONTH).levelById.get('unknown')).toBe('compact');
   });
 
   it('継続中の案件は基準との差を取らず常に詳細版', () => {
-    // 終端「現在」の end は実行時点なので、差分を取ると時計が漏れる。
+    // 終端「現在」の end は基準月なので、差分を取ると基準月が判定に漏れる。
     // 継続中は「今も稼働している」以上に直近になりようがないので常に詳細版。
     const items = [item('ongoing', '2010.01 — 現在'), item('recent', '2026.01 — 2026.09')];
-    expect(resolveDetailLevels(items).levelById.get('ongoing')).toBe('detail');
+    expect(resolveDetailLevels(items, REF_MONTH).levelById.get('ongoing')).toBe('detail');
   });
 
   it('基準が実行日で動かないので、カットオフ境界の案件は月をまたいでも詳細/簡約が不変', () => {
@@ -145,24 +151,33 @@ describe('resolveDetailLevels', () => {
     // （この例では継続中案件の開始月 2026.10）に固定される。
     const items = [item('ongoing', '2026.10 — 現在'), item('edge', '2024.09 — 2024.10', 'SE')];
     // 基準 2026.10 から 24 ヶ月前 — カットオフちょうど内側なので詳細版
-    expect(resolveDetailLevels(items).levelById.get('edge')).toBe('detail');
+    expect(resolveDetailLevels(items, REF_MONTH).levelById.get('edge')).toBe('detail');
     // 25 ヶ月前なら簡約版
     const older = [item('ongoing', '2026.10 — 現在'), item('edge', '2024.08 — 2024.09', 'SE')];
-    expect(resolveDetailLevels(older).levelById.get('edge')).toBe('compact');
+    expect(resolveDetailLevels(older, REF_MONTH).levelById.get('edge')).toBe('compact');
   });
 
   it('detailCount は詳細版の件数と一致する', () => {
     const items = [item('a', '2026.01 — 2026.09'), item('b', '2026.02 — 2026.08'), item('c', '2015.01 — 2015.06')];
-    const { detailCount, levelById } = resolveDetailLevels(items);
+    const { detailCount, levelById } = resolveDetailLevels(items, REF_MONTH);
     expect(detailCount).toBe([...levelById.values()].filter((v) => v === 'detail').length);
     expect(detailCount).toBe(2);
   });
 
   it('閾値は定数から読む（実装側で変えてもテストが追従する）', () => {
     const items = [item('recent', '2026.01 — 2026.09')];
-    const baseline = detailBaseline(items);
+    const baseline = detailBaseline(items, REF_MONTH);
     expect(baseline).not.toBeNull();
     expect(DETAIL_CUTOFF_MONTHS).toBeGreaterThan(0);
+  });
+
+  it('基準月が1ヶ月動いても詳細度は揺れない（基準はシート内の確定値に固定される回帰）', () => {
+    // 「現在」終端の案件の開始月が基準線を作る（2025.09）。edge はその 12 ヶ月前なので
+    // 詳細版。以前は「現在」を実行時点の Date で解釈していて、同じシート・同じ指定月でも
+    // 実行日によって境界の案件が detail↔compact に揺れた。
+    const items = [item('ongoing', '2025.09 — 現在'), item('edge', '2024.07 — 2024.09')];
+    expect(resolveDetailLevels(items, 2026 * 12 + 8).levelById.get('edge')).toBe('detail');
+    expect(resolveDetailLevels(items, 2026 * 12 + 9).levelById.get('edge')).toBe('detail');
   });
 });
 
