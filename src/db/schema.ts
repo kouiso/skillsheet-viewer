@@ -74,6 +74,40 @@ export const blocks = pgTable(
   (table) => [unique('blocks_sheet_id_order_unique').on(table.sheetId, table.order)],
 );
 
+/** 全文書の保存版。削除後も owner 境界内で復元するため本体への cascade FK は付けない。 */
+export const documentVersions = pgTable(
+  'document_versions',
+  {
+    sheetId: uuid('sheet_id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    revision: bigint('revision', { mode: 'bigint' }).notNull(),
+    title: text('title').notNull(),
+    blocks: jsonb('blocks').notNull(),
+    action: text('action').notNull(),
+    recordedAt: timestamp('recorded_at', { withTimezone: true }).notNull().defaultNow(),
+    transactionId: bigint('transaction_id', { mode: 'bigint' }).notNull(),
+    restoredFrom: bigint('restored_from', { mode: 'bigint' }),
+    restoredBefore: bigint('restored_before', { mode: 'bigint' }),
+  },
+  (table) => [
+    unique('document_versions_sheet_revision_unique').on(table.sheetId, table.revision),
+    index('document_versions_owner_sheet_revision_idx').on(table.ownerId, table.sheetId, table.revision),
+    check('document_versions_revision_nonnegative', sql`${table.revision} >= 0`),
+  ],
+);
+
+/** 削除 CAS の版を保持する。再作成 API の tombstone と独立し、明示復元だけに使用する。 */
+export const deletedDocuments = pgTable(
+  'deleted_documents',
+  {
+    sheetId: uuid('sheet_id').primaryKey(),
+    ownerId: text('owner_id').notNull(),
+    revision: bigint('revision', { mode: 'bigint' }).notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index('deleted_documents_owner_idx').on(table.ownerId)],
+);
+
 /**
  * 実ボリュームデモ用のフィクスチャ管理テーブル。
  * 同名シートの並行作成を防ぐため、owner_id 単位で一意制約を持つ。

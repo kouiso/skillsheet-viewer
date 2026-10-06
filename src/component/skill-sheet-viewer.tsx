@@ -50,7 +50,10 @@ interface SkillSheetViewerProps {
     content: string;
   };
   blocks?: Block[];
+  /** 編集プレビューで描画するブロック。集計は全blocksの文脈を保つ。 */
+  previewBlockId?: string;
   compareMode?: boolean;
+  navigationLayout?: 'sidebar' | 'inline';
   /**
    * 表示するビューの集合。省略時は全ビューON
    * （ビルダープレビュー・比較ページは従来どおり全セクション表示）。
@@ -239,14 +242,19 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
 const SkillSheetViewer = ({
   skillSheet,
   blocks,
+  previewBlockId,
   compareMode = false,
+  navigationLayout = 'sidebar',
   views,
   referenceMonth,
 }: SkillSheetViewerProps) => {
   // views 未指定（ビルダープレビュー・比較・レガシー）は全ビューON扱い。
   const showView = useCallback((view: ViewKey) => !views || views.includes(view), [views]);
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
-  const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
+  const groupedBlocks = useMemo(
+    () => (blocks ? groupBlocks(previewBlockId ? blocks.filter((block) => block.id === previewBlockId) : blocks) : []),
+    [blocks, previewBlockId],
+  );
   // 途中に他種別ブロックが挟まっていても、推しモードはシート内の全スキル一覧で共通にする。
   // 描画グループ単位にすると、片方のカテゴリだけ従来の習熟度強調へ戻ってしまうため。
   const hasFeaturedSkills = useMemo(
@@ -388,10 +396,19 @@ const SkillSheetViewer = ({
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col min-[900px]:flex-row">
+    <div
+      className={
+        navigationLayout === 'inline' ? 'atlas-content min-w-0' : 'flex min-h-screen flex-col min-[900px]:flex-row'
+      }
+    >
       {/* 目次（左サイドバー）— 比較モード、または構造化ダッシュボードで見出しが無い場合は非表示 */}
       {mounted && !compareMode && (!blocks || headings.length > 0) && (
-        <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />
+        <TableOfContents
+          layout={navigationLayout}
+          headings={headings}
+          activeId={activeId}
+          onHeadingClick={scrollToHeading}
+        />
       )}
 
       {/* メインコンテンツ */}
@@ -461,7 +478,13 @@ const SkillSheetViewer = ({
                   );
                 }
                 if (block.type === 'profile') {
-                  return <ProfileIntro key={block.id} data={block.data} />;
+                  return (
+                    <ProfileIntro
+                      layout={navigationLayout === 'inline' ? 'atlas' : 'default'}
+                      key={block.id}
+                      data={block.data}
+                    />
+                  );
                 }
                 if (block.type === 'stats') {
                   return (

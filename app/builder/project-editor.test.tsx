@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectBlockData } from '@/db/block';
 
@@ -46,6 +46,29 @@ const setNarrow = (matches: boolean) => {
 };
 
 describe('ProjectEditor 狭幅対応', () => {
+  it('会社削除の確認に全案件を表示し、取消では保存せず承認後だけ関連データを削除する', async () => {
+    const change = vi.fn();
+    const data = {
+      ...mockData,
+      items: Array.from({ length: 12 }, (_, index) => ({
+        ...mockData.items[0],
+        id: `p-${index}`,
+        title: `合成案件${index}`,
+        hidden: index === 11,
+      })),
+    };
+    render(<ProjectEditor data={data} onChange={change} showPreview={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'テスト会社 を削除' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(12);
+    expect(within(dialog).getByText('合成案件11（非表示）')).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'やめる' }));
+    expect(change).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'テスト会社 を削除' }));
+    fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '会社と案件を削除' }));
+    await waitFor(() => expect(change).toHaveBeenCalledExactlyOnceWith({ companies: [], items: [] }));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     setNarrow(false);

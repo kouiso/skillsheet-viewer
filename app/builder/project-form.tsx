@@ -23,6 +23,7 @@ const Field = ({
   required,
   hint,
   error,
+  warningTarget,
   col2,
   syncKey,
   onFocus,
@@ -32,6 +33,7 @@ const Field = ({
   required?: boolean;
   hint?: string;
   error?: string | null;
+  warningTarget?: string;
   col2?: boolean;
   /** プレビューの対応箇所へ結びつけるキー。 */
   syncKey?: string;
@@ -46,7 +48,22 @@ const Field = ({
       {required && <span className="req">*</span>}
     </label>
     {children}
-    {error ? <p className="hint err">{error}</p> : hint ? <p className="hint">{hint}</p> : null}
+    {error ? (
+      <div className="field-warning" role="status">
+        <span>{error}</span>
+        <button
+          type="button"
+          onClick={(event) => {
+            const field = event.currentTarget.closest('.field');
+            field?.querySelector<HTMLElement>(warningTarget ?? 'input, button, select, textarea')?.focus();
+          }}
+        >
+          確認する<span className="sr-only">（{label}）</span>
+        </button>
+      </div>
+    ) : hint ? (
+      <p className="hint">{hint}</p>
+    ) : null}
   </div>
 );
 
@@ -223,7 +240,9 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             col2
             syncKey="title"
             onFocus={focus('title')}
-            error={!p.title.trim() ? '必須項目です — 未入力のままだと一覧・閲覧側で「無題」表示になります' : null}
+            error={
+              !p.title.trim() ? '案件名が未入力です。未入力のままだと一覧・閲覧側で「無題」表示になります。' : null
+            }
           >
             <input
               value={p.title}
@@ -280,6 +299,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             syncKey="period"
             onFocus={focus('period')}
             hint="月数・並び順は自動計算"
+            warningTarget={orderError || endMissing ? 'input[aria-label="終了月"]' : 'input[aria-label="開始月"]'}
             error={
               orderError
                 ? '終了月が開始月より前になっています'

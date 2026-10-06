@@ -13,6 +13,7 @@ interface Heading {
 }
 
 interface TableOfContentsProps {
+  layout?: 'sidebar' | 'inline';
   headings: Heading[];
   activeId: string;
   onHeadingClick: (id: string) => void;
@@ -83,7 +84,7 @@ const TocList = ({ headings, activeId, onHeadingClick, collapsed }: TocListProps
   </ul>
 );
 
-const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContentsProps) => {
+const TableOfContents = ({ headings, activeId, onHeadingClick, layout = 'sidebar' }: TableOfContentsProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isMobile = useMediaQuery('(max-width: 899px)');
@@ -92,6 +93,17 @@ const TableOfContents = ({ headings, activeId, onHeadingClick }: TableOfContents
     onHeadingClick(id);
     if (isMobile) setMobileOpen(false);
   };
+
+  if (layout === 'inline') {
+    return (
+      <details className="atlas-toc no-print">
+        <summary>目次</summary>
+        <nav aria-label="目次">
+          <TocList headings={headings} activeId={activeId} onHeadingClick={onHeadingClick} />
+        </nav>
+      </details>
+    );
+  }
 
   // モバイル: 本文と重ならない操作行 + Sheet（左から）
   if (isMobile) {

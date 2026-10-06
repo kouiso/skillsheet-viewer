@@ -156,3 +156,29 @@ describe('ProjectPreview のキーボード移動', () => {
     expect(onJump).toHaveBeenCalledWith('title');
   });
 });
+
+describe('非表示案件と技術の全文確認', () => {
+  it('非表示でも本文を薄めず、展開操作は編集ジャンプを起こさない', () => {
+    const onJump = vi.fn();
+    const item = project({
+      hidden: true,
+      tech: {
+        lang: Array.from({ length: 20 }, (_, i) => `技術${i + 1}`),
+        fw: [],
+        db: [],
+        infra: [],
+        tools: [],
+        collab: [],
+      },
+    });
+    const view = render(<ProjectPreview project={item} company={undefined} no={1} onJump={onJump} />);
+    expect(view.container.querySelector('.opacity-60')).toBeNull();
+    expect(view.container.querySelector('.pv-card-hidden')).not.toBeNull();
+    expect(view.queryByText('技術20')).toBeNull();
+    fireEvent.click(view.getByRole('button', { name: 'すべての技術を表示（20件）' }));
+    expect(view.getByText('技術20')).toBeVisible();
+    expect(onJump).not.toHaveBeenCalled();
+    view.rerender(<ProjectPreview project={{ ...item, id: 'p2' }} company={undefined} no={2} onJump={onJump} />);
+    expect(view.queryByText('技術20')).toBeNull();
+  });
+});

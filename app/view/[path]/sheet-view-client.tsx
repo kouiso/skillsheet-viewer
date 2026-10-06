@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
+import { atlasFontClasses } from '@/component/viewer-fonts';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
 import type { Block } from '@/db/block';
 import { useReadDepth } from '@/hook/use-read-depth';
@@ -215,7 +216,7 @@ const SheetViewClient = ({
   const handleDownloadExcelDigest = () => downloadExcel('digest');
 
   return (
-    <div>
+    <div className={isDashboard ? `atlas-page ${atlasFontClasses}` : undefined}>
       {stale && (
         <div
           role="status"
@@ -253,6 +254,7 @@ const SheetViewClient = ({
         />
       )}
       <SkillSheetViewer
+        navigationLayout={isDashboard ? 'inline' : 'sidebar'}
         skillSheet={{ title, content }}
         blocks={blocks}
         views={isDashboard ? views : undefined}
