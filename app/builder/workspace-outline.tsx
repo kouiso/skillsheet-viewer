@@ -8,6 +8,7 @@ export interface WorkspaceOutlineItem {
   title: string;
   kind: string;
   warningCount?: number;
+  blockingCount?: number;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
 }
@@ -69,6 +70,12 @@ function OutlineRow({
     disabled: !onMove,
   });
   const selected = item.id === selectedId;
+  const issueDescription = item.blockingCount
+    ? `${item.blockingCount}か所の入力により保存を止めています`
+    : item.warningCount
+      ? `${item.warningCount}か所の確認が必要です。保存は続けています`
+      : '';
+  const issueId = `${instanceId}-issue`;
   const actionClass =
     'min-h-11 min-w-11 rounded border border-border bg-card text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:text-muted-foreground';
   return (
@@ -76,6 +83,7 @@ function OutlineRow({
       <div className={compact ? 'grid min-w-0' : 'flex min-w-0 items-stretch'}>
         <button
           type="button"
+          aria-describedby={issueDescription ? issueId : undefined}
           aria-current={item.id === selectedId ? 'true' : undefined}
           aria-label={`${item.kind}: ${item.title}`}
           title={`${item.kind}: ${item.title}`}
@@ -92,16 +100,21 @@ function OutlineRow({
               <span className="block break-words">{item.title}</span>
             </>
           )}
-          {Boolean(item.warningCount) && (
+          {issueDescription && (
             <span
               aria-hidden="true"
-              title={`${item.warningCount}か所の入力確認が必要`}
-              className="ml-1 font-semibold text-warn-strong"
+              title={issueDescription}
+              className={`ml-1 text-xs font-semibold ${item.blockingCount ? 'text-danger' : 'text-warn-strong'}`}
             >
               !
             </span>
           )}
         </button>
+        {issueDescription && (
+          <span id={issueId} className="sr-only">
+            {issueDescription}
+          </span>
+        )}
         {onMove && (
           <button
             ref={setDragRef}

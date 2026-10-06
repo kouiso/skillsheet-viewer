@@ -45,7 +45,7 @@ import { CreateSheetDialog } from './create-sheet-dialog';
 import { type HistoryEntry, loadHistory, pushHistory } from './history';
 import { HistoryDrawer } from './history-drawer';
 import { ProjectEditor } from './project-editor';
-import { projectWarnings } from './project-warning';
+import { projectBlockingWarnings, projectWarnings } from './project-warning';
 import { saveWithReadback } from './save-readback';
 import {
   assembleMarkdown,
@@ -162,12 +162,20 @@ const BuilderClient = ({
   }>();
   const warningJumpSequenceRef = useRef(0);
   const [profileWarningJump, setProfileWarningJump] = useState<{ blockId: string; token: number; selector: string }>();
-  const warnings = items.flatMap((item) =>
+  const projectInputWarnings = items.flatMap((item) =>
     item.type === 'project'
       ? item.data.items.flatMap((project) =>
           projectWarnings(project).map((warning) => ({ ...warning, blockId: item.id, projectId: project.id })),
         )
       : [],
+  );
+  const blockingPeriodWarnings = projectBlockingWarnings(itemsToDocumentBlocks(items));
+  const warnings = projectInputWarnings.filter(
+    (warning) =>
+      warning.field !== 'period' ||
+      !blockingPeriodWarnings.some(
+        (issue) => issue.blockId === warning.blockId && issue.projectId === warning.projectId,
+      ),
   );
   const [selectedProjectId, setSelectedProjectId] = useState(
     initialBlocks.find((block) => block.type === 'project')?.id ?? 'new-project',
@@ -313,7 +321,9 @@ const BuilderClient = ({
   const blockedProfileIds = items
     .filter((item) => item.type === 'profile' && blockedItemIds.has(item.id))
     .map((item) => item.id);
-  const warningCount = warnings.length + blockedProfileIds.length;
+  const warningCount = warnings.length;
+  const blockingCount = blockingPeriodWarnings.length + blockedProfileIds.length;
+  const inputIssueCount = warningCount + blockingCount;
 
   const moveBlock = useCallback((id: string, direction: -1 | 1) => {
     setItems((prev) => {
@@ -1009,11 +1019,14 @@ const BuilderClient = ({
   const autosaveIndicator =
     autosaveStatus === 'conflict'
       ? { label: '競合 — 再読み込みが必要', dotClass: 'bg-destructive', textClass: 'text-destructive' }
-      : blockedItemIds.size > 0
+      : blockingCount > 0
         ? {
             // 重複・未入力のどちらでもブロックされるため「重複」と断定しない
             // （chatgpt-codex-connector レビュー指摘）。実際の原因は行単位のエラー表示で示す。
-            label: '項目名を確認してください（重複/未入力）— 保存できません',
+            label:
+              blockedProfileIds.length > 0
+                ? '項目名を確認してください（重複/未入力）— 保存できません'
+                : '期間を確認してください — 保存を止めています',
             dotClass: 'bg-destructive',
             textClass: 'text-destructive',
           }
@@ -1050,19 +1063,25 @@ const BuilderClient = ({
   return (
     <div className="min-h-screen">
       {confirmationDialog}
-      {warningCount > 0 && !versionHistoryOpen && loadFailure === null && (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-warn-strong bg-warn-soft px-4 py-2 text-warn-strong">
+      {inputIssueCount > 0 && !versionHistoryOpen && loadFailure === null && (
+        <div
+          role="status"
+          data-testid="input-issues"
+          className={`flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2 ${blockingCount > 0 ? 'border-danger bg-danger-soft text-danger' : 'border-warn-strong bg-warn-soft text-warn-strong'}`}
+        >
           <span className="text-sm">
-            入力を確認してください：{warningCount}か所。案件名・期間・プロフィールの自由項目などがあります。
+            {blockingCount > 0
+              ? `保存を止めています：${blockingCount}か所。プロフィールの項目名や期間の日付を確認してください。${warningCount > 0 ? `ほかに確認が必要な入力が${warningCount}か所あります。` : ''}`
+              : `入力を確認してください：${warningCount}か所。保存は続けています。`}
           </span>
           <Button
             variant="outline"
             onClick={() => {
-              const first = warnings[0];
+              const first = blockingPeriodWarnings[0] ?? warnings[0];
               const profileId = blockedProfileIds[0];
               if (
                 profileId &&
-                (!first ||
+                (blockingPeriodWarnings.length === 0 ||
                   items.findIndex((item) => item.id === profileId) <
                     items.findIndex((item) => item.id === first.blockId))
               ) {
@@ -1351,8 +1370,9 @@ const BuilderClient = ({
             canMoveUp: index > 0,
             canMoveDown: index < items.length - 1,
             kind: names[item.type],
-            warningCount:
-              warnings.filter((warning) => warning.blockId === item.id).length +
+            warningCount: warnings.filter((warning) => warning.blockId === item.id).length,
+            blockingCount:
+              blockingPeriodWarnings.filter((warning) => warning.blockId === item.id).length +
               (blockedProfileIds.includes(item.id) ? 1 : 0),
             title:
               item.type === 'skills'

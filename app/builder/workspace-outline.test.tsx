@@ -55,3 +55,22 @@ describe('アウトラインの全ブロック並べ替え', () => {
     fireEvent.keyDown(document, { code: 'Escape' });
   });
 });
+
+it('保存不可は赤を優先し、注意との違いを読み上げへ渡す', () => {
+  render(
+    <WorkspaceOutline
+      items={[
+        { id: 'p', title: '保存不可', kind: '案件', warningCount: 1, blockingCount: 1 },
+        { id: 'w', title: '注意のみ', kind: '案件', warningCount: 1 },
+      ]}
+      selectedId="p"
+      onSelect={vi.fn()}
+    />,
+  );
+  const blocked = screen.getByRole('button', { name: '案件: 保存不可' });
+  const warning = screen.getByRole('button', { name: '案件: 注意のみ' });
+  expect(blocked).toHaveAccessibleDescription('1か所の入力により保存を止めています');
+  expect(warning).toHaveAccessibleDescription('1か所の確認が必要です。保存は続けています');
+  expect(blocked.querySelector('[aria-hidden="true"]')).toHaveClass('text-danger');
+  expect(warning.querySelector('[aria-hidden="true"]')).toHaveClass('text-warn-strong');
+});

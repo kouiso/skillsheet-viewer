@@ -380,6 +380,8 @@ describe('BuilderClient', () => {
         ]}
       />,
     );
+    expect(screen.getByTestId('input-issues')).toHaveClass('text-danger');
+    expect(screen.getByTestId('input-issues')).toHaveTextContent('保存を止めています：1か所');
     await user.click(screen.getByRole('button', { name: /保存/ }));
     expect(mockSave).not.toHaveBeenCalled();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
@@ -804,6 +806,8 @@ describe('BuilderClient', () => {
       screen.getByText('項目名が未入力のため、この項目は保存されません。項目名を入力してください。'),
     ).toBeInTheDocument();
     expect(screen.queryByText(/項目名が他の項目と重複しているため/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('input-issues')).toHaveClass('text-danger');
+    expect(screen.getByTestId('input-issues')).toHaveTextContent('保存を止めています：1か所');
     expect(screen.getByLabelText('項目名')).toHaveAttribute('aria-invalid', 'true');
   });
 
