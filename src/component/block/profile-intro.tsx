@@ -6,7 +6,7 @@ import { sanitizeHtml } from '@/db/sanitize-html';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
-  layout?: 'default' | 'atlas';
+  layout?: 'default' | 'console';
 }
 
 export const ProfileIntro = ({ data, layout = 'default' }: ProfileIntroProps) => {
@@ -125,18 +125,18 @@ export const ProfileIntro = ({ data, layout = 'default' }: ProfileIntroProps) =>
 
   const renderPr = (variant: 'sp' | 'desktop') => {
     if (!data.pr) return null;
-    const isSp = variant === 'sp';
+    const isSp = variant === 'sp' && layout !== 'console';
     return (
       <>
         <p
           ref={isSp ? prRef : undefined}
           id={isSp ? prId : undefined}
-          // line-clamp は SP 専用（sm 以上は続きを読むボタンを出さないため、常に全文表示に戻す）。
+          // Console は全幅で全文を表示。従来レイアウトだけ SP の折りたたみを維持する。
           // 行数を 6 にしているのは、自己PRが段落を空行で区切って保存され whitespace-pre-line で
           // その空行を保持するため。4行だと「本文2行＋空行1行＋本文1行」となり、fold 内の
           // 1/4 を区切りの空白に費やしたうえ2段落目が1行で切れて要旨が掴めなかった
           // （375px の実機で確認）。6行なら空行込みでも本文が5行残り、2段落目の要旨まで届く。
-          className={`max-w-[720px] whitespace-pre-line text-sm leading-[1.95] text-foreground/80 ${
+          className={`max-w-[720px] whitespace-pre-line text-sm leading-[1.95] ${layout === 'console' ? 'text-muted-foreground' : 'text-foreground/80'} ${
             isSp ? (expanded ? 'sm:line-clamp-none' : 'line-clamp-6 sm:line-clamp-none') : 'line-clamp-none'
           }`}
         >
@@ -160,22 +160,22 @@ export const ProfileIntro = ({ data, layout = 'default' }: ProfileIntroProps) =>
   };
 
   return (
-    <section className={layout === 'atlas' ? 'atlas-profile flex flex-col gap-4' : 'flex flex-col gap-4'}>
+    <section className={layout === 'console' ? 'console-profile flex flex-col gap-4' : 'flex flex-col gap-4'}>
       {renderName()}
       {/* SP レイアウト: 氏名 → メタ → 強み → 自己PR */}
       <div data-testid="profile-intro-sp" className="block sm:hidden">
         <div className="flex flex-col gap-4">
-          {layout !== 'atlas' && renderMeta()}
+          {layout !== 'console' && renderMeta()}
           {renderStrengths()}
           {renderPr('sp')}
-          {layout === 'atlas' && renderMeta()}
+          {layout === 'console' && renderMeta()}
         </div>
       </div>
       {/* デスクトップ レイアウト: 氏名 → 自己PR → 強み → メタ */}
       <div data-testid="profile-intro-desktop" className="hidden sm:flex flex-col gap-4">
-        {layout === 'atlas' && renderStrengths()}
+        {layout === 'console' && renderStrengths()}
         {renderPr('desktop')}
-        {layout !== 'atlas' && renderStrengths()}
+        {layout !== 'console' && renderStrengths()}
         {renderMeta()}
       </div>
     </section>

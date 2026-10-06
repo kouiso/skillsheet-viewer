@@ -96,7 +96,7 @@ const TableOfContents = ({ headings, activeId, onHeadingClick, layout = 'sidebar
 
   if (layout === 'inline') {
     return (
-      <details className="atlas-toc no-print">
+      <details className="console-toc no-print">
         <summary>目次</summary>
         <nav aria-label="目次">
           <TocList headings={headings} activeId={activeId} onHeadingClick={onHeadingClick} />

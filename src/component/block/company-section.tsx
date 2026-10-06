@@ -108,7 +108,7 @@ export function CompanySection({
 
       <CompanyLane companyPeriod={effectivePeriod} items={laneItems} />
 
-      <div className="flex min-w-0 flex-col gap-4">
+      <div className="viewer-project-grid flex min-w-0 flex-col gap-4">
         {items.map(({ item, no, tech }) => (
           <ProjectCard
             key={item.id}

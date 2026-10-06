@@ -29,7 +29,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
 import { useViewerTopbarHeight } from '@/hook/use-viewer-topbar-height';
-import { atlasFontClasses } from './viewer-fonts';
+import { consoleFontClasses } from './viewer-fonts';
 
 /**
  * ビューアで表示ON/OFFを切り替えられるキー。
@@ -124,7 +124,7 @@ function DigestDownloadMenu({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={`atlas-export-menu z-[70] ${atlasFontClasses}`}>
+      <PopoverContent className={`console-export-menu z-[70] ${consoleFontClasses}`}>
         <div className="flex flex-col">
           <Button
             variant="ghost"
@@ -199,7 +199,7 @@ function DownloadMenu({
           {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Download />}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className={`atlas-export-menu z-[70] ${atlasFontClasses}`}>
+      <PopoverContent className={`console-export-menu z-[70] ${consoleFontClasses}`}>
         <div className="flex flex-col">
           {onDownloadPdf && item('PDF', onDownloadPdf, 'PDFダウンロード')}
           {onDownloadExcel && item('Excel', onDownloadExcel, 'Excelダウンロード')}
@@ -249,7 +249,7 @@ export function ViewerTopbar({
   ) : null;
 
   const viewToggleFieldset = (
-    <fieldset className="atlas-view-toggles">
+    <fieldset className="console-view-toggles">
       <legend>表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
         const on = views.includes(view.id);
@@ -272,16 +272,9 @@ export function ViewerTopbar({
     </fieldset>
   );
 
-  // SP は「戻る＋アイコン群」／「ビュートグル」の2段、sm 以上は「戻る…ビュートグル→アイコン群」の1段で、
-  // ビュートグルとアイコン群の視覚的な前後がブレークポイントで入れ替わる。
-  // CSS order で入れ替えると DOM順（タブ順・読み上げ順）が視覚順とズレ、
-  // useMediaQuery で DOM 順を切り替えると SSR が常に SP 順を返すため hydration 後に
-  // デスクトップだけ並びが入れ替わって毎回レイアウトシフトが起きる。
-  // display:none はフォーカス順からも a11y ツリーからも外れるので、CSS だけで
-  // 両ブレークポイントの DOM順=視覚順を成立させられる出し分けを採る。
-  // compact=true は SP 向け（ダウンロードは「ダウンロード」メニュー1個に畳み、
-  // テーマはアイコンのみ）。false はデスクトップ向けで、出力ボタンに文字ラベルを付ける
-  // （#397: アイコンだけでは何を出力するか分からないため）。
+  // PC はトップバー、狭幅は Sheet 内へ同じ操作群を置く。
+  // CSS で非表示の領域はタブ順からも外れ、表示順と操作順を揃える。
+  // 出力ラベルは aria-label/Tooltip でも伝え、狭幅の常設ダウンロードは別メニューにまとめる。
   const renderActionIcons = (className: string, compact = false) => (
     <div className={className}>
       {reserveEditSlot ? (
@@ -314,7 +307,7 @@ export function ViewerTopbar({
                   aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
                   className={compact ? 'min-h-11 min-w-11' : 'min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]'}
                 >
-                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+                  {pdfLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileDown />}
                   {!compact && <span className="hidden xl:inline">PDF</span>}
                 </Button>
               </TooltipTrigger>
@@ -373,38 +366,55 @@ export function ViewerTopbar({
 
   const sidebar = (
     <>
-      <div className="atlas-identity">
+      <div className="console-identity">
         <p className="kicker">skillsheet-viewer</p>
-        <p className="atlas-name">{name || 'エンジニアスキルシート'}</p>
-        {company && <p className="atlas-company">{company}</p>}
+        <p className="console-name">{name || 'エンジニアスキルシート'}</p>
+        {company && <p className="console-company">{company}</p>}
       </div>
-      <Link href="/view" aria-label="シート一覧へ戻る" className="atlas-back">
+      <Link href="/view" aria-label="シート一覧へ戻る" className="console-back">
         <ArrowLeft className="size-4" aria-hidden="true" />
         シート一覧へ戻る
       </Link>
       {viewToggleFieldset}
-      {renderActionIcons('atlas-actions')}
+      {renderActionIcons('console-actions')}
     </>
   );
   return (
-    <>
-      <aside className="atlas-sidebar no-print" aria-label="スキルシートの表示と出力">
-        {sidebar}
-      </aside>
-      <header className="atlas-mobile-bar no-print" ref={headerRef}>
+    <header className="console-topbar no-print" ref={headerRef}>
+      <div className="console-desktop-bar">
+        <Link
+          href="/view"
+          aria-label="シート一覧へ戻る"
+          className="console-back console-back-icon"
+          title="シート一覧へ戻る"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+        </Link>
+        <div className="console-topbar-identity">
+          <span className="console-mark" aria-hidden="true" />
+          <span className="console-topbar-name">{name || 'エンジニアスキルシート'}</span>
+          {company && <span className="console-topbar-company">{company}</span>}
+        </div>
+        {viewToggleFieldset}
+        {renderActionIcons('console-actions')}
+      </div>
+      <div className="console-mobile-bar">
         <NavigationSheet open={navigationOpen} onOpenChange={setNavigationOpen}>
           <SheetTrigger asChild>
             <Button variant="outline" className="min-h-11 min-w-11" aria-label="表示・出力メニューを開く">
               <Menu aria-hidden="true" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="left" className={`atlas-drawer ${atlasFontClasses}`}>
+          <SheetContent side="left" className={`console-drawer ${consoleFontClasses}`}>
             <SheetTitle className="sr-only">スキルシートの表示と出力</SheetTitle>
             <SheetDescription className="sr-only">表示項目、ダウンロード、テーマを変更できます。</SheetDescription>
             {sidebar}
           </SheetContent>
         </NavigationSheet>
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{name || 'エンジニアスキルシート'}</span>
+        <div className="console-topbar-identity">
+          <span className="console-mark" aria-hidden="true" />
+          <span className="console-topbar-name">{name || 'エンジニアスキルシート'}</span>
+        </div>
         {(onDownloadPdf || onDownloadExcel || onDownloadPdfDigest || onDownloadExcelDigest) && (
           <DownloadMenu
             onDownloadPdf={onDownloadPdf}
@@ -414,7 +424,7 @@ export function ViewerTopbar({
             loading={pdfLoading || excelLoading || digestLoading}
           />
         )}
-      </header>
-    </>
+      </div>
+    </header>
   );
 }
