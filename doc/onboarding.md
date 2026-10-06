@@ -17,6 +17,9 @@
    - 秘密値の共有は SOPS + age（setup.md 内の該当節を参照）
 2. 起動確認: [README](../README.md) の「クイックスタート」
    - `pnpm dev` で `http://localhost:3000` が立ち上がる
+   - `/viewer-auth` で `VIEWER_CODE` を入力し、**/view が開くこと**を確認する
+     （ACCESS_DENIED や「DB が未設定です」系の案内が出る場合は、文書境界・権限の未設定。
+       README の「DB の用意」にある境界 install / `install-runtime-role.sql` の手順を確認する）
 3. 開発に入る前に: [dev-guide.md](./dev-guide.md)
    - コマンド一覧・プロジェクト構成・コーディング規約（命名規約は `script/check-naming.sh` が機械検査）
 4. 実装の中身を知るには: [01-setup-and-routing.md](./01-setup-and-routing.md) から
