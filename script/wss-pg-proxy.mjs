@@ -4,9 +4,10 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:https';
 import net from 'node:net';
 import process from 'node:process';
-import wsPkg from 'ws';
-
-const { WebSocketServer } = wsPkg;
+// ws v8 の ESM エントリ（wrapper.mjs）は default に WebSocket クラスだけを置く。
+// `import wsPkg from 'ws'` して wsPkg.WebSocketServer を取ると undefined で
+// 「not a constructor」に落ちるため、named export で受け取る。
+import { WebSocketServer } from 'ws';
 
 const STATE_DIR = process.env.SKILLSHEET_LOCAL_STACK_DIR ?? '/var/lib/postgresql/skillsheet-local-stack';
 
