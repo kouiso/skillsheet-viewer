@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { authFile, login } from './auth';
 import { deleteSheet, listSheets } from './document-fixture';
+import { chooseTemplate, openCreateSheet } from './workspace';
 
 const reportDir = path.join(process.cwd(), 'test-results', 'dogfood-screenshots');
 
@@ -54,10 +55,10 @@ test('repro: console-dashboard template should seed profile/stats/project blocks
   fs.mkdirSync(reportDir, { recursive: true });
   await login(page);
 
-  await page.getByRole('button', { name: '新規シート' }).click();
+  await openCreateSheet(page);
   await expect(page.getByText('新規シートを作成')).toBeVisible();
   await page.locator('#new-sheet-title').fill(`${REPRO_TITLE_PREFIX} ${Date.now()}`);
-  await page.locator('#new-sheet-template').selectOption('console-dashboard');
+  await chooseTemplate(page, 'console-dashboard');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
 

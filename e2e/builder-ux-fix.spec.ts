@@ -1,7 +1,8 @@
-import { expect, type Locator, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { TEMPLATES } from '../app/builder/sheet-template';
 import { authFile, login } from './auth';
 import { createSheet, deleteSheet } from './document-fixture';
+import { selectBlock } from './workspace';
 
 test.use({ storageState: authFile });
 
@@ -19,21 +20,6 @@ const getDashboardTemplateBlocks = () => {
   return dashboard.blocks;
 };
 
-async function getBlockValues(handles: Locator) {
-  return handles.evaluateAll((els) =>
-    els.map((el) => {
-      // ドラッグハンドルはモバイルレイアウト用のボタン用ラッパ（sm:contents）の中にあり、
-      // parentElement ではブロック本体に届かない。ブロックの外枠まで遡って入力を探す。
-      const block = el.closest('.rounded-lg');
-      const input = block?.querySelector('textarea, input');
-      if (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) {
-        return input.value;
-      }
-      return block?.textContent?.trim().slice(0, 30) ?? '';
-    }),
-  );
-}
-
 test('keyboard reorder moves one item at a time', async ({ page }) => {
   const title = `Keyboard reorder test ${Date.now()}`;
   const sheetId = await createSheet(title, getFullTemplateBlocks());
@@ -43,24 +29,22 @@ test('keyboard reorder moves one item at a time', async ({ page }) => {
     await login(page);
     await page.goto(`/builder?sheet=${sheetId}`, { waitUntil: 'networkidle' });
 
-    const handles = page.getByRole('button', { name: 'ブロックを並べ替え' });
-    await expect(handles).toHaveCount(7);
-
-    const before = await getBlockValues(handles);
-
-    // Focus the drag handle and move the block down one position with ArrowDown.
-    await handles.nth(1).focus();
-    await page.keyboard.press('ArrowDown');
-    await page.waitForTimeout(200);
-
-    const after = await getBlockValues(handles);
-    console.log('before:', before);
-    console.log('after:', after);
-    console.log('browser logs:', logs);
-
-    // The block originally at index 1 should now be at index 2.
-    expect(after[1]).not.toBe(before[1]);
-    expect(after[2]).toBe(before[1]);
+    const outline = page.locator('nav[aria-label="ブロック一覧"]:visible');
+    // 選択ボタンのラベル列を使い、見えていない編集フォームには依存しない。
+    const labels = () =>
+      outline.locator('button[aria-label*=":"]').evaluateAll((els) => els.map((el) => el.getAttribute('aria-label')));
+    await expect(outline.locator('button[aria-label*=":"]')).toHaveCount(7);
+    const before = await labels();
+    await outline.locator('button[aria-label*=":"]').nth(1).click();
+    const down = outline.getByRole('button', { name: /を下へ移動$/ });
+    await down.focus();
+    await page.keyboard.press('Enter');
+    const expected = [...before];
+    [expected[1], expected[2]] = [expected[2], expected[1]];
+    await expect.poll(labels).toEqual(expected);
+    await expect(page.locator('[data-slot="autosave-indicator"]')).toContainText('保存済み（自動）');
+    await page.reload({ waitUntil: 'networkidle' });
+    await expect.poll(labels).toEqual(expected);
   } finally {
     await deleteSheet(sheetId);
   }
@@ -81,8 +65,8 @@ test('profile custom row draft survives tab switch', async ({ page }) => {
     await customLabel.fill('得意分野');
     await customValue.fill('性能改善');
 
-    await page.getByRole('button', { name: '案件エディタ' }).click();
-    await page.getByRole('button', { name: 'ブロック編集' }).click();
+    await selectBlock(page, '統計');
+    await selectBlock(page, 'プロフィール');
 
     await expect(customLabel).toHaveValue('得意分野');
     await expect(customValue).toHaveValue('性能改善');
@@ -121,9 +105,9 @@ test.describe('mobile project editor', () => {
     try {
       await login(page);
       await page.goto(`/builder?sheet=${sheetId}`, { waitUntil: 'networkidle' });
-      await page.getByRole('button', { name: '案件エディタ' }).click();
-      await page.getByRole('button', { name: 'ナビを展開' }).click();
+      await page.getByRole('button', { name: 'アウトラインを開く', exact: true }).click();
       await page.getByRole('button', { name: '＋ 会社' }).click();
+      await page.getByRole('button', { name: 'アウトラインを開く', exact: true }).click();
       await page.waitForSelector('.co-head-row');
 
       const eye = page.locator('.co-head-row .row-eye').first();
