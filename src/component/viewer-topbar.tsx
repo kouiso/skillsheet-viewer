@@ -1,6 +1,5 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft,
   ChevronDown,
@@ -8,6 +7,7 @@ import {
   FileDown,
   FileMinus,
   Loader2,
+  Menu,
   Moon,
   PencilLine,
   Sheet,
@@ -15,12 +15,21 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import {
+  Sheet as NavigationSheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+  SheetTrigger,
+} from '@/component/ui/sheet';
+import './viewer-atlas.css';
 
 import { Button } from '@/component/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
 import { useViewerTopbarHeight } from '@/hook/use-viewer-topbar-height';
+import { atlasFontClasses } from './viewer-fonts';
 
 /**
  * ビューアで表示ON/OFFを切り替えられるキー。
@@ -115,7 +124,7 @@ function DigestDownloadMenu({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent className={`atlas-export-menu z-[70] ${atlasFontClasses}`}>
         <div className="flex flex-col">
           <Button
             variant="ghost"
@@ -190,7 +199,7 @@ function DownloadMenu({
           {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Download />}
         </Button>
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent className={`atlas-export-menu z-[70] ${atlasFontClasses}`}>
         <div className="flex flex-col">
           {onDownloadPdf && item('PDF', onDownloadPdf, 'PDFダウンロード')}
           {onDownloadExcel && item('Excel', onDownloadExcel, 'Excelダウンロード')}
@@ -221,7 +230,7 @@ export function ViewerTopbar({
   reserveEditSlot = false,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
-  const reduceMotion = useReducedMotion();
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   // ヘッダー実高を --viewer-topbar-h へ流し、見出し・目次のずらし量と一元化（#397）
   const headerRef = useViewerTopbarHeight<HTMLElement>();
@@ -240,15 +249,8 @@ export function ViewerTopbar({
   ) : null;
 
   const viewToggleFieldset = (
-    <fieldset
-      // flex-nowrap + overflow-x-auto: 390px でトグルを1段の横スクロールに収める（#397）。
-      // 折返しにするとヘッダーが 177px まで膨れて会社見出しに被さる（実測 17px 埋没）。
-      // スクロールバーは表示しない — classic スクロールバーは要素の高さに加算され、
-      // ≤120px のヘッダー高条件を超えてしまう。
-      // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
-      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 [scrollbar-width:none] max-sm:[mask-image:linear-gradient(to_right,black_calc(100%_-_16px),transparent_100%)] sm:w-auto [&::-webkit-scrollbar]:hidden"
-    >
-      <legend className="sr-only">表示するビュー</legend>
+    <fieldset className="atlas-view-toggles">
+      <legend>表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
         const on = views.includes(view.id);
         return (
@@ -369,49 +371,50 @@ export function ViewerTopbar({
     </div>
   );
 
-  return (
-    <motion.header
-      // 前庭障害の読み手へページ全体のスライドインを掛けない（#355）
-      initial={reduceMotion ? false : { y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
-      // design: 背景は下地を 88% 残した色 + blur 8px（カード色ではなくページ地の色を敷く）
-      className="no-print sticky top-0 z-40 border-b border-border bg-[color-mix(in_srgb,var(--background)_88%,transparent)] backdrop-blur-[8px]"
-      ref={headerRef}
-    >
-      {/* py-2（SP）: 390px でヘッダー高を ≤120px に収める（#397）。sm 以上は従来の py-3.5。 */}
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:px-8 sm:py-3.5">
-        {/* 「戻るリンク＋SP用アイコン群」を折り返さない1つの行にまとめる。
-            親は flex-wrap だが、flexbox は「縮めてから折り返す」のではなく
-            「入らなければ折り返す」ため、リンクに min-w-0 を付けるだけでは足りない。
-            氏名が未入力のシートはフォールバックの「エンジニアスキルシート」が入って
-            リンクだけで約222px を占め、アイコン群が2段目・ビュートグルが3段目へ押し出されて
-            #190 で狙った「SPは2段」が崩れる（実機で3段=177px を確認）。
-            この内側コンテナは既定の flex-nowrap なので、リンクが縮んで省略記号に逃げる。
-            sm 以上では w-auto + flex-1 となり、従来のスペーサー（min-w-4 flex-1）と同じく
-            ビュートグルとアイコン群を右端へ寄せる役割を兼ねる。 */}
-        {/* flex-1 は sm 以上だけに付ける。SP で flex-1 を付けると flex-basis が 0% になり
-            w-full（100%）を打ち消して行を占有できず、ビュートグルが同じ行に載ってしまう。 */}
-        <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto sm:min-w-fit sm:flex-1">
-          <Link
-            href="/view"
-            className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent sm:min-w-fit sm:flex-none"
-            aria-label="シート一覧へ戻る"
-          >
-            <ArrowLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span aria-hidden className="size-[9px] shrink-0 rounded-[2px] bg-primary" />
-            <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">
-              {name || 'エンジニアスキルシート'}
-            </span>
-            {company && <span className="min-w-0 truncate font-mono text-[12px] text-muted-foreground">{company}</span>}
-          </Link>
-
-          {renderActionIcons('flex shrink-0 items-center gap-2 sm:hidden', true)}
-        </div>
-
-        {viewToggleFieldset}
-        {renderActionIcons('hidden shrink-0 items-center gap-2 sm:flex')}
+  const sidebar = (
+    <>
+      <div className="atlas-identity">
+        <p className="kicker">skillsheet-viewer</p>
+        <p className="atlas-name">{name || 'エンジニアスキルシート'}</p>
+        {company && <p className="atlas-company">{company}</p>}
       </div>
-    </motion.header>
+      <Link href="/view" aria-label="シート一覧へ戻る" className="atlas-back">
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        シート一覧へ戻る
+      </Link>
+      {viewToggleFieldset}
+      {renderActionIcons('atlas-actions')}
+    </>
+  );
+  return (
+    <>
+      <aside className="atlas-sidebar no-print" aria-label="スキルシートの表示と出力">
+        {sidebar}
+      </aside>
+      <header className="atlas-mobile-bar no-print" ref={headerRef}>
+        <NavigationSheet open={navigationOpen} onOpenChange={setNavigationOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" className="min-h-11 min-w-11" aria-label="表示・出力メニューを開く">
+              <Menu aria-hidden="true" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className={`atlas-drawer ${atlasFontClasses}`}>
+            <SheetTitle className="sr-only">スキルシートの表示と出力</SheetTitle>
+            <SheetDescription className="sr-only">表示項目、ダウンロード、テーマを変更できます。</SheetDescription>
+            {sidebar}
+          </SheetContent>
+        </NavigationSheet>
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">{name || 'エンジニアスキルシート'}</span>
+        {(onDownloadPdf || onDownloadExcel || onDownloadPdfDigest || onDownloadExcelDigest) && (
+          <DownloadMenu
+            onDownloadPdf={onDownloadPdf}
+            onDownloadExcel={onDownloadExcel}
+            onDownloadPdfDigest={onDownloadPdfDigest}
+            onDownloadExcelDigest={onDownloadExcelDigest}
+            loading={pdfLoading || excelLoading || digestLoading}
+          />
+        )}
+      </header>
+    </>
   );
 }

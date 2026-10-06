@@ -63,7 +63,7 @@ function rawBlocks(value: unknown): RawDocumentBlock[] {
   }
   return value as RawDocumentBlock[];
 }
-function readResult(value: unknown): DocumentRead {
+export function readDocumentResult(value: unknown): DocumentRead {
   if (!record(value)) throw new DocumentError('INVALID_DB_RESPONSE');
   if (value.status === 'EMPTY' || value.status === 'INVALID_STATE' || value.status === 'NOT_FOUND') {
     return { status: value.status };
@@ -106,7 +106,7 @@ export function createDocumentService(db: Pick<Database, 'execute'>, expectedOwn
   }
   async function read(sheetId: string | null = null): Promise<DocumentRead> {
     if (sheetId !== null) requireId(sheetId);
-    const result = readResult(
+    const result = readDocumentResult(
       await execute(sql`select skillsheet_private.read_snapshot(${sheetId}::uuid, ${expectedOwner}::text) as result`),
     );
     if (sheetId && result.status === 'OK' && result.snapshot.sheetId.toLowerCase() !== sheetId.toLowerCase()) {
@@ -128,7 +128,7 @@ export function createDocumentService(db: Pick<Database, 'execute'>, expectedOwn
     ) {
       throw new DocumentError(value.status);
     }
-    const result = readResult(value);
+    const result = readDocumentResult(value);
     if (result.status !== 'OK') throw new DocumentError('INVALID_DB_RESPONSE');
     return result.snapshot;
   }

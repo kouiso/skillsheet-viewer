@@ -17,19 +17,24 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Eye, EyeOff } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { type ReactNode, useMemo, useRef, useState } from 'react';
 import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/block';
 import { groupProjectsByCompany } from '@/db/group-by-company';
 
 // 案件エディタ 3 ペインの共通スタイル。CSS はモジュール単位で一度読み込めば全体へ効くため、
 // 最初に使う側（このナビ）で読み込む。閲覧側のバンドルには入らない。
 import './editor.css';
+import { useWorkspaceConfirm } from './use-workspace-confirm';
 import { buildVisibleNoMap } from './visible-no';
 
 /** D&D 対象の識別用データ（company ヘッダへ案件をドロップすると companyId を付け替える）。 */
 type DragData = { type: 'company' | 'project' };
 
 interface ProjectNavProps {
+  title?: string;
+  outlineBefore?: ReactNode;
+  outlineAfter?: ReactNode;
+  outlineFooter?: ReactNode;
   data: ProjectBlockData;
   selectedId: string | null;
   onSelect: (projectId: string) => void;
@@ -196,6 +201,10 @@ const ProjectRow = ({
  * - dnd-kit による並び替え：会社同士 / 会社内の案件 / 会社ヘッダへの案件ドロップ（companyId 付け替え）
  */
 export const ProjectNav = ({
+  title,
+  outlineBefore,
+  outlineAfter,
+  outlineFooter,
   data,
   selectedId,
   onSelect,
@@ -211,6 +220,8 @@ export const ProjectNav = ({
   onDropProjectToCompany,
   onReorderCompany,
 }: ProjectNavProps) => {
+  const collapseRef = useRef<HTMLButtonElement>(null);
+  const { confirm, dialog } = useWorkspaceConfirm({ fallbackFocus: () => collapseRef.current });
   // 開閉状態：初期は選択中案件の会社のみ開く（未選択なら全開）。以降はユーザー操作を保持。
   const [open, setOpen] = useState<Record<string, boolean>>(() => {
     const current = data.items.find((p) => p.id === selectedId);
@@ -264,29 +275,45 @@ export const ProjectNav = ({
     }
   };
 
-  const confirmDeleteProject = (project: ProjectItem) => {
-    if (!window.confirm(`「${project.title || '無題の案件'}」を削除しますか？`)) return;
+  const confirmDeleteProject = async (project: ProjectItem) => {
+    if (
+      !(await confirm({
+        title: `「${project.title || '無題の案件'}」を削除しますか？`,
+        description: 'この案件を編集中の内容から削除します。保存済みの内容は版の履歴で確認できます。',
+        confirmLabel: '案件を削除',
+        danger: true,
+      }))
+    )
+      return;
     onDeleteProject(project.id);
   };
 
   return (
     <aside className="col-list">
+      {dialog}
       <div className="list-head">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="kicker">skillsheet · editor</div>
-            <div className="ttl">案件エディタ</div>
+            <div className="ttl">{title ?? '案件エディタ'}</div>
             <div className="sub">
               {data.companies.length}社 / {data.items.length}案件
             </div>
           </div>
-          <button type="button" className="rail-btn shrink-0" onClick={onCollapse} title="集中モード（ナビを畳む）">
+          <button
+            type="button"
+            ref={collapseRef}
+            className="rail-btn shrink-0"
+            onClick={onCollapse}
+            title="集中モード（ナビを畳む）"
+          >
             ⇤
           </button>
         </div>
       </div>
 
       <div className="list-body scroll">
+        {outlineBefore}
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={data.companies.map((c) => c.id)} strategy={verticalListSortingStrategy}>
             {data.companies.map((company) => {
@@ -351,12 +378,14 @@ export const ProjectNav = ({
             </div>
           </div>
         )}
+        {outlineAfter}
       </div>
 
-      <div className="border-t border-border p-3">
+      <div className="flex flex-wrap gap-2 border-t border-border p-3">
         <button type="button" onClick={onAddCompany} className="btn sm">
           ＋ 会社
         </button>
+        {outlineFooter}
       </div>
     </aside>
   );

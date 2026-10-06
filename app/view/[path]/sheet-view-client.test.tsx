@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Block } from '@/db/block';
 
+vi.mock('@/component/viewer-fonts', () => ({ atlasFontClasses: '' }));
+
 import SheetViewClient from './sheet-view-client';
 
 const toastLoading = vi.hoisted(() => vi.fn(() => 'toast-1'));

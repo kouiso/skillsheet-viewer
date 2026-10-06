@@ -1,6 +1,5 @@
 'use client';
 
-import { motion } from 'framer-motion';
 import { LogIn } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -48,10 +47,7 @@ function LoginForm() {
   };
 
   return (
-    <motion.form
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.5 }}
+    <form
       onSubmit={(e) => {
         void handleSubmit(e);
       }}
@@ -94,7 +90,7 @@ function LoginForm() {
           autoComplete="current-password"
         />
       </div>
-      <Button type="submit" variant="gradient" size="lg" className="w-full" disabled={loading}>
+      <Button type="submit" size="lg" className="w-full" disabled={loading}>
         {loading ? 'ログイン中...' : 'ログイン'}
       </Button>
       <p className="text-center text-sm text-muted-foreground">
@@ -107,66 +103,27 @@ function LoginForm() {
           閲覧コード認証
         </Link>
       </p>
-    </motion.form>
+    </form>
   );
 }
 
 export default function LoginPage() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-linear-to-br from-primary to-secondary px-4">
-      <motion.div
-        aria-hidden
-        animate={{ scale: [1, 1.2, 1], rotate: [0, 180, 360] }}
-        transition={{ duration: 20, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
-        className="pointer-events-none absolute -right-[10%] -top-[10%] size-[400px] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.2)_0%,transparent_70%)]"
-      />
-      <motion.div
-        aria-hidden
-        animate={{ scale: [1, 1.3, 1], rotate: [360, 180, 0] }}
-        transition={{ duration: 25, repeat: Number.POSITIVE_INFINITY, ease: 'linear' }}
-        className="pointer-events-none absolute -bottom-[15%] -left-[10%] size-[360px] rounded-full bg-[radial-gradient(circle,rgba(255,255,255,0.15)_0%,transparent_70%)]"
-      />
-
-      <motion.div
-        initial={{ opacity: 0, y: 50, scale: 0.9 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.6, ease: [0.43, 0.13, 0.23, 0.96] }}
-        className="relative z-10 w-full max-w-md"
-      >
-        <Card className="border-white/20 bg-card/95 shadow-elevation-8 backdrop-blur-md">
-          <CardContent className="p-8">
-            <motion.div
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
-              className="mb-4 flex justify-center"
-            >
-              <div className="flex size-20 items-center justify-center rounded-full bg-linear-to-br from-primary to-secondary shadow-elevation-4">
-                <LogIn aria-hidden="true" className="size-10 text-white" />
-              </div>
-            </motion.div>
-            <motion.h1
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-center text-2xl font-bold"
-            >
-              編集者ログイン
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.45 }}
-              className="mb-6 mt-2 text-center text-sm text-muted-foreground"
-            >
-              スキルシートビルダーへのアクセス
-            </motion.p>
-            <Suspense>
-              <LoginForm />
-            </Suspense>
-          </CardContent>
-        </Card>
-      </motion.div>
-    </div>
+    <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+      <Card className="w-full max-w-md">
+        <CardContent className="p-8">
+          <div className="mb-4 flex justify-center">
+            <LogIn aria-hidden="true" className="size-8 text-foreground" />
+          </div>
+          <h1 className="text-center text-2xl font-bold">編集者ログイン</h1>
+          <p className="mb-6 mt-2 text-center text-sm text-muted-foreground">
+            スキルシートを編集するにはログインしてください。
+          </p>
+          <Suspense>
+            <LoginForm />
+          </Suspense>
+        </CardContent>
+      </Card>
+    </main>
   );
 }

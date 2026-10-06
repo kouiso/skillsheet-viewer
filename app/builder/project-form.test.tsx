@@ -111,3 +111,39 @@ describe('案件の日付編集', () => {
     expect(project.duration).toBe(' 半年 ');
   });
 });
+
+describe('案件フォームの確認案内', () => {
+  it('未入力の案内から案件名へ移動し、入力データは変更しない', () => {
+    const onPatch = vi.fn();
+    const item = { ...project, title: '', period: '' };
+    render(
+      <ProjectForm
+        project={item}
+        data={{ companies: [], items: [item] }}
+        onPatch={onPatch}
+        onMoveCompany={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '確認する（案件タイトル）' }));
+    expect(screen.getByLabelText('案件タイトル')).toHaveFocus();
+    fireEvent.click(screen.getByRole('button', { name: '確認する（期間）' }));
+    expect(screen.getByLabelText('開始月', { selector: 'input' })).toHaveFocus();
+    expect(onPatch).not.toHaveBeenCalled();
+  });
+  it('逆期間の確認先は終了月で、既存の保存不可案内も保つ', () => {
+    const item = { ...project, periodStart: '2024-08', periodEnd: '2024-06', ongoing: false };
+    render(
+      <ProjectForm
+        project={item}
+        data={{ companies: [], items: [item] }}
+        onPatch={vi.fn()}
+        onMoveCompany={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '確認する（期間）' }));
+    expect(screen.getByLabelText('終了月', { selector: 'input' })).toHaveFocus();
+    expect(screen.getByRole('alert')).toHaveTextContent('保存できません');
+  });
+});

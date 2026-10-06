@@ -10,11 +10,11 @@
   z-index: 20;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
   padding: 9px 18px;
   border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--background) 90%, transparent);
-  backdrop-filter: blur(8px);
+  background: var(--background);
   font-family: var(--font-mono);
   font-size: 12px;
   color: var(--faint);
@@ -42,23 +42,24 @@
 }
 
 .syncbar.stale {
-  background: color-mix(in srgb, var(--warn-soft) 92%, transparent);
+  background: var(--warn-soft);
+  color: var(--warn-strong);
 }
 .syncbar.stale .dot {
   background: var(--warn);
 }
 .syncbar.stale .lbl {
-  color: var(--warn);
+  color: var(--warn-strong);
 }
 
 .syncbar.closed {
-  background: color-mix(in srgb, var(--danger-soft) 92%, transparent);
+  background: var(--muted);
 }
 .syncbar.closed .dot {
-  background: var(--danger);
+  background: var(--muted-foreground);
 }
 .syncbar.closed .lbl {
-  color: var(--danger);
+  color: var(--muted-foreground);
 }
 
 @keyframes syncbar-blip {
@@ -95,8 +96,10 @@
   background: var(--surface3);
 }
 
-/* 同期が切れている間は本文を沈める（内容は消さず、最後に受け取ったものを残す）。 */
-.stale-body {
-  opacity: 0.55;
-  transition: opacity 0.2s ease;
+/* 状態が変わっても本文を薄めない。状態帯の文言と色で識別する。 */
+.preview-document {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
+.syncbar .lbl { min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; }
+.syncbar .reconnect:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

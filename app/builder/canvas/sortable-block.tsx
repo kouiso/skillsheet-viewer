@@ -5,11 +5,12 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Trash2 } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { Button } from '@/component/ui/button';
-import type { ExperienceBlockData, ProfileBlockData, SkillEntry, TableColumn } from '@/db/block';
+import type { ExperienceBlockData, ProfileBlockData, SkillEntry, StatsBlockData, TableColumn } from '@/db/block';
 
 import { ExperienceBlockEditor } from '../block-editor/experience-block-editor';
 import { type CustomMetaRow, ProfileBlockEditor } from '../block-editor/profile-block-editor';
 import { SkillsBlockEditor } from '../block-editor/skill-block-editor';
+import { StatsBlockEditor } from '../block-editor/stats-block-editor';
 import { TableBlockEditor } from '../block-editor/table-block-editor';
 import type { EditorItem } from '../serialize';
 
@@ -18,6 +19,7 @@ export const SortableBlock = ({
   onMarkdownChange,
   onTableChange,
   onSkillsChange,
+  onStatsChange,
   onExperienceChange,
   onProfileChange,
   onProfileValidityChange,
@@ -30,6 +32,7 @@ export const SortableBlock = ({
   onMarkdownChange: (id: string, markdown: string) => void;
   onTableChange: (id: string, columns: TableColumn[], rows: string[][]) => void;
   onSkillsChange: (id: string, category: string, skills: SkillEntry[]) => void;
+  onStatsChange: (id: string, data: StatsBlockData) => void;
   onExperienceChange: (id: string, data: ExperienceBlockData) => void;
   onProfileChange: (id: string, data: ProfileBlockData) => void;
   onProfileValidityChange: (id: string, hasConflict: boolean) => void;
@@ -126,11 +129,7 @@ export const SortableBlock = ({
             onCustomDraftChange={onCustomDraftChange}
           />
         ) : item.type === 'stats' ? (
-          <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-            <span className="font-medium">統計:</span>{' '}
-            {item.data.items.map((i) => `${i.value}${i.unit} ${i.label}`).join(' / ') || '(未入力)'}
-            <p className="mt-0.5 text-xs">※ 案件エディタタブで編集</p>
-          </div>
+          <StatsBlockEditor data={item.data} onChange={(data) => onStatsChange(item.id, data)} />
         ) : item.type === 'project' ? (
           <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
             <span className="font-medium">案件:</span> {item.data.companies.length} 社 / {item.data.items.length} 件

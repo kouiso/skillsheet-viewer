@@ -6,9 +6,10 @@ import { sanitizeHtml } from '@/db/sanitize-html';
 
 interface ProfileIntroProps {
   data: ProfileBlockData;
+  layout?: 'default' | 'atlas';
 }
 
-export const ProfileIntro = ({ data }: ProfileIntroProps) => {
+export const ProfileIntro = ({ data, layout = 'default' }: ProfileIntroProps) => {
   const [expanded, setExpanded] = useState(false);
   // 文字数ではなく実測（line-clamp 適用時に scrollHeight > clientHeight か）で判定する。
   // 改行区切りの短い自己PR（whitespace-pre-line で改行を保持）は文字数が少なくても
@@ -159,20 +160,22 @@ export const ProfileIntro = ({ data }: ProfileIntroProps) => {
   };
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className={layout === 'atlas' ? 'atlas-profile flex flex-col gap-4' : 'flex flex-col gap-4'}>
       {renderName()}
       {/* SP レイアウト: 氏名 → メタ → 強み → 自己PR */}
       <div data-testid="profile-intro-sp" className="block sm:hidden">
         <div className="flex flex-col gap-4">
-          {renderMeta()}
+          {layout !== 'atlas' && renderMeta()}
           {renderStrengths()}
           {renderPr('sp')}
+          {layout === 'atlas' && renderMeta()}
         </div>
       </div>
       {/* デスクトップ レイアウト: 氏名 → 自己PR → 強み → メタ */}
       <div data-testid="profile-intro-desktop" className="hidden sm:flex flex-col gap-4">
+        {layout === 'atlas' && renderStrengths()}
         {renderPr('desktop')}
-        {renderStrengths()}
+        {layout !== 'atlas' && renderStrengths()}
         {renderMeta()}
       </div>
     </section>

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TRPCClientError } from '@trpc/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,6 +18,8 @@ const mockRouterPush = vi.fn();
 const mockRouterRefresh = vi.fn();
 const mockDelete = vi.fn().mockResolvedValue({ ok: true });
 const mockBuilderFetch = vi.fn().mockResolvedValue({ status: 'OK', snapshot: { revision: '5' } });
+const mockHistoryList = vi.fn().mockResolvedValue([]);
+const mockHistoryRead = vi.fn();
 const mockInvalidate = vi.fn().mockResolvedValue(undefined);
 // builder-client.tsx は trpc.sheet.*.useMutation().mutateAsync(...) と
 // trpc.sheet.list.useQuery(undefined, { initialData }) / trpc.useUtils() を呼ぶため、
@@ -26,6 +28,7 @@ const mockInvalidate = vi.fn().mockResolvedValue(undefined);
 vi.mock('@/lib/trpc-client', () => ({
   trpc: {
     sheet: {
+      history: { restore: { useMutation: () => ({ mutateAsync: vi.fn() }) } },
       save: { useMutation: () => ({ mutateAsync: mockSave }) },
       create: { useMutation: () => ({ mutateAsync: mockCreate }) },
       delete: { useMutation: () => ({ mutateAsync: mockDelete }) },
@@ -35,6 +38,11 @@ vi.mock('@/lib/trpc-client', () => ({
       sheet: {
         list: { invalidate: mockInvalidate },
         builderState: { fetch: mockBuilderFetch },
+        history: {
+          list: { fetch: mockHistoryList },
+          read: { fetch: mockHistoryRead },
+          previewRestore: { fetch: vi.fn() },
+        },
       },
     }),
   },
@@ -121,10 +129,19 @@ describe('BuilderClient', () => {
     const user = userEvent.setup();
     mockCreate.mockRejectedValueOnce(new Error('response lost')).mockResolvedValueOnce({ sheetId: 'new-id' });
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: '新規シート' }));
-    await user.click(screen.getByRole('button', { name: '作成' }));
-    await user.click(screen.getByRole('button', { name: '新規シート' }));
-    await user.click(screen.getByRole('button', { name: '作成' }));
+    await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+    await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
+    const dialog = screen.getByRole('dialog', { name: '新規シートを作成' });
+    const titleInput = within(dialog).getByRole('textbox', { name: 'タイトル' });
+    await user.clear(titleInput);
+    await user.type(titleInput, '再試行する合成シート');
+    const template = within(dialog).getByDisplayValue('console-dashboard');
+    await user.click(template);
+    await user.click(await within(dialog).findByRole('button', { name: '作成' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('入力内容は保持しています');
+    expect(titleInput).toHaveValue('再試行する合成シート');
+    expect(template).toBeChecked();
+    await user.click(await within(dialog).findByRole('button', { name: '作成' }));
     expect(mockCreate).toHaveBeenCalledTimes(2);
     expect(mockCreate.mock.calls[1][0]).toEqual(mockCreate.mock.calls[0][0]);
     expect(mockCreate.mock.calls[0][0].sheetId).toMatch(/^[0-9a-f-]{36}$/);
@@ -140,14 +157,16 @@ describe('BuilderClient', () => {
           finish = resolve;
         }),
     );
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    try {
+    {
       const view = render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
       if (operation === 'create') {
-        await user.click(screen.getByRole('button', { name: '新規シート' }));
+        await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+        await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
         await user.click(screen.getByRole('button', { name: '作成' }));
       } else {
+        await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
         await user.click(screen.getByRole('button', { name: '「テストシート」を削除' }));
+        await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '削除する' }));
       }
       expect(mutation).toHaveBeenCalledOnce();
       view.unmount();
@@ -156,19 +175,18 @@ describe('BuilderClient', () => {
       });
       expect(mockRouterPush).not.toHaveBeenCalled();
       expect(mockRouterRefresh).not.toHaveBeenCalled();
-    } finally {
-      confirm.mockRestore();
     }
   });
 
   it('最後のシートも画面が保持する版で削除する', async () => {
     const user = userEvent.setup();
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} initialRevision="0" />);
+    await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
     const remove = screen.getByRole('button', { name: /テストシート.*削除|削除.*テストシート/ });
     await user.click(remove);
+    expect(mockDelete).not.toHaveBeenCalled();
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '削除する' }));
     expect(mockDelete).toHaveBeenCalledWith({ sheetId: defaultProps.activeSheetId, expectedRevision: '0' });
-    confirm.mockRestore();
   });
 
   it('安全整数範囲を超える版を数値変換せず保存する', async () => {
@@ -188,19 +206,21 @@ describe('BuilderClient', () => {
 
   it('初期 markdown ブロックがテキストエリアとして表示される', () => {
     render(<BuilderClient initialBlocks={mdBlocks(['## A', '## B'])} initialTitle="t" {...defaultProps} />);
-    const areas = screen.getAllByPlaceholderText('Markdown を入力...') as HTMLTextAreaElement[];
-    expect(areas).toHaveLength(2);
-    expect(areas[0].value).toBe('## A');
-    expect(areas[1].value).toBe('## B');
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('## A');
+    fireEvent.click(screen.getByRole('button', { name: 'テキスト: ## B' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('## B');
+    fireEvent.click(screen.getByRole('button', { name: 'テキスト: ## A' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('## A');
   });
 
   it('「テキスト」で空ブロックが増える', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
-    // パレットチップと下部ボタンの両方に「テキスト」ボタンがあるため末尾（下部ボタン）を使う
-    const textBtns = screen.getAllByRole('button', { name: 'テキスト' });
-    await user.click(textBtns[textBtns.length - 1]);
-    expect(screen.getAllByPlaceholderText('Markdown を入力...')).toHaveLength(2);
+    await user.click(screen.getByRole('button', { name: 'ブロックを追加' }));
+    await user.click(screen.getAllByRole('button', { name: 'テキスト' })[0]);
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('');
+    fireEvent.click(screen.getByRole('button', { name: 'テキスト: ## A' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('## A');
   });
 
   it('削除ボタンでブロックが減る', async () => {
@@ -223,6 +243,106 @@ describe('BuilderClient', () => {
         sheetId: 'sheet-1',
       }),
     );
+  });
+
+  it('空の手動保存は取消で原稿を保ち、承諾したときだけ期待版で送る', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '' } });
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    let confirmation = await screen.findByRole('alertdialog');
+    expect(mockSave).not.toHaveBeenCalled();
+    await user.click(within(confirmation).getByRole('button', { name: 'やめる' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('');
+    expect(mockSave).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    confirmation = await screen.findByRole('alertdialog');
+    await user.click(within(confirmation).getByRole('button', { name: '空のまま保存' }));
+    expect(mockSave).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        sheetId: 'sheet-1',
+        expectedRevision: '5',
+        blocks: [{ id: 'block-0', type: 'markdown', order: 0, data: { markdown: '' } }],
+      }),
+    );
+  });
+
+  it('手動保存の競合は確認を出し、あとでを選ぶと原稿と競合状態を保つ', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValueOnce(trpcClientError('CONFLICT'));
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    const confirmation = await screen.findByRole('alertdialog');
+    await user.click(within(confirmation).getByRole('button', { name: 'あとで' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('## A');
+    expect(screen.getByText('競合 — 再読み込みが必要')).toBeInTheDocument();
+    expect(mockSave).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ expectedRevision: '5' }));
+    expect(mockRouterRefresh).not.toHaveBeenCalled();
+  });
+
+  it('履歴前の保存確認を取り消すと原稿を保持して保存も履歴取得もしない', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '履歴前の下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '編集に戻る' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('履歴前の下書き');
+    expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(mockHistoryList).not.toHaveBeenCalled();
+  });
+
+  it('履歴前のCAS保存応答を待ち、成功後だけ履歴を開く', async () => {
+    const user = userEvent.setup();
+    let complete: (value: { revision: string }) => void = () => {
+      throw new Error('未開始');
+    };
+    mockSave.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '履歴前の下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    expect(mockSave).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        sheetId: 'sheet-1',
+        expectedRevision: '5',
+        blocks: [{ id: 'block-0', type: 'markdown', order: 0, data: { markdown: '履歴前の下書き' } }],
+      }),
+    );
+    expect(mockHistoryList).not.toHaveBeenCalled();
+    expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
+    await act(async () => {
+      complete({ revision: '6' });
+    });
+    expect(await screen.findByRole('region', { name: '版の履歴' })).toBeInTheDocument();
+    await waitFor(() => expect(mockHistoryList).toHaveBeenCalled());
+  });
+
+  it('履歴前の保存失敗は原稿を保持し、同じID・期待版・内容で再試行できる', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValueOnce(new Error('合成ネットワーク障害')).mockResolvedValueOnce({ revision: '6' });
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '再試行の下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    const retry = await screen.findByRole('button', { name: 'もう一度保存して開く' });
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('再試行の下書き');
+    expect(mockHistoryList).not.toHaveBeenCalled();
+    expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
+    await user.click(retry);
+    expect(await screen.findByRole('region', { name: '版の履歴' })).toBeInTheDocument();
+    expect(mockSave).toHaveBeenCalledTimes(2);
+    expect(mockSave.mock.calls[1][0]).toEqual(mockSave.mock.calls[0][0]);
+    expect(mockSave.mock.calls[1][0].expectedRevision).toBe('5');
   });
 
   it('期間投影が不一致の下書きを保存APIへ送信しない', async () => {
@@ -274,7 +394,7 @@ describe('BuilderClient', () => {
         vi.advanceTimersByTime(10000);
       });
       expect(mockSave).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByRole('button', { name: '案件エディタ' }));
+      // 初期選択の案件を直接編集する（旧tab遷移は不要）。
       fireEvent.click(screen.getByRole('checkbox', { name: '継続中' }));
       fireEvent.change(screen.getByLabelText('終了月', { selector: 'input' }), { target: { value: '2026-09' } });
       await act(async () => {
@@ -336,7 +456,7 @@ describe('BuilderClient', () => {
       />,
     );
     // 先頭ブロックの案件だけを編集する
-    fireEvent.click(screen.getByRole('button', { name: '案件エディタ' }));
+    // 初期選択の案件を直接編集する（旧tab遷移は不要）。
     fireEvent.change(screen.getByLabelText('案件タイトル'), { target: { value: '案件A改' } });
     await user.click(screen.getByRole('button', { name: /保存/ }));
     const blocks = mockSave.mock.calls[0][0].blocks;
@@ -347,6 +467,69 @@ describe('BuilderClient', () => {
       type: 'project',
       data: { companies: [{ name: 'B社' }], items: [{ title: '案件B' }] },
     });
+  });
+
+  it('選択した2件目のprojectだけを書き換え、1件目と順序・IDを保持する', async () => {
+    const user = userEvent.setup();
+    const blocks: Block[] = ['a', 'b'].map((id, order) => ({
+      id: `project-${id}`,
+      type: 'project',
+      order,
+      data: {
+        companies: [{ id: `company-${id}`, name: `合成会社${id}`, kind: '', period: '', note: '' }],
+        items: [
+          {
+            id: `item-${id}`,
+            companyId: `company-${id}`,
+            title: `合成案件${id}`,
+            scope: '',
+            period: '2024.01 — 2024.12',
+            role: '',
+            team: '',
+            tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+            process: [],
+            duties: '',
+            acquired: '',
+            comment: '',
+          },
+        ],
+      },
+    }));
+    render(<BuilderClient initialTitle="複数案件" initialBlocks={blocks} {...defaultProps} />);
+    const selectors = screen.getAllByRole('button', { name: '経歴（案件）: 経歴（案件）' });
+    expect(selectors).toHaveLength(2);
+    await user.click(selectors[1]);
+    expect(screen.getByLabelText('案件タイトル')).toHaveValue('合成案件b');
+    fireEvent.change(screen.getByLabelText('案件タイトル'), { target: { value: '2件目のみ更新' } });
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    const saved = mockSave.mock.calls[0][0].blocks;
+    expect(saved).toHaveLength(2);
+    expect(saved.map((b: Block) => b.id)).toEqual(['project-a', 'project-b']);
+    expect(saved[0].data).toEqual(blocks[0].data);
+    expect(saved[1].data.items[0]).toMatchObject({ id: 'item-b', title: '2件目のみ更新' });
+    await user.click(screen.getAllByRole('button', { name: '経歴（案件）: 経歴（案件）' })[0]);
+    expect(screen.getByLabelText('案件タイトル')).toHaveValue('合成案件a');
+  });
+
+  it('最初の会社追加後の連続編集でprojectを重複作成せず、選択会社と原稿を保持する', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['既存本文'])} initialTitle="初回案件" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '＋ 会社' }));
+    fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '合成会社' } });
+    fireEvent.change(screen.getByLabelText('会社の説明'), { target: { value: '連続入力の説明' } });
+    await user.click(screen.getByRole('button', { name: '＋ 案件を追加' }));
+    fireEvent.change(screen.getByLabelText('案件タイトル'), { target: { value: '初回の案件' } });
+    fireEvent.change(screen.getByLabelText('案件タイトル'), { target: { value: '連続編集後の案件' } });
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    const saved = mockSave.mock.calls[0][0].blocks;
+    expect(saved).toHaveLength(2);
+    expect(saved[0]).toMatchObject({ type: 'markdown', data: { markdown: '既存本文' } });
+    const projects = saved.filter((b: Block) => b.type === 'project');
+    expect(projects).toHaveLength(1);
+    expect(projects[0].data.companies).toHaveLength(1);
+    expect(projects[0].data.companies[0]).toMatchObject({ name: '合成会社', note: '連続入力の説明' });
+    expect(projects[0].data.items).toHaveLength(1);
+    expect(projects[0].data.items[0].title).toBe('連続編集後の案件');
   });
 
   it('文書IDがないビルダーは保存から暗黙作成しない', async () => {
@@ -387,33 +570,33 @@ describe('BuilderClient', () => {
   // 作成導線だけ抜けていた（Major/データ消失）ため、confirmDiscardChanges() 経由になったことを検証する。
   it('未保存の変更がある状態で「新規シート」を押すと確認ダイアログを挟み、拒否時は作成ダイアログを開かない', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
-    await user.click(screen.getByRole('button', { name: '新規シート' }));
-    expect(confirmSpy).toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+    await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
+    const confirmation = await screen.findByRole('alertdialog');
+    expect(within(confirmation).getByRole('button', { name: '編集に戻る' })).toHaveFocus();
+    await user.click(within(confirmation).getByRole('button', { name: '編集に戻る' }));
     expect(screen.queryByText('新規シートを作成')).not.toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 
   it('未保存の変更があっても確認ダイアログを承諾すれば「新規シート」の作成ダイアログが開く', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
-    await user.click(screen.getByRole('button', { name: '新規シート' }));
+    await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+    await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて移動' }));
     expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 
   it('未保存の変更が無ければ確認ダイアログを挟まず「新規シート」の作成ダイアログが開く', async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.spyOn(window, 'confirm');
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
-    await user.click(screen.getByRole('button', { name: '新規シート' }));
-    expect(confirmSpy).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+    await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
-    confirmSpy.mockRestore();
   });
 
   // プレビューは別ウィンドウに分離済み（builder-client 内には描画しない）ため、
@@ -486,9 +669,8 @@ describe('BuilderClient', () => {
   it('「テーブル」追加→セル入力が table ブロックとして保存 payload に入る', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={[]} initialTitle="t" {...defaultProps} />);
-    // パレットチップと下部ボタンの両方に「テーブル」ボタンがあるため末尾（下部ボタン）を使う
-    const tableBtns = screen.getAllByRole('button', { name: 'テーブル' });
-    await user.click(tableBtns[tableBtns.length - 1]);
+    await user.click(screen.getByRole('button', { name: 'ブロックを追加' }));
+    await user.click(screen.getAllByRole('button', { name: 'テーブル' })[0]);
     // 既定テーブル: 2 列（項目/内容）＋空 1 行。1 行 1 列にセル入力する。
     await user.type(screen.getByLabelText('1行1列'), 'PHP');
     await user.click(screen.getByRole('button', { name: /保存/ }));
@@ -676,23 +858,17 @@ describe('BuilderClient', () => {
       );
       const topbar = container.querySelector('[data-slot="builder-topbar"]') as HTMLElement;
       const row = topbar.querySelector(':scope > div') as HTMLElement;
-      const actions = row.children[row.children.length - 1] as HTMLElement;
-
-      expect(actions.className).toContain('gap-2');
-      expect(actions.className).not.toMatch(/\bgap-1\b/);
-
-      // 「自動保存に失敗 — 保存ボタンで再試行」は 210px あり、shrink-0 + whitespace-nowrap の
-      // ままだと 375px/320px で保存ボタン自体が画面外へ出て押せなくなる（実機実測: 右端394px）。
-      // SP だけ折り返しを許可し、sm 以上は従来どおり1行に保つ。
-      expect(actions.className).toContain('flex-wrap');
-      expect(actions.className).toContain('min-w-0');
-      expect(actions.className).toContain('sm:flex-nowrap');
-      expect(actions.className).toContain('sm:shrink-0');
-      expect(actions.className).not.toMatch(/(?<!sm:)\bshrink-0\b/);
+      // 新topbarは操作を同じ折返し行へ統合。8px間隔と縮小可能な行を保持する。
+      expect(row.className).toContain('gap-2');
+      expect(row.className).not.toMatch(/(?:^|\s)gap-1(?:\s|$)/);
+      expect(row.className).toContain('flex-wrap');
+      expect(row.className).toContain('min-w-0');
+      expect(screen.getByRole('button', { name: '保存' }).closest('[data-slot="builder-topbar"]')).toBe(topbar);
     });
 
     it('シート一覧の行（選択ボタン + 削除ボタン）が gap-2（8px）で並ぶ', () => {
       render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+      fireEvent.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
       const deleteButton = screen.getByRole('button', { name: '「テストシート」を削除' });
       const row = deleteButton.closest('li') as HTMLElement;
       expect(row.className).toContain('gap-2');
@@ -829,7 +1005,7 @@ describe('BuilderClient 自動保存', () => {
       />,
     );
     expect(screen.getByRole('button', { name: '保存' })).toBeDisabled();
-    expect(screen.getByLabelText('タイトル')).toBeDisabled();
+    expect(screen.queryByLabelText('タイトル')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'テキスト' })).not.toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(5000);
@@ -853,7 +1029,8 @@ describe('BuilderClient 自動保存', () => {
         initialRevision="0"
       />,
     );
-    typeMarkdown('## B');
+    expect(screen.queryByPlaceholderText('Markdown を入力...')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '新しいシートを作る' })).toBeInTheDocument();
     await act(async () => {
       vi.advanceTimersByTime(600);
     });
@@ -951,7 +1128,6 @@ describe('BuilderClient 自動保存', () => {
 
   it('競合の初回で自動保存を恒久停止し、ダイアログではなく競合バナーを表示する', async () => {
     mockSave.mockRejectedValueOnce(trpcClientError('CONFLICT'));
-    const confirmSpy = vi.spyOn(window, 'confirm');
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     typeMarkdown('## Aa');
     await act(async () => {
@@ -959,7 +1135,7 @@ describe('BuilderClient 自動保存', () => {
     });
     expect(mockSave).toHaveBeenCalledTimes(1);
     // 自動保存の競合はダイアログを出さない（インジケータ＋再読み込みボタンで通知）
-    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     expect(screen.getByText('競合 — 再読み込みが必要')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '再読み込み' })).toBeInTheDocument();
     // 以降どれだけ編集してデバウンスが満了しても自動保存は走らない（競合スパム防止）
@@ -973,7 +1149,7 @@ describe('BuilderClient 自動保存', () => {
   });
 
   it('自動保存の失敗（非競合）は同一内容で無限リトライせず、新しい編集で再試行する', async () => {
-    mockSave.mockRejectedValueOnce(trpcClientError('UNAUTHORIZED'));
+    mockSave.mockRejectedValueOnce(new Error('network unavailable'));
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
     typeMarkdown('## Aa');
     await act(async () => {
@@ -994,6 +1170,33 @@ describe('BuilderClient 自動保存', () => {
     });
     expect(mockSave).toHaveBeenCalledTimes(2);
     expect(screen.getByText('保存済み（自動）')).toBeInTheDocument();
+  });
+
+  it('認証失効後の追加入力を保持し、自動再試行を止めて明示保存成功後に復帰する', async () => {
+    mockSave.mockRejectedValueOnce(trpcClientError('UNAUTHORIZED'));
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    typeMarkdown('## Aa');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(screen.getByText('認証の有効期限が切れました')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '別のタブで認証する' })).toHaveAttribute('target', '_blank');
+    typeMarkdown('## Aab');
+    await act(async () => {
+      vi.advanceTimersByTime(10000);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: '認証後に保存を再試行' }));
+    });
+    expect(mockSave).toHaveBeenCalledTimes(2);
+    expect(mockSave.mock.calls[1][0].blocks[0].data.markdown).toBe('## Aab');
+    expect(screen.queryByText('認証の有効期限が切れました')).not.toBeInTheDocument();
+    typeMarkdown('## Aabc');
+    await act(async () => {
+      vi.advanceTimersByTime(1500);
+    });
+    expect(mockSave).toHaveBeenCalledTimes(3);
   });
 
   it('markdown へ落ちないフィールド（プロフィールの所属会社）の編集でも dirty になり自動保存される', async () => {
@@ -1027,13 +1230,14 @@ describe('BuilderClient 自動保存', () => {
     );
   });
 
-  it('案件エディタタブを開いただけでは空 project ブロックが追加されず、dirty にも自動保存にもならない', async () => {
+  it('アウトラインを折り畳み展開しただけでは空 project ブロックが追加されず、dirty にも自動保存にもならない', async () => {
     // ensureProjectBlock 廃止の回帰テスト（issue #128）。ProjectEditor は data 未指定時に
     // {companies:[],items:[]} へフォールバックするため、タブを開くだけではブロックを
     // 追加する必要がない。追加していれば（サーバがもう空ブロックを drop しないため）
     // dirty になり、放置後に自動保存されてしまう。
     render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
-    fireEvent.click(screen.getByRole('button', { name: '案件エディタ' }));
+    fireEvent.click(screen.getByTitle('集中モード（ナビを畳む）'));
+    fireEvent.click(screen.getByRole('button', { name: 'アウトラインを展開' }));
     await act(async () => {
       vi.advanceTimersByTime(5000);
     });

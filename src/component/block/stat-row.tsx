@@ -19,7 +19,7 @@ export const StatRow = ({ data, projectItems, referenceMonth }: StatRowProps) =>
     // mb-6 は親が space-y-* を持つダッシュボードでは隣接兄弟マージンとして相殺されるため
     // 二重には空かない。逆に外すと space-y-0 のレイアウト（project ブロックが無いシート）で
     // 次ブロックとの余白が消えるので、ブレークポイントを付けず常に持たせる。
-    <div className="overflow-x-auto">
+    <div className="viewer-stat-row overflow-x-auto">
       <div className={`mb-6 grid min-w-[360px] grid-cols-2 gap-px border border-border bg-border ${desktopColumns}`}>
         {items.map((item, i) => (
           // biome-ignore lint/suspicious/noArrayIndexKey: 静的リスト

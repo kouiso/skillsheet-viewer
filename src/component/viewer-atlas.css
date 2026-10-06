@@ -1,0 +1,61 @@
+/* Atlas。閲覧ページとそのportalだけに適用し、編集画面の配色を変えない。 */
+.atlas-page, .atlas-drawer, .atlas-export-menu {
+  --background:#ffffff; --foreground:#18181b; --card:#ffffff; --card-foreground:#18181b;
+  --muted:#fafafa; --muted-foreground:#52525b; --faint:#62626c;
+  --surface2:#fafafa; --surface3:#f2f2f3; --border:#d0d0d5; --input:#74747d;
+  --primary:#0d9488; --primary-dark:#0a7269; --primary-hover:#075e57; --primary-foreground:#fff;
+  --accent:#f0fbf9; --accent-soft:#f0fbf9; --accent-text:#0d7a70; --accent-foreground:#0d7a70;
+  --track:#e4e4e7; --chip-bg:#f5f5f6; --chip-text:#3f3f46;
+  --radius:7px; --radius-lg:10px; --bar-round:2px; --head-weight:700;
+  --elevation-1:0 0 #0000; --elevation-2:0 0 #0000;
+  background:var(--background); color:var(--foreground);
+}
+.dark .atlas-page, .dark .atlas-drawer, .dark .atlas-export-menu {
+  --background:#0d0e10; --foreground:#ededef; --card:#16181b; --card-foreground:#ededef;
+  --muted:#1b1e22; --muted-foreground:#b1b4bc; --faint:#a0a4ad;
+  --surface2:#1b1e22; --surface3:#23262b; --border:#41464f; --input:#7b8492;
+  --primary:#2dd4bf; --primary-dark:#2dd4bf; --primary-hover:#5eead4; --primary-foreground:#06201d;
+  --accent:#0f2926; --accent-soft:#0f2926; --accent-text:#5eead4; --accent-foreground:#5eead4;
+  --track:#30353d; --chip-bg:#1f2226; --chip-text:#c5c8cf;
+}
+.atlas-page {max-width:1280px; margin:auto; min-height:100vh; display:grid; grid-template-columns:268px minmax(0,1fr); align-items:start;}
+.atlas-page > [role="status"] {grid-column:1/-1;}
+.atlas-sidebar {position:sticky;top:0;height:100dvh;padding:36px 26px;display:flex;flex-direction:column;gap:24px;overflow:auto;border-right:1px solid var(--border);}
+.atlas-name {font-size:18px;font-weight:700;margin:8px 0 0;overflow-wrap:anywhere;}
+.atlas-company {font-size:12px;color:var(--muted-foreground);margin-top:3px;overflow-wrap:anywhere;}
+.atlas-back {display:flex;align-items:center;gap:8px;min-height:44px;border-radius:7px;font-size:12px;color:var(--muted-foreground);}
+.atlas-back:hover {background:var(--muted);}
+.atlas-view-toggles {display:flex;flex-direction:column;gap:8px;min-width:0;border:0;padding:0;margin:0;}
+.atlas-view-toggles legend {position:static;width:auto;height:auto;clip:auto;white-space:normal;font-family:var(--font-mono);font-size:12px;letter-spacing:.1em;color:var(--faint);margin-bottom:12px;}
+.atlas-view-toggles .softbtn {width:100%;justify-content:flex-start;min-height:44px;white-space:normal;text-align:left;}
+.atlas-actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:auto;padding-top:20px;border-top:1px solid var(--border);}
+.atlas-actions button span {display:inline;}
+.atlas-mobile-bar {display:none;}
+.atlas-drawer {width:min(320px,calc(100vw - 32px));display:flex;flex-direction:column;gap:24px;padding:52px 26px 26px;overflow:auto;}
+.atlas-drawer > button[aria-label="閉じる"] {min-width:44px;min-height:44px;display:grid;place-items:center;opacity:1;}
+@media(max-width:899px){
+ .atlas-page {display:block;}
+ .atlas-sidebar {display:none;}
+ .atlas-mobile-bar {display:flex;position:sticky;top:0;z-index:40;gap:12px;align-items:center;padding:12px 16px;background:var(--background);border-bottom:1px solid var(--border);}
+}
+@media print {.atlas-page {display:block;} .atlas-sidebar,.atlas-mobile-bar {display:none;}}
+
+.atlas-export-menu {pointer-events:auto;}
+
+.atlas-content > main {padding:20px 56px 96px;max-width:1012px;}
+.atlas-content > main > div {max-width:880px;margin:0 auto;}
+.atlas-toc {margin:28px 56px 0;border-bottom:1px solid var(--border);padding-bottom:12px;color:var(--muted-foreground);font-size:13px;}
+.atlas-toc summary {min-height:44px;cursor:pointer;align-content:center;}
+.atlas-toc nav {max-height:50vh;overflow:auto;}
+.atlas-toc summary:focus-visible {outline:2px solid var(--ring);outline-offset:2px;}
+@media(max-width:899px){.atlas-content > main {padding:20px 24px 72px;} .atlas-toc {margin:16px 24px 0;}}
+@media(max-width:420px){.atlas-content > main {padding-inline:16px;} .atlas-toc {margin-inline:16px;}}
+
+.atlas-page, .atlas-drawer, .atlas-export-menu {--font-sans:var(--font-atlas-body),system-ui,sans-serif;--font-mono:var(--font-atlas-mono),monospace;font-family:var(--font-sans);}
+
+.atlas-profile .techtag {padding:4px 10px;border-radius:7px;font-size:12px;}
+
+.atlas-page input {border-color:var(--input);}
+.atlas-page input:focus {border-color:var(--input);outline:2px solid var(--ring);outline-offset:2px;}
+
+.atlas-page .viewer-stat-row > div {min-width:0;border-radius:10px;overflow:hidden;}
