@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { StatsBlockData } from '@/db/block';
 import { itemToBlockInput } from '../serialize';
-import { StatsBlockEditor } from './stats-block-editor';
+import { StatsBlockEditor } from './stat-block-editor';
 
 const initial: StatsBlockData = {
   items: [
