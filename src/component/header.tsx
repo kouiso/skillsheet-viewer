@@ -97,14 +97,14 @@ const Header = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
                   onClick={() => void onDownloadPdf()}
                   disabled={pdfLoading}
                   aria-busy={pdfLoading}
                   aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
-                  className="min-h-11 min-w-11"
+                  className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
                 >
                   {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+                  <span className="hidden xl:inline">PDF</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>PDFをダウンロード</TooltipContent>
@@ -116,14 +116,14 @@ const Header = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
                   onClick={() => void onDownloadExcel()}
                   disabled={excelLoading}
                   aria-busy={excelLoading}
                   aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
-                  className="min-h-11 min-w-11"
+                  className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
                 >
                   {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
+                  <span className="hidden xl:inline">Excel</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Excelをダウンロード</TooltipContent>
