@@ -1,3 +1,4 @@
+import { TRPCClientError } from '@trpc/client';
 import { describe, expect, it, vi } from 'vitest';
 import { saveWithReadback } from './save-readback';
 
@@ -16,7 +17,7 @@ describe('保存応答喪失の読戻し', () => {
     expect(read).not.toHaveBeenCalled();
   });
   it('失敗応答でも同ID・進んだ版・同じ内容なら保存済みsnapshotを返す', async () => {
-    const save = vi.fn().mockRejectedValue(new Error('response lost'));
+    const save = vi.fn().mockRejectedValue(TRPCClientError.from(new Error('response lost')));
     const read = vi.fn().mockResolvedValue({ status: 'OK', snapshot });
     expect(await saveWithReadback(payload, save, read)).toEqual(snapshot);
     expect(save).toHaveBeenCalledOnce();
@@ -28,6 +29,10 @@ describe('保存応答喪失の読戻し', () => {
     { data: { code: 'CONFLICT' } },
     { data: { code: 'FORBIDDEN' } },
     { shape: { data: { code: 'BAD_REQUEST' } } },
+    TRPCClientError.from({ error: { message: '競合', code: -32009, data: { code: 'CONFLICT', httpStatus: 409 } } }),
+    TRPCClientError.from({
+      error: { message: '認証が必要', code: -32001, data: { code: 'UNAUTHORIZED', httpStatus: 401 } },
+    }),
   ])('明示的な拒否は別タブの同じ内容で成功扱いにしない', async (error) => {
     const read = vi.fn().mockResolvedValue({ status: 'OK', snapshot });
     await expect(saveWithReadback(payload, vi.fn().mockRejectedValue(error), read)).rejects.toBe(error);
@@ -39,7 +44,7 @@ describe('保存応答喪失の読戻し', () => {
     { ...snapshot, revision: payload.expectedRevision },
     { ...snapshot, revision: 'invalid' },
   ])('別ID・別内容・進んでいない版は成功にしない', async (current) => {
-    const error = new Error('CONFLICT');
+    const error = TRPCClientError.from(new Error('response lost'));
     await expect(
       saveWithReadback(
         payload,
