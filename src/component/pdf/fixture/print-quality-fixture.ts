@@ -18,10 +18,10 @@
  * 最後の 1 行は後から足したもの。それ以前のフィクスチャは和文だけ・`・` 始まりの擬似
  * 箇条書きだけでできており、`BulletRow` も字種の境界も 1 度も通らないまま緑になっていた。
  *
- * `resolveDetailLevels`（project-detail-level.ts）の分岐に日付の実行時依存が無いよう、
+ * `resolveDetailLevels`（project-detail-level.ts）の分岐を渡した基準月に連動させないよう、
  * どの案件も period に「現在」を使わない（固定の終了年月にする）。`現在` を 1 件でも混ぜると、
- * baseline が実行時刻の `new Date()` になり、詳細/簡約の振り分けがテスト実行日によって
- * 変わってしまう（実測: DETAIL_CUTOFF_MONTHS=24 の境界に近い案件が数年後に振り分けを変える）。
+ * baseline が基準月の値に連動し、DETAIL_CUTOFF_MONTHS=24 の境界に近い案件が
+ * 基準月を 1 ヶ月動かすだけで振り分けを変える（実データで再現）。
  */
 
 import type { Block, CompanyInfo, ProjectItem, ProjectTech } from '@/db/block';
