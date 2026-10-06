@@ -129,6 +129,13 @@ pnpm db:migrate
 - **新規（fresh）DB**: そのまま実行すれば Drizzle が全マイグレーションを適用します。
 - **既存本番 DB**: Better Auth CLI などで先にテーブルが作られている場合、そのまま流すと「テーブルが既に存在する」で失敗します。最初に 1 回だけ baseline を行ってから通常運用に移します。手順は [`drizzle/migration-baseline.md`](./drizzle/migration-baseline.md) を参照してください。
 
+#### 文書境界（`skillsheet_private`）と接続 role の権限
+
+スキルシートの閲覧・編集は `skillsheet_private` スキーマの境界関数（SECURITY DEFINER）経由です。境界は `pnpm db:migrate` では作られず、**境界未 install・権限未付与・principals 未登録の DB では `/view` が ACCESS_DENIED（PostgreSQL 42501）で全滅します**（Issue #373）。対処は接続先ごとに次のどちらかです。
+
+- **ローカル PostgreSQL（外部接続不要・推奨）**: `sudo ./script/dev-local-stack.sh up` がローカル cluster の起動・migrations・境界 install・接続 role への EXECUTE・principals 登録・`.env.local` 生成まで一括で行います。`NODE_EXTRA_CA_CERTS` だけ実行後の案内どおり設定してください（wss プロキシの自己署名証明書を信頼するため）。
+- **共有 DB（Neon）**: 管理者側で `script/sql/install-skillsheet-read-boundary.sql` → `install-skillsheet-write-boundary.sql` を適用したうえで、あなたの接続 role に `install-runtime-role.sql` を実行してもらいます（`-v runtime_role=...` / `-v runtime_password=...` / `-v owner_id=<SKILLSHEET_OWNER_ID>`。値はリポジトリやドキュメントに書かない）。適用順序の詳細は [doc/05-toc-and-deploy.md](./doc/05-toc-and-deploy.md) の「文書境界・runtime role の適用順序」を参照。
+
 ### 4. 開発サーバーの起動
 
 ```bash
