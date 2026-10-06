@@ -58,8 +58,12 @@ const ok = (rev: string, blocks: unknown) => ({
   snapshot: { sheetId, title: '合成', revision: rev, blocks },
 });
 
+// approvalFor→recordNarrativeApproval→persistPrivateRepairRecord は /proc/self/fd 経由の
+// Linux 専用なので、その経路を通るテストは Linux に限る。
+const itLinux = it.skipIf(process.platform !== 'linux');
+
 describe('applyNarrativeUpdate', () => {
-  it('承認一致+現在文書一致ならCAS→読戻しで新snapshotを返す', async () => {
+  itLinux('承認一致+現在文書一致ならCAS→読戻しで新snapshotを返す', async () => {
     const current = snapshot();
     const proposal = proposeNarrativeUpdate('owner-a', current, narrative);
     const approval = approvalFor('owner-a', current, proposal);
@@ -74,7 +78,7 @@ describe('applyNarrativeUpdate', () => {
     expect(fake.execute).toHaveBeenCalledTimes(3);
   });
 
-  it('承認記録が案と不一致ならDBを書かず拒否する', async () => {
+  itLinux('承認記録が案と不一致ならDBを書かず拒否する', async () => {
     const current = snapshot();
     const proposal = proposeNarrativeUpdate('owner-a', current, narrative);
     const approval = { ...approvalFor('owner-a', current, proposal), afterHash: '0'.repeat(64) };
@@ -85,7 +89,7 @@ describe('applyNarrativeUpdate', () => {
     expect(fake.execute).toHaveBeenCalledTimes(1); // readのみ、書込みなし
   });
 
-  it('CASがCONFLICTを返せばそのまま失敗する', async () => {
+  itLinux('CASがCONFLICTを返せばそのまま失敗する', async () => {
     const current = snapshot();
     const proposal = proposeNarrativeUpdate('owner-a', current, narrative);
     const approval = approvalFor('owner-a', current, proposal);

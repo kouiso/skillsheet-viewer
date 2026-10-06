@@ -206,6 +206,27 @@ describe('buildPrintViewModel', () => {
     expect(vm.companies.map((c) => c.isLatest)).toEqual([true, false]);
   });
 
+  it('最新会社の判定は基準月で揺れない（「現在」終端を実行時点の時計で解釈しない回帰）', () => {
+    // 「〜現在」の会社は終わっていないので常に最新側として扱う。基準月を 2026.09 →
+    // 2026.10 に動かしても isLatest は A 社のまま揺れない。以前は「現在」を実行時点の
+    // Date で解釈していたため、同じシート・同じ指定月でも実行日で isLatest が揺れた。
+    const blocks = blocksFixture();
+    const project = blocks.find((b) => b.type === 'project');
+    if (project?.type !== 'project') throw new Error('fixture');
+    project.data.companies = [
+      { id: 'ca', name: 'A社', kind: '', period: '2020.01 — 現在', note: '' },
+      { id: 'cb', name: 'B社', kind: '', period: '2025.11 — 2026.09', note: '' },
+    ];
+    project.data.items = [
+      { ...project.data.items[0], id: 'ia', companyId: 'ca', period: '2020.01 — 現在' },
+      { ...project.data.items[1], id: 'ib', companyId: 'cb', period: '2025.11 — 2026.09' },
+    ];
+    const sep = buildPrintViewModel('シート', blocks, undefined, 2026 * 12 + 8);
+    expect(sep.companies.find((c) => c.name === 'A社')?.isLatest).toBe(true);
+    const oct = buildPrintViewModel('シート', blocks, undefined, 2026 * 12 + 9);
+    expect(oct.companies.find((c) => c.name === 'A社')?.isLatest).toBe(true);
+  });
+
   it('直近の案件は詳細版、古い案件は簡約版になる', () => {
     const vm = buildPrintViewModel('シート', blocksFixture());
     const levels = new Map(vm.companies.flatMap((c) => c.projects).map((p) => [p.title, p.level]));
