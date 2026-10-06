@@ -4,6 +4,12 @@ Claude Code / claude.ai Custom Connector から、OAuth 2.1 で認証・認可�
 
 関連ドキュメント: [02 認証](02-authentication.md) / [01 セットアップとルーティング](01-setup-and-routing.md)
 
+> **先に読む: MCP は `0006` マイグレーションを適用してから有効にする。**
+> 対象環境の DB に `0006`（OAuth テーブル）が無いまま `MCP_ENABLED` を有効にしても、
+> `/api/mcp` は 404 のまま動かない。手順と理由は「[環境変数](#環境変数)」節の「有効化の順序」を見る。
+> 本番（Neon `main`）は `0000`〜`0010` を適用済み（2026-10-05 に `drizzle.__drizzle_migrations` の
+> 11 行とリポジトリの SQL の SHA-256 が全件一致することを確認）。
+
 ---
 
 ## 全体像
@@ -175,9 +181,34 @@ Better Auth の OAuth テーブル（`oauth_access_token` / `oauth_refresh_token
 JWT は `/api/auth/jwks` で生成されたローカル DB の署名鍵を使い、検証と同じ iss/aud/scope を
 持つものをテスト用に発行した（ブラウザ経由の OAuth 認可ダンス自体は未実施）。
 
+## 本番検証（2026-10-05 実施の記録）
+
+本番 `https://skill-sheet-snowy.vercel.app`（main `79ce1f1` のデプロイ）に対して実測した。
+本番シートの `updated_at` は検証の前後で同じ値のままで、書き込みは発生していない。
+
+- 公開 endpoint
+  - `/api/mcp`: GET 405、トークン無しの POST 401（`WWW-Authenticate` に resource_metadata と scope）
+  - `/.well-known/oauth-protected-resource/api/mcp`: 200（`authorization_servers` は `/api/auth`）
+  - `/.well-known/oauth-authorization-server/api/auth`: 200（`client_id_metadata_document_supported: true`）
+  - `/api/auth/jwks`: 200（EdDSA 鍵 1 本）
+  - 以前の調査で 404 と記録した `/api/get-session` と `/.well-known/oauth-authorization-server`（パス無し）は、
+    どちらも実在しない URL を叩いていただけだった。正しい URL は `/api/auth/get-session`（200）と
+    issuer のパスを付けた `/.well-known/oauth-authorization-server/api/auth`（200）。
+- トークン付きの呼び出し
+  - トークンは本番の JWKS 署名鍵で、OAuth フローが出すものと同じ iss・aud・scope で発行した
+    （ブラウザでのログインは通していない）。
+  - MCP Inspector CLI（`npx @modelcontextprotocol/inspector --cli … --transport http`）で
+    `tools/list` が 8 ツールを返す。`list_sheets`・`get_sheet`・`search_projects` は本番データを返す
+  - `skillsheet:read` だけのトークンで `update_stats` → 403 `insufficient_scope`
+  - `sub` がオーナー以外のトークン → 403
+  - `read+write` のトークンで、正しいラベルと古い `expectedRevision` を渡した `update_stats` → `CONFLICT`（保存されない）
+  - 存在しないラベルを渡した `update_stats` → `NOT_FOUND`
+- Vercel の実行ログ（production、直近 1 時間）で `/api/mcp` の 200・202・401・403・405 が記録され、
+  error・warning・fatal は 0 件だった
+
 ## 未検証事項（SBI4 の残作業）
 
 - ブラウザ経由の OAuth 認可フロー（`/login` → `/consent` → code → token）の実測
-- claude.ai Custom Connector の実接続（本番デプロイ後に行う）
-- MCP Inspector での全ツール実測・トークン失効の実測
-- Vercel 上での Fluid compute / ログ確認
+- claude.ai Custom Connector の実接続（オーナーの claude.ai ログインが必要）
+- 書き込みツールで実際に保存する経路の本番実測と、トークン失効の実測
+- Vercel 上での Fluid compute の設定確認
