@@ -135,14 +135,14 @@ const Header = ({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
                   onClick={() => void onDownloadDocx()}
                   disabled={docxLoading}
                   aria-busy={docxLoading}
                   aria-label={docxLoading ? 'Wordを生成中' : 'Wordダウンロード'}
-                  className="min-h-11 min-w-11"
+                  className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
                 >
                   {docxLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileText />}
+                  <span className="hidden xl:inline">Word</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Wordをダウンロード</TooltipContent>
