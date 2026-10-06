@@ -15,10 +15,17 @@ export async function chooseTemplate(page: Page, id: 'full' | 'console-dashboard
 }
 
 /** レール/ドロワーの複製を除き、実際に操作可能なアウトラインから選ぶ。 */
-export async function selectBlock(page: Page, kind: string) {
+const blockLabels = {
+  スキル: /^スキル:/,
+  テーブル: /^テーブル:/,
+  統計: /^統計:/,
+  プロフィール: /^プロフィール:/,
+} as const;
+
+export async function selectBlock(page: Page, kind: keyof typeof blockLabels) {
   const item = page
     .locator('nav[aria-label="ブロック一覧"]:visible')
-    .getByRole('button', { name: new RegExp(`^${kind}:`) })
+    .getByRole('button', { name: blockLabels[kind] })
     .first();
   await item.click();
 }
