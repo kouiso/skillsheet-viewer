@@ -224,19 +224,20 @@ function hasMonthPrecision(token: string): boolean {
 
 /**
  * period の開始・終了を parseYearMonth と同じ数値尺度で返す。
- * 終端「現在」は実行時点の年月。解釈できない入力は null（新規パーサは持たない）。
+ * 終端「現在」は引数の基準月（`年*12 + 月 - 1`、currentMonthKey と同じ尺度）で解釈する。
+ * この関数は時計を読まない。時計を読むのは基準月を決める呼び出し側だけ。
+ * 解釈できない入力は null（新規パーサは持たない）。
  */
-export function parsePeriodBounds(period: string): PeriodBounds | null {
+export function parsePeriodBounds(period: string, referenceMonth: number): PeriodBounds | null {
   if (typeof period !== 'string' || period.length === 0) return null;
   const [startToken, endToken] = splitPeriodRange(period);
   const start = parseYearMonth(startToken);
   if (start === null) return null;
   const startPrecise = hasMonthPrecision(startToken);
   if (endToken === '現在') {
-    // 終端「現在」は実行時点。描画に使う側は openEnded を見て、時計に依存しない値へ
-    // 置き換えること（サーバとブラウザで月をまたぐと違う結果になり、hydration がずれる）。
-    const now = new Date();
-    const end = now.getFullYear() + now.getMonth() / 12;
+    // 終端「現在」は引数の基準月。実行時点の時計を読むと同じ period が実行日で違う値になり、
+    // サーバとブラウザで hydration がずれるほか、スケジュール実行で描画が揺れた。
+    const end = referenceMonth / 12;
     return { start, end: Math.max(end, start), precise: startPrecise, openEnded: true };
   }
   // 終了が未記載なら「終わりが分からない」であって、開始と同じ月に終わったのではない。
