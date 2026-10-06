@@ -41,3 +41,12 @@ export function projectBlockingWarnings(blocks: readonly RawDocumentBlock[]) {
   }
   return result;
 }
+
+/** 単一フォームでも保存と同じ期間診断を使い、旧形式の明示投影を見落とさない。 */
+export function projectHasBlockingPeriod(project: ProjectItem): boolean {
+  return (
+    projectBlockingWarnings([
+      { id: 'period-validation', type: 'project', order: 0, data: { companies: [], items: [project] } },
+    ]).length > 0
+  );
+}
