@@ -340,7 +340,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               {durationBadge && <span className={`dur-badge${ongoing ? ' live' : ''}`}>{durationBadge}</span>}
             </div>
             {projectionMismatch && (
-              <p role="alert" className="hint">
+              <p role="alert" className="hint err">
                 期間の日付と保存済みの期間が一致していないため保存できません。開始月・終了月・継続中を確認してください。
               </p>
             )}
