@@ -14,6 +14,7 @@ import {
 import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constant';
 import { GrowTextarea } from './grow-textarea';
 import { MonthDatePicker } from './month-date-picker';
+import { projectHasBlockingPeriod } from './project-warning';
 import { ScopePicker } from './scope-picker';
 import { TagInput } from './tag-input';
 
@@ -178,9 +179,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
   const ongoing = p.ongoing ?? parsedLegacy?.ongoing ?? false;
   // レガシー文字列がパース不能（"2020年頃" 等）：月入力は空のまま、元の文字列を注記表示して温存する
   const legacyUnparsable = !hasMonthFields && parsedLegacy === null && p.period.trim().length > 0;
-  const projectionMismatch =
-    parsedLegacy !== null &&
-    (start !== parsedLegacy.start || end !== parsedLegacy.end || ongoing !== parsedLegacy.ongoing);
+  const projectionMismatch = projectHasBlockingPeriod(p);
 
   const commitPeriod = (nextStart: string, nextEnd: string, nextOngoing: boolean) => {
     const formatted = formatPeriodRange(nextStart, nextEnd, nextOngoing);
