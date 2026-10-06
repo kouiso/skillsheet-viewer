@@ -26,6 +26,7 @@ import { unified } from 'unified';
 import type { Block, ProjectTech } from '@/db/block';
 import { filterVisibleProjectData, orderedProfileMetaEntries, resolveProfileMetaLabel } from '@/db/block';
 import {
+  currentMonthKey,
   experienceSourceLabel,
   resolveCompanyPeriod,
   resolveDisplayedSkillExperience,
@@ -331,7 +332,7 @@ export function enumerateCompletenessFacts(
     companies: visibleParts.flatMap((part) => part.companies),
     items: visibleParts.flatMap((part) => part.items),
   };
-  const { levelById } = resolveDetailLevels(visible.items);
+  const { levelById } = resolveDetailLevels(visible.items, referenceMonth ?? currentMonthKey());
   const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
 
   // --- 1 ページ目: 氏名・肩書き・プロフィール項目・統計・自己紹介 ---
@@ -757,7 +758,7 @@ export function buildContinuationHeaderNoise(blocks: Block[], referenceMonth?: n
     companies: visibleParts.flatMap((part) => part.companies),
     items: visibleParts.flatMap((part) => part.items),
   };
-  const { levelById } = resolveDetailLevels(visible.items);
+  const { levelById } = resolveDetailLevels(visible.items, referenceMonth ?? currentMonthKey());
   const groups = groupProjectsByCompany(visible.companies, visible.items).filter((g) => g.items.length > 0);
   const noise: ContinuationHeaderNoise[] = [];
   for (const group of groups) {

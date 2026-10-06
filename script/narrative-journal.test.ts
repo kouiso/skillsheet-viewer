@@ -26,8 +26,11 @@ function dir(): string {
   return d;
 }
 
+// appendNarrativeJournal は /proc/self/fd 経由の Linux 専用なので、その経路のテストだけ skip。
+const itLinux = it.skipIf(process.platform !== 'linux');
+
 describe('append-only journal', () => {
-  it('状態遷移を時系列で追記・読み戻す', () => {
+  itLinux('状態遷移を時系列で追記・読み戻す', () => {
     const file = path.join(dir(), 'journal.jsonl');
     appendNarrativeJournal(file, entry('approved'));
     appendNarrativeJournal(file, entry('db-applied'));
