@@ -206,11 +206,10 @@ describe('buildPrintViewModel', () => {
     expect(vm.companies.map((c) => c.isLatest)).toEqual([true, false]);
   });
 
-  it('最新会社の判定は基準月で決まる（「現在」終端を実行時点の時計で解釈しない回帰）', () => {
-    // 「〜現在」の終了月と別会社の固定終了月が同じ月に並ぶ境界:
-    // 基準月 2026.09 では終了月が同着で開始の遅い B 社が最新、基準月 2026.10 では
-    // A 社の「現在」が 1 ヶ月伸びて A 社が最新。以前は「現在」を実行時点の Date で
-    // 解釈していたため、同じシート・同じ指定月でも実行日で isLatest が揺れた。
+  it('最新会社の判定は基準月で揺れない（「現在」終端を実行時点の時計で解釈しない回帰）', () => {
+    // 「〜現在」の会社は終わっていないので常に最新側として扱う。基準月を 2026.09 →
+    // 2026.10 に動かしても isLatest は A 社のまま揺れない。以前は「現在」を実行時点の
+    // Date で解釈していたため、同じシート・同じ指定月でも実行日で isLatest が揺れた。
     const blocks = blocksFixture();
     const project = blocks.find((b) => b.type === 'project');
     if (project?.type !== 'project') throw new Error('fixture');
@@ -223,7 +222,7 @@ describe('buildPrintViewModel', () => {
       { ...project.data.items[1], id: 'ib', companyId: 'cb', period: '2025.11 — 2026.09' },
     ];
     const sep = buildPrintViewModel('シート', blocks, undefined, 2026 * 12 + 8);
-    expect(sep.companies.find((c) => c.name === 'B社')?.isLatest).toBe(true);
+    expect(sep.companies.find((c) => c.name === 'A社')?.isLatest).toBe(true);
     const oct = buildPrintViewModel('シート', blocks, undefined, 2026 * 12 + 9);
     expect(oct.companies.find((c) => c.name === 'A社')?.isLatest).toBe(true);
   });
