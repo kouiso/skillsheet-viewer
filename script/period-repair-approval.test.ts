@@ -6,7 +6,8 @@ import type { DocumentSnapshot } from '../src/db/document-service';
 import { recordPeriodRepairApproval } from './period-repair-approval';
 import { proposePeriodRepair } from './period-repair-proposal';
 
-it('明示ハッシュが一致する承認だけを不変記録として保存する', () => {
+// recordPeriodRepairApproval→persistPrivateRepairRecord は /proc/self/fd 経由の Linux 専用。
+it.skipIf(process.platform !== 'linux')('明示ハッシュが一致する承認だけを不変記録として保存する', () => {
   const directory = mkdtempSync(join(tmpdir(), 'repair-approval-'));
   try {
     const source: DocumentSnapshot = {
