@@ -29,7 +29,7 @@ vi.mock('framer-motion', () => ({
   useReducedMotion: () => false,
 }));
 
-vi.mock('./viewer-fonts', () => ({ consoleFontClasses: '' }));
+vi.mock('./viewer-font', () => ({ consoleFontClasses: '' }));
 
 const renderTopbar = (props = {}) =>
   render(

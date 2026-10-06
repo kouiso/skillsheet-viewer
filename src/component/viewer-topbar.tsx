@@ -22,14 +22,14 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/component/ui/sheet';
-import './viewer-atlas.css';
+import './viewer-console.css';
 
 import { Button } from '@/component/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
 import { useViewerTopbarHeight } from '@/hook/use-viewer-topbar-height';
-import { consoleFontClasses } from './viewer-fonts';
+import { consoleFontClasses } from './viewer-font';
 
 /**
  * ビューアで表示ON/OFFを切り替えられるキー。

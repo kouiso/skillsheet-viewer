@@ -10,7 +10,7 @@ import type { ExperienceBlockData, ProfileBlockData, SkillEntry, StatsBlockData,
 import { ExperienceBlockEditor } from '../block-editor/experience-block-editor';
 import { type CustomMetaRow, ProfileBlockEditor } from '../block-editor/profile-block-editor';
 import { SkillsBlockEditor } from '../block-editor/skill-block-editor';
-import { StatsBlockEditor } from '../block-editor/stats-block-editor';
+import { StatsBlockEditor } from '../block-editor/stat-block-editor';
 import { TableBlockEditor } from '../block-editor/table-block-editor';
 import type { EditorItem } from '../serialize';
 
