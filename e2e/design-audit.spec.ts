@@ -26,7 +26,34 @@ const viewports = [
 
 type Theme = 'light' | 'dark';
 
-async function setTheme(page: Page, theme: Theme) {
+// globals.css: body { background-color: var(--background) }。light は #f6f8f8、
+// dark は #0a0d0f。computed style は rgb() 形式で返る。
+const THEME_BACKGROUND: Record<Theme, string> = {
+  light: 'rgb(246, 248, 248)',
+  dark: 'rgb(10, 13, 15)',
+};
+
+const hasDarkClass = (page: Page) => page.evaluate(() => document.documentElement.classList.contains('dark'));
+
+/**
+ * 指定テーマへ切り替える。
+ * dark への遷移はページ上の「テーマ切り替え」ボタンを実際にクリックする（#374。
+ * localStorage 直書きだと ThemeModeProvider の保存経路を通らず、
+ * 「トグルで dark にしてもリロードで light に戻る」退行を検出できない）。
+ * light は監査の初期状態（ベースライン）として localStorage へ直接置く。
+ * トグルボタンを持たないページ（/login・/viewer-auth・/builder/preview）では
+ * dark も「ユーザーが以前選択した保存値」として localStorage へ置き、
+ * 復元経路の確認はリロード後のアサートで行う。
+ */
+async function applyTheme(page: Page, theme: Theme) {
+  const themeToggle = page.getByRole('button', { name: 'テーマ切り替え' });
+  if (theme === 'dark' && (await themeToggle.count()) > 0) {
+    if (!(await hasDarkClass(page))) {
+      await themeToggle.click();
+      await expect.poll(() => hasDarkClass(page), { message: 'トグルで dark になること' }).toBe(true);
+    }
+    return;
+  }
   await page.evaluate((t) => {
     localStorage.setItem('theme-mode', t);
   }, theme);
@@ -56,10 +83,24 @@ async function measureAndCapture(page: Page, viewport: (typeof viewports)[number
   };
   page.on('console', consoleHandler);
 
-  await setTheme(page, theme);
+  await applyTheme(page, theme);
   await page.reload({ waitUntil: 'networkidle' });
   // 各ページの framer-motion 等アニメーションが完了してからスクリーンショットを取得する
   await page.waitForTimeout(1200);
+
+  // #374: リロード後もテーマが維持されること。
+  // html.dark の有無・localStorage の保存値・解決済みの body 背景色を確認する
+  // （トグル → リロードで light に戻る、保存値が上書きされる退行の検出）。
+  const themeState = await page.evaluate(() => ({
+    dark: document.documentElement.classList.contains('dark'),
+    stored: localStorage.getItem('theme-mode'),
+    bodyBackground: getComputedStyle(document.body).backgroundColor,
+  }));
+  expect(themeState.dark, `${name}/${viewport.name}/${theme}: html.dark の有無`).toBe(theme === 'dark');
+  expect(themeState.stored, `${name}/${viewport.name}/${theme}: localStorage theme-mode の保持`).toBe(theme);
+  expect(themeState.bodyBackground, `${name}/${viewport.name}/${theme}: 背景色が ${theme} テーマの値であること`).toBe(
+    THEME_BACKGROUND[theme],
+  );
 
   const overflow = await page.evaluate(() => {
     const html = document.documentElement;

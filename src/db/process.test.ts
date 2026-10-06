@@ -18,6 +18,9 @@ import {
   splitPeriodRange,
 } from './process';
 
+// 基準月キー: year*12 + monthIndex（currentMonthKey と同じ約束）。2026 年 9 月 = 24320。
+const REF_MONTH = 2026 * 12 + 8;
+
 describe('normalizeProcess', () => {
   it('未知の語彙は other に落ちる', () => {
     const result = normalizeProcess(['要件定義', 'インフラ構築']);
@@ -87,21 +90,25 @@ describe('parseStart', () => {
 
 describe('parsePeriodBounds', () => {
   it('開始・終了とも解釈できる period は両端を返す', () => {
-    const bounds = parsePeriodBounds('2020.04 — 2023.03');
+    const bounds = parsePeriodBounds('2020.04 — 2023.03', REF_MONTH);
     expect(bounds).not.toBeNull();
     expect(bounds?.start).toBeCloseTo(2020 + 3 / 12);
     expect(bounds?.end).toBeCloseTo(2023 + 2 / 12);
   });
 
-  it('終端が「現在」なら開始は parseStart と同じで終了は欠落しない', () => {
-    const bounds = parsePeriodBounds('2025.11 — 現在');
+  it('終端「現在」は引数の基準月で解釈し、実行日に依存しない', () => {
+    const bounds = parsePeriodBounds('2025.11 — 現在', REF_MONTH);
     expect(bounds).not.toBeNull();
     expect(bounds?.start).toBeCloseTo(parseStart('2025.11 — 現在') ?? Number.NaN);
-    expect(bounds?.end).toBeGreaterThanOrEqual(bounds?.start ?? Number.POSITIVE_INFINITY);
+    // 2026 年 9 月（REF_MONTH）が終端になる
+    expect(bounds?.end).toBeCloseTo(2026 + 8 / 12);
+    // 別の基準月なら別の値を返す（時計ではなく引数を見ている）
+    const earlier = parsePeriodBounds('2025.11 — 現在', 2026 * 12 + 5);
+    expect(earlier?.end).toBeCloseTo(2026 + 5 / 12);
   });
 
   it('単独トークンは点期間として解釈する', () => {
-    const bounds = parsePeriodBounds('2020.06');
+    const bounds = parsePeriodBounds('2020.06', REF_MONTH);
     expect(bounds).not.toBeNull();
     expect(bounds?.start).toBeCloseTo(2020 + 5 / 12);
     expect(bounds?.end).toBeCloseTo(2020 + 5 / 12);
@@ -112,15 +119,15 @@ describe('parsePeriodBounds', () => {
     // CompanyInfo.period の実データはスペース入り（実測: "2025 年 11 月〜2026 年 9 月"）。
     // これが解釈できないと、会社の最新判定（isLatest）が実データで全社「解釈不能」になる
     // （company-grouping 作業で発見した回帰）。
-    const bounds = parsePeriodBounds('2025 年 11 月〜2026 年 9 月');
+    const bounds = parsePeriodBounds('2025 年 11 月〜2026 年 9 月', REF_MONTH);
     expect(bounds).not.toBeNull();
     expect(bounds?.start).toBeCloseTo(2025 + 10 / 12);
     expect(bounds?.end).toBeCloseTo(2026 + 8 / 12);
   });
 
   it('空文字・解釈不能は null', () => {
-    expect(parsePeriodBounds('')).toBeNull();
-    expect(parsePeriodBounds('期間未定')).toBeNull();
+    expect(parsePeriodBounds('', REF_MONTH)).toBeNull();
+    expect(parsePeriodBounds('期間未定', REF_MONTH)).toBeNull();
   });
 });
 
@@ -373,19 +380,19 @@ describe('deriveCompanyPeriod', () => {
 
 describe('parsePeriodBounds: 精度と終端の扱い（レビュー指摘の回帰）', () => {
   it('年だけの表記は月精度なしとして返す', () => {
-    expect(parsePeriodBounds('2020')).toMatchObject({ precise: false, openEnded: false });
+    expect(parsePeriodBounds('2020', REF_MONTH)).toMatchObject({ precise: false, openEnded: false });
   });
 
   it('終了が未記載でも月精度なしにする（開始と同じ月に終わったことにしない）', () => {
-    expect(parsePeriodBounds('2020.06')).toMatchObject({ precise: false, openEnded: false });
+    expect(parsePeriodBounds('2020.06', REF_MONTH)).toMatchObject({ precise: false, openEnded: false });
   });
 
   it('終端「現在」は openEnded で返す（描画側が時計に依存しないようにする）', () => {
-    expect(parsePeriodBounds('2020.06 — 現在')).toMatchObject({ openEnded: true });
+    expect(parsePeriodBounds('2020.06 — 現在', REF_MONTH)).toMatchObject({ openEnded: true });
   });
 
   it('両端とも月まで書かれていれば月精度ありにする', () => {
-    expect(parsePeriodBounds('2020.01 — 2020.03')).toMatchObject({ precise: true, openEnded: false });
+    expect(parsePeriodBounds('2020.01 — 2020.03', REF_MONTH)).toMatchObject({ precise: true, openEnded: false });
   });
 });
 
