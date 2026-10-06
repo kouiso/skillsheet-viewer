@@ -107,6 +107,51 @@ describe('シート全体の版の履歴', () => {
     expect(within(dialog).getByText(/本文1/, { selector: 'ins' })).toBeVisible();
   });
 
+  it('比較ペインと異なる確認応答でも対象原文・差分・警告・復元tokenを混同しない', async () => {
+    const { api } = setup({
+      previewRestore: vi.fn().mockResolvedValue({
+        current: { ...snapshot('9', false), title: '確認時の現在' },
+        target: { ...snapshot('7'), title: '確認対象のタイトル' },
+        newlyVisible: [
+          {
+            blockId: 'block',
+            companyId: 'new-company',
+            company: '確認対象の公開会社',
+            projectId: 'new-project',
+            project: '確認対象の公開案件',
+          },
+        ],
+        visibilityUncertain: true,
+        confirmation: 'b'.repeat(64),
+        canRestore: true,
+        laterRevisionCount: '8',
+      }),
+    });
+    await selectOld();
+    expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('2');
+    expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1');
+    fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(api.previewRestore).toHaveBeenCalledWith('1', '2');
+    expect(api.restore).not.toHaveBeenCalled();
+    expect(within(dialog).getByText(/確認対象の公開会社/)).toBeVisible();
+    expect(within(dialog).getByText('復元前の内容は履歴に残りますが、現在の入力ルールでは戻せません。')).toBeVisible();
+    fireEvent.click(within(dialog).getByText('戻す内容と変更点を確認'));
+    expect(within(dialog).getByRole('heading', { name: '確認対象のタイトル' })).toBeVisible();
+    expect(within(dialog).getByText(/"markdown": "本文7/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/"markdown": "本文1/)).not.toBeInTheDocument();
+    expect(within(dialog).getByText(/本文9/, { selector: 'del' })).toBeVisible();
+    expect(within(dialog).getByText(/本文7/, { selector: 'ins' })).toBeVisible();
+    fireEvent.click(within(dialog).getByRole('button', { name: '戻す' }));
+    await waitFor(() =>
+      expect(api.restore).toHaveBeenCalledWith({
+        targetRevision: '7',
+        expectedRevision: '9',
+        confirmation: 'b'.repeat(64),
+      }),
+    );
+  });
+
   it('再読込後も履歴の復元前リンクが残り、復元した版を期待版に固定する', async () => {
     const { api } = setup({
       list: vi.fn().mockResolvedValue([
