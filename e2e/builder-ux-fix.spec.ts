@@ -138,8 +138,11 @@ test.describe('mobile project editor', () => {
       expect(tapTarget?.right).toBe('-11px');
       expect(tapTarget?.bottom).toBe('-11px');
       // 22px の見た目に -11px の inset があるため、タップ領域は 44px 四方になる。
-      expect((tapTarget?.elementWidth ?? 0) + 22).toBeGreaterThanOrEqual(44);
-      expect((tapTarget?.elementHeight ?? 0) + 22).toBeGreaterThanOrEqual(44);
+      // モバイルエミュレーションでは getBoundingClientRect が 22px を
+      // 21.99998…px と返すことがあり、整数の設計値との比較が 44px 未満と誤判定する。
+      // ラスタの小数ぶれ 0.1px までは許容して、タップ領域の確保だけを検査する。
+      expect((tapTarget?.elementWidth ?? 0) + 22).toBeGreaterThanOrEqual(44 - 0.1);
+      expect((tapTarget?.elementHeight ?? 0) + 22).toBeGreaterThanOrEqual(44 - 0.1);
     } finally {
       await deleteSheet(sheetId);
     }
