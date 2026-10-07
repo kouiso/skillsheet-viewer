@@ -61,6 +61,7 @@ vi.mock('@/component/viewer-topbar', async (importOriginal) => {
       onDownloadPdf,
       pdfLoading,
       onDownloadExcel,
+      onDownloadDocx,
       onDownloadPdfDigest,
       onDownloadExcelDigest,
       digestLoading,
@@ -68,6 +69,7 @@ vi.mock('@/component/viewer-topbar', async (importOriginal) => {
       onDownloadPdf?: () => void;
       pdfLoading?: boolean;
       onDownloadExcel?: () => void;
+      onDownloadDocx?: () => void;
       onDownloadPdfDigest?: () => void;
       onDownloadExcelDigest?: () => void;
       digestLoading?: boolean;
@@ -84,6 +86,11 @@ vi.mock('@/component/viewer-topbar', async (importOriginal) => {
         {onDownloadExcel && (
           <button type="button" data-testid="dashboard-topbar-excel" onClick={onDownloadExcel}>
             Excel
+          </button>
+        )}
+        {onDownloadDocx && (
+          <button type="button" data-testid="dashboard-topbar-docx" onClick={onDownloadDocx}>
+            Word
           </button>
         )}
         {onDownloadPdfDigest && (
@@ -269,6 +276,28 @@ describe('SheetViewClient', () => {
       );
       // 全文版のクエリに edition は付けない（既存呼び出しと同じ URL）。
       expect(fetchMock).toHaveBeenCalledWith('/api/sheet/export-xlsx');
+      vi.unstubAllGlobals();
+    });
+
+    it('Word は export-docx を id 付きで呼び .docx を保存する', async () => {
+      const downloads = captureDownloads();
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        blob: async () => new Blob(['docx'], { type: 'application/octet-stream' }),
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+      const user = userEvent.setup();
+      const id = '11111111-1111-4111-8111-111111111111';
+      renderClient({ title: 'テストシート', blocks: [projectBlock], sheetId: id });
+
+      await user.click(screen.getByTestId('dashboard-topbar-docx'));
+
+      await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Wordをダウンロードしました', { id: 'toast-1' }));
+      // docx は edition パラメータを持たない（digest は route が 400 で拒否する設計）
+      expect(fetchMock).toHaveBeenCalledWith(`/api/sheet/export-docx?id=${encodeURIComponent(id)}`);
+      expect(downloads.names.at(-1)).toBe('テストシート.docx');
+      expect(trackEvent).toHaveBeenCalledWith(expect.objectContaining({ name: 'docx_exported', result: 'success' }));
+      downloads.spy.mockRestore();
       vi.unstubAllGlobals();
     });
   });
