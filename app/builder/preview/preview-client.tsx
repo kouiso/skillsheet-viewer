@@ -1,112 +1,130 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
-
 import { SyncBar, type SyncState } from './sync-bar';
 
-// builder-client.tsx と共有するキー（別ウィンドウ連携用）。
+// 既存のキーと4秒heartbeatを維持し、送信元と単調な連番で別窓の混入を防ぐ。
 const PREVIEW_CHANNEL_NAME = 'builder-preview';
 const PREVIEW_STORAGE_KEY = 'builder-preview-payload';
-
-/**
- * この時間だけ何も届かなければ「同期が途切れた」とみなす。
- * 編集側は内容が変わらなくても 4 秒ごとに生存確認を送る（builder-client の
- * PREVIEW_HEARTBEAT_MS）ので、手が止まっているだけの状態では途切れ扱いにならない。
- */
 const STALE_AFTER_MS = 12_000;
+type PreviewPayload = { title: string; content: string; sessionId: string; sequence: number };
+const isPreviewPayload = (value: unknown): value is PreviewPayload => {
+  if (typeof value !== 'object' || value === null) return false;
+  const payload = value as Partial<PreviewPayload>;
+  return (
+    typeof payload.title === 'string' &&
+    typeof payload.content === 'string' &&
+    typeof payload.sessionId === 'string' &&
+    Number.isSafeInteger(payload.sequence) &&
+    Number(payload.sequence) >= 0
+  );
+};
 
-type PreviewPayload = { title: string; content: string };
-
-const isPreviewPayload = (value: unknown): value is PreviewPayload =>
-  typeof value === 'object' &&
-  value !== null &&
-  typeof (value as PreviewPayload).title === 'string' &&
-  typeof (value as PreviewPayload).content === 'string';
+const openerAlive = () => {
+  try {
+    return Boolean(window.opener && !window.opener.closed);
+  } catch {
+    return false;
+  }
+};
 
 export default function PreviewClient() {
   const [payload, setPayload] = useState<PreviewPayload | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
-  const [syncState, setSyncState] = useState<SyncState>('live');
+  const [syncState, setSyncState] = useState<SyncState>('waiting');
   const channelRef = useRef<BroadcastChannel | null>(null);
-  // window.open() で開かれた別窓は必ず window.opener を持つ（後で閉じられても消えない）。
-  // このURLへ直接アクセスした場合は最初から null。lastUpdatedAt はローカルストレージの
-  // シード（前回セッションの残留データ）でも立ってしまうため、standalone/closed の判定は
-  // lastUpdatedAt ではなくマウント時の window.opener の有無で行う（レビュー指摘: 過去に
-  // 一度でも別窓を開いたことがあるブラウザで直接アクセスすると、古いシードのせいで
-  // 「編集画面が閉じられました」と誤表示していた）。
-  const hadOpenerRef = useRef(typeof window !== 'undefined' && !!window.opener);
+  const session = useRef<string | null>(null);
+  const sequence = useRef(-1);
+  const receivedAt = useRef<number | null>(null);
+  const startedAt = useRef(0);
 
-  /** BroadcastChannel を張り直す。初回マウントと「再接続」ボタンの両方から呼ぶ。 */
-  const connect = useCallback(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    channelRef.current?.close();
-    const channel = new BroadcastChannel(PREVIEW_CHANNEL_NAME);
-    channel.onmessage = (event) => {
-      if (!isPreviewPayload(event.data)) return;
-      setPayload(event.data);
-      setLastUpdatedAt(Date.now());
-      setSyncState('live');
-    };
-    channelRef.current = channel;
+  const accept = useCallback((value: unknown) => {
+    if (
+      !session.current ||
+      !openerAlive() ||
+      !isPreviewPayload(value) ||
+      value.sessionId !== session.current ||
+      value.sequence <= sequence.current
+    )
+      return;
+    sequence.current = value.sequence;
+    receivedAt.current = Date.now();
+    setPayload(value);
+    setLastUpdatedAt(receivedAt.current);
+    setSyncState('live');
   }, []);
 
-  useEffect(() => {
-    // マウント時: window.open 直前にエディタ側がシード保存した内容を読み、
-    // 別窓を開いた瞬間から即座にプレビューが見える状態にする。
-    // hadOpenerRef が false（このURLへの直接アクセス）の場合は読み込まない。
-    // ここを無条件にすると、過去に別窓プレビューを開いたブラウザで直接アクセスした際、
-    // localStorage に残った前回セッションの内容が「表示できるプレビューがありません」の
-    // 下に薄く表示され続けてしまう（レビュー指摘）。
-    if (hadOpenerRef.current) {
-      try {
-        const seeded = localStorage.getItem(PREVIEW_STORAGE_KEY);
-        if (seeded) {
-          const parsed = JSON.parse(seeded);
-          if (isPreviewPayload(parsed)) {
-            setPayload(parsed);
-            setLastUpdatedAt(Date.now());
-          }
-        }
-      } catch {
-        // localStorage が読めない環境では BroadcastChannel の初回更新を待つ。
-      }
-    }
-    connect();
-    return () => channelRef.current?.close();
-  }, [connect]);
-
-  // 状態の判定は「編集画面が生きているか」→「最近更新が来たか」の順。
-  // 編集画面が閉じられた場合は再接続しても内容は来ないので、再接続ボタンを出さない。
-  //
-  // openerGone は「一度も接続していない（このURLへ直接アクセスした）」と
-  // 「接続後に編集画面が閉じられた」の両方で true になる。hadOpenerRef（マウント時に
-  // window.opener があったか）で前者を判別し、実態と食い違う「表示は最後の内容です」
-  // という文言を出さないようにする（#151 U-5）。
-  useEffect(() => {
-    const tick = () => {
-      const openerGone = typeof window !== 'undefined' && (!window.opener || window.opener.closed);
-      if (openerGone) {
-        setSyncState(hadOpenerRef.current ? 'closed' : 'standalone');
+  /** 再接続後も連番を保持し、閉じたchannelの遅延イベントを受け入れない。 */
+  const connect = useCallback(() => {
+    channelRef.current?.close();
+    channelRef.current = null;
+    if (!session.current || !openerAlive()) return;
+    try {
+      if (typeof BroadcastChannel === 'undefined') {
+        setSyncState('stale');
         return;
       }
-      setSyncState(lastUpdatedAt && Date.now() - lastUpdatedAt > STALE_AFTER_MS ? 'stale' : 'live');
+      const channel = new BroadcastChannel(PREVIEW_CHANNEL_NAME);
+      channelRef.current = channel;
+      channel.onmessage = (event) => {
+        if (channelRef.current === channel) accept(event.data);
+      };
+    } catch {
+      setSyncState('stale');
+    }
+  }, [accept]);
+
+  useEffect(() => {
+    const candidate = new URLSearchParams(window.location.search).get('session');
+    session.current = window.opener && candidate ? candidate : null;
+    startedAt.current = Date.now();
+    if (!session.current) {
+      setSyncState('standalone');
+      return;
+    }
+    try {
+      const seed = localStorage.getItem(PREVIEW_STORAGE_KEY);
+      if (seed) accept(JSON.parse(seed));
+    } catch {
+      // ストレージ拒否や壊れたseedでも、次のheartbeatを待つ。
+    }
+    connect();
+    const tick = () => {
+      if (!openerAlive()) {
+        setSyncState('closed');
+        return;
+      }
+      if (Date.now() - (receivedAt.current ?? startedAt.current) > STALE_AFTER_MS) setSyncState('stale');
     };
     tick();
-    const timer = window.setInterval(tick, 2_000);
-    return () => window.clearInterval(timer);
-  }, [lastUpdatedAt]);
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      window.clearInterval(timer);
+      channelRef.current?.close();
+      channelRef.current = null;
+    };
+  }, [accept, connect]);
 
   return (
     <>
       <SyncBar state={syncState} lastUpdatedAt={lastUpdatedAt} onReconnect={connect} />
-      <div className={`mx-auto max-w-4xl px-4 py-6 sm:px-6 ${syncState === 'live' ? '' : 'stale-body'}`}>
-        <SkillSheetViewer
-          skillSheet={{ title: payload?.title?.trim() || 'プレビュー', content: payload?.content ?? '' }}
-          compareMode
-        />
-      </div>
+      <main className="preview-document mx-auto max-w-4xl px-4 py-6 sm:px-6">
+        <p className="mb-5 text-sm text-muted-foreground">
+          編集中の内容を表示しています。保存状況は編集画面で確認してください。
+        </p>
+        {payload ? (
+          <SkillSheetViewer
+            skillSheet={{ title: payload.title.trim() || 'プレビュー', content: payload.content }}
+            compareMode
+          />
+        ) : (
+          <div className="rounded-lg border border-border bg-card p-6 text-card-foreground">
+            <h1 className="text-lg font-semibold">プレビュー</h1>
+            <p className="mt-2 text-sm text-muted-foreground">ここに表示する内容がありません。</p>
+          </div>
+        )}
+      </main>
     </>
   );
 }

@@ -5,12 +5,11 @@ import type { BlockInput, ProfileBlockData } from '@/db/block';
 import {
   buildRealVolumeDemoBlocks,
   COMPANY_NAMES,
-  createRealVolumeDemoSheet,
   REAL_VOLUME_COMPANY_COUNT,
   REAL_VOLUME_FLAGSHIP_PROJECT_TITLE,
   TECH_POOLS,
 } from '@/db/fixture';
-import { createSheet, deleteSheet, listSheets } from './document-fixture';
+import { createRealVolumeDemoSheet, createSheet, deleteSheet, listSheets } from './document-fixture';
 import { extractPdfPages, extractPdfText } from './pdf-extract';
 
 // PR #298（提出用 PDF をデザイン準拠の構造描画へ作り替える）のユーザーストーリーを、
@@ -131,6 +130,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await cleanupSheetsByTitle(EXPERTISE_FALLBACK_TITLE);
+  if (richSheetId) await deleteSheet(richSheetId);
 });
 
 // ---------------------------------------------------------------------------
@@ -356,8 +356,12 @@ test('12. the toggle and export button still work at a 320px viewport', async ({
   await page.setViewportSize({ width: 320, height: 812 });
   await openSheet(page, richSheetId);
 
+  // Consoleの狭幅では表示切替をドロワーから操作する。
+  await page.getByRole('button', { name: '表示・出力メニューを開く' }).click();
   await skillToggleButton(page).click();
   await expect(skillMatrixSection(page)).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: 'スキルシートの表示と出力' })).not.toBeVisible();
 
   // SP ではダウンロード系が「ダウンロード」メニューに畳まれる（戻るリンクの
   // タップターゲット確保のため）。トリガーの hit target を測ってからメニュー経由で PDF を出す。

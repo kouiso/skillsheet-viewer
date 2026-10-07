@@ -1,7 +1,7 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
-import { createRealVolumeDemoSheet } from '@/db/fixture';
 import { authFile } from './auth';
+import { createRealVolumeDemoSheet, deleteSheet } from './document-fixture';
 
 // #393: 閲覧画面で読み手が引っかかる細部 4 件の回帰検査。
 // 合成フィクスチャ（real-volume-demo）のみを使う。実データは使わない。
@@ -28,6 +28,10 @@ async function openViewer(page: Page, width: number) {
 test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () => {
   test.beforeAll(async () => {
     viewSheetId = await createRealVolumeDemoSheet();
+  });
+
+  test.afterAll(async () => {
+    if (viewSheetId) await deleteSheet(viewSheetId);
   });
 
   for (const width of [390, 1280] as const) {
@@ -142,10 +146,15 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
     await openViewer(page, 1280);
     // 目次項目は非同期投入されるため、省略検査の前に投入を待つ（空集合への vacuous pass 防止）。
     // 長い会社名が折り返しで全文出ていること（省略なし）
-    const longLabel = page.locator('aside li button', { hasText: 'グローバルシステムズグループ' }).first();
+    await page
+      .locator('summary')
+      .filter({ hasText: /^目次$/ })
+      .click();
+    const toc = page.getByRole('navigation', { name: '目次', exact: true });
+    const longLabel = toc.locator('li button', { hasText: 'グローバルシステムズグループ' }).first();
     await expect(longLabel).toBeVisible();
-    const clipped = await page.evaluate(() => {
-      const spans = [...document.querySelectorAll<HTMLElement>('aside li button span:not([aria-hidden])')];
+    const clipped = await toc.evaluate((nav) => {
+      const spans = [...nav.querySelectorAll<HTMLElement>('li button span:not([aria-hidden])')];
       return (
         spans
           // text-overflow の方式に依らず、横方向の切り詰め（scrollWidth）と

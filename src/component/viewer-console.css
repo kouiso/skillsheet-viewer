@@ -1,0 +1,93 @@
+/* Console。取得済み redesign2 の topbar/1180px/IBM Plex/罫線構成。
+   12px以上・不透明な面・AAの文字色は閲覧要件に合わせて補正する。 */
+.console-page, .console-drawer, .console-export-menu {
+  --background:#f6f8f8; --foreground:#10171a; --card:#ffffff; --card-foreground:#10171a;
+  --popover:#ffffff; --popover-foreground:#10171a;
+  --muted:#f0f3f3; --muted-foreground:#4a565c; --faint:#59666d;
+  --surface2:#f0f3f3; --surface3:#e6ecec; --border:#dce3e4; --input:#74858d;
+  --primary:#0d9488; --primary-dark:#08665e; --primary-hover:#064f49; --primary-foreground:#ffffff;
+  --accent:#ecfaf8; --accent-soft:#ecfaf8; --accent-text:#08665e; --accent-foreground:#08665e; --on-accent:#ffffff;
+  --track:#d5dede; --chip-bg:#eef3f3; --chip-text:#34424a;
+  --radius:4px; --radius-md:4px; --radius-lg:6px; --bar-round:1px; --head-weight:600;
+  --elevation-1:0 0 #0000; --elevation-2:0 0 #0000;
+  background:var(--background); color:var(--foreground);
+}
+.dark .console-page, .dark .console-drawer, .dark .console-export-menu {
+  --background:#0a0d0f; --foreground:#e6edf0; --card:#0f1316; --card-foreground:#e6edf0;
+  --popover:#0f1316; --popover-foreground:#e6edf0;
+  --muted:#141a1e; --muted-foreground:#a0adb5; --faint:#96a1a8;
+  --surface2:#141a1e; --surface3:#192227; --border:#2e3b43; --input:#7b8992;
+  --primary:#14b8a6; --primary-dark:#0d9488; --primary-hover:#14b8a6; --primary-foreground:#03110f;
+  --accent:#0c2320; --accent-soft:#0c2320; --accent-text:#5eead4; --accent-foreground:#5eead4; --on-accent:#03110f;
+  --track:#192227; --chip-bg:#141b1f; --chip-text:#aeb9bf;
+}
+.console-page {min-height:100vh;}
+.console-page, .console-fonts {
+  --font-sans:var(--font-ibm-sans-jp),'IBM Plex Sans JP',system-ui,sans-serif;
+  --font-mono:var(--font-ibm-mono),'IBM Plex Mono',monospace;
+  font-family:var(--font-sans);
+}
+.console-page h1, .console-page h2, .console-page h3 {font-weight:600;}
+.console-topbar {position:sticky;top:0;z-index:40;background:var(--background);border-bottom:1px solid var(--border);}
+.console-desktop-bar {max-width:1180px;margin:auto;padding:14px 32px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.console-topbar-identity {display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap;}
+.console-mark {width:9px;height:9px;border-radius:2px;background:var(--primary);flex-shrink:0;}
+.console-topbar-name {font-size:15px;font-weight:600;overflow-wrap:anywhere;}
+.console-topbar-company {font-family:var(--font-mono);font-size:12px;color:var(--faint);overflow-wrap:anywhere;}
+.console-back {display:flex;align-items:center;gap:8px;min-height:44px;border-radius:4px;font-size:12px;color:var(--muted-foreground);}
+.console-back-icon {min-width:44px;justify-content:center;}
+.console-back:hover {background:var(--muted);color:var(--accent-text);}
+.console-name {font-size:18px;font-weight:600;margin:8px 0 0;overflow-wrap:anywhere;}
+.console-company {font-family:var(--font-mono);font-size:12px;color:var(--muted-foreground);margin-top:3px;overflow-wrap:anywhere;}
+.console-view-toggles {display:flex;gap:7px;flex-wrap:wrap;border:0;padding:0;margin:0 0 0 auto;min-width:0;}
+.console-view-toggles legend {position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
+.console-view-toggles .softbtn {min-height:44px;}
+.console-actions {display:flex;align-items:center;flex-wrap:wrap;gap:4px;}
+.console-mobile-bar {display:none;}
+.console-drawer {width:min(320px,calc(100vw - 32px));display:flex;flex-direction:column;gap:24px;padding:52px 24px 24px;overflow:auto;}
+.console-drawer > button[aria-label="閉じる"] {min-width:44px;min-height:44px;display:grid;place-items:center;opacity:1;}
+.console-drawer .console-view-toggles {margin:0;flex-direction:column;gap:8px;}
+.console-drawer .console-view-toggles legend {position:static;width:auto;height:auto;clip-path:none;font-family:var(--font-mono);font-size:12px;color:var(--faint);margin-bottom:12px;}
+.console-drawer .console-view-toggles .softbtn {width:100%;justify-content:flex-start;white-space:normal;text-align:left;}
+.console-drawer .console-actions {margin-top:auto;border-top:1px solid var(--border);padding-top:16px;gap:8px;}
+.console-drawer .console-actions button span {display:inline;}
+.console-export-menu {pointer-events:auto;}
+.console-content > main {max-width:1180px;margin:auto;padding:28px 32px 96px;}
+.console-content > main > div {max-width:none;margin:0;}
+.console-toc {max-width:1116px;margin:20px auto 0;border-bottom:1px solid var(--border);padding-bottom:8px;color:var(--muted-foreground);font-size:13px;}
+.console-toc summary {min-height:44px;cursor:pointer;align-content:center;}
+.console-toc nav {max-height:50vh;overflow:auto;}
+.console-toc summary:focus-visible, .console-back:focus-visible {outline:2px solid var(--ring);outline-offset:2px;}
+.console-profile .techtag {padding:4px 9px;border-radius:4px;font-size:12px;}
+.console-page input {border-color:var(--input);}
+.console-page input:focus {border-color:var(--input);outline:2px solid var(--ring);outline-offset:2px;}
+.console-page .viewer-stat-row > div {border-radius:6px;overflow:hidden;}
+.console-page .viewer-project-grid {display:grid;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr));align-items:start;gap:16px;}
+/* 2列カードでは画面幅でなくカードの幅に合わせて技術のラベルを上に置く。 */
+.console-page .viewer-project-grid article .grid.items-baseline {grid-template-columns:minmax(0,1fr);}
+@media(max-width:1179px){.console-toc {margin-inline:32px;}}
+@media(max-width:899px){
+ .console-desktop-bar {display:none;}
+ .console-mobile-bar {display:flex;gap:12px;align-items:center;padding:12px 16px;}
+ .console-content > main {padding:24px 24px 72px;}
+ .console-toc {margin:16px 24px 0;}
+}
+@media(max-width:420px){.console-content > main {padding-inline:16px;} .console-toc {margin-inline:16px;}}
+@media(prefers-reduced-motion:reduce){
+ .console-page *, .console-drawer, .console-drawer *, .console-export-menu, .console-export-menu * {animation:none!important;transition:none!important;scroll-behavior:auto!important;}
+}
+@media print {.console-topbar {display:none;}}
+
+.console-mobile-bar .console-topbar-identity {flex:1;}
+
+/* 出力を追加しても原本の横一列に収まるよう、PC の常設操作は名前付きアイコンにする。 */
+.console-desktop-bar .console-actions button > span, .console-desktop-bar .console-actions .lucide-chevron-down {display:none;}
+.console-profile dt {max-width:min(50%,18rem);}
+@media(min-width:640px){.console-profile dl > div {min-width:120px;} .console-profile dt {max-width:18rem;}}
+
+/* 原本の小さい工程文字を12pxへ保つため、カード内の7工程を折り返す。 */
+.console-page .viewer-project-grid article {container-type:inline-size;}
+.console-page .viewer-project-grid article .grid.items-end {grid-template-columns:repeat(4,minmax(0,1fr));}
+@container (max-width:340px) {
+ .console-page .viewer-project-grid article .grid.items-end {grid-template-columns:repeat(3,minmax(0,1fr));}
+}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
+import { consoleFontClasses } from '@/component/viewer-font';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
 import type { Block } from '@/db/block';
 import { useReadDepth } from '@/hook/use-read-depth';
@@ -263,7 +264,7 @@ const SheetViewClient = ({
   const handleDownloadDocx = () => downloadDocx();
 
   return (
-    <div>
+    <div className={isDashboard ? `console-page ${consoleFontClasses}` : undefined}>
       {stale && (
         <div
           role="status"
@@ -305,6 +306,7 @@ const SheetViewClient = ({
         />
       )}
       <SkillSheetViewer
+        navigationLayout={isDashboard ? 'inline' : 'sidebar'}
         skillSheet={{ title, content }}
         blocks={blocks}
         views={isDashboard ? views : undefined}

@@ -22,7 +22,7 @@ interface ProjectPreviewProps {
   onJump?: (syncKey: string) => void;
 }
 
-/** 技術チップは多すぎると縦に伸びてカードの形が崩れるため、この件数で打ち切って残数を出す。 */
+/** 技術チップは初期表示をこの件数に抑え、展開操作で全件を確認できるようにする。 */
 const MAX_TECH_CHIPS = 16;
 
 /** イベント発生元が sync() 要素自身ではなく、内側のリンク等インタラクティブ要素かどうか。 */
@@ -46,7 +46,9 @@ const isInteractiveDescendant = (currentTarget: EventTarget, target: EventTarget
 export const ProjectPreview = ({ project, company, no, syncKey, onJump }: ProjectPreviewProps) => {
   const hidden = Boolean(project.hidden || company?.hidden);
   const tech = flattenTech(project.tech);
-  const shownTech = tech.slice(0, MAX_TECH_CHIPS);
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const expanded = expandedProject === project.id;
+  const shownTech = expanded ? tech : tech.slice(0, MAX_TECH_CHIPS);
   const process = normalizeProcess(project.process);
   const summary = project.summary?.trim();
   /** スコープ欄の値そのままか、空なら技術スタックからの導出値（由来を添える）。 */
@@ -147,7 +149,7 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
         aria-label="プレビューの項目（Enter で編集欄へ移動）"
         onKeyDown={handleToolbarKeyDown}
       >
-        <div className={`pv-card${hidden ? ' opacity-60' : ''}`}>
+        <div className={`pv-card${hidden ? ' pv-card-hidden' : ''}`}>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="pv-no">{no > 0 ? String(no).padStart(2, '0') : '––'}</span>
@@ -205,6 +207,17 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
                 {tech.length > shownTech.length && <span>+{tech.length - shownTech.length}</span>}
               </div>
             </div>
+          )}
+
+          {tech.length > MAX_TECH_CHIPS && (
+            <button
+              type="button"
+              className="pv-expand"
+              aria-expanded={expanded}
+              onClick={() => setExpandedProject(expanded ? null : project.id)}
+            >
+              {expanded ? '技術一覧を折りたたむ' : `すべての技術を表示（${tech.length}件）`}
+            </button>
           )}
 
           <div className="pv-proc-wrap">

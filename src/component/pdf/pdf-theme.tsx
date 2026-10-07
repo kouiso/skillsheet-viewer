@@ -57,10 +57,10 @@ export const NUM = {
   COL_LABEL_FLEX: COLUMN.LABEL_FLEX,
   COL_VALUE_FLEX: COLUMN.VALUE_FLEX,
   // 見出しの直後に最低限これだけの高さが同じページに続かなければ、見出しごと
-  // 次ページへ送る（本文 10.5pt / 行送り 1.6 で約 3 行分）。案件見出し（■）だけで
+  // 次ページへ送る（本文 11pt / 行送り 1.6 で約 3 行分）。案件見出し（■）だけで
   // なく通常の `##` 見出しにも適用する（Issue #263 D: 通常見出しがページ末尾に
   // 取り残されていた）。
-  MIN_PRESENCE_HEADING: 48,
+  MIN_PRESENCE_HEADING: FONT_SIZE.BODY * LINE_HEIGHT * 3,
 } as const;
 
 export const styles = StyleSheet.create({

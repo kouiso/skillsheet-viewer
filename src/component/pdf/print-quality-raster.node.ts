@@ -169,9 +169,17 @@ function rasterizePdfPages(pdfBuffer: Buffer, dpi: number): { dir: string; pngPa
 
 /** PNG 1 枚をグレースケールの生バイト列（1px = 1byte、行優先）へ変換する。 */
 function readPageGray(pngPath: string): { width: number; height: number; data: Buffer } {
-  const dims = execFileSync('identify', ['-format', '%w %h', pngPath]).toString().trim().split(/\s+/).map(Number);
+  // 内部TTLは未設定時だけ有限にし、無制限値の時刻演算に依存しない。
+  // 呼出元が設定した制限とImageMagickのpolicyは維持する。PDF全体の期限ではない。
+  const environment = { ...process.env, MAGICK_TIME_LIMIT: process.env.MAGICK_TIME_LIMIT ?? '120' };
+  const dims = execFileSync('identify', ['-format', '%w %h', pngPath], { env: environment })
+    .toString()
+    .trim()
+    .split(/\s+/)
+    .map(Number);
   const [width, height] = dims;
   const data = execFileSync('convert', [pngPath, '-colorspace', 'Gray', '-depth', '8', 'gray:-'], {
+    env: environment,
     maxBuffer: 1024 * 1024 * 64,
   });
   return { width, height, data };
