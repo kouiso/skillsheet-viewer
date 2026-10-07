@@ -4,7 +4,7 @@ import Link from 'next/link';
 
 import './sync-bar.css';
 
-export type SyncState = 'live' | 'stale' | 'closed' | 'standalone';
+export type SyncState = 'waiting' | 'live' | 'stale' | 'closed' | 'standalone';
 
 interface SyncBarProps {
   state: SyncState;
@@ -14,6 +14,7 @@ interface SyncBarProps {
 }
 
 const LABEL: Record<SyncState, string> = {
+  waiting: '編集画面からの内容を待っています',
   live: '編集中の内容を同期表示',
   stale: '同期が途切れています',
   closed: '編集画面が閉じられました — 表示は最後の内容です',
@@ -39,7 +40,11 @@ const formatStamp = (at: number): string => {
 export const SyncBar = ({ state, lastUpdatedAt, onReconnect }: SyncBarProps) => (
   <div className={`syncbar ${state} no-print`} role="status" aria-live="polite">
     <span aria-hidden className="dot" />
-    <span className="lbl">{LABEL[state]}</span>
+    <span className="lbl">
+      {state === 'closed' && lastUpdatedAt === null
+        ? '編集画面が閉じられました。内容は受信していません。'
+        : LABEL[state]}
+    </span>
     <span className="grow" />
     {/* lastUpdatedAt は epoch ミリ秒。`&&` だと 0 のとき裸の 0 が描画されるので明示的に比較する。 */}
     {state === 'live' && lastUpdatedAt !== null && <span className="stamp">{formatStamp(lastUpdatedAt)}</span>}

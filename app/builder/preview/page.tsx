@@ -11,8 +11,20 @@ export const metadata: Metadata = {
 };
 
 // /builder と同じ認可（DAL）を踏襲する。DATABASE_URL 参照があるため connection() で動的化。
-export default async function BuilderPreviewPage() {
+export default async function BuilderPreviewPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ session?: string | string[] }>;
+}) {
   await connection();
+
+  const { session } = await searchParams;
+  // 戻り先のパスは固定し、セッション値だけをqueryとして保持する。
+  const next =
+    typeof session === 'string' && session
+      ? `/builder/preview?${new URLSearchParams({ session })}`
+      : '/builder/preview';
+  const login = `/login?next=${encodeURIComponent(next)}`;
 
   let canEdit: boolean;
   try {
@@ -23,10 +35,10 @@ export default async function BuilderPreviewPage() {
     // 例外を投げうる（旧実装の isEditor() は同じ状況でも null を返すだけで例外を投げなかった）。
     // 未認可扱いにしてログインへ送るのが builder/page.tsx の UNAUTHORIZED 分岐と一貫する。
     console.error('Failed to resolve auth status for builder preview:', err);
-    redirect('/login?next=/builder/preview');
+    redirect(login);
   }
   if (!canEdit) {
-    redirect('/login?next=/builder/preview');
+    redirect(login);
   }
 
   return <PreviewClient />;

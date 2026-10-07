@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CompanyInfo, ProjectBlockData, ProjectItem } from '@/db/block';
 import { deriveCompanyPeriod } from '@/db/process';
 
@@ -10,6 +11,7 @@ import { CompanyBar, ProjectForm } from './project-form';
 import { ProjectNav } from './project-nav';
 import { ProjectPreview } from './project-preview';
 import { RailNav } from './rail-nav';
+import { useWorkspaceConfirm } from './use-workspace-confirm';
 import { buildVisibleNoMap, previewNoOf } from './visible-no';
 
 const newId = () =>
@@ -84,7 +86,22 @@ export interface ProjectEditorSelection {
   visibleNo: number;
 }
 
+export interface ProjectEditorWorkspace {
+  selectedBlockId: string;
+  warningJump?: { projectId: string; field: 'title' | 'period'; target: string; token: number };
+  editorFocusRequest?: { token: number; selector: string };
+  title?: string;
+  outlineBefore?: ReactNode;
+  outlineAfter?: ReactNode;
+  outlineFooter?: ReactNode;
+  rail?: ReactNode;
+  editor?: ReactNode;
+  preview?: ReactNode;
+  onProjectSelect: () => void;
+}
+
 interface ProjectEditorProps {
+  workspace?: ProjectEditorWorkspace;
   data: ProjectBlockData;
   onChange: (data: ProjectBlockData) => void;
   /** 選択中の会社/案件が変わったとき breadcrumb 表示用に通知する（任意）。 */
@@ -113,12 +130,26 @@ const useTopbarOffset = (): number => {
  * 外部契約は {data, onChange} のまま（builder-client の差分を最小化）。
  * 会社の period は items 変更のたびに deriveCompanyPeriod で自動再計算する。
  */
-export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }: ProjectEditorProps) => {
+export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview, workspace }: ProjectEditorProps) => {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const { confirm, dialog } = useWorkspaceConfirm({
+    fallbackFocus: () =>
+      formWrapRef.current?.querySelector<HTMLElement>('input,button') ??
+      (narrow ? navTriggerRef.current : (shellRef.current?.querySelector<HTMLElement>('.col-list button') ?? null)),
+  });
   const [selectedId, setSelectedId] = useState<string | null>(data.items[0]?.id ?? null);
   // 案件未選択でも会社編集バー（名称変更・削除）を出せるよう、会社選択を案件選択と独立に持つ。
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
     data.items[0]?.companyId ?? data.companies[0]?.id ?? null,
   );
+  const [mobilePane, setMobilePane] = useState<'edit' | 'preview'>('edit');
+  const navTriggerRef = useRef<HTMLButtonElement>(null);
+  const selectedBlockId = workspace?.selectedBlockId;
+  useEffect(() => {
+    if (selectedBlockId === undefined) return;
+    setNavOpen(false);
+    setMobilePane('edit');
+  }, [selectedBlockId]);
   const [userRail, setUserRail] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const narrow = useMediaQuery('(max-width: 860px)');
@@ -127,6 +158,8 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
   const [toast, setToast] = useState<string | null>(null);
   const formWrapRef = useRef<HTMLDivElement>(null);
   const previewColRef = useRef<HTMLDivElement>(null);
+  const focusNewCompanyRef = useRef<string | null>(null);
+  const focusCompanyAfterNavCloseRef = useRef(false);
   const topOffset = useTopbarOffset();
 
   // 狭幅から広幅へ戻ったらドロワーは閉じる。
@@ -134,16 +167,7 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
     if (!narrow) setNavOpen(false);
   }, [narrow]);
 
-  // ドロワー表示中は Esc で閉じられるようにする。
-  useEffect(() => {
-    if (!navOpen) return;
-    const handle = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setNavOpen(false);
-    };
-    window.addEventListener('keydown', handle);
-    return () => window.removeEventListener('keydown', handle);
-  }, [navOpen]);
-
+  // Escape は Radix に委ね、確認ダイアログだけを閉じたときに親まで閉じない。
   const openNav = useCallback(() => {
     if (narrow) setNavOpen(true);
     else setUserRail(false);
@@ -163,6 +187,14 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
   const currentCompany = current
     ? data.companies.find((c) => c.id === current.companyId)
     : (data.companies.find((c) => c.id === selectedCompanyId) ?? undefined);
+  useEffect(() => {
+    if (!currentCompany || focusNewCompanyRef.current !== currentCompany.id || selectedId !== null) return;
+    const frame = requestAnimationFrame(() => {
+      shellRef.current?.querySelector<HTMLInputElement>('input[aria-label="会社名"]')?.focus();
+      focusNewCompanyRef.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentCompany, selectedId]);
 
   // 連続操作でトーストが重なると、先に出した分のタイマーが後の表示を消してしまう。
   // 常に直前のタイマーを畳んでから張り直す。
@@ -174,6 +206,8 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
   }, []);
 
   const selectProject = (projectId: string) => {
+    workspace?.onProjectSelect();
+    setMobilePane('edit');
     setSelectedId(projectId);
     const project = data.items.find((p) => p.id === projectId);
     if (project) setSelectedCompanyId(project.companyId);
@@ -182,12 +216,45 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
   };
 
   const selectCompany = (companyId: string) => {
+    workspace?.onProjectSelect();
+    setMobilePane('edit');
     setSelectedCompanyId(companyId);
     // 会社ヘッダのクリックは「会社そのものを編集したい」操作として案件選択を解除する。
     // current を残したままだと currentCompany の解決が current 側を優先してしまい、
     // 別会社のヘッダをクリックしても会社編集バーが切り替わらない。
     setSelectedId(null);
   };
+  const warningJump = workspace?.warningJump;
+  const editorFocusRequest = workspace?.editorFocusRequest;
+  useEffect(() => {
+    if (!editorFocusRequest) return;
+    setNavOpen(false);
+    setMobilePane('edit');
+    const frame = requestAnimationFrame(() => {
+      const target = formWrapRef.current?.querySelector<HTMLElement>(editorFocusRequest.selector);
+      target?.scrollIntoView({ block: 'center' });
+      target?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editorFocusRequest]);
+  const completedWarningJumpRef = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (!warningJump || completedWarningJumpRef.current === warningJump.token) return;
+    if (currentId !== warningJump.projectId) {
+      setSelectedId(warningJump.projectId);
+      setSelectedCompanyId(data.items.find((item) => item.id === warningJump.projectId)?.companyId ?? null);
+      return;
+    }
+    setNavOpen(false);
+    setMobilePane('edit');
+    const frame = requestAnimationFrame(() => {
+      completedWarningJumpRef.current = warningJump.token;
+      const field = formWrapRef.current?.querySelector<HTMLElement>(`[data-sync="${warningJump.field}"]`);
+      field?.scrollIntoView({ block: 'center' });
+      field?.querySelector<HTMLElement>(warningJump.target)?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [warningJump, currentId, data.items]);
 
   // items 変更を伴う更新は必ず会社期間の再導出を通す（変更前 data と比較し、
   // 案件 period が実際に変わった会社だけ再導出する）
@@ -277,6 +344,9 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
 
   // ── 追加・削除 ──
   const addProject = (companyId: string) => {
+    workspace?.onProjectSelect();
+    setNavOpen(false);
+    setMobilePane('edit');
     const project = emptyProject(companyId);
     // 挿入位置＝「同じ会社の最後の案件の直後」。その会社にまだ案件が無い場合は
     // 配列の先頭(index 0)ではなく末尾に追加する。data.items は会社の並び順で
@@ -296,7 +366,12 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
   };
 
   const addCompany = () => {
+    focusCompanyAfterNavCloseRef.current = navOpen && narrow;
+    workspace?.onProjectSelect();
+    setNavOpen(false);
+    setMobilePane('edit');
     const company = emptyCompany();
+    focusNewCompanyRef.current = company.id;
     commit({ ...data, companies: [...data.companies, company] });
     // 追加直後に会社編集バーを出す（＋会社→即リネームできる導線）。
     setSelectedId(null);
@@ -315,21 +390,46 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
   };
 
   /** フォーム下部の削除ボタン用（confirm 付き）。 */
-  const confirmDeleteCurrentProject = () => {
+  const confirmDeleteCurrentProject = async () => {
     if (!current) return;
-    if (!window.confirm(`「${current.title || '無題の案件'}」を削除しますか？`)) return;
+    if (
+      !(await confirm({
+        title: `「${current.title || '無題の案件'}」を削除しますか？`,
+        description: 'この案件を編集中の内容から削除します。保存済みの内容は版の履歴で確認できます。',
+        confirmLabel: '案件を削除',
+        danger: true,
+      }))
+    )
+      return;
     deleteProject(current.id);
   };
 
-  const deleteCompany = (companyId: string) => {
+  const deleteCompany = async (companyId: string) => {
     const company = data.companies.find((c) => c.id === companyId);
     if (!company) return;
     const children = data.items.filter((p) => p.companyId === companyId);
-    const message =
-      children.length > 0
-        ? `「${company.name || '(会社名未入力)'}」と、ひもづく案件 ${children.length} 件をすべて削除しますか？\nこの操作は取り消せません。`
-        : `「${company.name || '(会社名未入力)'}」を削除しますか？`;
-    if (!window.confirm(message)) return;
+    if (
+      !(await confirm({
+        title: `「${company.name || '(会社名未入力)'}」を削除しますか？`,
+        description: `この会社と関連する案件 ${children.length} 件を編集中の内容から削除します。保存済みの内容は版の履歴で確認できます。`,
+        confirmLabel: '会社と案件を削除',
+        danger: true,
+        details:
+          children.length > 0 ? (
+            <ul className="list-disc space-y-2 pl-5">
+              {children.map((project) => (
+                <li key={project.id}>
+                  {project.title || '無題の案件'}
+                  {project.hidden && '（非表示）'}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>関連する案件はありません。</p>
+          ),
+      }))
+    )
+      return;
     const items = data.items.filter((p) => p.companyId !== companyId);
     const companies = data.companies.filter((c) => c.id !== companyId);
     commit({ ...data, companies, items });
@@ -388,15 +488,38 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
 
   return (
     <div
-      className={`shell${isRail ? ' rail' : ''}${showPreview ? '' : ' no-preview'}`}
+      ref={shellRef}
+      className={`shell${workspace ? ' workspace-shell' : ''}${isRail ? ' rail' : ''}${showPreview ? '' : ' no-preview'} mobile-${mobilePane}`}
       style={{ '--editor-top': `${topOffset}px` } as React.CSSProperties}
     >
+      {dialog}
+      {workspace && (
+        <div className="workspace-mobile-head">
+          <button ref={navTriggerRef} type="button" className="btn" onClick={openNav} aria-label="アウトラインを開く">
+            ☰ アウトライン
+          </button>
+          <span>{workspace.title ?? '編集'}</span>
+        </div>
+      )}
       {isRail ? (
-        <RailNav data={data} selectedId={currentId} onSelect={selectProject} onExpand={openNav} />
+        workspace ? (
+          <aside className="col-list workspace-rail">
+            <button type="button" className="rail-btn" onClick={openNav} aria-label="アウトラインを展開">
+              ☰
+            </button>
+            {workspace.rail}
+          </aside>
+        ) : (
+          <RailNav data={data} selectedId={currentId} onSelect={selectProject} onExpand={openNav} />
+        )
       ) : (
         <ProjectNav
+          title={workspace ? 'アウトライン' : undefined}
+          outlineBefore={workspace?.outlineBefore}
+          outlineAfter={workspace?.outlineAfter}
+          outlineFooter={workspace?.outlineFooter}
           data={data}
-          selectedId={currentId}
+          selectedId={workspace?.editor !== undefined ? null : currentId}
           onSelect={selectProject}
           onSelectCompany={selectCompany}
           onAddProject={addProject}
@@ -413,43 +536,69 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
       )}
 
       {navOpen && narrow && (
-        <div className="nav-overlay" aria-modal="true" role="dialog" aria-label="案件ナビ">
-          <div className="nav-drawer">
-            <ProjectNav
-              data={data}
-              selectedId={currentId}
-              onSelect={(projectId) => {
-                selectProject(projectId);
-                setNavOpen(false);
+        <Dialog.Root open={navOpen} onOpenChange={setNavOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay asChild>
+              <button
+                type="button"
+                className="workspace-drawer-overlay"
+                aria-label="ナビを閉じる"
+                onClick={() => setNavOpen(false)}
+              />
+            </Dialog.Overlay>
+            <Dialog.Content
+              className="nav-drawer workspace-drawer"
+              aria-describedby={undefined}
+              onCloseAutoFocus={(event) => {
+                if (focusCompanyAfterNavCloseRef.current) {
+                  event.preventDefault();
+                  focusCompanyAfterNavCloseRef.current = false;
+                  requestAnimationFrame(() =>
+                    shellRef.current?.querySelector<HTMLInputElement>('input[aria-label="会社名"]')?.focus(),
+                  );
+                  return;
+                }
+                if (navTriggerRef.current) {
+                  event.preventDefault();
+                  navTriggerRef.current.focus();
+                }
               }}
-              onSelectCompany={(companyId) => {
-                selectCompany(companyId);
-                setNavOpen(false);
-              }}
-              onAddProject={addProject}
-              onAddCompany={addCompany}
-              onDeleteProject={deleteProject}
-              onDeleteCompany={deleteCompany}
-              onCollapse={closeNav}
-              onToggleHideProject={toggleHideProject}
-              onToggleHideCompany={toggleHideCompany}
-              onReorderProject={reorderProject}
-              onDropProjectToCompany={dropProjectToCompany}
-              onReorderCompany={reorderCompany}
-            />
-          </div>
-          <button
-            type="button"
-            className="nav-overlay-backdrop"
-            onClick={() => setNavOpen(false)}
-            aria-label="ナビを閉じる"
-          />
-        </div>
+            >
+              <Dialog.Title className="sr-only">{workspace ? 'アウトライン' : '案件ナビ'}</Dialog.Title>
+              <ProjectNav
+                title={workspace ? 'アウトライン' : undefined}
+                outlineBefore={workspace?.outlineBefore}
+                outlineAfter={workspace?.outlineAfter}
+                outlineFooter={workspace?.outlineFooter}
+                data={data}
+                selectedId={workspace?.editor !== undefined ? null : currentId}
+                onSelect={(projectId) => {
+                  selectProject(projectId);
+                  setNavOpen(false);
+                }}
+                onSelectCompany={(companyId) => {
+                  selectCompany(companyId);
+                  setNavOpen(false);
+                }}
+                onAddProject={addProject}
+                onAddCompany={addCompany}
+                onDeleteProject={deleteProject}
+                onDeleteCompany={deleteCompany}
+                onCollapse={closeNav}
+                onToggleHideProject={toggleHideProject}
+                onToggleHideCompany={toggleHideCompany}
+                onReorderProject={reorderProject}
+                onDropProjectToCompany={dropProjectToCompany}
+                onReorderCompany={reorderCompany}
+              />
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       )}
 
       <div className="col-main">
         {/* 案件が0件の会社でも名称変更・削除ができるよう、会社編集バーは単独でも表示する。 */}
-        {currentCompany && (
+        {workspace?.editor === undefined && currentCompany && (
           <CompanyBar
             company={currentCompany}
             onPatchCompany={patchCompany}
@@ -457,7 +606,9 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
           />
         )}
         <div className="form-wrap scroll" ref={formWrapRef}>
-          {current ? (
+          {workspace?.editor !== undefined ? (
+            workspace.editor
+          ) : current ? (
             <ProjectForm
               project={current}
               data={data}
@@ -486,9 +637,11 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
         </div>
       </div>
 
-      {showPreview && (
+      {(showPreview || (Boolean(workspace) && narrow)) && (
         <div className="preview-col scroll" ref={previewColRef}>
-          {current ? (
+          {workspace?.preview !== undefined ? (
+            workspace.preview
+          ) : current ? (
             <ProjectPreview
               project={current}
               company={currentCompany}
@@ -505,6 +658,16 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview }
         </div>
       )}
 
+      {workspace && (
+        <nav className="workspace-mobile-tabs" aria-label="表示切替">
+          <button type="button" aria-pressed={mobilePane === 'edit'} onClick={() => setMobilePane('edit')}>
+            編集
+          </button>
+          <button type="button" aria-pressed={mobilePane === 'preview'} onClick={() => setMobilePane('preview')}>
+            プレビュー
+          </button>
+        </nav>
+      )}
       {toast && (
         <div className="toast" role="status">
           {toast}

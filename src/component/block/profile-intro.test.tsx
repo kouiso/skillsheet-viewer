@@ -201,3 +201,24 @@ describe('ProfileIntro', () => {
     }
   });
 });
+
+describe('Consoleプロフィール', () => {
+  it('PCと狭幅で強み→自己PR→補足の順序を揃え、全文を保持する', () => {
+    render(
+      <ProfileIntro
+        layout="console"
+        data={buildData({ pr: '合成の自己PR末尾', strengths: ['合成の強み'], meta: { work: '合成の補足' } })}
+      />,
+    );
+    for (const id of ['profile-intro-sp', 'profile-intro-desktop']) {
+      const root = within(screen.getByTestId(id));
+      const strengths = root.getByText('合成の強み');
+      const pr = root.getByText('合成の自己PR末尾');
+      const meta = root.getByText('合成の補足');
+      expect(strengths.compareDocumentPosition(pr) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(pr.compareDocumentPosition(meta) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(pr).not.toHaveClass('line-clamp-6');
+      expect(pr).toHaveClass('line-clamp-none');
+    }
+  });
+});

@@ -158,8 +158,7 @@
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: -2px;
-  color: var(--faint);
-  opacity: 0.55;
+  color: var(--muted-foreground);
   flex-shrink: 0;
   padding-left: 8px;
 }
@@ -227,8 +226,7 @@
   font-family: var(--font-mono);
   font-size: 12px;
   letter-spacing: -2px;
-  color: var(--faint);
-  opacity: 0.55;
+  color: var(--muted-foreground);
   flex-shrink: 0;
   cursor: grab;
 }
@@ -507,11 +505,11 @@
 }
 .inp.err,
 .datepick.err {
-  border-color: color-mix(in srgb, var(--danger) 55%, transparent);
+  border-color: var(--warn-strong);
 }
 .inp.err:focus,
 .datepick.err:hover {
-  border-color: var(--danger);
+  border-color: var(--warn-strong);
 }
 
 .inp,
@@ -945,7 +943,6 @@
   font-size: 12px;
   line-height: 1.6;
   color: var(--muted-foreground);
-  opacity: 0.8;
   margin-top: 4px;
 }
 /* 役割・会社・人数・期間の1行メタ（閲覧側 project-card.tsx のメタ行に対応）。
@@ -982,11 +979,12 @@
 }
 .pv-proc {
   display: flex;
+  flex-wrap: wrap;
   gap: 5px;
   align-items: flex-end;
 }
 .pv-proc .pp {
-  flex: 1;
+  flex: 1 0 64px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1018,6 +1016,40 @@
   line-height: 1.8;
   color: var(--foreground);
 }
+
+/* 注意は下書き保存を追加で止めない。既存の期間整合性エラーは別途表示する。 */
+.field-warning {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  padding: 8px 10px;
+  margin-top: 6px;
+  border: 1px solid var(--warn-strong);
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn-strong);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.field-warning button, .pv-expand {
+  min-height: 44px;
+  padding: 6px 10px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.field-warning button:focus-visible, .pv-expand:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.pv-expand { color: var(--accent-text); align-self: flex-start; }
+.pv-card-hidden { border: 2px dashed var(--muted-foreground); }
+/* 長い連続文字列も切り落とさず、プレビュー内で全文を折り返す。 */
+.pv-card, .pv-block { min-width: 0; overflow-wrap: anywhere; }
+.pv-summary, .pv-block .bc { max-height: none; overflow: visible; }
+.pv-tech span { max-width: 100%; overflow-wrap: anywhere; }
 
 /* 編集欄 ⇄ プレビューの同期ハイライト */
 .pv-sync {
@@ -1403,3 +1435,33 @@
     opacity: 1;
   }
 }
+
+/* 全ブロック共通ワークスペース。狭幅でもプレビューへ明示的に切り替えられる。 */
+.workspace-shell { grid-template-columns: 272px minmax(0, 1fr) 380px; }
+.workspace-shell.no-preview { grid-template-columns: 272px minmax(0, 1fr); }
+.workspace-shell.rail { grid-template-columns: 56px minmax(0, 1fr) 380px; }
+.workspace-shell.rail.no-preview { grid-template-columns: 56px minmax(0, 1fr); }
+.workspace-shell .preview-col { display: block; min-width: 0; }
+.workspace-rail { overflow-y: auto; align-items: center; padding-top: 12px; }
+.workspace-mobile-head, .workspace-mobile-tabs { display: none; }
+.workspace-drawer-overlay { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 40%); }
+.workspace-drawer { position: fixed; inset: 0 auto 0 0; z-index: 61; max-width: 90vw; }
+@media (min-width: 861px) and (max-width: 1180px) {
+  .workspace-shell { grid-template-columns: 224px minmax(0, 1fr) 300px; }
+  .workspace-shell.rail { grid-template-columns: 56px minmax(0, 1fr) 300px; }
+}
+@media (max-width: 860px) {
+  .workspace-shell, .workspace-shell.rail, .workspace-shell.no-preview, .workspace-shell.rail.no-preview {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .workspace-shell > .col-list { display: none; }
+  .workspace-mobile-head { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--card); min-width: 0; }
+  .workspace-mobile-head span { overflow-wrap: anywhere; font-size: 13px; }
+  .workspace-shell .col-main, .workspace-shell .preview-col { grid-row: 2; }
+  .workspace-shell.mobile-edit .preview-col, .workspace-shell.mobile-preview .col-main { display: none; }
+  .workspace-mobile-tabs { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--border); background: var(--card); padding-bottom: env(safe-area-inset-bottom); }
+  .workspace-mobile-tabs button { min-height: 48px; color: var(--foreground); border-top: 3px solid transparent; }
+  .workspace-mobile-tabs button[aria-pressed=true] { border-top-color: var(--primary); background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
+  .workspace-mobile-tabs button:focus-visible { outline: 2px solid var(--ring); outline-offset: -4px; }
+}
+@media (prefers-reduced-motion: reduce) { .workspace-drawer { animation: none; } }

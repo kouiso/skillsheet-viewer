@@ -14,6 +14,7 @@ import {
 import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constant';
 import { GrowTextarea } from './grow-textarea';
 import { MonthDatePicker } from './month-date-picker';
+import { projectHasBlockingPeriod } from './project-warning';
 import { ScopePicker } from './scope-picker';
 import { TagInput } from './tag-input';
 
@@ -23,6 +24,7 @@ const Field = ({
   required,
   hint,
   error,
+  warningTarget,
   col2,
   syncKey,
   onFocus,
@@ -32,6 +34,7 @@ const Field = ({
   required?: boolean;
   hint?: string;
   error?: string | null;
+  warningTarget?: string;
   col2?: boolean;
   /** プレビューの対応箇所へ結びつけるキー。 */
   syncKey?: string;
@@ -46,7 +49,22 @@ const Field = ({
       {required && <span className="req">*</span>}
     </label>
     {children}
-    {error ? <p className="hint err">{error}</p> : hint ? <p className="hint">{hint}</p> : null}
+    {error ? (
+      <div className="field-warning" role="status">
+        <span>{error}</span>
+        <button
+          type="button"
+          onClick={(event) => {
+            const field = event.currentTarget.closest('.field');
+            field?.querySelector<HTMLElement>(warningTarget ?? 'input, button, select, textarea')?.focus();
+          }}
+        >
+          確認する<span className="sr-only">（{label}）</span>
+        </button>
+      </div>
+    ) : hint ? (
+      <p className="hint">{hint}</p>
+    ) : null}
   </div>
 );
 
@@ -161,9 +179,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
   const ongoing = p.ongoing ?? parsedLegacy?.ongoing ?? false;
   // レガシー文字列がパース不能（"2020年頃" 等）：月入力は空のまま、元の文字列を注記表示して温存する
   const legacyUnparsable = !hasMonthFields && parsedLegacy === null && p.period.trim().length > 0;
-  const projectionMismatch =
-    parsedLegacy !== null &&
-    (start !== parsedLegacy.start || end !== parsedLegacy.end || ongoing !== parsedLegacy.ongoing);
+  const projectionMismatch = projectHasBlockingPeriod(p);
 
   const commitPeriod = (nextStart: string, nextEnd: string, nextOngoing: boolean) => {
     const formatted = formatPeriodRange(nextStart, nextEnd, nextOngoing);
@@ -223,7 +239,9 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             col2
             syncKey="title"
             onFocus={focus('title')}
-            error={!p.title.trim() ? '必須項目です — 未入力のままだと一覧・閲覧側で「無題」表示になります' : null}
+            error={
+              !p.title.trim() ? '案件名が未入力です。未入力のままだと一覧・閲覧側で「無題」表示になります。' : null
+            }
           >
             <input
               value={p.title}
@@ -280,6 +298,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             syncKey="period"
             onFocus={focus('period')}
             hint="月数・並び順は自動計算"
+            warningTarget={orderError || endMissing ? 'input[aria-label="終了月"]' : 'input[aria-label="開始月"]'}
             error={
               orderError
                 ? '終了月が開始月より前になっています'
@@ -320,7 +339,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               {durationBadge && <span className={`dur-badge${ongoing ? ' live' : ''}`}>{durationBadge}</span>}
             </div>
             {projectionMismatch && (
-              <p role="alert" className="hint">
+              <p role="alert" className="hint err">
                 期間の日付と保存済みの期間が一致していないため保存できません。開始月・終了月・継続中を確認してください。
               </p>
             )}

@@ -371,3 +371,33 @@ it('単独リンクだけを操作領域の拡張対象にし、本文内リン�
   expect(screen.getByRole('link', { name: '単独 強調 と コード' }).parentElement).toHaveClass('standalone-link');
   expect(screen.getByRole('link', { name: '本文内' }).parentElement).not.toHaveClass('standalone-link');
 });
+
+it('Console指定をプロフィールへ伝搬し、目次を本文内に置く', async () => {
+  render(
+    <SkillSheetViewer
+      navigationLayout="inline"
+      skillSheet={{ title: '合成', content: '' }}
+      blocks={[
+        { id: 'note', order: 0, type: 'markdown', data: { markdown: '## 合成の目次見出し' } },
+        {
+          id: 'profile',
+          order: 1,
+          type: 'profile',
+          data: {
+            name: '合成氏名',
+            title: '合成役割',
+            pr: '合成自己PR',
+            strengths: ['合成強み'],
+            meta: { work: '合成補足' },
+          },
+        },
+      ]}
+    />,
+  );
+  const profile = within(screen.getByTestId('profile-intro-desktop'));
+  expect(
+    profile.getByText('合成強み').compareDocumentPosition(profile.getByText('合成自己PR')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  await waitFor(() => expect(document.querySelector('.console-toc')).toBeInTheDocument());
+});

@@ -1,14 +1,9 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
 import { isProjectBlockData } from '@/db';
-import {
-  createRealVolumeDemoSheet,
-  REAL_VOLUME_COMPANY_COUNT,
-  REAL_VOLUME_DEMO_TITLE,
-  REAL_VOLUME_PROJECT_COUNT,
-} from '@/db/fixture';
+import { REAL_VOLUME_COMPANY_COUNT, REAL_VOLUME_DEMO_TITLE, REAL_VOLUME_PROJECT_COUNT } from '@/db/fixture';
 import { authFile, login } from './auth';
-import { getSkillSheetById } from './document-fixture';
+import { createRealVolumeDemoSheet, deleteSheet, getSkillSheetById } from './document-fixture';
 
 test.use({ storageState: authFile });
 
@@ -141,6 +136,10 @@ test.describe('Claude Design 全画面監査', () => {
     viewSheetId = await createRealVolumeDemoSheet();
   });
 
+  test.afterAll(async () => {
+    if (viewSheetId) await deleteSheet(viewSheetId);
+  });
+
   test('フィクスチャの件数が元データ（19社/32案件）と一致する', async () => {
     const sheet = await getSkillSheetById(viewSheetId);
     const projectBlock = sheet.blocks.find((b) => b.type === 'project');
@@ -249,7 +248,7 @@ test.describe('Claude Design 全画面監査', () => {
 
     // 監査対象が実際に19社/32案件のフィクスチャであり、空のプレビューではないことを
     // キャプチャ開始前に確認する。
-    await expect(popup.getByRole('heading', { name: REAL_VOLUME_DEMO_TITLE })).toBeVisible();
+    await expect(popup.getByRole('heading', { name: new RegExp(REAL_VOLUME_DEMO_TITLE) })).toBeVisible();
 
     for (const viewport of viewports) {
       for (const theme of ['light', 'dark'] as const) {

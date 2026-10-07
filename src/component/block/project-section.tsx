@@ -1,6 +1,6 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { type ReactNode, useMemo, useState } from 'react';
 import { filterVisibleProjectData, type ProjectBlockData, type ProjectItem, type ProjectTech } from '@/db/block';
 import { groupProjectsByCompany } from '@/db/group-by-company';
@@ -33,10 +33,9 @@ interface ProjectSectionProps {
 }
 
 function FadeUpSection({ children }: { children: ReactNode }) {
-  const reduceMotion = useReducedMotion();
   return (
     <motion.section
-      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
     >

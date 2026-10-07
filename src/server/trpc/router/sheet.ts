@@ -1,5 +1,8 @@
 import { TRPCError } from '@trpc/server';
+import { z } from 'zod';
 import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
+import { isRevision } from '@/db/document-contract';
+import { createDocumentHistory } from '@/db/document-history';
 import { createDocumentService, DocumentError } from '@/db/document-service';
 import { getCachedDbSheet, getCachedDbSheetById, toStaleSheet } from '@/server/sheet-cache';
 import { invalidateDbSheetCache } from '@/server/sheet-service';
@@ -48,7 +51,65 @@ async function documentCall<T>(action: () => Promise<T>): Promise<T> {
   }
 }
 
+const historyId = z.object({ sheetId: z.uuid() });
+const historyRevision = z.string().refine(isRevision, 'invalid revision');
+const restoreInput = historyId.extend({ targetRevision: historyRevision, expectedRevision: historyRevision });
+const deletedInput = historyId.extend({ expectedDeletionRevision: historyRevision });
+function history() {
+  return createDocumentHistory(getDb(), getOwnerId());
+}
+
 export const sheetRouter = router({
+  history: router({
+    list: editorProcedure
+      .input(
+        historyId.extend({
+          beforeRevision: historyRevision.optional(),
+          limit: z.number().int().min(1).max(20).default(20),
+        }),
+      )
+      .query(({ input }) => documentCall(() => history().list(input.sheetId, input.beforeRevision, input.limit))),
+    read: editorProcedure
+      .input(historyId.extend({ revision: historyRevision }))
+      .query(({ input }) => documentCall(() => history().read(input.sheetId, input.revision))),
+    previewRestore: editorProcedure
+      .input(restoreInput)
+      .query(({ input }) =>
+        documentCall(() => history().previewRestore(input.sheetId, input.targetRevision, input.expectedRevision)),
+      ),
+    restore: editorProcedure.input(restoreInput.extend({ confirmation: z.string().length(64) })).mutation(({ input }) =>
+      documentCall(async () => {
+        const result = await history().restore(
+          input.sheetId,
+          input.targetRevision,
+          input.expectedRevision,
+          input.confirmation,
+        );
+        invalidateDbSheetCache();
+        return result;
+      }),
+    ),
+    deletedList: editorProcedure.query(() => documentCall(() => history().deletedList())),
+    previewDeleted: editorProcedure
+      .input(deletedInput)
+      .query(({ input }) =>
+        documentCall(() => history().previewDeleted(input.sheetId, input.expectedDeletionRevision)),
+      ),
+    restoreDeleted: editorProcedure
+      .input(deletedInput.extend({ confirmation: z.string().length(64) }))
+      .mutation(({ input }) =>
+        documentCall(async () => {
+          const result = await history().restoreDeleted(
+            input.sheetId,
+            input.expectedDeletionRevision,
+            input.confirmation,
+          );
+          invalidateDbSheetCache();
+          return result;
+        }),
+      ),
+  }),
+
   // navigation() は builderState と同じヘルパー。documentCall を通さないと
   // DocumentError がここだけ未マッピングの INTERNAL_SERVER_ERROR になり、
   // 同一障害でエラー契約が割れる（#349）。

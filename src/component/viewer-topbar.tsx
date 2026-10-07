@@ -1,6 +1,5 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
 import {
   ArrowLeft,
   ChevronDown,
@@ -8,6 +7,7 @@ import {
   FileDown,
   FileMinus,
   Loader2,
+  Menu,
   Moon,
   PencilLine,
   Sheet,
@@ -15,12 +15,21 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import {
+  Sheet as NavigationSheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+  SheetTrigger,
+} from '@/component/ui/sheet';
+import './viewer-console.css';
 
 import { Button } from '@/component/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
 import { useViewerTopbarHeight } from '@/hook/use-viewer-topbar-height';
+import { consoleFontClasses } from './viewer-font';
 
 /**
  * ビューアで表示ON/OFFを切り替えられるキー。
@@ -118,7 +127,7 @@ function DigestDownloadMenu({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent className={`console-export-menu z-[70] ${consoleFontClasses}`}>
         <div className="flex flex-col">
           <Button
             variant="ghost"
@@ -195,7 +204,7 @@ function DownloadMenu({
           {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Download />}
         </Button>
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent className={`console-export-menu z-[70] ${consoleFontClasses}`}>
         <div className="flex flex-col">
           {onDownloadPdf && item('PDF', onDownloadPdf, 'PDFダウンロード')}
           {onDownloadExcel && item('Excel', onDownloadExcel, 'Excelダウンロード')}
@@ -241,7 +250,7 @@ function OfficeDownloadMenu({
           <ChevronDown className="hidden size-3.5 text-muted-foreground xl:inline" aria-hidden />
         </Button>
       </PopoverTrigger>
-      <PopoverContent>
+      <PopoverContent className={`console-export-menu z-[70] ${consoleFontClasses}`}>
         <div className="flex flex-col">
           <Button
             variant="ghost"
@@ -292,7 +301,7 @@ export function ViewerTopbar({
   reserveEditSlot = false,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
-  const reduceMotion = useReducedMotion();
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   // ヘッダー実高を --viewer-topbar-h へ流し、見出し・目次のずらし量と一元化（#397）
   const headerRef = useViewerTopbarHeight<HTMLElement>();
@@ -311,16 +320,8 @@ export function ViewerTopbar({
   ) : null;
 
   const viewToggleFieldset = (
-    <fieldset
-      // flex-nowrap + overflow-x-auto: 390px でトグルを1段の横スクロールに収める（#397）。
-      // 折返しにするとヘッダーが 177px まで膨れて会社見出しに被さる（実測 17px 埋没）。
-      // スクロールバーは表示しない — classic スクロールバーは要素の高さに加算され、
-      // ≤120px のヘッダー高条件を超えてしまう。
-      // 右端の文字まで薄めるマスクは使わず、次のボタンの見切れをスクロールの手掛かりにする。
-      // min-w-0 は flex item の min-width:auto によるページ横スクロール抑止。
-      className="m-0 flex w-full min-w-0 flex-nowrap items-center gap-1.5 overflow-x-auto border-0 p-0 [scrollbar-width:none] sm:w-auto [&::-webkit-scrollbar]:hidden"
-    >
-      <legend className="sr-only">表示するビュー</legend>
+    <fieldset className="console-view-toggles">
+      <legend>表示するビュー</legend>
       {ALL_VIEWS.map((view) => {
         const on = views.includes(view.id);
         return (
@@ -342,16 +343,9 @@ export function ViewerTopbar({
     </fieldset>
   );
 
-  // SP は「戻る＋アイコン群」／「ビュートグル」の2段、sm 以上は「戻る…ビュートグル→アイコン群」の1段で、
-  // ビュートグルとアイコン群の視覚的な前後がブレークポイントで入れ替わる。
-  // CSS order で入れ替えると DOM順（タブ順・読み上げ順）が視覚順とズレ、
-  // useMediaQuery で DOM 順を切り替えると SSR が常に SP 順を返すため hydration 後に
-  // デスクトップだけ並びが入れ替わって毎回レイアウトシフトが起きる。
-  // display:none はフォーカス順からも a11y ツリーからも外れるので、CSS だけで
-  // 両ブレークポイントの DOM順=視覚順を成立させられる出し分けを採る。
-  // compact=true は SP 向け（ダウンロードは「ダウンロード」メニュー1個に畳み、
-  // テーマはアイコンのみ）。false はデスクトップ向けで、出力ボタンに文字ラベルを付ける
-  // （#397: アイコンだけでは何を出力するか分からないため）。
+  // PC はトップバー、狭幅は Sheet 内へ同じ操作群を置く。
+  // CSS で非表示の領域はタブ順からも外れ、表示順と操作順を揃える。
+  // 出力ラベルは aria-label/Tooltip でも伝え、狭幅の常設ダウンロードは別メニューにまとめる。
   const renderActionIcons = (className: string, compact = false) => (
     <div className={className}>
       {reserveEditSlot ? (
@@ -386,7 +380,7 @@ export function ViewerTopbar({
                   aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
                   className={compact ? 'min-h-11 min-w-11' : 'min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]'}
                 >
-                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+                  {pdfLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileDown />}
                   {!compact && <span className="hidden xl:inline">PDF</span>}
                 </Button>
               </TooltipTrigger>
@@ -432,49 +426,68 @@ export function ViewerTopbar({
     </div>
   );
 
-  return (
-    <motion.header
-      // 前庭障害の読み手へページ全体のスライドインを掛けない（#355）
-      initial={reduceMotion ? false : { y: -100 }}
-      animate={{ y: 0 }}
-      transition={{ duration: 0.5, ease: 'easeOut' }}
-      // スクロール下の本文に左右されず文字を読めるよう、テーマの背景を不透明に敷く。
-      className="no-print sticky top-0 z-40 border-b border-border bg-background"
-      ref={headerRef}
-    >
-      {/* py-2（SP）: 390px でヘッダー高を ≤120px に収める（#397）。sm 以上は従来の py-3.5。 */}
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 sm:px-8 sm:py-3.5">
-        {/* 「戻るリンク＋SP用アイコン群」を折り返さない1つの行にまとめる。
-            親は flex-wrap だが、flexbox は「縮めてから折り返す」のではなく
-            「入らなければ折り返す」ため、リンクに min-w-0 を付けるだけでは足りない。
-            氏名が未入力のシートはフォールバックの「エンジニアスキルシート」が入って
-            リンクだけで約222px を占め、アイコン群が2段目・ビュートグルが3段目へ押し出されて
-            #190 で狙った「SPは2段」が崩れる（実機で3段=177px を確認）。
-            この内側コンテナは既定の flex-nowrap なので、リンクが縮んで省略記号に逃げる。
-            sm 以上では w-auto + flex-1 となり、従来のスペーサー（min-w-4 flex-1）と同じく
-            ビュートグルとアイコン群を右端へ寄せる役割を兼ねる。 */}
-        {/* flex-1 は sm 以上だけに付ける。SP で flex-1 を付けると flex-basis が 0% になり
-            w-full（100%）を打ち消して行を占有できず、ビュートグルが同じ行に載ってしまう。 */}
-        <div className="flex w-full min-w-0 items-center gap-4 sm:w-auto sm:min-w-fit sm:flex-1">
-          <Link
-            href="/view"
-            className="flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-md -mx-1.5 px-1.5 transition-colors hover:bg-accent sm:min-w-fit sm:flex-none"
-            aria-label="シート一覧へ戻る"
-          >
-            <ArrowLeft className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            <span aria-hidden className="size-[9px] shrink-0 rounded-[2px] bg-primary" />
-            <span className="min-w-0 truncate text-[15px] font-semibold text-foreground">
-              {name || 'エンジニアスキルシート'}
-            </span>
-            {company && <span className="min-w-0 truncate font-mono text-[12px] text-muted-foreground">{company}</span>}
-          </Link>
-
-          {renderActionIcons('flex shrink-0 items-center gap-2 sm:hidden', true)}
-        </div>
-
-        {viewToggleFieldset}
-        {renderActionIcons('hidden shrink-0 items-center gap-2 sm:flex')}
+  const sidebar = (
+    <>
+      <div className="console-identity">
+        <p className="kicker">skillsheet-viewer</p>
+        <p className="console-name">{name || 'エンジニアスキルシート'}</p>
+        {company && <p className="console-company">{company}</p>}
       </div>
-    </motion.header>
+      <Link href="/view" aria-label="シート一覧へ戻る" className="console-back">
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        シート一覧へ戻る
+      </Link>
+      {viewToggleFieldset}
+      {renderActionIcons('console-actions')}
+    </>
+  );
+  return (
+    <header className="console-topbar no-print" ref={headerRef}>
+      <div className="console-desktop-bar">
+        <Link
+          href="/view"
+          aria-label="シート一覧へ戻る"
+          className="console-back console-back-icon"
+          title="シート一覧へ戻る"
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+        </Link>
+        <div className="console-topbar-identity">
+          <span className="console-mark" aria-hidden="true" />
+          <span className="console-topbar-name">{name || 'エンジニアスキルシート'}</span>
+          {company && <span className="console-topbar-company">{company}</span>}
+        </div>
+        {viewToggleFieldset}
+        {renderActionIcons('console-actions')}
+      </div>
+      <div className="console-mobile-bar">
+        <NavigationSheet open={navigationOpen} onOpenChange={setNavigationOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" className="min-h-11 min-w-11" aria-label="表示・出力メニューを開く">
+              <Menu aria-hidden="true" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className={`console-drawer ${consoleFontClasses}`}>
+            <SheetTitle className="sr-only">スキルシートの表示と出力</SheetTitle>
+            <SheetDescription className="sr-only">表示項目、ダウンロード、テーマを変更できます。</SheetDescription>
+            {sidebar}
+          </SheetContent>
+        </NavigationSheet>
+        <div className="console-topbar-identity">
+          <span className="console-mark" aria-hidden="true" />
+          <span className="console-topbar-name">{name || 'エンジニアスキルシート'}</span>
+        </div>
+        {(onDownloadPdf || onDownloadExcel || onDownloadDocx || onDownloadPdfDigest || onDownloadExcelDigest) && (
+          <DownloadMenu
+            onDownloadPdf={onDownloadPdf}
+            onDownloadExcel={onDownloadExcel}
+            onDownloadDocx={onDownloadDocx}
+            onDownloadPdfDigest={onDownloadPdfDigest}
+            onDownloadExcelDigest={onDownloadExcelDigest}
+            loading={pdfLoading || excelLoading || docxLoading || digestLoading}
+          />
+        )}
+      </div>
+    </header>
   );
 }

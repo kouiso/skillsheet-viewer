@@ -12,6 +12,22 @@ export async function saveWithReadback(
   try {
     return await save(payload);
   } catch (originalError) {
+    // 明示されたサーバーの拒否を、別タブの同じ内容で成功に置き換えない。
+    // 読戻しで照合するのは、結果が不明な通信・応答喪失の場合だけ。
+    if (originalError !== null && typeof originalError === 'object') {
+      const error = originalError as {
+        data?: { code?: unknown };
+        shape?: { data?: { code?: unknown } };
+        message?: unknown;
+      };
+      if (
+        typeof error.data?.code === 'string' ||
+        typeof error.shape?.data?.code === 'string' ||
+        (typeof error.message === 'string' &&
+          ['CONFLICT', 'UNAUTHORIZED', 'FORBIDDEN', 'BAD_REQUEST', 'NOT_FOUND'].includes(error.message))
+      )
+        throw originalError;
+    }
     try {
       const result = await read(payload.sheetId);
       if (result.status === 'OK') {
