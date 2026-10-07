@@ -166,9 +166,9 @@ describe('ViewerTopbar', () => {
   });
 
   describe('Excel ダウンロードの生成中フィードバック', () => {
-    it('通常時は「Excelダウンロード」ラベルで押せる（デスクトップ側）', () => {
+    it('通常時は「Excel / Wordをダウンロード」ラベルで押せる（デスクトップ側）', () => {
       renderTopbar({ onDownloadExcel: vi.fn() });
-      const buttons = getIconCopies('Excelダウンロード');
+      const buttons = getIconCopies('Excel / Wordをダウンロード');
       expect(buttons).toHaveLength(1);
       for (const button of buttons) {
         expect(button).toBeEnabled();
@@ -179,7 +179,7 @@ describe('ViewerTopbar', () => {
 
     it('excelLoading 中は無効化され、aria-busy と生成中ラベルで状態を伝える', () => {
       renderTopbar({ onDownloadExcel: vi.fn(), excelLoading: true });
-      const desktop = getIconCopies('Excelを生成中');
+      const desktop = getIconCopies('Excel / Wordを生成中');
       expect(desktop).toHaveLength(1);
       const sp = getIconCopies('ダウンロードを生成中');
       expect(sp).toHaveLength(1);
@@ -187,13 +187,13 @@ describe('ViewerTopbar', () => {
         expect(button).toBeDisabled();
         expect(button).toHaveAttribute('aria-busy', 'true');
       }
-      expect(screen.queryByLabelText('Excelダウンロード')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Excel / Wordをダウンロード')).not.toBeInTheDocument();
     });
 
-    it('onDownloadExcel 未指定なら Excel ボタン自体を出さない', () => {
+    it('onDownloadExcel 未指定なら Excel / Word メニュー自体を出さない', () => {
       renderTopbar();
-      expect(screen.queryByLabelText('Excelダウンロード')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('Excelを生成中')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Excel / Wordをダウンロード')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Excel / Wordを生成中')).not.toBeInTheDocument();
     });
   });
 
@@ -272,7 +272,9 @@ describe('ViewerTopbar', () => {
       // デスクトップ側は文字ラベル付き（SP 側はアイコンのみのまま）。
       const desktopPdf = getIconCopies('PDFダウンロード')[0];
       expect(desktopPdf.textContent).toContain('PDF');
-      expect(getIconCopies('Excelダウンロード')[0].textContent).toContain('Excel');
+      const officeMenu = getIconCopies('Excel / Wordをダウンロード')[0];
+      expect(officeMenu.textContent).toContain('Excel');
+      expect(officeMenu.querySelector('svg.lucide-chevron-down')).not.toBeNull();
       expect(getIconCopies('テーマ切り替え').map((b) => b.textContent)).toEqual(['テーマ']);
 
       // 要約版はメニューを開くことを ChevronDown（下向き矢印）で示す。
