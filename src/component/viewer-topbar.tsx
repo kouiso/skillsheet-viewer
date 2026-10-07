@@ -356,7 +356,8 @@ export function ViewerTopbar({
         editButton
       )}
 
-      {compact && (onDownloadPdf || onDownloadExcel || onDownloadDocx || onDownloadPdfDigest || onDownloadExcelDigest) ? (
+      {compact &&
+      (onDownloadPdf || onDownloadExcel || onDownloadDocx || onDownloadPdfDigest || onDownloadExcelDigest) ? (
         <DownloadMenu
           onDownloadPdf={onDownloadPdf}
           onDownloadExcel={onDownloadExcel}
