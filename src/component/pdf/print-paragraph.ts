@@ -2,7 +2,29 @@ import type { MdNode } from './print-markdown';
 
 /** About three lines of Japanese body text. This is a reading target, not a clipping limit. */
 const PARAGRAPH_TARGET = 120;
-const OPEN_PAIRS: Record<string, string> = { '「': '」', '『': '』', '（': '）', '(': ')', '【': '】', '“': '”' };
+const OPEN_PAIRS: Record<string, string> = {
+  '「': '」',
+  '『': '』',
+  '（': '）',
+  '(': ')',
+  '【': '】',
+  '“': '”',
+  '‘': '’',
+  '[': ']',
+  '{': '}',
+  '｢': '｣',
+  '《': '》',
+  '〈': '〉',
+  '〔': '〕',
+  '〖': '〗',
+  '«': '»',
+  '〝': '〟',
+  '［': '］',
+  '｛': '｝',
+  '〘': '〙',
+  '〚': '〛',
+  '"': '"',
+};
 
 function charsOf(node: MdNode, cache: Map<MdNode, string[]>): string[] {
   const cached = cache.get(node);
@@ -13,6 +35,20 @@ function charsOf(node: MdNode, cache: Map<MdNode, string[]>): string[] {
       : (node.children?.flatMap((child) => charsOf(child, cache)) ?? [...(node.value ?? '')]);
   cache.set(node, chars);
   return chars;
+}
+
+/** Keep slicing offsets in the original AST, but do not count invisible HTML tags as prose. */
+function visibleWeights(node: MdNode, cache: Map<MdNode, string[]>): number[] {
+  if (node.type === 'html') {
+    let inTag = false;
+    return charsOf(node, cache).map((char) => {
+      if (char === '<') inTag = true;
+      const visible = inTag ? 0 : 1;
+      if (char === '>') inTag = false;
+      return visible;
+    });
+  }
+  return node.children?.flatMap((child) => visibleWeights(child, cache)) ?? charsOf(node, cache).map(() => 1);
 }
 
 /** Links, code and raw HTML stay intact, including punctuation inside them. */
@@ -83,7 +119,18 @@ export function readableParagraphs(node: MdNode): MdNode[] {
   const cache = new Map<MdNode, string[]>();
   const offsetsCache = new Map<MdNode[], number[]>();
   const chars = charsOf(node, cache);
-  if (chars.length <= PARAGRAPH_TARGET) return [node];
+  const weights = visibleWeights(node, cache);
+  const visiblePrefix = [0];
+  for (const weight of weights) visiblePrefix.push(visiblePrefix[visiblePrefix.length - 1] + weight);
+  const visibleLength = (start: number, end: number): number => visiblePrefix[end] - visiblePrefix[start];
+  const tiny = (start: number, end: number): boolean =>
+    [
+      ...chars
+        .slice(start, end)
+        .filter((char, index) => weights[start + index] > 0 && !/\s/u.test(char))
+        .join(''),
+    ].length <= 2;
+  if (visibleLength(0, chars.length) <= PARAGRAPH_TARGET) return [node];
   // Existing authored line breaks already express the reading structure. Splitting just
   // before one would introduce a blank leading line and make measured pagination unmatchable.
   if (chars.some((char) => char === '\n' || char === '\r')) return [node];
@@ -96,8 +143,8 @@ export function readableParagraphs(node: MdNode): MdNode[] {
     const span = protectedSpans[protectedIndex];
     if (span && i >= span[0] && i < span[1]) continue;
     const char = chars[i];
-    if (OPEN_PAIRS[char]) closes.push(OPEN_PAIRS[char]);
-    else if (closes.at(-1) === char) closes.pop();
+    if (closes.at(-1) === char) closes.pop();
+    else if (OPEN_PAIRS[char]) closes.push(OPEN_PAIRS[char]);
     else if (closes.length === 0 && /[。！？]/u.test(char) && !/[。！？\p{Mark}\u200d]/u.test(chars[i + 1] ?? ''))
       ends.push(i + 1);
   }
@@ -107,21 +154,14 @@ export function readableParagraphs(node: MdNode): MdNode[] {
   let start = 0;
   let previous = 0;
   for (const end of ends) {
-    if (end - start > PARAGRAPH_TARGET && previous > start) {
+    if (visibleLength(start, end) > PARAGRAPH_TARGET && !tiny(start, previous)) {
       cuts.push(previous);
       start = previous;
     }
     previous = end;
   }
   // Do not turn a terminal punctuation mark or a tiny tail into a paragraph of its own.
-  if (
-    cuts.length > 0 &&
-    chars
-      .slice(cuts[cuts.length - 1])
-      .join('')
-      .trim().length <= 2
-  )
-    cuts.pop();
+  if (cuts.length > 0 && tiny(cuts[cuts.length - 1], chars.length)) cuts.pop();
   if (cuts.length === 0) return [node];
   cuts.push(chars.length);
   start = 0;

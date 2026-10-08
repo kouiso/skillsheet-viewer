@@ -25,8 +25,8 @@ import { PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constant';
 import { splitForHyphenation } from './font';
 import { checkLineBreakQuality, LINE_BREAK_RULES, summarizeLineBreaks } from './line-break-quality';
-import { buildPrintSkillSheetDocument } from './print-document';
-import { displayParagraphTexts } from './print-markdown';
+import { buildPrintSkillSheetDocument, type PrintSkillSheetDocumentProps } from './print-document';
+import { displayParagraphRegions } from './print-paragraph-region';
 import type { QualityItem, QualityPage } from './print-quality';
 import { extractQualityPages } from './print-quality-extract.node';
 import { PRINT_SIZE, PRINT_TYPE } from './print-token';
@@ -265,7 +265,8 @@ function buildLineBreakCheckBlocks(): Block[] {
     'PostgreSQL の索引を見直して検索の応答時間を約半分に短縮し、レビューの観点も整理した。';
   const comment =
     'この案件を通じて、技術的な意思決定を自分の言葉で説明できるようになったことが収穫だった。' +
-    'GraphQL のスキーマ設計では REST API との差分を整理し、CI での検査も整えた。';
+    'GraphQL のスキーマ設計では REST API との差分を整理し、CI での検査も整えた。' +
+    '合成データの検証として、担当範囲と確認した結果を順に説明し、関係者との認識をそろえた。';
   return [
     {
       id: 'line-break-check-profile',
@@ -368,24 +369,7 @@ function collectRenderedMarkdownTexts(value: unknown, out: string[] = []): strin
  */
 function collectPrintSourceTexts(blocks: Block[], title: string): string[] {
   const viewModel = buildPrintViewModel(title, blocks, undefined, referenceMonth);
-  // これらだけが PrintMarkdown / markdownPieces を通る。会社注記・メタ表・技術名などの
-  // 単独 Text には表示用の段落分割がないため、架空の短い出典を追加しない。
-  const splitParagraphTexts = [
-    ...displayParagraphTexts(viewModel.summary.pr),
-    ...(viewModel.showProjects
-      ? viewModel.companies.flatMap((company) =>
-          company.projects.flatMap((project) =>
-            [project.summary, project.duties, project.acquired, project.comment].flatMap(displayParagraphTexts),
-          ),
-        )
-      : []),
-  ];
-  return [
-    ...collectSourceTexts(blocks),
-    ...collectSourceTexts(viewModel),
-    ...collectRenderedMarkdownTexts(blocks),
-    ...splitParagraphTexts,
-  ];
+  return [...collectSourceTexts(blocks), ...collectSourceTexts(viewModel), ...collectRenderedMarkdownTexts(blocks)];
 }
 
 /** 抽出した頁から running footer の文字列を拾う（下端帯に出る item の連結）。 */
@@ -401,10 +385,20 @@ describe('checkLineBreakQuality: 描いた PDF に当てる', () => {
   it('合成ブロックを現行の印刷コードで描いた PDF では規則の当たりが 0 件', { timeout: 60_000 }, async () => {
     const title = '改行規則の検査';
     const blocks = buildLineBreakCheckBlocks();
-    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, referenceMonth }));
+    const document = await buildPrintSkillSheetDocument({ title, blocks, referenceMonth });
+    const buffer = await renderToBuffer(document);
     const pages = await extractQualityPages(buffer);
+    const regions = displayParagraphRegions(
+      (document.props as unknown as PrintSkillSheetDocumentProps).projectPages,
+      pages.length,
+    );
+    expect(regions.length).toBeGreaterThan(0);
     const report = checkLineBreakQuality(pages, {
       sourceTexts: collectPrintSourceTexts(blocks, title),
+      displayParagraphRegions: displayParagraphRegions(
+        (document.props as unknown as PrintSkillSheetDocumentProps).projectPages,
+        pages.length,
+      ),
       footerText: footerTextOf(pages),
     });
     console.log(`PDF_LAYOUT_COUNTS ${summarizeLineBreaks(report)}`);
@@ -426,10 +420,15 @@ describe('checkLineBreakQuality: 描いた PDF に当てる', () => {
       }
       const blocks = parsed as Block[];
       const title = 'エンジニアスキルシート';
-      const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, referenceMonth }));
+      const document = await buildPrintSkillSheetDocument({ title, blocks, referenceMonth });
+      const buffer = await renderToBuffer(document);
       const pages = await extractQualityPages(buffer);
       const report = checkLineBreakQuality(pages, {
         sourceTexts: collectPrintSourceTexts(blocks, title),
+        displayParagraphRegions: displayParagraphRegions(
+          (document.props as unknown as PrintSkillSheetDocumentProps).projectPages,
+          pages.length,
+        ),
         footerText: footerTextOf(pages),
       });
       // 公開ログに出せるのは件数だけ。本文や位置の文字列は出さない。

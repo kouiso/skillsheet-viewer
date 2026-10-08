@@ -48,6 +48,8 @@ interface LeafDraft {
   kind: Leaf['kind'];
   el: ReactElement;
   keepWithNext: boolean;
+  displayParagraphGroup?: object;
+  displayParagraphText?: string;
   text?: string;
   remake?: (text: string) => ReactElement;
   frame: FrameSpec;
@@ -63,6 +65,8 @@ function draftToLeaf(
     id,
     kind: draft.kind,
     ...common,
+    displayParagraphGroup: draft.displayParagraphGroup,
+    displayParagraphText: draft.displayParagraphText,
     el: draft.el,
     frame: draft.frame,
     keepWithNext: draft.keepWithNext,
@@ -176,6 +180,8 @@ function detailCardDrafts(project: PrintProject): LeafDraft[] {
         keepWithNext: piece.keepWithNext ?? false,
         text: piece.text,
         remake: piece.remake,
+        displayParagraphGroup: piece.displayParagraphGroup,
+        displayParagraphText: piece.displayParagraphText,
         frame: {
           ...cardFrame({
             padTop: piece.gap,
@@ -225,6 +231,8 @@ function compactProjectDrafts(project: PrintProject): LeafDraft[] {
       keepWithNext: piece.keepWithNext,
       text: piece.text,
       remake: piece.remake,
+      displayParagraphGroup: piece.displayParagraphGroup,
+      displayParagraphText: piece.displayParagraphText,
       frame: groupFrame(index === body.length - 1),
     });
   });
@@ -340,8 +348,24 @@ export function splitLeaf(
   };
   const { height: _h, marginTop: _mt, marginBottom: _mb, lines: _l, ...rest } = leaf;
   return {
-    head: { ...rest, id: `${leaf.id}:head`, text: texts.head, el: leaf.remake(texts.head), frame: headFrame },
-    tail: { ...rest, id: `${leaf.id}:tail`, text: texts.tail, el: leaf.remake(texts.tail), frame: tailFrame },
+    head: {
+      ...rest,
+      id: `${leaf.id}:head`,
+      text: texts.head,
+      // This physical head continues on the next page: do not grant it a new
+      // display-end exemption. The true display piece ends in the tail.
+      displayParagraphText: undefined,
+      el: leaf.remake(texts.head),
+      frame: headFrame,
+    },
+    tail: {
+      ...rest,
+      id: `${leaf.id}:tail`,
+      text: texts.tail,
+      displayParagraphText: leaf.displayParagraphGroup ? texts.tail : undefined,
+      el: leaf.remake(texts.tail),
+      frame: tailFrame,
+    },
   };
 }
 

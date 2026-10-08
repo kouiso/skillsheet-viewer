@@ -2,16 +2,88 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import { describe, expect, it } from 'vitest';
 import { PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
-import { displayParagraphTexts, type MdNode, markdownPieces } from './print-markdown';
+import { type MdNode, markdownPieces } from './print-markdown';
 import { readableParagraphs } from './print-paragraph';
 
 const processor = unified().use(remarkParse).use(PDF_REMARK_PLUGINS);
 const paragraph = (source: string) =>
   (processor.runSync(processor.parse(source)) as unknown as MdNode).children?.[0] as MdNode;
 const textOf = (node: MdNode): string => node.children?.map(textOf).join('') ?? node.value ?? '';
+// Observe the actual measured-route pieces; no production source dictionary API.
+const displayParagraphTexts = (text: string) =>
+  markdownPieces(text)
+    .filter((piece) => piece.displayParagraphGroup)
+    .map((piece) => piece.displayParagraphText ?? '');
+
 const sentence = '業務の課題を整理し、担当者と確認した内容に基づいて検証を行い、対応結果を記録しました。';
 
 describe('PDF display paragraphs', () => {
+  it('does not let invisible tags or interstitial spaces disguise a two-character fragment', () => {
+    const source = `${'あ'.repeat(129)}。<b> あ </b>。${'あ'.repeat(200)}`;
+    const pieces = readableParagraphs(paragraph(source)).map(textOf);
+    expect(pieces.join('')).toBe(textOf(paragraph(source)));
+    expect(pieces.every((piece) => [...piece.replace(/<[^>]*>/g, '').replace(/\s/gu, '')].length > 2)).toBe(true);
+  });
+  it('gives each field a distinct display paragraph identity even when text and local keys repeat', () => {
+    const source = sentence.repeat(6);
+    const first = markdownPieces(source);
+    const second = markdownPieces(source);
+    expect(first[0].displayParagraphGroup).toBe(first[1].displayParagraphGroup);
+    expect(first[0].displayParagraphGroup).not.toBe(second[0].displayParagraphGroup);
+  });
+  it('counts visible prose rather than long invisible HTML attributes without changing the AST', () => {
+    const source = `<span data-synthetic="${'x'.repeat(200)}">あ。</span>${sentence.repeat(3)}`;
+    const original = paragraph(source);
+    const snapshot = JSON.stringify(original);
+    const pieces = readableParagraphs(original);
+    expect(pieces.map(textOf).join('')).toBe(textOf(original));
+    expect(JSON.stringify(original)).toBe(snapshot);
+    expect(
+      pieces.every(
+        (piece) =>
+          [
+            ...textOf(piece)
+              .replace(/<[^>]*>/g, '')
+              .trim(),
+          ].length > 2,
+      ),
+    ).toBe(true);
+    const short = `<span data-synthetic="${'x'.repeat(200)}">${sentence}</span>`;
+    expect(readableParagraphs(paragraph(short))).toEqual([paragraph(short)]);
+  });
+  it('never isolates a two-character sentence in the middle of prose', () => {
+    const source = `${'あ'.repeat(129)}。あ。${'あ'.repeat(200)}`;
+    const pieces = readableParagraphs(paragraph(source)).map(textOf);
+    expect(pieces.join('')).toBe(source);
+    expect(pieces.every((piece) => [...piece.trim()].length > 2)).toBe(true);
+  });
+
+  it('keeps Japanese bracket variants and double-quoted prose intact', () => {
+    for (const [open, close] of [
+      ['"', '"'],
+      ['‘', '’'],
+      ['[', ']'],
+      ['{', '}'],
+      ['｢', '｣'],
+      ['《', '》'],
+      ['〈', '〉'],
+      ['〔', '〕'],
+      ['〖', '〗'],
+      ['«', '»'],
+      ['〝', '〟'],
+      ['［', '］'],
+      ['｛', '｝'],
+      ['〘', '〙'],
+      ['〚', '〛'],
+    ]) {
+      const source = open + sentence.repeat(3) + close;
+      expect(readableParagraphs(paragraph(source)).map(textOf)).toEqual([source]);
+      const surrounding = sentence.repeat(2) + source + sentence.repeat(2);
+      const pieces = readableParagraphs(paragraph(surrounding)).map(textOf);
+      expect(pieces.join('')).toBe(surrounding);
+      expect(pieces.some((piece) => piece.includes(source))).toBe(true);
+    }
+  });
   it('gives long prose breathing room at existing sentence endings, preserving every character', () => {
     const source = sentence.repeat(6);
     const result = readableParagraphs(paragraph(source));

@@ -168,17 +168,6 @@ function listMarker(list: MdNode, index: number): string {
 function renderBlock(node: MdNode, key: string, allowHeading = true): ReactNode {
   if (node.type === 'paragraph') {
     const headingLike = allowHeading && isHeadingLikeParagraph(node);
-    const paragraphs = headingLike ? [node] : readableParagraphs(node);
-    if (paragraphs.length > 1) {
-      return (
-        <View key={key} style={styles.blocks}>
-          {paragraphs.map((paragraph, index) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: 印刷時の静的な段落順が識別子。本文は重複しうる。
-            <Paragraph key={`${key}-p${index}`}>{renderInline(paragraph.children)}</Paragraph>
-          ))}
-        </View>
-      );
-    }
     return <Paragraph key={key}>{renderInline(node.children, headingLike)}</Paragraph>;
   }
   if (node.type === 'list') {
@@ -244,29 +233,11 @@ export function PrintMarkdown({ text }: { text: string }) {
   );
 }
 
-/**
- * 品質検査用の出典。実際に renderBlock / blockPieces が分けた段落だけを返す。
- * 箇条書き・表・見出しは分割しないので、短い架空の出典を足さない。
- * 元フィールドだけでは分割後の段落末尾を特定できず、末尾保護の折り返しを誤検出する。
- */
-export function displayParagraphTexts(text: string): string[] {
-  const tree = processor.runSync(processor.parse(text)) as unknown as MdNode;
-  const out: string[] = [];
-  const inlineText = (node: MdNode): string => {
-    if (node.type === 'html') return stripHtmlTags(node.value);
-    if (node.type === 'break') return '\n';
-    return node.children?.map(inlineText).join('') ?? node.value ?? '';
-  };
-  const walk = (node: MdNode): void => {
-    if (node.type === 'paragraph' && !isHeadingLikeParagraph(node)) {
-      const paragraphs = readableParagraphs(node);
-      if (paragraphs.length > 1) out.push(...paragraphs.map(inlineText));
-    } else if (node.type === 'blockquote') {
-      node.children?.forEach(walk);
-    }
-  };
-  tree.children?.forEach(walk);
-  return out;
+/** 実表示leafの全文。装飾の描画後文字列を測定・照合に用いる。 */
+function inlinePlainText(node: MdNode): string {
+  if (node.type === 'html') return stripHtmlTags(node.value);
+  if (node.type === 'break') return '\n';
+  return node.children?.map(inlinePlainText).join('') ?? node.value ?? '';
 }
 
 /**
@@ -289,6 +260,9 @@ export interface MarkdownPiece {
   gap: number;
   /** 次の要素と同じページに置く（表の見出し行）。 */
   keepWithNext?: boolean;
+  /** 同じ元段落から分割した本文。測定後に1行の孤立を防ぐためだけに使う。 */
+  displayParagraphGroup?: object;
+  displayParagraphText?: string;
 }
 
 const BLOCK_GAP = 4;
@@ -332,9 +306,15 @@ function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiec
     const headingLike = allowHeading && isHeadingLikeParagraph(node);
     const paragraphs = headingLike ? [node] : readableParagraphs(node);
     if (paragraphs.length > 1) {
+      const start = out.length;
+      const group = {};
       paragraphs.forEach((paragraph, index) => {
         blockPieces(paragraph, `${key}-p${index}`, depth, out, false);
       });
+      for (let index = start; index < out.length; index += 1) {
+        out[index].displayParagraphGroup = group;
+        out[index].displayParagraphText = inlinePlainText(paragraphs[index - start]);
+      }
       return;
     }
     if (isPlainParagraph(node) && !headingLike) {
