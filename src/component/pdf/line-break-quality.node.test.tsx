@@ -26,6 +26,7 @@ import PDF_FONT_FAMILY from './constant';
 import { splitForHyphenation } from './font';
 import { checkLineBreakQuality, LINE_BREAK_RULES, summarizeLineBreaks } from './line-break-quality';
 import { buildPrintSkillSheetDocument } from './print-document';
+import { displayParagraphTexts } from './print-markdown';
 import type { QualityItem, QualityPage } from './print-quality';
 import { extractQualityPages } from './print-quality-extract.node';
 import { PRINT_SIZE, PRINT_TYPE } from './print-token';
@@ -367,7 +368,24 @@ function collectRenderedMarkdownTexts(value: unknown, out: string[] = []): strin
  */
 function collectPrintSourceTexts(blocks: Block[], title: string): string[] {
   const viewModel = buildPrintViewModel(title, blocks, undefined, referenceMonth);
-  return [...collectSourceTexts(blocks), ...collectSourceTexts(viewModel), ...collectRenderedMarkdownTexts(blocks)];
+  // これらだけが PrintMarkdown / markdownPieces を通る。会社注記・メタ表・技術名などの
+  // 単独 Text には表示用の段落分割がないため、架空の短い出典を追加しない。
+  const splitParagraphTexts = [
+    ...displayParagraphTexts(viewModel.summary.pr),
+    ...(viewModel.showProjects
+      ? viewModel.companies.flatMap((company) =>
+          company.projects.flatMap((project) =>
+            [project.summary, project.duties, project.acquired, project.comment].flatMap(displayParagraphTexts),
+          ),
+        )
+      : []),
+  ];
+  return [
+    ...collectSourceTexts(blocks),
+    ...collectSourceTexts(viewModel),
+    ...collectRenderedMarkdownTexts(blocks),
+    ...splitParagraphTexts,
+  ];
 }
 
 /** 抽出した頁から running footer の文字列を拾う（下端帯に出る item の連結）。 */

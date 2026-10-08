@@ -16,6 +16,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { isSafeLinkHref, PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
+import { readableParagraphs } from './print-paragraph';
 import { BulletLine, BulletRow, Link, Paragraph, PrintText, printStyles } from './print-primitive';
 import { PRINT_COLOR, PRINT_TYPE, PRINT_WEIGHT } from './print-token';
 
@@ -164,9 +165,21 @@ function listMarker(list: MdNode, index: number): string {
   return `${start + index}.`;
 }
 
-function renderBlock(node: MdNode, key: string): ReactNode {
+function renderBlock(node: MdNode, key: string, allowHeading = true): ReactNode {
   if (node.type === 'paragraph') {
-    return <Paragraph key={key}>{renderInline(node.children, isHeadingLikeParagraph(node))}</Paragraph>;
+    const headingLike = allowHeading && isHeadingLikeParagraph(node);
+    const paragraphs = headingLike ? [node] : readableParagraphs(node);
+    if (paragraphs.length > 1) {
+      return (
+        <View key={key} style={styles.blocks}>
+          {paragraphs.map((paragraph, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: 印刷時の静的な段落順が識別子。本文は重複しうる。
+            <Paragraph key={`${key}-p${index}`}>{renderInline(paragraph.children)}</Paragraph>
+          ))}
+        </View>
+      );
+    }
+    return <Paragraph key={key}>{renderInline(node.children, headingLike)}</Paragraph>;
   }
   if (node.type === 'list') {
     return (
@@ -232,6 +245,31 @@ export function PrintMarkdown({ text }: { text: string }) {
 }
 
 /**
+ * 品質検査用の出典。実際に renderBlock / blockPieces が分けた段落だけを返す。
+ * 箇条書き・表・見出しは分割しないので、短い架空の出典を足さない。
+ * 元フィールドだけでは分割後の段落末尾を特定できず、末尾保護の折り返しを誤検出する。
+ */
+export function displayParagraphTexts(text: string): string[] {
+  const tree = processor.runSync(processor.parse(text)) as unknown as MdNode;
+  const out: string[] = [];
+  const inlineText = (node: MdNode): string => {
+    if (node.type === 'html') return stripHtmlTags(node.value);
+    if (node.type === 'break') return '\n';
+    return node.children?.map(inlineText).join('') ?? node.value ?? '';
+  };
+  const walk = (node: MdNode): void => {
+    if (node.type === 'paragraph' && !isHeadingLikeParagraph(node)) {
+      const paragraphs = readableParagraphs(node);
+      if (paragraphs.length > 1) out.push(...paragraphs.map(inlineText));
+    } else if (node.type === 'blockquote') {
+      node.children?.forEach(walk);
+    }
+  };
+  tree.children?.forEach(walk);
+  return out;
+}
+
+/**
  * 自由記述を measure-then-place の葉の材料に分解したもの（案件セクション用）。
  *
  * `PrintMarkdown` は 1 枚の View に段落と箇条書きを積むが、それではフィールド全体が
@@ -289,9 +327,17 @@ function listItemPieces(item: MdNode, key: string, marker: string, depth: number
   });
 }
 
-function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiece[]): void {
+function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiece[], allowHeading = true): void {
   if (node.type === 'paragraph') {
-    if (isPlainParagraph(node) && !isHeadingLikeParagraph(node)) {
+    const headingLike = allowHeading && isHeadingLikeParagraph(node);
+    const paragraphs = headingLike ? [node] : readableParagraphs(node);
+    if (paragraphs.length > 1) {
+      paragraphs.forEach((paragraph, index) => {
+        blockPieces(paragraph, `${key}-p${index}`, depth, out, false);
+      });
+      return;
+    }
+    if (isPlainParagraph(node) && !headingLike) {
       const text = plainText(node);
       const remake = (value: string) => <Paragraph key={key}>{value}</Paragraph>;
       out.push({ kind: 'paragraph', el: remake(text), text, remake, indent: depth * NESTED_INDENT, gap: BLOCK_GAP });
@@ -299,7 +345,7 @@ function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiec
     }
     out.push({
       kind: 'paragraph',
-      el: renderBlock(node, key) as ReactElement,
+      el: renderBlock(node, key, allowHeading) as ReactElement,
       indent: depth * NESTED_INDENT,
       gap: BLOCK_GAP,
     });
