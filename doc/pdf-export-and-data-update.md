@@ -59,7 +59,45 @@ experience 等）を含むと、この構造描画ではなく旧 markdown 経�
 psql service=sheet -tA -c "SELECT COALESCE(json_agg(json_build_object('id',id,'type',type,'order',\"order\",'data',data) ORDER BY \"order\"), '[]'::json) FROM public.blocks WHERE sheet_id='<シート ID>'" > blocks.json
 ```
 
-CI の実データ検査（`.github/workflows/pdf-layout-check.yml`）は、同じ用途に `script/dump-block.ts` を使っている。
+公開の定期検査（`.github/workflows/pdf-layout-check.yml`）は、`script/generate-pdf-layout-fixture.mjs` で
+完全に架空の構造化ブロックを一時ディレクトリへ生成する。DB・owner・シートの設定や実経歴を参照しない。
+互換性のため `REAL_BLOCKS_JSON` という既存の入力名を使うが、この workflow の入力元は合成データのみ。
+日本語の長段落・会社と案件の非表示・長い技術名を、アプリの A4・最小11pt の描画経路で回帰検査する。
+公開ログには `source=synthetic`、内容の SHA-256、件数と終了状態だけを残し、本文や識別情報は出さない。
+
+**合成回帰は本番の文言・改ページを保証しない。実経歴を変更した場合は、許可されたローカル環境で
+対象データをアプリの印刷コードに渡して出力し、本文の完全性と全ページの見た目を確認する受入検査が必須。**
+その入力や PDF を公開 CI・リポジトリ・公開 artifact へ持ち込まない。
+ローカルの許可済みデータ書き出しには `script/dump-block.ts` も使えるが、公開定期 CI からは呼ばない。
+定期 fixture は12カテゴリのスキル一覧を持つ代表ケースで、全入力形状の保証ではない。
+`node script/generate-pdf-layout-fixture.mjs <新規JSON> <新規evidence> --sparse-skills` で、3件だけの
+合法なスキル入力も再生成できる。この variant は現行の専用スキルページが疎になる問題と、
+長いスキル名を分断しない配置を early-break 検査が拾う問題の反例として保持する。
+代表ケースの成功でこれらを解決済みとせず、配置・検査の契約を別途確認する。既存の閾値は緩めない。
+期間はアプリ標準の `2026.01〜2026.06` を使う。ASCII の ` - ` は期間の標準区切りではなく、
+未解釈の原文を保持する別経路になるため、代表 fixture の期間には使わない。
+
+
+
+少数スキルの診断は、通常の定期合格ゲートとは別に明示実行する。既知の失敗を `it.fails` で
+成功に反転させず、診断は赤のまま残す。2026-10-10 の合成出力ではスキル専用ページの
+`underfilled-page=1` と、名前を分断しないタグ折返しに対する `early-break=1` を確認した。
+件数・種別が変わった場合は出力を見直し、問題が解決したか、新しい欠陥が生じたかを確認する。
+
+```sh
+umask 077
+diagnostic_dir=$(mktemp -d)
+node script/generate-pdf-layout-fixture.mjs "$diagnostic_dir/blocks.json" "$diagnostic_dir/blocks.evidence" --sparse-skills
+REAL_BLOCKS_JSON="$diagnostic_dir/blocks.json" PRINT_PDF_OUT="$diagnostic_dir/sparse.pdf" PRINT_REFERENCE_MONTH=24321 \
+  pnpm exec vitest run --config vitest.config.pdf.ts --maxWorkers=2 \
+  src/component/pdf/print-document.node.test.tsx src/component/pdf/line-break-quality.node.test.tsx -t 実データ
+```
+
+ここで生成した入力・PDF は合成のみ。上の診断結果を代表 fixture の nightly 合格に加算しない。
+通常の外部入力テストは `REAL_BLOCKS_JSON` の存在を必須とし、読み取ったブロックから PDF を描く。
+`assertComplete(blocks, pages)` が元ブロックから列挙した氏名・スキル・本文などの欠落を検査するため、
+別の fixture へ静かに切り替わっても通常受入は通らない。公開 workflow は検査前に JSON の実 SHA-256
+を evidence と突合し、違えば hash 行を公開せず停止する。
 
 ### 2. 印刷コードを呼ぶ
 
