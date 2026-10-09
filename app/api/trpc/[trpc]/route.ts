@@ -2,13 +2,10 @@ import { fetchRequestHandler } from '@trpc/server/adapters/fetch';
 
 import { reportTRPCError } from '@/server/report-error';
 import { createTRPCContext } from '@/server/trpc/context';
-import { shouldLogTRPCError } from '@/server/trpc/log-error';
 import { appRouter } from '@/server/trpc/router';
 
 // DATABASE_URL 等はランタイム専用のため、このルートは常に動的に実行する。
 export const dynamic = 'force-dynamic';
-
-export { shouldLogTRPCError };
 
 function handler(req: Request) {
   return fetchRequestHandler({
