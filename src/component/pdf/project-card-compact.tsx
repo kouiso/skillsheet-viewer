@@ -148,6 +148,8 @@ export interface CompactBodyPiece {
   remake?: (text: string) => ReactElement;
   /** 小見出しは直後の本文と同じページに置く。 */
   keepWithNext: boolean;
+  displayParagraphGroup?: object;
+  displayParagraphText?: string;
 }
 
 /** 2 段目のブロック列。メタ行 → チップ → 小見出し + 本文、の順。 */
@@ -224,6 +226,8 @@ export function compactBodyPieces(project: PrintProject): CompactBodyPiece[] {
       const remake = piece.remake;
       pieces.push({
         kind: piece.kind,
+        displayParagraphGroup: piece.displayParagraphGroup,
+        displayParagraphText: piece.displayParagraphText,
         keepWithNext: piece.keepWithNext ?? false,
         el: wrap(piece.el),
         ...(piece.text !== undefined && remake
