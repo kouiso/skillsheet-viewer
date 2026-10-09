@@ -344,6 +344,7 @@ const BuilderClient = ({
   // デバウンスして更新し、タイピングのラグを防ぐ。初期値・初回レンダリングは即時反映。
   const [referenceMonth] = useState(() => currentMonthKey(new Date()));
   const [previewContent, setPreviewContent] = useState(() => assembleMarkdown(items, { referenceMonth }));
+  const previewContentRef = useRef(previewContent);
   const isFirstPreviewRender = useRef(true);
 
   useEffect(() => {
@@ -389,6 +390,7 @@ const BuilderClient = ({
   }, []);
 
   useEffect(() => {
+    previewContentRef.current = previewContent;
     previewChannelRef.current?.postMessage(previewPayload(title, previewContent));
   }, [title, previewContent, previewPayload]);
 
@@ -396,25 +398,31 @@ const BuilderClient = ({
   // 内容が変わらなくても一定間隔で同じ内容を送り直す。受信側は最終受信時刻だけを見る。
   useEffect(() => {
     const timer = window.setInterval(() => {
-      previewChannelRef.current?.postMessage(previewPayload(title, previewContent));
+      previewChannelRef.current?.postMessage(previewPayload(titleRef.current, previewContentRef.current));
     }, PREVIEW_HEARTBEAT_MS);
     return () => window.clearInterval(timer);
-  }, [title, previewContent, previewPayload]);
+  }, [previewPayload]);
 
-  // 開いたプレビュー窓の参照。既に開いている場合はページ再読み込みを避け focus() するだけにする。
+  // 開いたプレビュー窓の参照。既に開いている場合は最新本文を送り focus() する。
   const previewWindowRef = useRef<Window | null>(null);
 
   // ヘッダー「プレビュー」ボタン: 別ウィンドウを開く。開いた瞬間に最新内容が見えるよう
   // localStorage にシード保存してから開く（以後の更新は BroadcastChannel で追従）。
   const handleOpenPreview = () => {
+    // 入力直後でも最新本文で開く。heartbeat も同じ本文を参照して旧版への巻き戻りを防ぐ。
+    const content = assembleMarkdown(items, { referenceMonth });
+    previewContentRef.current = content;
+    setPreviewContent(content);
+    const payload = previewPayload(title, content);
+    try {
+      localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // プライベートブラウジング等で localStorage が使えなくても window.open は試みる。
+    }
+    previewChannelRef.current?.postMessage(payload);
     if (previewWindowRef.current && !previewWindowRef.current.closed) {
       previewWindowRef.current.focus();
       return;
-    }
-    try {
-      localStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(previewPayload(title, previewContent)));
-    } catch {
-      // プライベートブラウジング等で localStorage が使えなくても window.open は試みる。
     }
     const win = window.open(
       `/builder/preview?session=${encodeURIComponent(previewSessionRef.current)}`,

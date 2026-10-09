@@ -63,6 +63,65 @@ const defaultProps = { sheets: [defaultSheet], activeSheetId: 'sheet-1', initial
 describe('BuilderClient', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('debounce前のプレビュー開始・再フォーカス・再オープンは最新スキルを送り旧本文に戻さない', () => {
+    vi.useFakeTimers();
+    const messages: { title: string; content: string; sequence: number }[] = [];
+    class Channel {
+      postMessage(payload: (typeof messages)[number]) {
+        messages.push(payload);
+      }
+      close() {}
+    }
+    vi.stubGlobal('BroadcastChannel', Channel);
+    const popup = { closed: false, focus: vi.fn() };
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window);
+    const view = render(
+      <BuilderClient
+        initialBlocks={[
+          {
+            id: 'skills-1',
+            type: 'skills',
+            order: 0,
+            data: { category: '言語', skills: [{ name: '旧スキル', years: 0, level: '' }] },
+          },
+        ]}
+        initialTitle="旧タイトル"
+        {...defaultProps}
+      />,
+    );
+    try {
+      // 次のheartbeat直前で編集し、debounceより先に送信される条件も再現する。
+      act(() => vi.advanceTimersByTime(3999));
+      for (const [index, name] of ['Playwright', '最新フォーカス本文', '最新再オープン本文'].entries()) {
+        if (index === 2) popup.closed = true;
+        fireEvent.change(screen.getByLabelText('スキル1の名称'), { target: { value: name } });
+        fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '編集済タイトル' } });
+        messages.length = 0;
+        // 時間を進めず、300msの本文更新前に実際のプレビューボタンを押す。
+        fireEvent.click(screen.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }));
+        const seed = JSON.parse(localStorage.getItem('builder-preview-payload') ?? 'null');
+        expect(seed.title).toBe('編集済タイトル');
+        expect(seed.content).toContain(name);
+        expect(seed.content).not.toContain('旧スキル');
+        expect(messages.length).toBeGreaterThan(0);
+        expect(messages.every((message) => message.content.includes(name))).toBe(true);
+        expect(open).toHaveBeenCalledTimes(index === 2 ? 2 : 1);
+        // debounceとheartbeatが後から発火しても最新本文を保ち、送信自体も止まらない。
+        const beforeHeartbeat = messages.length;
+        act(() => vi.advanceTimersByTime(4000));
+        expect(messages.length).toBeGreaterThan(beforeHeartbeat);
+        expect(messages.every((message) => message.content.includes(name))).toBe(true);
+      }
+      expect(popup.focus).toHaveBeenCalledTimes(3);
+    } finally {
+      view.unmount();
+      open.mockRestore();
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+      localStorage.removeItem('builder-preview-payload');
+    }
+  });
+
   it('編集不能rawの退避Blobは未知field・配列順・巨大版・空行を保持する', async () => {
     const raw: DocumentSnapshot = {
       sheetId: '00000000-0000-4000-8000-000000000001',
