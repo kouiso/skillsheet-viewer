@@ -263,7 +263,8 @@ export function WorkspaceTopbar({
           disabled={disabled || !activeSheetId || saveBusy}
           onClick={onSave}
           aria-label={saving ? '保存中' : '保存'}
-          className="shrink-0 px-3"
+          // 保存操作が再び可能になった瞬間、文字も不透明へ戻す。
+          className="shrink-0 px-3 transition-[background-color,color,box-shadow]"
         >
           <Save className="size-4" />
           <span className="hidden sm:inline">{saving ? '保存中…' : '保存'}</span>
