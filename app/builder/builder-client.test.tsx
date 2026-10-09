@@ -104,13 +104,21 @@ describe('BuilderClient', () => {
         expect(seed.content).toContain(name);
         expect(seed.content).not.toContain('旧スキル');
         expect(messages.length).toBeGreaterThan(0);
-        expect(messages.every((message) => message.content.includes(name))).toBe(true);
+        for (const message of messages) {
+          expect(message.title).toBe('編集済タイトル');
+          expect(message.content).toContain(name);
+          expect(message.content).not.toContain('旧スキル');
+        }
         expect(open).toHaveBeenCalledTimes(index === 2 ? 2 : 1);
         // debounceとheartbeatが後から発火しても最新本文を保ち、送信自体も止まらない。
         const beforeHeartbeat = messages.length;
         act(() => vi.advanceTimersByTime(4000));
         expect(messages.length).toBeGreaterThan(beforeHeartbeat);
-        expect(messages.every((message) => message.content.includes(name))).toBe(true);
+        for (const message of messages) {
+          expect(message.title).toBe('編集済タイトル');
+          expect(message.content).toContain(name);
+          expect(message.content).not.toContain('旧スキル');
+        }
       }
       expect(popup.focus).toHaveBeenCalledTimes(3);
     } finally {
