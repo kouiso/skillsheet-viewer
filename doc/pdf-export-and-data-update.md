@@ -71,8 +71,8 @@ psql service=sheet -tA -c "SELECT COALESCE(json_agg(json_build_object('id',id,'t
 ローカルの許可済みデータ書き出しには `script/dump-block.ts` も使えるが、公開定期 CI からは呼ばない。
 定期 fixture は12カテゴリのスキル一覧を持つ代表ケースで、全入力形状の保証ではない。
 `node script/generate-pdf-layout-fixture.mjs <新規JSON> <新規evidence> --sparse-skills` で、3件だけの
-合法なスキル入力も再生成できる。この variant は現行の専用スキルページが疎になる問題と、
-長いスキル名を分断しない配置を early-break 検査が拾う問題の反例として保持する。
+合法なスキル入力も再生成できる。この variant は、少数スキルの専用ページと列内の折返しを
+調べる診断用の反例として保持する。
 代表ケースの成功でこれらを解決済みとせず、配置・検査の契約を別途確認する。既存の閾値は緩めない。
 期間はアプリ標準の `2026.01〜2026.06` を使う。ASCII の ` - ` は期間の標準区切りではなく、
 未解釈の原文を保持する別経路になるため、代表 fixture の期間には使わない。
@@ -81,7 +81,8 @@ psql service=sheet -tA -c "SELECT COALESCE(json_agg(json_build_object('id',id,'t
 
 少数スキルの診断は、通常の定期合格ゲートとは別に明示実行する。既知の失敗を `it.fails` で
 成功に反転させず、診断は赤のまま残す。2026-10-10 の合成出力ではスキル専用ページの
-`underfilled-page=1` と、名前を分断しないタグ折返しに対する `early-break=1` を確認した。
+`underfilled-page=1` と `early-break=1` を確認した。後者はカテゴリー名の折返し位置に現れ、
+描画上の列幅と検査が推定する列幅の対応を別途調査している。
 件数・種別が変わった場合は出力を見直し、問題が解決したか、新しい欠陥が生じたかを確認する。
 
 ```sh
