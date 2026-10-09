@@ -142,6 +142,42 @@ describe('paginate', () => {
     for (const p of pages) expect(p.usedHeight).toBeLessThanOrEqual(CONTENT);
   });
 
+  it('測り直した尻が 1 行になれば、切れ目を戻して最低 2 行を残す', async () => {
+    const reflow: PaginateOptions = {
+      ...options,
+      measure: async (source) => {
+        const measured = await options.measure(source);
+        if (source.id.endsWith('-tail') && measured.lines?.length === 2)
+          return { ...measured, height: LINE, lines: measured.lines.slice(0, 1) };
+        return measured;
+      },
+    };
+    const pages = await paginate([leaf(CONTENT - 4 * LINE), paragraph(6)], reflow);
+    expect(ids(pages)).toEqual([['L1', 'L2-head'], ['L2-tail']]);
+    expect(pages[0].leaves[1].leaf.lines).toHaveLength(3);
+    expect(pages[1].leaves[0].leaf.lines).toHaveLength(3);
+  });
+
+  it('測り直した頭が最低行数に届かなければ、段落を丸ごと送る', async () => {
+    const reflow: PaginateOptions = {
+      ...options,
+      measure: async (source) => {
+        const measured = await options.measure(source);
+        if (source.id.endsWith('-head')) return { ...measured, height: LINE, lines: measured.lines?.slice(0, 1) };
+        return measured;
+      },
+    };
+    const pages = await paginate([leaf(700), paragraph(6)], reflow);
+    expect(ids(pages)).toEqual([['L1'], ['L2']]);
+    expect(pages[1].leaves[0].leaf.lines).toHaveLength(6);
+  });
+
+  it('指定した最低 1 行の尻は再測定後も許容する', async () => {
+    const pages = await paginate([leaf(CONTENT - 3 * LINE), paragraph(4)], { ...options, minLinesTail: 1 });
+    expect(pages[0].leaves[1].leaf.lines).toHaveLength(3);
+    expect(pages[1].leaves[0].leaf.lines).toHaveLength(1);
+  });
+
   it('割れない葉が 1 ページより高ければ、消さずにそのまま置く', async () => {
     const pages = await paginate([leaf(100), leaf(900), leaf(100)], options);
     expect(ids(pages)).toEqual([['L1'], ['L2'], ['L3']]);

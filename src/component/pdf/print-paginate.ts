@@ -137,8 +137,11 @@ async function trySplit(
     // 本文と行が対応付けられない葉は割らない（呼び出し側の判断。葉ごと次ページへ送る）。
     if (!parts) return null;
     const head = await measure({ ...parts.head, keepWithNext: false });
+    // 分割後の再改行でも最低行数を守る。元の行数だけでは widow / orphan を保証できない。
+    if ((head.lines?.length ?? 0) < minLinesHead) continue;
     if (outerHeight(head) <= remaining + EPSILON) {
       const tail = await measure({ ...parts.tail, keepWithNext: leaf.keepWithNext });
+      if ((tail.lines?.length ?? 0) < minLinesTail) continue;
       return { head, tail };
     }
   }
