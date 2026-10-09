@@ -91,6 +91,34 @@ describe('PDF display paragraphs', () => {
     expect(result.map(textOf).join('')).toBe(source);
   });
 
+  it('keeps an unclosed quotation intact and preserves every character', () => {
+    for (const open of ['「', '"']) {
+      const source = open + sentence.repeat(6);
+      const original = paragraph(source);
+      const snapshot = JSON.stringify(original);
+      const pieces = readableParagraphs(original).map(textOf);
+      expect(pieces).toEqual([source]);
+      expect(pieces.join('')).toBe(source);
+      expect(JSON.stringify(original)).toBe(snapshot);
+    }
+  });
+
+  it('retains earlier paragraph boundaries before an unclosed quotation', () => {
+    for (const open of ['「', '"']) {
+      const source = sentence.repeat(2) + open + sentence.repeat(4);
+      const pieces = readableParagraphs(paragraph(source)).map(textOf);
+      expect(pieces).toEqual([sentence.repeat(2), open + sentence.repeat(4)]);
+      expect(pieces.join('')).toBe(source);
+    }
+  });
+
+  it('protects a final unclosed double quote after a balanced pair', () => {
+    const source = `"${sentence}"${sentence}"${sentence.repeat(4)}`;
+    const pieces = readableParagraphs(paragraph(source)).map(textOf);
+    expect(pieces).toEqual([`"${sentence}"${sentence}`, `"${sentence.repeat(4)}`]);
+    expect(pieces.join('')).toBe(source);
+  });
+
   it('keeps a short paragraph and a long unpunctuated sentence unchanged', () => {
     for (const source of [sentence, '長い文を途中で切断しない'.repeat(30)]) {
       const original = paragraph(source);

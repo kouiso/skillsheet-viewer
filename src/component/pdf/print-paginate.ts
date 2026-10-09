@@ -196,18 +196,19 @@ export async function paginate(leaves: MeasuredLeaf[], options: PaginateOptions)
       return parts;
     };
 
-    if (
-      groupTail < minLinesTail &&
-      !pageEmpty &&
-      outerHeight(leaf) + outerHeight(queue[index + 1]) > remaining + EPSILON
-    ) {
+    if (groupTail < minLinesTail && outerHeight(leaf) + outerHeight(queue[index + 1]) > remaining + EPSILON) {
       const parts = await splitGroup();
       if (parts) {
         place(parts.head);
         queue[index] = parts.tail;
+        breakPage();
+        continue;
       }
-      breakPage();
-      continue;
+      // 空ページで割れない連鎖は通常配置へ進め、改ページだけの繰り返しを避ける。
+      if (!pageEmpty) {
+        breakPage();
+        continue;
+      }
     }
 
     if (outerHeight(leaf) <= remaining + EPSILON) {

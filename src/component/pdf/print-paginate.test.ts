@@ -178,6 +178,59 @@ describe('paginate', () => {
     expect(pages[1].leaves[0].leaf.lines).toHaveLength(1);
   });
 
+  it.each([
+    [60, 3],
+    [CONTENT, 39],
+  ])('空ページでも %spt に同居できない段落末尾を前の行と残す', async (contentHeight, lineCount) => {
+    const group = {};
+    const first = paragraph(lineCount, {
+      displayParagraphGroup: group,
+      displayParagraphLineCount: lineCount,
+      keepWithNext: true,
+    });
+    const last = paragraph(1, { displayParagraphGroup: group, displayParagraphLineCount: 1 });
+    const grouped: PaginateOptions = {
+      ...options,
+      contentHeight,
+      measure: async (source) => {
+        const measured = await options.measure(source);
+        return { ...measured, displayParagraphLineCount: measured.lines?.length };
+      },
+    };
+    const pages = await paginate([first, last], grouped);
+    expect(ids(pages)).toEqual([['L1-head'], ['L1-tail', 'L2']]);
+    expect(pages.map((page) => page.leaves.map(({ leaf }) => leaf.lines?.length))).toEqual([[lineCount - 1], [1, 1]]);
+    expect(pages.every((page) => page.usedHeight <= contentHeight)).toBe(true);
+    expect(pages.flatMap((page) => page.leaves.flatMap(({ leaf }) => leaf.lines ?? []))).toEqual([
+      ...(first.lines ?? []),
+      ...(last.lines ?? []),
+    ]);
+  });
+
+  it.each([60, 45])('空ページの同一段落を割れなくても %spt で停止し全文を残す', async (contentHeight) => {
+    const group = {};
+    const first = paragraph(3, {
+      displayParagraphGroup: group,
+      displayParagraphLineCount: 3,
+      keepWithNext: true,
+    });
+    const last = paragraph(1, { displayParagraphGroup: group, displayParagraphLineCount: 1 });
+    let attempts = 0;
+    const pages = await paginate([first, last], {
+      ...options,
+      contentHeight,
+      split: () => {
+        attempts++;
+        if (attempts > 4) throw new Error('分割の試行が進まない');
+        return undefined;
+      },
+    });
+    expect(ids(pages)).toEqual([['L1'], ['L2']]);
+    expect(pages.flatMap((page) => page.leaves.map(({ leaf }) => leaf))).toEqual([first, last]);
+    expect(attempts).toBeGreaterThan(0);
+    expect(attempts).toBeLessThanOrEqual(4);
+  });
+
   it('割れない葉が 1 ページより高ければ、消さずにそのまま置く', async () => {
     const pages = await paginate([leaf(100), leaf(900), leaf(100)], options);
     expect(ids(pages)).toEqual([['L1'], ['L2'], ['L3']]);

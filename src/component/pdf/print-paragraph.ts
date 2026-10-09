@@ -136,6 +136,7 @@ export function readableParagraphs(node: MdNode): MdNode[] {
   if (chars.some((char) => char === '\n' || char === '\r')) return [node];
   const protectedSpans = protectedRanges(node.children, cache);
   let protectedIndex = 0;
+  // 閉じ忘れも引用の続きとして保守的に扱う。本文は変えず、それ以前の文末候補は残す。
   const closes: string[] = [];
   const ends: number[] = [];
   for (let i = 0; i < chars.length; i += 1) {
