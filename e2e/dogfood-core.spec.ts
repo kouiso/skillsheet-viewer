@@ -173,9 +173,8 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
   await previewPage.waitForURL(/\/builder\/preview\?session=/);
   await previewPage.waitForLoadState('networkidle');
   await capture(previewPage, 'A-preview-light.png');
-  const previewText = await previewPage.locator('body').innerText();
-  expect(previewText).toContain(`${FULL_TEMPLATE_TITLE} 編集済`);
-  expect(previewText).toContain('Playwright');
+  await expect(previewPage.locator('body')).toContainText(`${FULL_TEMPLATE_TITLE} 編集済`);
+  await expect(previewPage.locator('body')).toContainText('Playwright');
   await previewPage.close();
 
   off();
