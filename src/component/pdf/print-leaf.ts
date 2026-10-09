@@ -78,6 +78,9 @@ export interface Leaf {
   frame?: FrameSpec;
   /** true なら次の葉と同じページに置く。置けなければ連鎖ごと次ページへ送る（見出し類）。 */
   keepWithNext: boolean;
+  /** 隣接する同じ元段落の表示片を、実測1行なら同頁に保つ。 */
+  displayParagraphGroup?: object;
+  displayParagraphText?: string;
   /** 'lines' は Text を 1 つだけ持つ葉で、行境界で 2 つに割ってよい。 */
   splittable: 'lines' | 'never';
   /** 装飾の無い本文そのもの。`splittable: 'lines'` の葉だけ持ち、行の切れ目で 2 つに分ける元になる。 */
@@ -93,6 +96,8 @@ export interface MeasuredLine {
 }
 
 export interface MeasuredLeaf extends Leaf {
+  /** 分割表示段落の実行数。装飾があっても割り直し用の lines とは別に測る。 */
+  displayParagraphLineCount?: number;
   /** 外枠（margin を除く border box）の高さ pt。 */
   height: number;
   marginTop: number;

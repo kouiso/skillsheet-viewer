@@ -67,6 +67,20 @@ function canSplit(
   return leaf.splittable === 'lines' && leaf.lines !== undefined && leaf.lines.length >= minHead + minTail;
 }
 
+/** One measured line in the next display piece belongs to the same original
+ * paragraph. Borrow it for the group tail minimum; unrelated leaves retain
+ * their own two-line minimum. Object identity survives remakes/measurement. */
+function groupTailMinimum(leaf: MeasuredLeaf, next: MeasuredLeaf | undefined, minimum: number): number {
+  return leaf.keepWithNext &&
+    leaf.displayParagraphGroup &&
+    leaf.displayParagraphGroup === next?.displayParagraphGroup &&
+    leaf.companyId === next.companyId &&
+    leaf.cardId === next.cardId &&
+    next.displayParagraphLineCount === 1
+    ? Math.max(1, minimum - 1)
+    : minimum;
+}
+
 /** 先頭 k 行だけ残したときの高さの見積り。行以外の高さ（padding 等）は丸ごと頭に残るとみなす。 */
 function headHeightEstimate(leaf: MeasuredLeaf & { lines: MeasuredLine[] }, k: number): number {
   const linesTotal = leaf.lines.reduce((sum, line) => sum + line.height, 0);
@@ -90,7 +104,13 @@ function chainRequirement(
 
   const requirementOf = (last: number): number => {
     let total = 0;
-    for (let i = index; i < last; i++) total += outerHeight(leaves[i]);
+    for (let i = index; i < last; i++) {
+      const groupedLeaf = leaves[i];
+      const groupTail = groupTailMinimum(groupedLeaf, leaves[i + 1], minTail);
+      if (groupTail < minTail && canSplit(groupedLeaf, minHead, groupTail))
+        return total + groupedLeaf.marginTop + headHeightEstimate(groupedLeaf, minHead);
+      total += outerHeight(groupedLeaf);
+    }
     const tail = leaves[last];
     const body = canSplit(tail, minHead, minTail) ? headHeightEstimate(tail, minHead) : tail.height;
     return total + tail.marginTop + body;
@@ -117,8 +137,11 @@ async function trySplit(
     // 本文と行が対応付けられない葉は割らない（呼び出し側の判断。葉ごと次ページへ送る）。
     if (!parts) return null;
     const head = await measure({ ...parts.head, keepWithNext: false });
+    // 分割後の再改行でも最低行数を守る。元の行数だけでは widow / orphan を保証できない。
+    if ((head.lines?.length ?? 0) < minLinesHead) continue;
     if (outerHeight(head) <= remaining + EPSILON) {
       const tail = await measure({ ...parts.tail, keepWithNext: leaf.keepWithNext });
+      if ((tail.lines?.length ?? 0) < minLinesTail) continue;
       return { head, tail };
     }
   }
@@ -160,6 +183,33 @@ export async function paginate(leaves: MeasuredLeaf[], options: PaginateOptions)
       if (lead) place(lead, true);
     }
     const remaining = contentHeight - y;
+    const groupTail = groupTailMinimum(leaf, queue[index + 1], minLinesTail);
+    const splitGroup = async () => {
+      if (groupTail >= minLinesTail || !canSplit(leaf, minLinesHead, groupTail)) return null;
+      const parts = await trySplit(leaf, remaining, { ...splitOptions, minLinesTail: groupTail });
+      if (
+        !parts ||
+        (parts.head.displayParagraphLineCount ?? 0) < minLinesHead ||
+        (parts.tail.displayParagraphLineCount ?? 0) + 1 < minLinesTail
+      )
+        return null;
+      return parts;
+    };
+
+    if (groupTail < minLinesTail && outerHeight(leaf) + outerHeight(queue[index + 1]) > remaining + EPSILON) {
+      const parts = await splitGroup();
+      if (parts) {
+        place(parts.head);
+        queue[index] = parts.tail;
+        breakPage();
+        continue;
+      }
+      // 空ページで割れない連鎖は通常配置へ進め、改ページだけの繰り返しを避ける。
+      if (!pageEmpty) {
+        breakPage();
+        continue;
+      }
+    }
 
     if (outerHeight(leaf) <= remaining + EPSILON) {
       const requirement = chainRequirement(queue, index, contentHeight, minLinesHead, minLinesTail);
@@ -168,11 +218,25 @@ export async function paginate(leaves: MeasuredLeaf[], options: PaginateOptions)
         index++;
         continue;
       }
+      const parts = await splitGroup();
+      if (parts) {
+        place(parts.head);
+        queue[index] = parts.tail;
+        breakPage();
+        continue;
+      }
       breakPage();
       continue;
     }
 
     // 葉そのものが残りに入らない。割れるなら頭だけ置き、尻を次ページの先頭に回す。
+    const groupedParts = await splitGroup();
+    if (groupedParts) {
+      place(groupedParts.head);
+      queue[index] = groupedParts.tail;
+      breakPage();
+      continue;
+    }
     if (canSplit(leaf, minLinesHead, minLinesTail)) {
       const parts = await trySplit(leaf, remaining, splitOptions);
       if (parts) {

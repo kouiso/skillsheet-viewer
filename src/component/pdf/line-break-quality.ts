@@ -54,6 +54,8 @@ export interface LineBreakReport {
 }
 
 export interface LineBreakCheckOptions {
+  /** 実割付で分割表示leafに対応する物理ページ・box（上端基準pt）。保存不要の検査用情報。 */
+  displayParagraphRegions?: { page: number; top: number; bottom: number; text: string }[];
   /**
    * 描画元の文字列（ブロックの本文など）。英数字で切れた境界について、
    * 「結合した連なりがそのまま元の文中にある」ものだけを語の途中の分割と数え、
@@ -614,7 +616,23 @@ function checkSegPairs(
   paragraphs: WorkSeg[][],
   hits: Record<LineBreakMetric, Set<string>>,
   sourceTexts: string[] | undefined,
+  regions: LineBreakCheckOptions['displayParagraphRegions'],
 ): void {
+  // Only actual measured leaf ownership grants a new display-end exemption.
+  // Equal text elsewhere, automatic flow and callers without frames retain
+  // the original source matching behavior.
+  const displayedEnd = (b: WorkSeg, para: WorkSeg[]): boolean =>
+    regions?.some(
+      (region) =>
+        region.page === b.page &&
+        sameVisible(region.text, para.map((seg) => seg.text).join('')) &&
+        para.every(
+          (seg) =>
+            seg.page === region.page &&
+            PRINT_SIZE.pageHeight - seg.y >= region.top - 0.5 &&
+            PRINT_SIZE.pageHeight - seg.y <= region.bottom + 0.5,
+        ),
+    ) ?? false;
   for (const para of paragraphs) {
     for (let i = 0; i + 1 < para.length; i += 1) {
       const a = para[i];
@@ -631,8 +649,10 @@ function checkSegPairs(
       // ときを最終行とみなす。
       const boundary = boundarySource(a, b, sourceTexts);
       const rest = boundary === undefined ? undefined : [...boundary.text].slice(boundary.headIndex).join('');
-      const bIsLastLine = rest === undefined ? i + 1 === para.length - 1 : sameVisible(rest, b.text);
-      const unitLength = firstBreakUnitLength(rest ?? b.text, bIsLastLine);
+      const isDisplayedEnd = i + 1 === para.length - 1 && displayedEnd(b, para);
+      const bIsLastLine =
+        (rest === undefined ? i + 1 === para.length - 1 : sameVisible(rest, b.text)) || isDisplayedEnd;
+      const unitLength = firstBreakUnitLength(isDisplayedEnd ? b.text : (rest ?? b.text), bIsLastLine);
       const slack = a.bound - a.right;
       const sourceOk = sourceTexts === undefined || boundary !== undefined;
       // brokeAtNewline: 作者が引いた強制改行（出典の \n）。行が途中で止まるのは
@@ -787,7 +807,7 @@ export function checkLineBreakQuality(pages: QualityPage[], options?: LineBreakC
   }
 
   resolveParaBounds(merged);
-  checkSegPairs(merged, hits, options?.sourceTexts);
+  checkSegPairs(merged, hits, options?.sourceTexts, options?.displayParagraphRegions);
 
   for (const para of merged) {
     const last = para.at(-1);
