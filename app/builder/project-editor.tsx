@@ -610,6 +610,7 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview, 
           ref={formWrapRef}
           onFocusCapture={(event) => {
             const control = event.target;
+            if (!(control instanceof HTMLElement)) return;
             // ブラウザーの caret 自動スクロール後に、枠全体を表示切替タブの上へ戻す。
             requestAnimationFrame(() => {
               if (document.activeElement === control && formWrapRef.current?.contains(control))
