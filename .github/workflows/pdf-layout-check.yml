@@ -1,29 +1,25 @@
 name: PDF Layout Check
 
-# PDF のレイアウトは本文の長さで崩れる。本文は DB 側で変わるので、コードが無変更でも
-# ある日突然崩れる。PR の CI は fixture しか見ないため原理的に捕まらない。
-# ここだけが実データを引いて崩れを見張る経路。
-# 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（この workflow 名で登録済み）。
+# 公開定期 CI は完全な架空 fixture による回帰検査。実経歴の受入検査ではない。
+# 実経歴変更後の受入は、許可されたローカル環境で別途実施する。
+# 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（名前は維持）。
 on:
   schedule:
-    # JST 06:00。朝いちで気づけるようにする。
+    # JST 06:00。
     - cron: '0 21 * * *'
   workflow_dispatch:
 
-# 読むだけの job なので token の権限も読み取りに絞る。
 permissions:
   contents: read
 
 jobs:
   pdf-layout-check:
-    name: PDF layout check (real data)
+    name: PDF layout check (synthetic data)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          # 後続の pnpm install / tsx / vitest が実行する第三者コードへ
-          # Git 認証情報を渡さない。この job は push しない。
           persist-credentials: false
 
       - name: Setup pnpm
@@ -32,7 +28,6 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          # ci.yml と同じ理由で mise.toml を読めないため、バージョンを手動で同期させる。
           node-version: '22.21.1'
           cache: 'pnpm'
 
@@ -40,66 +35,64 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install system dependencies for PDF rasterization
-        # ci.yml の test ジョブと同じ依存。ラスタ検査が PDF ページをビットマップ化する。
         run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
 
-      - name: Validate target sheet
-        env:
-          PDF_CHECK_DATABASE_URL: ${{ secrets.PDF_CHECK_DATABASE_URL }}
-          PDF_CHECK_SHEET_ID: ${{ vars.PDF_CHECK_SHEET_ID }}
-        run: |
-          if [[ -z "$PDF_CHECK_DATABASE_URL" ]]; then
-            echo '::error::PDF_CHECK_DATABASE_URL must be configured.'
-            exit 1
-          fi
-          if [[ ! "$PDF_CHECK_SHEET_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-            echo '::error::PDF_CHECK_SHEET_ID must be configured with a sheet UUID.'
-            exit 1
-          fi
-
-      - name: Dump blocks from database
-        env:
-          DATABASE_URL: ${{ secrets.PDF_CHECK_DATABASE_URL }}
-          PDF_CHECK_SHEET_ID: ${{ vars.PDF_CHECK_SHEET_ID }}
-          SKILLSHEET_OWNER_ID: ${{ secrets.SKILLSHEET_OWNER_ID }}
-        # 本文やDBエラーは非公開の一時ファイルに限定する。成果物へはアップロードしない。
+      - name: Generate synthetic blocks
         run: |
           umask 077
           status=0
-          pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/blocks.json" --sheet-id "$PDF_CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/pdf-dump.log" 2>&1 || status=$?
-          echo "Database dump finished (exit $status)."
+          node script/generate-pdf-layout-fixture.mjs "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" > "$RUNNER_TEMP/pdf-fixture.log" 2>&1 || status=$?
+          echo "Synthetic fixture generation finished (exit $status)."
           exit "$status"
 
-      - name: Record dump evidence
-        # M07 の完了条件（接続先識別・owner一致・件数・スナップショット）を
-        # 非秘密の識別子だけで実行ログへ残す。内容は dump-block.ts が
-        # 非秘密値だけを書く evidence ファイルで、本文・認証情報は入らない。
-        run: cat "$RUNNER_TEMP/blocks.evidence"
+      - name: Record synthetic evidence
+        # 任意の行を cat しない。データ種類・hash・件数のみの形式に限定する。
+        run: |
+          if ! evidence=$(grep -Ex 'PDF_SYNTHETIC_FIXTURE source=synthetic sha256=[0-9a-f]{64} blocks=[0-9]+ companies=[0-9]+ projects=[0-9]+ visibleCompanies=[0-9]+ visibleProjects=[0-9]+' "$RUNNER_TEMP/blocks.evidence" 2>/dev/null); then
+            echo '::error::Synthetic evidence is missing or invalid.'
+            exit 1
+          fi
+          if [[ "$evidence" == *$'\n'* ]]; then
+            echo '::error::Synthetic evidence must contain exactly one record.'
+            exit 1
+          fi
+          expected_hash=${evidence#* sha256=}
+          expected_hash=${expected_hash%% *}
+          if ! actual_hash=$(sha256sum -- "$RUNNER_TEMP/blocks.json" 2>/dev/null); then
+            echo '::error::Synthetic input is missing.'
+            exit 1
+          fi
+          actual_hash=${actual_hash%% *}
+          if [[ "$actual_hash" != "$expected_hash" ]]; then
+            echo '::error::Synthetic input hash mismatch.'
+            exit 1
+          fi
+          printf '%s\n' "$evidence"
 
-      - name: PDF layout check against real data
+      - name: PDF layout check against synthetic data
         env:
+          # 既存の外部入力テスト経路を使用する。変数名は互換性用で、入力元は上記の合成生成器。
           REAL_BLOCKS_JSON: ${{ runner.temp }}/blocks.json
-        # assertion の失敗文には実経歴が含まれうるため、成功時も公開ログへ転送しない。
+          # 合成期間の評価基準月を固定し、日付の経過で検査対象が変わらないようにする。
+          PRINT_REFERENCE_MONTH: '24321'
         run: |
           umask 077
           status=0
-          pnpm exec vitest run --config vitest.config.pdf.ts > "$RUNNER_TEMP/pdf-layout.log" 2>&1 || status=$?
-          echo "PDF content and raster checks finished (exit $status)."
+          # ラスタ化を含む重い検査の同時実行数をローカル検証と runner で揃える。
+          pnpm exec vitest run --config vitest.config.pdf.ts --maxWorkers=2 > "$RUNNER_TEMP/pdf-layout.log" 2>&1 || status=$?
+          echo "Synthetic PDF content and raster checks finished (exit $status)."
           exit "$status"
 
-      - name: Publish failed test names and per-rule counts
+      - name: Publish per-rule counts
         if: always()
-        # 公開ログへ出すのはテストの成否行（✓/×/FAIL の先頭印）と規則ごとの件数
-        # （PDF_LAYOUT_COUNTS 行）だけ。assertion の文や本文・座標は出さない。
+        # assertion・テスト名・本文・座標・識別情報は公開しない。既知の規則と整数だけ。
         run: |
           if [[ -f "$RUNNER_TEMP/pdf-layout.log" ]]; then
-            # テスト名（✓/×/FAIL 行）と規則ごとの件数だけを転送する。行頭に
-            # アンカーする: 出力の途中に紛れた文字列（本文の断片やエラーメッセージ
-            # 内の文言）を拾わないため。テスト名行は src/ のパスを必ず含む。
             sed 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/pdf-layout.log" |
-              grep -E '^[[:space:]]*(✓|×|✗)[[:space:]]+src/|^[[:space:]]*FAIL[[:space:]]+src/|^[[:space:]]*PDF_LAYOUT_COUNTS[[:space:]]' || true
+              grep -E '^[[:space:]]*PDF_LAYOUT_COUNTS (early-break|mid-alnum-break|runt-line|kinsoku|long-paragraph|overflow|page-spill)=[0-9]+( (early-break|mid-alnum-break|runt-line|kinsoku|long-paragraph|overflow|page-spill)=[0-9]+)*[[:space:]]*$' || true
           fi
 
-      - name: Remove private data and logs
+      - name: Remove synthetic inputs and logs
         if: always()
-        run: rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/pdf-dump.log" "$RUNNER_TEMP/pdf-layout.log"
+        run: |
+          rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/pdf-fixture.log" "$RUNNER_TEMP/pdf-layout.log"
