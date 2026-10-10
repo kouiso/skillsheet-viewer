@@ -432,6 +432,10 @@
   flex: 1;
   overflow: auto;
 }
+/* textarea の caret だけでなく、入力枠とフォーカスリング全体をスクロール領域内へ出す。 */
+.workspace-shell .form-wrap :is(input, textarea, select, button, a[href]) {
+  scroll-margin-block: 12px;
+}
 .form-inner {
   max-width: 760px;
   margin: 0 auto;
