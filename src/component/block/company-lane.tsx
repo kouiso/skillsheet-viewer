@@ -83,7 +83,7 @@ export function CompanyLane({ companyPeriod, items }: { companyPeriod: string; i
         <span aria-hidden />
         <div className="flex flex-wrap justify-between gap-2.5 border-t border-border pt-1.5">
           <span className="whitespace-nowrap font-mono text-[12px] text-muted-foreground">{lane.startLabel}</span>
-          <span className="whitespace-nowrap font-mono text-[12px] text-muted-foreground">{lane.endLabel}</span>
+          <span className="ml-auto whitespace-nowrap font-mono text-[12px] text-muted-foreground">{lane.endLabel}</span>
         </div>
         <span aria-hidden />
       </div>
