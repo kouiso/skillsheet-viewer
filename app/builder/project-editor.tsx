@@ -605,7 +605,18 @@ export const ProjectEditor = ({ data, onChange, onSelectionChange, showPreview, 
             onDeleteCompany={() => deleteCompany(currentCompany.id)}
           />
         )}
-        <div className="form-wrap scroll" ref={formWrapRef}>
+        <div
+          className="form-wrap scroll"
+          ref={formWrapRef}
+          onFocusCapture={(event) => {
+            const control = event.target;
+            // ブラウザーの caret 自動スクロール後に、枠全体を表示切替タブの上へ戻す。
+            requestAnimationFrame(() => {
+              if (document.activeElement === control && formWrapRef.current?.contains(control))
+                control.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            });
+          }}
+        >
           {workspace?.editor !== undefined ? (
             workspace.editor
           ) : current ? (
