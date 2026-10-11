@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, FileDown, FileText, Loader2, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
 import Link from 'next/link';
 
+import { DownloadMenu } from '@/component/download-menu';
+import { DriveSaveSection, useDriveSaveContext } from '@/component/drive-save-menu';
 import { Button } from '@/component/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
 import { useThemeMode } from '@/context/theme-context';
@@ -23,6 +25,8 @@ interface HeaderProps {
   canEdit?: boolean;
   /** 編集者判定の前後で編集ボタン分の幅を固定する。 */
   reserveEditSlot?: boolean;
+  /** Drive に Excel を保存してよいか（DB シートのみ。PDF は常に可）。 */
+  canSaveExcelToDrive?: boolean;
   /** 指定時、タイトル左に一覧などへ戻るリンクを出す（例: "/view"）。 */
   backHref?: string;
 }
@@ -37,6 +41,7 @@ const Header = ({
   docxLoading = false,
   canEdit = true,
   reserveEditSlot = false,
+  canSaveExcelToDrive = false,
   backHref,
 }: HeaderProps) => {
   const { mode, toggleTheme } = useThemeMode();
@@ -56,6 +61,11 @@ const Header = ({
       <TooltipContent>編集／ビルダー</TooltipContent>
     </Tooltip>
   ) : null;
+  // オーナーの Drive 保存が使えるとき、ダウンロード系は 1 つのメニューに畳む（[✎][⬇▾]）。
+  // アイコンを個別に並べると 320px 幅に収まらない（#384）。閲覧者は従来の見た目のまま。
+  const drive = useDriveSaveContext();
+  const collapseDownloads = Boolean(drive?.available) && canEdit;
+  const downloadLoading = pdfLoading || excelLoading || docxLoading;
 
   return (
     <motion.header
@@ -92,61 +102,73 @@ const Header = ({
             editButton
           )}
 
-          {onDownloadPdf && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  onClick={() => void onDownloadPdf()}
-                  disabled={pdfLoading}
-                  aria-busy={pdfLoading}
-                  aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
-                  className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
-                >
-                  {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
-                  <span className="hidden xl:inline">PDF</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>PDFをダウンロード</TooltipContent>
-            </Tooltip>
-          )}
+          {collapseDownloads && (onDownloadPdf || onDownloadExcel || onDownloadDocx) ? (
+            <DownloadMenu
+              onDownloadPdf={onDownloadPdf}
+              onDownloadExcel={onDownloadExcel}
+              onDownloadDocx={onDownloadDocx}
+              loading={downloadLoading}
+              driveSection={<DriveSaveSection canSaveExcel={canSaveExcelToDrive} />}
+            />
+          ) : (
+            <>
+              {onDownloadPdf && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void onDownloadPdf()}
+                      disabled={pdfLoading}
+                      aria-busy={pdfLoading}
+                      aria-label={pdfLoading ? 'PDFを生成中' : 'PDFダウンロード'}
+                      className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
+                    >
+                      {pdfLoading ? <Loader2 className="animate-spin" /> : <FileDown />}
+                      <span className="hidden xl:inline">PDF</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>PDFをダウンロード</TooltipContent>
+                </Tooltip>
+              )}
 
-          {onDownloadExcel && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  onClick={() => void onDownloadExcel()}
-                  disabled={excelLoading}
-                  aria-busy={excelLoading}
-                  aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
-                  className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
-                >
-                  {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
-                  <span className="hidden xl:inline">Excel</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Excelをダウンロード</TooltipContent>
-            </Tooltip>
-          )}
+              {onDownloadExcel && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void onDownloadExcel()}
+                      disabled={excelLoading}
+                      aria-busy={excelLoading}
+                      aria-label={excelLoading ? 'Excelを生成中' : 'Excelダウンロード'}
+                      className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
+                    >
+                      {excelLoading ? <Loader2 className="motion-safe:animate-spin" /> : <Sheet />}
+                      <span className="hidden xl:inline">Excel</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Excelをダウンロード</TooltipContent>
+                </Tooltip>
+              )}
 
-          {onDownloadDocx && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  onClick={() => void onDownloadDocx()}
-                  disabled={docxLoading}
-                  aria-busy={docxLoading}
-                  aria-label={docxLoading ? 'Wordを生成中' : 'Wordダウンロード'}
-                  className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
-                >
-                  {docxLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileText />}
-                  <span className="hidden xl:inline">Word</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Wordをダウンロード</TooltipContent>
-            </Tooltip>
+              {onDownloadDocx && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      onClick={() => void onDownloadDocx()}
+                      disabled={docxLoading}
+                      aria-busy={docxLoading}
+                      aria-label={docxLoading ? 'Wordを生成中' : 'Wordダウンロード'}
+                      className="min-h-11 min-w-11 gap-1.5 px-2.5 text-[13px]"
+                    >
+                      {docxLoading ? <Loader2 className="motion-safe:animate-spin" /> : <FileText />}
+                      <span className="hidden xl:inline">Word</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Wordをダウンロード</TooltipContent>
+                </Tooltip>
+              )}
+            </>
           )}
 
           <Tooltip>

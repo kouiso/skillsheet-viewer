@@ -23,6 +23,7 @@ const SERVER_ONLY_SPECIFIERS = [
   '@/db',
   '@/db/schema',
   '@/db/viewer-rate-limit',
+  '@/db/drive-destination',
   '@/lib/auth',
   '@/server/session',
   '@/server/github-sheet',

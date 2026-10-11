@@ -158,3 +158,46 @@ e2e 実行ごとに `bootstrap-owner.ts` が一時オーナーを作成し `skil
 - `skillsheet_e2e` は全 PR/実行で共有の1本なので、ci.yml の e2e 脚は job レベルの `concurrency`（`e2e-shared-db` グループ）で直列化する。同時実行すると互いが相手の DB を drop して両方失敗する。待機枠は1つのため、立て続けに来た実行は古い待機側がキャンセルされる（re-run で復帰）。
 
 Neon branch を毎回作る案（案A）は `NEON_API_KEY` secret が未設定のため未採用。branch は親のデータを copy-on-write で引き継ぐため、残渣を抱えた DB を派生させるだけになり、真に fresh な DB には branch 上で別 DB を作る必要がある。API key を用意しても管理コストが上がるだけで、現行の drop+create と効果は変わらない。
+
+### Google Drive 保存のセットアップ（#384）
+
+閲覧画面から PDF / Excel を Google Drive へ直接保存する機能。ブラウザが Drive API を直叩きする設計で、サーバーに Google の秘密情報は置かない。
+
+#### 本番 DB への適用（既存本番）
+
+`drive_destination` 表は `drizzle/migration/0012_wealthy_quentin_quire.sql` で作られる。
+
+1. `pnpm db:migrate`（ローカルから本番 `DATABASE_URL` へ。適用前に Neon ブランチでバックアップ）
+2. runtime role へ権限を**単独 GRANT** する。`install-runtime-role.sql` を本番に再実行してはいけない — `ALTER ROLE` がパスワードを再設定し稼働中の接続を壊すため。代わりにスーパーユーザー（Neon の `neondb_owner` 等）で次だけ実行する:
+
+   ```sql
+   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.drive_destination TO <runtime_role>;
+   ```
+
+   `<runtime_role>` は install-runtime-role.sql 実行時に `-v runtime_role=...` で渡した値。
+
+#### Google Cloud 側の設定（オーナー専任）
+
+コンソールを触れるのはオーナーだけ。以下を 1 つの GCP プロジェクトで行う。
+
+1. **API 有効化**: Google Drive API と Google Picker API（Google Workspace API セクション）を有効化
+2. **OAuth 同意画面**: 「内部」（このプロジェクトのテスト/内部ユーザーのみ）に設定し、スコープ `https://www.googleapis.com/auth/drive.file` を登録（非機密スコープなので審査不要）
+3. **OAuth 2.0 クライアント ID（Web）**: 承認済みの JavaScript 生成元に次の3箇所を登録
+   - 本番 `https://skill-sheet-snowy.vercel.app`
+   - 固定 preview URL（Vercel の Production 以外で使う preview ドメイン）
+   - `http://localhost:3000`
+   - 承認済みリダイレクト URI は不要（GIS の token client はリダイレクトを使わない）
+4. **API キー**: Picker 用に発行し、HTTP リファラーを上記3ドメイン（+ `*.vercel.app` 必要なら）に制限。キー自体はブラウザに出る値だが tRPC 経由でオーナーにだけ返す
+5. **環境変数**（Vercel へ設定・本番と preview の両方。`.env.example` 参照）:
+   - `GOOGLE_DRIVE_CLIENT_ID` = クライアント ID（*.apps.googleusercontent.com）
+   - `GOOGLE_PICKER_API_KEY` = API キー
+   - `GOOGLE_CLOUD_PROJECT_NUMBER` = プロジェクト番号（数値のみ。Picker の appId）
+
+3 変数が揃わない環境では機能ごと隠れる（drive.setting が `enabled: false`）。
+
+#### PoC 手順（issue #384 の指定どおり）
+
+1. 上記を preview 環境の Vercel env に設定してデプロイ
+2. 固定 preview URL でオーナーログイン → Drive メニュー「保存先を選ぶ」→ Google Picker でフォルダ選択
+3. 「PDF」を押す → ブラウザが Drive API へ直接 multipart POST → 選んだフォルダに `<タイトル>_YYYY-MM-DD_HHmm.pdf` ができる
+4. 未決リスクの確認: `drive.file` スコープで Picker 選択フォルダへの作成が通るか（共有ドライブなら親の共有権限も確認）、>5MB のファイル（分割アップロード未実装）が必要になるか
