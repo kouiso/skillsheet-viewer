@@ -2,8 +2,15 @@ name: TruffleHog Secret Scan
 
 on:
   pull_request:
+    # 既定 types には ready_for_review が無い。draft→ready で再走するよう列挙
+    types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main]
+
+# 同一 workflow・同 ref の二重起動を潰す
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -12,7 +19,11 @@ permissions:
 jobs:
   trufflehog:
     name: Secret Scan
+    # draft PR では走らない（ready_for_review で再走）。push は pull_request が null なので
+    # != true で素通し（== false だと null 評価で誤 skip する罠）
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
