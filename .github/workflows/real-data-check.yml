@@ -88,7 +88,8 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: head/pnpm-lock.yaml
 
-      - name: Install dependencies (head)
+      - name: Install dependencies (nightly)
+        if: inputs.base-ref == ''
         working-directory: head
         run: pnpm install --frozen-lockfile
 
@@ -136,6 +137,14 @@ jobs:
         # 非秘密の識別子だけで実行ログへ残す。内容は dump-block.ts が
         # 非秘密値だけを書く evidence ファイルで、本文・認証情報は入らない。
         run: cat "$RUNNER_TEMP/real-data/blocks.evidence"
+
+      # head（PR）の依存は dump の後に入れる。pnpm install は package.json の lifecycle script を
+      # 実行し、そこで残したプロセスは同じユーザーで動く dump の環境変数（DB の接続 URL）を
+      # /proc から読めてしまうため。夜間モードでは head が dump するので、ここでは既に入っている。
+      - name: Install dependencies (head)
+        if: inputs.base-ref != ''
+        working-directory: head
+        run: pnpm install --frozen-lockfile
 
       - name: Run checks against real data
         id: test

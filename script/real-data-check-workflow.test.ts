@@ -60,6 +60,17 @@ it('DB の接続 URL は dump にだけ渡し、比較モードでは main 側�
   const run = workflow.split('      - name: Run checks against real data\n')[1]?.split('\n      - name:')[0] ?? '';
   expect(run).not.toContain('secrets.');
 });
+it('比較モードでは PR 側の依存（lifecycle script）を dump の後に入れる', () => {
+  const at = (name: string) => workflow.indexOf(`      - name: ${name}\n`);
+  expect(at('Install dependencies (head)')).toBeGreaterThan(at('Dump blocks from database'));
+  expect(at('Install dependencies (base)')).toBeLessThan(at('Dump blocks from database'));
+  const head = workflow.split('      - name: Install dependencies (head)\n')[1]?.split('\n      - name:')[0] ?? '';
+  expect(head).toContain("if: inputs.base-ref != ''");
+  const nightly =
+    workflow.split('      - name: Install dependencies (nightly)\n')[1]?.split('\n      - name:')[0] ?? '';
+  expect(nightly).toContain("if: inputs.base-ref == ''");
+  expect(at('Install dependencies (nightly)')).toBeLessThan(at('Dump blocks from database'));
+});
 it('Dump blocks from database は機密ログを公開せず終了コードを保持する', () => {
   const dir = tempDir();
   mkdirSync(join(dir, 'bin'));
