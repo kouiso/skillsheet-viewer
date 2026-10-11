@@ -188,14 +188,19 @@ jobs:
           # 落ちたテストの ID（ファイル::テスト名）。テストが 1 本も読めずに落ちたファイルは
           # ファイル::(suite)、テストの外で落ちた実行は (run) で表す。
           failed_ids() {
-            local side=$1
-            jq -r --arg root "$GITHUB_WORKSPACE/$side/" '
+            local side=$1 ids
+            ids=$(jq -r --arg root "$GITHUB_WORKSPACE/$side/" '
               [ .testResults[] | (.name | ltrimstr($root)) as $f
                 | ([.assertionResults[] | select(.status == "failed") | "\($f)::\(.fullName)"]) as $a
                 | if ($a | length) > 0 then $a[] elif .status == "failed" then "\($f)::(suite)" else empty end
               ] as $ids
               | if ($ids | length) == 0 and .success == false then "(run)" else $ids[] end
-            ' "$dir/$side.json" | sort -u
+            ' "$dir/$side.json" | sort -u)
+            # 未処理の例外などは JSON 上で全件通過のまま終了コードだけを 0 以外にするため、それも (run) とする。
+            if [[ -z "$ids" && "$(cat "$dir/$side.exit" 2>/dev/null)" != 0 ]]; then
+              ids="(run)"
+            fi
+            printf '%s\n' "$ids" | sed '/^$/d'
           }
           all_ids() {
             local side=$1

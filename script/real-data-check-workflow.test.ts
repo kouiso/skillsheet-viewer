@@ -169,6 +169,7 @@ function judge(opts: {
   head?: Record<string, Assertion[]>;
   base?: Record<string, Assertion[]>;
   headExit?: number;
+  baseExit?: number;
   baseRef?: string;
   outcome?: string;
   log?: string;
@@ -183,6 +184,7 @@ function judge(opts: {
   if (opts.head) write('head', opts.head);
   if (opts.base) write('base', opts.base);
   writeFileSync(join(data, 'head.exit'), `${opts.headExit ?? 0}\n`);
+  if (opts.base) writeFileSync(join(data, 'base.exit'), `${opts.baseExit ?? 0}\n`);
   writeFileSync(join(data, 'head.log'), opts.log ?? 'PRIVATE_RESUME_TEXT\n');
   return runStep('Judge results', dir, {
     RUNNER_TEMP: dir,
@@ -262,4 +264,30 @@ it('比較: base で落ちていたテストを PR が直した時は成功に�
   });
   expect(result.status).toBe(0);
   expect(result.stdout).toContain('この PR の変更で新たに落ちたテストはない');
+});
+it('比較: テストは全件通っても head の実行が異常終了したら PR の失敗にする', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    base: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    headExit: 1,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('× (run)');
+});
+it('比較: base の実行も同じく異常終了していれば警告に留めて通す', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    base: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    headExit: 1,
+    baseExit: 1,
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('base でも × (run)');
+});
+it('夜間: テストは全件通っても実行が異常終了したら失敗にする', () => {
+  const result = judge({ head: { 'src/a.node.test.tsx': [pass('崩れない')] }, headExit: 1 });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('× (run)');
 });
