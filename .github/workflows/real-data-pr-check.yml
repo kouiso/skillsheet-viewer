@@ -1,7 +1,8 @@
 name: Real Data Check (PR)
 on:
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    # edited を入れる: base ブランチの変更（pull_request.base.sha の差し替え）でも比較対象が変わるため再実行する
+    types: [opened, reopened, synchronize, ready_for_review, edited]
     paths-ignore: ['**/*.md', 'doc/**']
 permissions:
   contents: read
