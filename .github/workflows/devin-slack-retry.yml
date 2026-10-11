@@ -6,7 +6,8 @@ name: Devin Slack Retry
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # 10分毎→6時間毎へ。pending の再投稿は relay 側の MAX_TRIES=3 で打ち止めになる
+    - cron: '7 */6 * * *'
   workflow_dispatch:
 
 permissions:

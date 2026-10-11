@@ -11,8 +11,8 @@ const MARKER_RE = /<!-- devin-slack-triggered([^>]*)-->/;
 const SESSION_URL_RE = /https:\/\/(?:[\w-]+\.)*devin\.ai\/sessions\/[0-9a-f]+/;
 const FAILURE_RE =
   /Failed to create Devin|Failed to start|Failed to launch|couldn'?t start|could not start|unable to start|error creating session/i;
-const MAX_TRIES = 36; // 10分間隔で約6時間
-const STALE_TRIGGER_TRIES = 6; // 起動要求後に Devin の返信が無いまま許容する sweep 回数(約1時間)
+const MAX_TRIES = 3; // 6時間間隔で約18時間
+const STALE_TRIGGER_TRIES = 3; // 起動要求後に Devin の返信が無いまま許容する sweep 回数(約18時間)
 
 const STATUS_LABELS = {
   queued: 'Queued',
@@ -549,14 +549,16 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
     } else {
       const tries = (marker.tries || 0) + 1;
       if (tries >= STALE_TRIGGER_TRIES) {
+        // 無言が続く限り再投稿しない。pending に落とすと同じスレッドへ再投稿を繰り返すため、
+        // failed（要手動対応）で止める
         await finalize(
           github,
           context,
           core,
           issue,
-          { ts: marker.ts, status: 'pending', tries },
+          { ts: marker.ts, status: 'failed', tries },
           cfg,
-          'Devin 応答なし。定期実行で再投稿します',
+          'Devin 応答なし（無言）。自動再投稿はしません。再開するにはラベルを付け直してください',
         );
         await removeTriggerLabel(issue.number);
       } else {

@@ -1,8 +1,9 @@
 name: CI Failure Slack Notify
 
 # 監視対象の workflow が main / develop で落ちたら Slack へ通知し、続けて Devin を呼ぶ。
-# 夜間の実データ検査（PDF / XLSX）は DB 本文の変化だけでも落ちるため、コードの差分を待たずに
-# Devin へ調査を渡す。ただし同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
+# 夜間の実データ検査（PDF / XLSX）と Deploy Smoke は失敗の大半がデータ・外部要因で、自動起動の
+# 価値が薄いため Devin は呼ばず Slack 通知だけに絞る（2026-10 コスト見直し）。
+# 同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
 # 食い潰す（09-20 / 09-22 に実際に起動失敗した）ので、未解決の失敗を workflow×ブランチ×起動契機
 # ごとに open issue 1 本で持ち、issue が無い時だけ Devin を呼ぶ。同じ契機で次に成功したら issue を
 # 閉じ、次の失敗で再び呼べる状態へ戻す。
@@ -157,9 +158,13 @@ jobs:
 
       # devin-slack-trigger.yml と同じく、チャンネル直下へ Devin 宛てに投稿する（bot 投稿で Devin が
       # 起動した実績があるのはこの形）。1 行目は、人が Devin に計画から任せる時と同じ「<@Devin> !megaplan」。
+      # 定期チェック（PDF / XLSX）と Deploy Smoke の失敗は Slack 通知だけに絞り Devin を呼ばない。
+      # それ以外の workflow は従来通り issue が無い時だけ呼ぶ
       - name: Mention Devin
         id: devin
-        if: steps.tracking.outputs.number == ''
+        if: >-
+          steps.tracking.outputs.number == '' &&
+          !contains(fromJSON('["PDF Layout Check", "XLSX Format Check", "Deploy Smoke"]'), github.event.workflow_run.name)
         env:
           DEVIN_USER_ID: ${{ vars.SLACK_DEVIN_USER_ID }}
           NOTIFY_TS: ${{ steps.slack.outputs.ts }}
