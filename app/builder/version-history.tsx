@@ -473,12 +473,15 @@ export function VersionHistory({
               if (group.kind === 'single') return <li key={group.version.revision}>{versionEntry(group.version)}</li>;
               const newest = group.versions[0];
               const oldest = group.versions[group.versions.length - 1];
-              const open = expanded.has(oldest.revision);
-              const listId = `version-group-${oldest.revision}`;
+              // WHY: 古い版を追加読み込みするとまとまりの下端(oldest)が伸びる。
+              //      開閉キーに newest を使うと読み込みで区切りが変わっても
+              //      開いていた内訳が閉じない。
+              const open = expanded.has(newest.revision);
+              const listId = `version-group-${newest.revision}`;
               const selected = group.versions.some((version) => version.revision === to);
               const end = groupEnd(oldest.recordedAt, newest.recordedAt);
               return (
-                <li key={`group-${oldest.revision}`}>
+                <li key={`group-${newest.revision}`}>
                   <div className="flex min-w-0 gap-1">
                     <button
                       type="button"
@@ -510,8 +513,8 @@ export function VersionHistory({
                       onClick={() =>
                         setExpanded((previous) => {
                           const next = new Set(previous);
-                          if (open) next.delete(oldest.revision);
-                          else next.add(oldest.revision);
+                          if (open) next.delete(newest.revision);
+                          else next.add(newest.revision);
                           return next;
                         })
                       }
