@@ -2,11 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { DriveSaveProvider } from '@/component/drive-save-menu';
 import Header from '@/component/header';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import { consoleFontClasses } from '@/component/viewer-font';
 import { ALL_VIEW_KEYS, ViewerTopbar, type ViewKey } from '@/component/viewer-topbar';
 import type { Block } from '@/db/block';
+import type { DriveSaveFile, DriveSaveKind } from '@/hook/use-drive-save';
 import { useReadDepth } from '@/hook/use-read-depth';
 import { digestTitle, type ExportEdition } from '@/lib/export/edition';
 import { generateSkillSheetPdfBlob, PdfDurationConflictError } from '@/lib/generate-skillsheet-pdf';
@@ -105,6 +107,42 @@ const SheetViewClient = ({
     setViews((prev) => (enabled ? [...prev, view] : prev.filter((v) => v !== view)));
   };
 
+  // 「ファイルを作る」と「渡し方（ダウンロード / Drive 保存）」に分ける（#384）。
+  // Drive 側も同じ生成物を使うので、生成はここで 1 箇所にまとめる。
+  // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
+  // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
+  // duration の手入力と期間の導出が矛盾するシートは generateSkillSheetPdfBlob が
+  // PdfDurationConflictError で止める（誤った月数を印刷物へ出さない）。
+  const buildPdfFile = async (edition: ExportEdition): Promise<DriveSaveFile> => ({
+    blob: await generateSkillSheetPdfBlob({ title, content, blocks, views, referenceMonth, edition }),
+    title: edition === 'digest' ? digestTitle(title) : title,
+  });
+
+  // Excel / Word は既存の route に fetch して Blob 化する（生成はサーバー側のまま）。
+  const buildXlsxFile = async (edition: ExportEdition): Promise<DriveSaveFile> => {
+    const params = new URLSearchParams();
+    if (sheetId) params.set('id', sheetId);
+    if (edition === 'digest') params.set('edition', 'digest');
+    const query = params.size > 0 ? `?${params}` : '';
+    const res = await fetch(`/api/sheet/export-xlsx${query}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return { blob: await res.blob(), title: edition === 'digest' ? digestTitle(title) : title };
+  };
+
+  // ダウンロードの窓口。生成した Blob をブラウザの a[download] で手元に落とす。
+  const saveBlobLocally = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, REVOKE_OBJECT_URL_DELAY_MS);
+  };
+
   const downloadPdf = async (edition: ExportEdition) => {
     const label = edition === 'digest' ? '要約版PDF' : 'PDF';
     const toastId = toast.loading(`${label}を生成中…`);
@@ -113,22 +151,8 @@ const SheetViewClient = ({
     const setLoading = edition === 'digest' ? setDigestLoading : setPdfLoading;
     try {
       setLoading(true);
-      // blocks を渡すと印刷デザイン（会社セクション + 案件カード）で描かれる。
-      // views は「押した瞬間のトグルの状態」で、永続化はしていない（DB に項目を足さない方針）。
-      // duration の手入力と期間の導出が矛盾するシートは generateSkillSheetPdfBlob が
-      // PdfDurationConflictError で止める（誤った月数を印刷物へ出さない）。
-      const blob = await generateSkillSheetPdfBlob({ title, content, blocks, views, referenceMonth, edition });
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${edition === 'digest' ? digestTitle(title) : title}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, REVOKE_OBJECT_URL_DELAY_MS);
+      const { blob, title: fileTitle } = await buildPdfFile(edition);
+      saveBlobLocally(blob, `${fileTitle}.pdf`);
 
       toast.success(`${label}をダウンロードしました`, { id: toastId });
       track({
@@ -171,24 +195,8 @@ const SheetViewClient = ({
     const setLoading = edition === 'digest' ? setDigestLoading : setExcelLoading;
     try {
       setLoading(true);
-      const params = new URLSearchParams();
-      if (sheetId) params.set('id', sheetId);
-      if (edition === 'digest') params.set('edition', 'digest');
-      const query = params.size > 0 ? `?${params}` : '';
-      const res = await fetch(`/api/sheet/export-xlsx${query}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${edition === 'digest' ? digestTitle(title) : title}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, REVOKE_OBJECT_URL_DELAY_MS);
+      const { blob, title: fileTitle } = await buildXlsxFile(edition);
+      saveBlobLocally(blob, `${fileTitle}.xlsx`);
 
       toast.success(`${label}をダウンロードしました`, { id: toastId });
       track({
@@ -228,17 +236,7 @@ const SheetViewClient = ({
       const res = await fetch(`/api/sheet/export-docx${query}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${title}.docx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => {
-        URL.revokeObjectURL(url);
-      }, REVOKE_OBJECT_URL_DELAY_MS);
+      saveBlobLocally(blob, `${title}.docx`);
 
       toast.success('Wordをダウンロードしました', { id: toastId });
       track({
@@ -264,55 +262,64 @@ const SheetViewClient = ({
   const handleDownloadDocx = () => downloadDocx();
 
   return (
-    <div className={isDashboard ? `console-page ${consoleFontClasses}` : undefined}>
-      {stale && (
-        <div
-          role="status"
-          className="border-b border-warn/40 bg-warn-soft px-4 py-2 text-center text-sm text-warn-strong"
-        >
-          表示中の内容はしばらく更新されていない可能性があります。最新の状態と異なる場合があります。
-        </div>
-      )}
-      {isDashboard ? (
-        <ViewerTopbar
-          name={profile?.data.name}
-          company={profile?.data.company}
-          views={views}
-          onToggleView={toggleView}
-          onDownloadPdf={handleDownloadPdf}
-          pdfLoading={pdfLoading}
-          onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
-          excelLoading={excelLoading}
-          onDownloadDocx={canExportExcel ? handleDownloadDocx : undefined}
-          docxLoading={docxLoading}
-          onDownloadPdfDigest={handleDownloadPdfDigest}
-          onDownloadExcelDigest={canExportExcel ? handleDownloadExcelDigest : undefined}
-          digestLoading={digestLoading}
-          canEdit={canEdit}
-          reserveEditSlot={reserveEditSlot}
+    // Drive 保存（オーナー専用）。canEdit=false なら tRPC・Google スクリプトとも動かない。
+    // 「ファイルを作る」はダウンロードと同じ生成物を使い、「渡し方」だけ Drive にする。
+    <DriveSaveProvider
+      canEdit={canEdit}
+      buildFile={(kind: DriveSaveKind, edition) => (kind === 'pdf' ? buildPdfFile(edition) : buildXlsxFile(edition))}
+    >
+      <div className={isDashboard ? `console-page ${consoleFontClasses}` : undefined}>
+        {stale && (
+          <div
+            role="status"
+            className="border-b border-warn/40 bg-warn-soft px-4 py-2 text-center text-sm text-warn-strong"
+          >
+            表示中の内容はしばらく更新されていない可能性があります。最新の状態と異なる場合があります。
+          </div>
+        )}
+        {isDashboard ? (
+          <ViewerTopbar
+            name={profile?.data.name}
+            company={profile?.data.company}
+            views={views}
+            onToggleView={toggleView}
+            onDownloadPdf={handleDownloadPdf}
+            pdfLoading={pdfLoading}
+            onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
+            excelLoading={excelLoading}
+            onDownloadDocx={canExportExcel ? handleDownloadDocx : undefined}
+            docxLoading={docxLoading}
+            onDownloadPdfDigest={handleDownloadPdfDigest}
+            onDownloadExcelDigest={canExportExcel ? handleDownloadExcelDigest : undefined}
+            digestLoading={digestLoading}
+            canEdit={canEdit}
+            reserveEditSlot={reserveEditSlot}
+            canSaveExcelToDrive={canExportExcel}
+          />
+        ) : (
+          // project ブロックを持たない DB シート（Header 側）でも Excel / Word 出力は出す
+          <Header
+            onDownloadPdf={handleDownloadPdf}
+            pdfLoading={pdfLoading}
+            onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
+            excelLoading={excelLoading}
+            onDownloadDocx={canExportExcel ? handleDownloadDocx : undefined}
+            docxLoading={docxLoading}
+            canEdit={canEdit}
+            reserveEditSlot={reserveEditSlot}
+            canSaveExcelToDrive={canExportExcel}
+            backHref="/view"
+          />
+        )}
+        <SkillSheetViewer
+          navigationLayout={isDashboard ? 'inline' : 'sidebar'}
+          skillSheet={{ title, content }}
+          blocks={blocks}
+          views={isDashboard ? views : undefined}
+          referenceMonth={referenceMonth}
         />
-      ) : (
-        // project ブロックを持たない DB シート（Header 側）でも Excel / Word 出力は出す
-        <Header
-          onDownloadPdf={handleDownloadPdf}
-          pdfLoading={pdfLoading}
-          onDownloadExcel={canExportExcel ? handleDownloadExcel : undefined}
-          excelLoading={excelLoading}
-          onDownloadDocx={canExportExcel ? handleDownloadDocx : undefined}
-          docxLoading={docxLoading}
-          canEdit={canEdit}
-          reserveEditSlot={reserveEditSlot}
-          backHref="/view"
-        />
-      )}
-      <SkillSheetViewer
-        navigationLayout={isDashboard ? 'inline' : 'sidebar'}
-        skillSheet={{ title, content }}
-        blocks={blocks}
-        views={isDashboard ? views : undefined}
-        referenceMonth={referenceMonth}
-      />
-    </div>
+      </div>
+    </DriveSaveProvider>
   );
 };
 
