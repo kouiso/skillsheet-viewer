@@ -1,7 +1,8 @@
 name: Real Data Check
 
 # 実データ（DB の本番シート）で PDF / XLSX の崩れを検査する共通の本体。
-# 夜間の pdf-layout-check.yml / xlsx-format-check.yml から呼ぶ。base-ref を渡すと PR 用の比較モードになる（後述）。
+# 夜間の xlsx-format-check.yml から呼ぶ。base-ref を渡すと PR 用の比較モードになる（後述）。
+# PDF の夜間検査は架空データ（script/generate-pdf-layout-fixture.mjs）で回しており、ここは使わない。
 #
 # 公開リポジトリなので、経歴の本文が公開ログへ出ない仕組みをここ 1 か所で持つ。
 # - 検査の出力・JSON レポートは非公開の一時ディレクトリへ書き、最後に消す
@@ -158,7 +159,7 @@ jobs:
               env -u GITHUB_STEP_SUMMARY -u GITHUB_OUTPUT -u GITHUB_ENV -u GITHUB_PATH -u GITHUB_STATE \
                 -u ACTIONS_RUNTIME_TOKEN -u ACTIONS_RUNTIME_URL -u ACTIONS_RESULTS_URL -u ACTIONS_CACHE_URL \
                 -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL \
-                pnpm exec vitest run --config vitest.config.pdf.ts "${paths[@]}" \
+                pnpm exec vitest run --config vitest.config.pdf.ts --maxWorkers=2 "${paths[@]}" \
                   --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/real-data/$side.json" \
                   > "$RUNNER_TEMP/real-data/$side.log" 2>&1
             ) || status=$?
@@ -205,8 +206,10 @@ jobs:
           if [[ -z "$BASE_REF" ]]; then
             # 夜間: main のコードなので、落ちたテスト名と規則ごとの件数をそのまま出す。
             head_failed=$(failed_ids head)
-            # 規則ごとの件数（PDF_LAYOUT_COUNTS 行）は数値だけを出す行として検査側が書く。
-            sed 's/\x1b\[[0-9;]*m//g' "$dir/head.log" | grep -E '^[[:space:]]*PDF_LAYOUT_COUNTS[[:space:]]' || true
+            # 規則ごとの件数（PDF_LAYOUT_COUNTS 行）は、既知の規則名と整数だけの行に限って出す
+            # （pdf-layout-check.yml と同じ形）。
+            sed 's/\x1b\[[0-9;]*m//g' "$dir/head.log" |
+              grep -E '^[[:space:]]*PDF_LAYOUT_COUNTS (early-break|mid-alnum-break|runt-line|kinsoku|long-paragraph|overflow|page-spill)=[0-9]+( (early-break|mid-alnum-break|runt-line|kinsoku|long-paragraph|overflow|page-spill)=[0-9]+)*[[:space:]]*$' || true
             if [[ "$(cat "$dir/head.exit")" == 0 && -z "$head_failed" ]]; then
               echo "$CHECK_NAME: 実データで通過"
               exit 0

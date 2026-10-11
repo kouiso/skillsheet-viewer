@@ -4,6 +4,7 @@ import type { Block, BlockInput } from '../src/db/block';
 import { getDb } from '../src/db/client';
 import { currentMonthKey } from '../src/db/derived-display';
 import { createDocumentService, DocumentError } from '../src/db/document-service';
+import { buildRealVolumeDemoBlocks, REAL_VOLUME_DEMO_TITLE } from '../src/db/fixture';
 import { getOwnerId } from '../src/db/skillsheet';
 
 /** E2E準備用。各呼出しは独立した新規fixture操作であり、本番の作成再試行には使わない。 */
@@ -35,4 +36,9 @@ export async function listSheets() {
 export async function getSkillSheetById(sheetId: string, referenceMonth = currentMonthKey()) {
   const snapshot = await readReproDocument(getDb(), getOwnerId(), sheetId, referenceMonth);
   return { ...snapshot, blocks: snapshot.blocks as Block[] };
+}
+
+/** 実行ごとに独立した合成シートを作成する。共有fixture管理表の権限は使わない。 */
+export async function createRealVolumeDemoSheet() {
+  return createSheet(`${REAL_VOLUME_DEMO_TITLE} ${randomUUID()}`, buildRealVolumeDemoBlocks());
 }

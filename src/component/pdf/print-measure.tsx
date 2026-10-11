@@ -116,6 +116,7 @@ async function measureBatch(leaves: Leaf[], fontStore: typeof Font): Promise<Mea
       marginTop: box.marginTop ?? 0,
       marginBottom: box.marginBottom ?? 0,
       ...(lines ? { lines } : {}),
+      ...(leaf.displayParagraphGroup ? { displayParagraphLineCount: linesOf(node)?.length } : {}),
     };
   });
 }
@@ -125,6 +126,23 @@ export async function measureLeaves(leaves: Leaf[], fontStore: typeof Font = Fon
   const measured: MeasuredLeaf[] = [];
   for (let start = 0; start < leaves.length; start += MEASURE_BATCH_SIZE) {
     measured.push(...(await measureBatch(leaves.slice(start, start + MEASURE_BATCH_SIZE), fontStore)));
+  }
+  for (let index = 0; index + 1 < measured.length; index += 1) {
+    const current = measured[index];
+    const next = measured[index + 1];
+    if (
+      current.displayParagraphGroup &&
+      current.displayParagraphGroup === next.displayParagraphGroup &&
+      current.cardId === next.cardId &&
+      current.companyId === next.companyId &&
+      (next.displayParagraphLineCount === 1 ||
+        (current.displayParagraphLineCount === 1 &&
+          (index === 0 ||
+            measured[index - 1].displayParagraphGroup !== current.displayParagraphGroup ||
+            !measured[index - 1].keepWithNext)))
+    ) {
+      current.keepWithNext = true;
+    }
   }
   return measured;
 }

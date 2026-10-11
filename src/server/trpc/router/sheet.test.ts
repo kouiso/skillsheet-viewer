@@ -37,6 +37,10 @@ vi.mock('@/db/document-service', async (original) => ({
 
 import { revalidateTag } from 'next/cache';
 import { SkillSheetNotFoundError } from '@/db';
+
+vi.mock('@/db/document-history', () => ({ createDocumentHistory: vi.fn() }));
+
+import { createDocumentHistory } from '@/db/document-history';
 import { createDocumentService, DocumentError } from '@/db/document-service';
 
 import { getCachedDbSheet, getCachedDbSheetById } from '@/server/sheet-cache';
@@ -237,5 +241,45 @@ describe('owner-bound document API', () => {
       ok: true,
     });
     expect(service.delete).toHaveBeenCalledWith(SHEET_ID, '0');
+  });
+});
+
+describe('sheet.history editor境界', () => {
+  it('閲覧者に履歴本文・一覧・削除履歴を公開しない', async () => {
+    const caller = callerAs(null, true);
+    await expect(caller.sheet.history.list({ sheetId: SHEET_ID })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.sheet.history.read({ sheetId: SHEET_ID, revision: '0' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    await expect(caller.sheet.history.deletedList()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(createDocumentHistory).not.toHaveBeenCalled();
+  });
+  it('確認tokenと文字列revisionを復元サービスへそのまま渡す', async () => {
+    const restore = vi.fn().mockResolvedValue({
+      snapshot: { revision: '9007199254740994' },
+      undoRevision: '9007199254740993',
+      undoAvailable: true,
+    });
+    vi.mocked(createDocumentHistory).mockReturnValue({ restore } as never);
+    const result = await callerAs('editor').sheet.history.restore({
+      sheetId: SHEET_ID,
+      targetRevision: '1',
+      expectedRevision: '9007199254740993',
+      confirmation: 'a'.repeat(64),
+    });
+    expect(restore).toHaveBeenCalledWith(SHEET_ID, '1', '9007199254740993', 'a'.repeat(64));
+    expect(result.snapshot.revision).toBe('9007199254740994');
+  });
+  it('復元競合はCONFLICT、不正対象はPRECONDITION_FAILEDとして返す', async () => {
+    const restore = vi
+      .fn()
+      .mockRejectedValueOnce(new DocumentError('CONFLICT'))
+      .mockRejectedValueOnce(new DocumentError('UNEDITABLE_DOCUMENT'));
+    vi.mocked(createDocumentHistory).mockReturnValue({ restore } as never);
+    const input = { sheetId: SHEET_ID, targetRevision: '1', expectedRevision: '2', confirmation: 'a'.repeat(64) };
+    await expect(callerAs('editor').sheet.history.restore(input)).rejects.toMatchObject({ code: 'CONFLICT' });
+    await expect(callerAs('editor').sheet.history.restore(input)).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
   });
 });

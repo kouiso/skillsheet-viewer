@@ -41,7 +41,6 @@ async function cleanupSheetsByPrefix(prefix: string) {
 async function openProjectEditor(page: Page) {
   if (!currentSheetId) throw new Error('E2E sheet id not set; did beforeEach run?');
   await page.goto(`/builder?sheet=${currentSheetId}`);
-  await page.getByRole('button', { name: '案件エディタ' }).click();
   await page.getByRole('button', { name: '＋ 会社' }).click();
   await expect(page.getByRole('textbox', { name: '会社名' })).toBeVisible();
 }
@@ -127,7 +126,6 @@ test.describe('builder autosave', () => {
         // セッション B は A と同じ cookie を使う（Better Auth の sign-in レートリミットを回避）
         if (!currentSheetId) throw new Error('E2E sheet id not set; did beforeEach run?');
         await pageB.goto(`/builder?sheet=${currentSheetId}`);
-        await pageB.getByRole('button', { name: '案件エディタ' }).click();
         const rowPattern = new RegExp(`^${escapeRegExp(companyName)}(?!.*を)`);
         await pageB.getByRole('button', { name: rowPattern }).click();
         const inputB = pageB.getByRole('textbox', { name: '会社名' });

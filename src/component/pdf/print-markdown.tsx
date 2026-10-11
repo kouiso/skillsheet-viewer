@@ -16,6 +16,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 
 import { isSafeLinkHref, PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
+import { readableParagraphs } from './print-paragraph';
 import { BulletLine, BulletRow, Link, Paragraph, PrintText, printStyles } from './print-primitive';
 import { PRINT_COLOR, PRINT_TYPE, PRINT_WEIGHT } from './print-token';
 
@@ -164,9 +165,10 @@ function listMarker(list: MdNode, index: number): string {
   return `${start + index}.`;
 }
 
-function renderBlock(node: MdNode, key: string): ReactNode {
+function renderBlock(node: MdNode, key: string, allowHeading = true): ReactNode {
   if (node.type === 'paragraph') {
-    return <Paragraph key={key}>{renderInline(node.children, isHeadingLikeParagraph(node))}</Paragraph>;
+    const headingLike = allowHeading && isHeadingLikeParagraph(node);
+    return <Paragraph key={key}>{renderInline(node.children, headingLike)}</Paragraph>;
   }
   if (node.type === 'list') {
     return (
@@ -231,6 +233,13 @@ export function PrintMarkdown({ text }: { text: string }) {
   );
 }
 
+/** 実表示leafの全文。装飾の描画後文字列を測定・照合に用いる。 */
+function inlinePlainText(node: MdNode): string {
+  if (node.type === 'html') return stripHtmlTags(node.value);
+  if (node.type === 'break') return '\n';
+  return node.children?.map(inlinePlainText).join('') ?? node.value ?? '';
+}
+
 /**
  * 自由記述を measure-then-place の葉の材料に分解したもの（案件セクション用）。
  *
@@ -251,6 +260,9 @@ export interface MarkdownPiece {
   gap: number;
   /** 次の要素と同じページに置く（表の見出し行）。 */
   keepWithNext?: boolean;
+  /** 同じ元段落から分割した本文。測定後に1行の孤立を防ぐためだけに使う。 */
+  displayParagraphGroup?: object;
+  displayParagraphText?: string;
 }
 
 const BLOCK_GAP = 4;
@@ -289,9 +301,23 @@ function listItemPieces(item: MdNode, key: string, marker: string, depth: number
   });
 }
 
-function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiece[]): void {
+function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiece[], allowHeading = true): void {
   if (node.type === 'paragraph') {
-    if (isPlainParagraph(node) && !isHeadingLikeParagraph(node)) {
+    const headingLike = allowHeading && isHeadingLikeParagraph(node);
+    const paragraphs = headingLike ? [node] : readableParagraphs(node);
+    if (paragraphs.length > 1) {
+      const start = out.length;
+      const group = {};
+      paragraphs.forEach((paragraph, index) => {
+        blockPieces(paragraph, `${key}-p${index}`, depth, out, false);
+      });
+      for (let index = start; index < out.length; index += 1) {
+        out[index].displayParagraphGroup = group;
+        out[index].displayParagraphText = inlinePlainText(paragraphs[index - start]);
+      }
+      return;
+    }
+    if (isPlainParagraph(node) && !headingLike) {
       const text = plainText(node);
       const remake = (value: string) => <Paragraph key={key}>{value}</Paragraph>;
       out.push({ kind: 'paragraph', el: remake(text), text, remake, indent: depth * NESTED_INDENT, gap: BLOCK_GAP });
@@ -299,7 +325,7 @@ function blockPieces(node: MdNode, key: string, depth: number, out: MarkdownPiec
     }
     out.push({
       kind: 'paragraph',
-      el: renderBlock(node, key) as ReactElement,
+      el: renderBlock(node, key, allowHeading) as ReactElement,
       indent: depth * NESTED_INDENT,
       gap: BLOCK_GAP,
     });

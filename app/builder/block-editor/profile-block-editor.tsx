@@ -58,6 +58,10 @@ const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
   return conflicts;
 };
 
+/** 保存に反映できない自由項目があるか。非表示の編集ブロックでも親が保持する。 */
+export const hasUncommittedProfileRows = (rows: CustomMetaRow[]): boolean =>
+  findConflictingRowIds(rows).size > 0 || rows.some((row) => !row.label.trim() && Boolean(row.value.trim()));
+
 /**
  * プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。
  *

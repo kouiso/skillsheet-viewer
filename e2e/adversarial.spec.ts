@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, type Page, test } from '@playwright/test';
-import { createRealVolumeDemoSheet } from '@/db/fixture';
 import { authFile, login } from './auth';
-import { deleteSheet, getSkillSheetById, listSheets } from './document-fixture';
+import { createRealVolumeDemoSheet, deleteSheet, getSkillSheetById, listSheets } from './document-fixture';
+import { addBlock, chooseTemplate, openCreateSheet, selectBlock } from './workspace';
 
 test.use({ storageState: authFile });
 
@@ -91,6 +91,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
+  if (richSheetId) await deleteSheet(richSheetId);
   await cleanupSheets();
 });
 
@@ -98,15 +99,16 @@ test('A. rapid edit/save cycles', async ({ page }) => {
   const { errors, warnings, off } = collectErrors(page);
   await login(page);
 
-  await page.getByRole('button', { name: '新規シート' }).click();
+  await openCreateSheet(page);
   await expect(page.getByText('新規シートを作成')).toBeVisible();
   await page.locator('#new-sheet-title').fill(`${SHEET_PREFIX} rapid`);
-  await page.locator('#new-sheet-template').selectOption('full');
+  await chooseTemplate(page, 'full');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
   createdSheetIds.push(newId);
 
+  await selectBlock(page, 'スキル');
   // rapid skill rows add/remove
   const addSkill = page.getByRole('button', { name: 'スキルを追加' }).first();
   for (let i = 0; i < 5; i++) await addSkill.click();
@@ -115,7 +117,7 @@ test('A. rapid edit/save cycles', async ({ page }) => {
   expect(skillCount).toBeGreaterThanOrEqual(5);
 
   // rapid table row/column (use the add-button, not the palette chip)
-  await page.getByRole('button', { name: 'テーブル' }).nth(1).click();
+  await addBlock(page, 'テーブル');
   const addRow = page.getByRole('button', { name: '行を追加' }).first();
   for (let i = 0; i < 3; i++) await addRow.click();
 
@@ -125,24 +127,24 @@ test('A. rapid edit/save cycles', async ({ page }) => {
 
   // switch tabs 5 times
   for (let i = 0; i < 5; i++) {
-    await page.getByRole('button', { name: '案件エディタ' }).click();
-    await page.getByRole('button', { name: /^ブロック/ }).click();
+    await selectBlock(page, 'スキル');
+    await selectBlock(page, 'テーブル');
   }
 
   // add experience and immediately delete
-  await page.getByRole('button', { name: '職務経歴' }).click();
+  await addBlock(page, '職務経歴（簡易）');
   await expect(page.getByLabel('会社名').last()).toBeVisible();
 
   // save
   await page.getByRole('button', { name: '保存' }).first().click();
-  await expect(page.getByText(/保存済|保存しました/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-slot="autosave-indicator"]')).toContainText('保存済み', { timeout: 15_000 });
 
   // preview popup
   const [popup] = await Promise.all([
     page.waitForEvent('popup'),
     page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click(),
   ]);
-  await popup.waitForURL('/builder/preview');
+  await popup.waitForURL(/\/builder\/preview\?session=/);
   await popup.waitForLoadState('networkidle');
   await capture(popup, 'A-preview-rapid.png');
   const previewText = await popup.locator('body').innerText();
@@ -158,9 +160,9 @@ test('B. extreme input edge cases', async ({ page }) => {
   const { errors, warnings, off } = collectErrors(page);
   await login(page);
 
-  await page.getByRole('button', { name: '新規シート' }).click();
+  await openCreateSheet(page);
   await page.locator('#new-sheet-title').fill(`${SHEET_PREFIX} extreme`);
-  await page.locator('#new-sheet-template').selectOption('console-dashboard');
+  await chooseTemplate(page, 'console-dashboard');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
@@ -174,7 +176,7 @@ test('B. extreme input edge cases', async ({ page }) => {
   await page.getByLabel('自己PR').fill(longDesc);
 
   // skill block
-  await page.getByRole('button', { name: 'スキル一覧' }).click();
+  await addBlock(page, 'スキル一覧');
   await page.getByRole('button', { name: 'スキルを追加' }).first().click();
   await page
     .getByLabel(/スキル\d+の名称/)
@@ -182,16 +184,19 @@ test('B. extreme input edge cases', async ({ page }) => {
     .fill(longName);
 
   // project editor
-  await page.getByRole('button', { name: '案件エディタ' }).click();
   await page.getByRole('button', { name: '＋ 会社' }).click();
   await page.locator('input[aria-label="会社名"]').first().fill(longName);
   await page.getByRole('button', { name: '＋ 案件を追加' }).click();
   await page.getByLabel('案件タイトル').fill(longName);
   // required empty -> should show validation error then refill
   await page.getByLabel('案件タイトル').fill('');
-  await expect(page.getByText('必須項目です')).toBeVisible();
+  await expect(
+    page.getByText('案件名が未入力です。未入力のままだと一覧・閲覧側で「無題」表示になります。', { exact: true }),
+  ).toBeVisible();
   await page.getByLabel('案件タイトル').fill(longName);
-  await expect(page.getByText('必須項目です')).not.toBeVisible();
+  await expect(
+    page.getByText('案件名が未入力です。未入力のままだと一覧・閲覧側で「無題」表示になります。', { exact: true }),
+  ).not.toBeVisible();
 
   await page.getByLabel('担当業務').fill(longDesc);
   await page.getByLabel('コメント').fill(longDesc);
@@ -205,7 +210,7 @@ test('B. extreme input edge cases', async ({ page }) => {
   });
 
   await page.getByRole('button', { name: '保存' }).first().click();
-  await expect(page.getByText(/保存済|保存しました/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('[data-slot="autosave-indicator"]')).toContainText('保存済み', { timeout: 15_000 });
 
   await capture(page, 'B-extreme-inputs.png');
 
@@ -214,7 +219,7 @@ test('B. extreme input edge cases', async ({ page }) => {
     page.waitForEvent('popup'),
     page.getByRole('button', { name: 'プレビューを別ウィンドウで開く' }).click(),
   ]);
-  await popup.waitForURL('/builder/preview');
+  await popup.waitForURL(/\/builder\/preview\?session=/);
   await popup.waitForLoadState('networkidle');
   const previewText = await popup.locator('body').innerText();
   expect(previewText).toContain('A'.repeat(50));
@@ -286,15 +291,14 @@ test('D. network throttling and offline', async ({ page }) => {
   const { errors, warnings, off } = collectErrors(page);
   await login(page);
 
-  await page.getByRole('button', { name: '新規シート' }).click();
+  await openCreateSheet(page);
   await page.locator('#new-sheet-title').fill(`${SHEET_PREFIX} network`);
-  await page.locator('#new-sheet-template').selectOption('blank');
+  await chooseTemplate(page, 'blank');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
   createdSheetIds.push(newId);
 
-  await page.getByRole('button', { name: '案件エディタ' }).click();
   await page.getByRole('button', { name: '＋ 会社' }).click();
   const companyInput = page.locator('input[aria-label="会社名"]').first();
 
@@ -537,10 +541,10 @@ test('I. data freshness / revalidate', async ({ page, browser }) => {
   const { errors, warnings, off } = collectErrors(page);
   await login(page);
 
-  await page.getByRole('button', { name: '新規シート' }).click();
+  await openCreateSheet(page);
   const title = `${SHEET_PREFIX} fresh`;
   await page.locator('#new-sheet-title').fill(title);
-  await page.locator('#new-sheet-template').selectOption('console-dashboard');
+  await chooseTemplate(page, 'console-dashboard');
   await page.getByRole('button', { name: '作成' }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
@@ -549,7 +553,7 @@ test('I. data freshness / revalidate', async ({ page, browser }) => {
   const updatedTitle = `${title} updated`;
   await page.locator('#sheet-title').fill(updatedTitle);
   await page.getByRole('button', { name: '保存' }).first().click();
-  await expect(page.getByText(/保存しました|保存済み/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('[data-slot="autosave-indicator"]')).toContainText('保存済み', { timeout: 30_000 });
 
   off();
   expect(errors.filter((e) => !/net::ERR_|Failed to load resource/.test(e))).toEqual([]);

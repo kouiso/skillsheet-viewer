@@ -25,7 +25,8 @@ import { PDF_REMARK_PLUGINS } from '@/lib/markdown-config';
 import PDF_FONT_FAMILY from './constant';
 import { splitForHyphenation } from './font';
 import { checkLineBreakQuality, LINE_BREAK_RULES, summarizeLineBreaks } from './line-break-quality';
-import { buildPrintSkillSheetDocument } from './print-document';
+import { buildPrintSkillSheetDocument, type PrintSkillSheetDocumentProps } from './print-document';
+import { displayParagraphRegions } from './print-paragraph-region';
 import type { QualityItem, QualityPage } from './print-quality';
 import { extractQualityPages } from './print-quality-extract.node';
 import { PRINT_SIZE, PRINT_TYPE } from './print-token';
@@ -166,6 +167,25 @@ describe('checkLineBreakQuality: 規則ごとの当たり', () => {
     expect(report.hits['page-spill']).toEqual([{ page: 2, line: 1 }]);
   });
 
+  it('頁またぎ: 次頁の先頭で複数列が同じ行に並ぶ表ヘッダ再掲は段落に継がない', () => {
+    // 実データで出た偽陽性: 継続表のヘッダ行（期間|案件|チーム）が頁の先頭に再掲されると、
+    // 前頁の最終行が列の右端まで埋まっているので本文の続きと誤認され、2 字の「期間」が
+    // 段落の最終行になり runt-line（とこぼれの偽計上）に当たった。
+    const page1: QualityPage = [
+      item('頁の終わりまで埋まった本文の行です', 64, 80, RIGHT - 64),
+      item('まだ埋まって続いている行ですよね', 64, 80 - PITCH, RIGHT - 64),
+    ];
+    const page2: QualityPage = [
+      item('期間', 64, 800, 2 * BODY),
+      item('案件', 152, 800, 2 * BODY),
+      item('チーム', 512, 800, 2 * BODY),
+      lineAt('ヘッダの次の本文行です。', 800 - PITCH, 300),
+    ];
+    const report = checkLineBreakQuality([page1, page2]);
+    expect(report.counts['runt-line']).toBe(0);
+    expect(report.counts['page-spill']).toBe(0);
+  });
+
   it('複数列: 同じ行に並ぶ別の列に紛れても、列ごとの段落を追って当たる', () => {
     // 左列 3 行（1 行目だけ早く切れる）と右列 3 行を行順に並べる。
     // 右列は頁の右端まで届くので、左列の早い改行は「列の右端」に対して計る。
@@ -245,7 +265,8 @@ function buildLineBreakCheckBlocks(): Block[] {
     'PostgreSQL の索引を見直して検索の応答時間を約半分に短縮し、レビューの観点も整理した。';
   const comment =
     'この案件を通じて、技術的な意思決定を自分の言葉で説明できるようになったことが収穫だった。' +
-    'GraphQL のスキーマ設計では REST API との差分を整理し、CI での検査も整えた。';
+    'GraphQL のスキーマ設計では REST API との差分を整理し、CI での検査も整えた。' +
+    '合成データの検証として、担当範囲と確認した結果を順に説明し、関係者との認識をそろえた。';
   return [
     {
       id: 'line-break-check-profile',
@@ -364,10 +385,20 @@ describe('checkLineBreakQuality: 描いた PDF に当てる', () => {
   it('合成ブロックを現行の印刷コードで描いた PDF では規則の当たりが 0 件', { timeout: 60_000 }, async () => {
     const title = '改行規則の検査';
     const blocks = buildLineBreakCheckBlocks();
-    const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, referenceMonth }));
+    const document = await buildPrintSkillSheetDocument({ title, blocks, referenceMonth });
+    const buffer = await renderToBuffer(document);
     const pages = await extractQualityPages(buffer);
+    const regions = displayParagraphRegions(
+      (document.props as unknown as PrintSkillSheetDocumentProps).projectPages,
+      pages.length,
+    );
+    expect(regions.length).toBeGreaterThan(0);
     const report = checkLineBreakQuality(pages, {
       sourceTexts: collectPrintSourceTexts(blocks, title),
+      displayParagraphRegions: displayParagraphRegions(
+        (document.props as unknown as PrintSkillSheetDocumentProps).projectPages,
+        pages.length,
+      ),
       footerText: footerTextOf(pages),
     });
     console.log(`PDF_LAYOUT_COUNTS ${summarizeLineBreaks(report)}`);
@@ -389,10 +420,15 @@ describe('checkLineBreakQuality: 描いた PDF に当てる', () => {
       }
       const blocks = parsed as Block[];
       const title = 'エンジニアスキルシート';
-      const buffer = await renderToBuffer(await buildPrintSkillSheetDocument({ title, blocks, referenceMonth }));
+      const document = await buildPrintSkillSheetDocument({ title, blocks, referenceMonth });
+      const buffer = await renderToBuffer(document);
       const pages = await extractQualityPages(buffer);
       const report = checkLineBreakQuality(pages, {
         sourceTexts: collectPrintSourceTexts(blocks, title),
+        displayParagraphRegions: displayParagraphRegions(
+          (document.props as unknown as PrintSkillSheetDocumentProps).projectPages,
+          pages.length,
+        ),
         footerText: footerTextOf(pages),
       });
       // 公開ログに出せるのは件数だけ。本文や位置の文字列は出さない。

@@ -1,6 +1,6 @@
 'use client';
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -50,7 +50,10 @@ interface SkillSheetViewerProps {
     content: string;
   };
   blocks?: Block[];
+  /** 編集プレビューで描画するブロック。集計は全blocksの文脈を保つ。 */
+  previewBlockId?: string;
   compareMode?: boolean;
+  navigationLayout?: 'sidebar' | 'inline';
   /**
    * 表示するビューの集合。省略時は全ビューON
    * （ビルダープレビュー・比較ページは従来どおり全セクション表示）。
@@ -194,13 +197,11 @@ function blockToMarkdownContent(block: Block): string | null {
 
 type RenderGroup = { kind: 'skills'; blocks: Extract<Block, { type: 'skills' }>[] } | { kind: 'single'; block: Block };
 
-// ビュートグルでセクションが再マウントされた際のフェードアップ表示
-// （デザインプロトタイプの .fadeup 相当）。prefers-reduced-motion 時は即時表示する。
+// SSR から本文を表示する。表示切替後も透明な初期状態を挟まない。
 function FadeUpSection({ children }: { children: ReactNode }) {
-  const reduceMotion = useReducedMotion();
   return (
     <motion.section
-      initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+      initial={false}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
     >
@@ -239,14 +240,19 @@ function groupBlocks(blocks: Block[]): RenderGroup[] {
 const SkillSheetViewer = ({
   skillSheet,
   blocks,
+  previewBlockId,
   compareMode = false,
+  navigationLayout = 'sidebar',
   views,
   referenceMonth,
 }: SkillSheetViewerProps) => {
   // views 未指定（ビルダープレビュー・比較・レガシー）は全ビューON扱い。
   const showView = useCallback((view: ViewKey) => !views || views.includes(view), [views]);
   // headings/lightbox の更新で再レンダリングされても blocks が変わらなければ再計算しない。
-  const groupedBlocks = useMemo(() => (blocks ? groupBlocks(blocks) : []), [blocks]);
+  const groupedBlocks = useMemo(
+    () => (blocks ? groupBlocks(previewBlockId ? blocks.filter((block) => block.id === previewBlockId) : blocks) : []),
+    [blocks, previewBlockId],
+  );
   // 途中に他種別ブロックが挟まっていても、推しモードはシート内の全スキル一覧で共通にする。
   // 描画グループ単位にすると、片方のカテゴリだけ従来の習熟度強調へ戻ってしまうため。
   const hasFeaturedSkills = useMemo(
@@ -288,7 +294,6 @@ const SkillSheetViewer = ({
   // 通さない。sheet-view-client.tsx の同名ロジックと必ず揃えること（片方だけ直すと
   // ヘッダー/レイアウトがページ間で食い違う）。
   const isDashboard = useMemo(() => (blocks ?? []).some((b) => b.type === 'project'), [blocks]);
-  const reduceMotion = useReducedMotion();
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [mounted, setMounted] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -388,15 +393,24 @@ const SkillSheetViewer = ({
   }, []);
 
   return (
-    <div className="flex min-h-screen flex-col min-[900px]:flex-row">
+    <div
+      className={
+        navigationLayout === 'inline' ? 'console-content min-w-0' : 'flex min-h-screen flex-col min-[900px]:flex-row'
+      }
+    >
       {/* 目次（左サイドバー）— 比較モード、または構造化ダッシュボードで見出しが無い場合は非表示 */}
       {mounted && !compareMode && (!blocks || headings.length > 0) && (
-        <TableOfContents headings={headings} activeId={activeId} onHeadingClick={scrollToHeading} />
+        <TableOfContents
+          layout={navigationLayout}
+          headings={headings}
+          activeId={activeId}
+          onHeadingClick={scrollToHeading}
+        />
       )}
 
       {/* メインコンテンツ */}
       <motion.main
-        initial={reduceMotion ? false : { opacity: 0, y: 20 }}
+        initial={false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         // design: max-width 1180px / padding 44px 32px 96px / セクション間 48px
@@ -461,7 +475,13 @@ const SkillSheetViewer = ({
                   );
                 }
                 if (block.type === 'profile') {
-                  return <ProfileIntro key={block.id} data={block.data} />;
+                  return (
+                    <ProfileIntro
+                      layout={navigationLayout === 'inline' ? 'console' : 'default'}
+                      key={block.id}
+                      data={block.data}
+                    />
+                  );
                 }
                 if (block.type === 'stats') {
                   return (

@@ -61,12 +61,13 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
+    "docx": "9.7.2",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
     "framer-motion": "^11.15.0",
     "lucide-react": "^1.17.0",
     "mcp-handler": "2.1.1",
-    "next": "^16.3.4",
+    "next": "^16.3.8",
     "posthog-js": "^1.424.1",
     "react": "^19.2.0",
     "react-day-picker": "^10.0.1",
@@ -92,7 +93,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
-    "@next/bundle-analyzer": "^16.3.4",
+    "@next/bundle-analyzer": "^16.3.6",
     "@playwright/test": "^1.51.1",
     "@storybook/addon-docs": "^10.5.4",
     "@storybook/nextjs-vite": "^10.5.4",
@@ -101,6 +102,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/jszip": "^3.4.1",
     "@types/node": "^24.10.0",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
@@ -111,6 +113,7 @@
     "audit-ci": "^7.1.0",
     "drizzle-kit": "^0.31.10",
     "jsdom": "^27.0.1",
+    "jszip": "3.10.2",
     "pdfjs-dist": "4.10.38",
     "storybook": "^10.5.4",
     "tailwindcss": "^4.3.0",
@@ -126,16 +129,18 @@
       "unrs-resolver"
     ],
     "overrides": {
-      "next>sharp": ">=0.35.4",
+      "next>sharp": ">=0.35.5",
       "postcss": "^8.5.23",
-      "sharp": "^0.35.4",
+      "sharp": "^0.35.5",
       "brace-expansion@1": "^1.1.20",
       "brace-expansion@2": "^2.1.6",
       "brace-expansion@>=3": "^5.0.11",
       "test-exclude": "^8.0.0",
       "fast-uri@3": "^3.1.7",
       "nanoid": "^3.3.17",
-      "browserslist": "^4.28.7"
+      "browserslist": "^4.28.7",
+      "vitest>tinypool": ">=2.1.2",
+      "source-map-js": ">=1.2.2"
     },
     "patchedDependencies": {
       "@react-pdf/textkit@6.3.0": "patch/@react-pdf__textkit@6.3.0.patch"

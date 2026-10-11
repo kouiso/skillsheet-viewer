@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { POST, shouldLogTRPCError } from './route';
+import { shouldLogTRPCError } from '@/server/trpc/log-error';
+
+import { POST } from './route';
 
 describe('shouldLogTRPCError', () => {
   it.each([
