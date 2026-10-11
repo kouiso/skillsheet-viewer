@@ -1,18 +1,6 @@
 'use client';
 
-import {
-  ArrowLeft,
-  ChevronDown,
-  Download,
-  FileDown,
-  FileMinus,
-  Loader2,
-  Menu,
-  Moon,
-  PencilLine,
-  Sheet,
-  Sun,
-} from 'lucide-react';
+import { ArrowLeft, ChevronDown, FileDown, FileMinus, Loader2, Menu, Moon, PencilLine, Sheet, Sun } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import {
@@ -24,6 +12,8 @@ import {
 } from '@/component/ui/sheet';
 import './viewer-console.css';
 
+import { DownloadMenu } from '@/component/download-menu';
+import { DriveSaveMenu, DriveSaveSection } from '@/component/drive-save-menu';
 import { Button } from '@/component/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/component/ui/tooltip';
@@ -80,6 +70,8 @@ interface ViewerTopbarProps {
   canEdit?: boolean;
   /** 編集者判定の前後で編集ボタン分の幅を固定する。 */
   reserveEditSlot?: boolean;
+  /** Drive に Excel を保存してよいか（DB シートのみ。PDF は常に可）。 */
+  canSaveExcelToDrive?: boolean;
 }
 
 /**
@@ -151,66 +143,6 @@ function DigestDownloadMenu({
               Excel（要約版）
             </Button>
           )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/**
- * SP 用のダウンロードメニュー。PDF / Excel / 要約版を1つの Popover に畳む。
- * SP のアイコン行は「戻るリンク＋アイコン群」を320px に収める必要があり、
- * ボタンを個別に並べるとリンクのタップターゲットが 44px を割る（#337 CI で実測）。
- */
-function DownloadMenu({
-  onDownloadPdf,
-  onDownloadExcel,
-  onDownloadDocx,
-  onDownloadPdfDigest,
-  onDownloadExcelDigest,
-  loading,
-}: {
-  onDownloadPdf?: () => void | Promise<void>;
-  onDownloadExcel?: () => void | Promise<void>;
-  onDownloadDocx?: () => void | Promise<void>;
-  onDownloadPdfDigest?: () => void | Promise<void>;
-  onDownloadExcelDigest?: () => void | Promise<void>;
-  loading: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const item = (label: string, action: () => void | Promise<void>, ariaLabel: string) => (
-    <Button
-      variant="ghost"
-      aria-label={ariaLabel}
-      onClick={() => {
-        setOpen(false);
-        void action();
-      }}
-    >
-      {label}
-    </Button>
-  );
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          disabled={loading}
-          aria-busy={loading}
-          aria-label={loading ? 'ダウンロードを生成中' : 'ダウンロード'}
-          className="min-h-11 min-w-11"
-        >
-          {loading ? <Loader2 className="motion-safe:animate-spin" /> : <Download />}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className={`console-export-menu z-[70] ${consoleFontClasses}`}>
-        <div className="flex flex-col">
-          {onDownloadPdf && item('PDF', onDownloadPdf, 'PDFダウンロード')}
-          {onDownloadExcel && item('Excel', onDownloadExcel, 'Excelダウンロード')}
-          {onDownloadDocx && item('Word', onDownloadDocx, 'Wordダウンロード')}
-          {onDownloadPdfDigest && item('PDF（要約版）', onDownloadPdfDigest, 'PDF（要約版）ダウンロード')}
-          {onDownloadExcelDigest && item('Excel（要約版）', onDownloadExcelDigest, 'Excel（要約版）ダウンロード')}
         </div>
       </PopoverContent>
     </Popover>
@@ -299,6 +231,7 @@ export function ViewerTopbar({
   digestLoading = false,
   canEdit = true,
   reserveEditSlot = false,
+  canSaveExcelToDrive = false,
 }: ViewerTopbarProps) {
   const { mode, toggleTheme } = useThemeMode();
   const [navigationOpen, setNavigationOpen] = useState(false);
@@ -365,6 +298,7 @@ export function ViewerTopbar({
           onDownloadPdfDigest={onDownloadPdfDigest}
           onDownloadExcelDigest={onDownloadExcelDigest}
           loading={pdfLoading || excelLoading || docxLoading || digestLoading}
+          driveSection={<DriveSaveSection canSaveExcel={canSaveExcelToDrive} />}
         />
       ) : (
         <>
@@ -405,6 +339,8 @@ export function ViewerTopbar({
               labeled={!compact}
             />
           )}
+
+          <DriveSaveMenu canSaveExcel={canSaveExcelToDrive} />
         </>
       )}
 
@@ -485,6 +421,7 @@ export function ViewerTopbar({
             onDownloadPdfDigest={onDownloadPdfDigest}
             onDownloadExcelDigest={onDownloadExcelDigest}
             loading={pdfLoading || excelLoading || docxLoading || digestLoading}
+            driveSection={<DriveSaveSection canSaveExcel={canSaveExcelToDrive} />}
           />
         )}
       </div>

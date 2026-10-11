@@ -11,6 +11,11 @@
  * 任意（GitHub 読み取りの副系統でのみ必要）:
  *   GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO  — 欠けても throw せず warn のみ
  *
+ * 任意（Google Drive 保存。warn も出さない）:
+ *   GOOGLE_DRIVE_CLIENT_ID / GOOGLE_PICKER_API_KEY / GOOGLE_CLOUD_PROJECT_NUMBER
+ *   — 3つ揃った環境でのみ Drive 保存を有効にする（tRPC drive.setting が返す）。
+ *     NEXT_PUBLIC_ にしない — オーナーだけが使う値なので router 経由で渡す（#384）。
+ *
  * Server-only. Never import from Client Components.
  */
 

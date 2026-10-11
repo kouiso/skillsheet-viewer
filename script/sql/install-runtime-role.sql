@@ -87,6 +87,7 @@ BEGIN
        public.verification,
        public.jwks,
        public.viewer_login_attempt,
+       public.drive_destination,
        public.oauth_client,
        public.oauth_client_assertion,
        public.oauth_client_resource,
