@@ -2,7 +2,7 @@ name: XLSX Format Check
 
 # xlsx の書式はテンプレ複写・結合・罫線で構成され、コード変更でも DB 本文変化でも
 # 崩れうる。毎朝実データを引いて崩れを見張る（pdf-layout-check.yml の xlsx 版）。
-# PR の変更による崩れは real-data-pr-check.yml が見る。検査の本体は real-data-check.yml。
+# 検査の本体は real-data-check.yml。
 # 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（この workflow 名で登録済み）。
 on:
   schedule:

@@ -1,17 +1,16 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 
 const workflow = readFileSync(new URL('../.github/workflows/real-data-check.yml', import.meta.url), 'utf8');
-const prWorkflow = readFileSync(new URL('../.github/workflows/real-data-pr-check.yml', import.meta.url), 'utf8');
 const dirs: string[] = [];
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
-function stepScript(name: string, source = workflow): string {
-  const step = source.split(`      - name: ${name}\n`)[1]?.split('\n      - name:')[0];
+function stepScript(name: string): string {
+  const step = workflow.split(`      - name: ${name}\n`)[1]?.split('\n      - name:')[0];
   const script = step?.split('        run: |\n')[1];
   if (!script) throw new Error(`missing step ${name}`);
   return script
@@ -19,6 +18,20 @@ function stepScript(name: string, source = workflow): string {
     .map((line) => line.replace(/^ {10}/, ''))
     .join('\n');
 }
+function tempDir(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'real-data-workflow-'));
+  dirs.push(dir);
+  return dir;
+}
+// 開発者のshell設定・資格情報・ツールshimを子プロセスへ引き継がない。
+function runStep(name: string, cwd: string, env: Record<string, string>) {
+  return spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-c', stepScript(name)], {
+    cwd,
+    env: { PATH: `${cwd}/bin:/usr/bin:/bin`, NODE_ENV: 'test', ...env },
+    encoding: 'utf8',
+  });
+}
+
 it('未設定の対象はデータ取得前に拒否する', () => {
   const result = spawnSync('bash', ['-e', '-c', stepScript('Validate target sheet')], {
     env: { ...process.env, CHECK_DATABASE_URL: 'synthetic-db', CHECK_SHEET_ID: '' },
@@ -39,57 +52,67 @@ it('専用DB設定の欠落は秘密値を出さずデータ取得前に拒否�
   expect(result.stdout).toContain('database URL secret must be configured');
   expect(workflow).not.toContain('secrets.DATABASE_URL');
 });
-it.each([
-  ['Dump blocks from database', 'pdf-dump.log'],
-  ['Run checks against real data', 'pdf-check.log'],
-])('%s は機密ログを公開せず終了コードを保持する', (step, logfile) => {
-  const dir = mkdtempSync(join(tmpdir(), 'pdf-workflow-'));
-  dirs.push(dir);
-  writeFileSync(join(dir, 'pnpm'), '#!/bin/bash\necho PRIVATE_RESUME_TEXT\necho PRIVATE_ERROR >&2\nexit 7\n', {
+it('DB の接続 URL は dump にだけ渡し、比較モードでは main 側のコードで dump する', () => {
+  const dump = workflow.split('      - name: Dump blocks from database\n')[1]?.split('\n      - name:')[0] ?? '';
+  expect(dump).toContain('working-directory:');
+  expect(dump).toContain("inputs.base-ref != '' && 'base' || 'head'");
+  expect(workflow.match(/secrets\.database-url/g)).toHaveLength(2);
+  const run = workflow.split('      - name: Run checks against real data\n')[1]?.split('\n      - name:')[0] ?? '';
+  expect(run).not.toContain('secrets.');
+});
+it('Dump blocks from database は機密ログを公開せず終了コードを保持する', () => {
+  const dir = tempDir();
+  mkdirSync(join(dir, 'bin'));
+  writeFileSync(join(dir, 'bin', 'pnpm'), '#!/bin/bash\necho PRIVATE_RESUME_TEXT\necho PRIVATE_ERROR >&2\nexit 7\n', {
     mode: 0o700,
   });
-  const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-c', stepScript(step)], {
-    env: {
-      // 開発者のshell設定・資格情報・ツールshimを子プロセスへ引き継がない。
-      // この試験で起動を許すpnpmは上記の合成stubだけ。
-      PATH: `${dir}:/usr/bin:/bin`,
-      NODE_ENV: 'test',
-      RUNNER_TEMP: dir,
-      LOG_PREFIX: 'pdf',
-      CHECK_SHEET_ID: '01234567-89ab-cdef-0123-456789abcdef',
-    },
-    encoding: 'utf8',
+  const result = runStep('Dump blocks from database', dir, {
+    RUNNER_TEMP: dir,
+    CHECK_SHEET_ID: '01234567-89ab-cdef-0123-456789abcdef',
   });
   expect(result.status).toBe(7);
   expect(result.stdout + result.stderr).not.toContain('PRIVATE');
   expect(result.stdout).toContain('exit 7');
-  expect(readFileSync(join(dir, logfile), 'utf8')).toContain('PRIVATE_RESUME_TEXT');
-  expect(statSync(join(dir, logfile)).mode & 0o777).toBe(0o600);
+  const log = join(dir, 'real-data', 'dump.log');
+  expect(readFileSync(log, 'utf8')).toContain('PRIVATE_RESUME_TEXT');
+  expect(statSync(log).mode & 0o777).toBe(0o600);
 });
-
-it('Run checks は TEST_PATHS の各ファイルだけを vitest に渡す', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'pdf-workflow-'));
-  dirs.push(dir);
-  writeFileSync(join(dir, 'pnpm'), '#!/bin/bash\nprintf "%s\\n" "$@" > "$RUNNER_TEMP/args"\n', { mode: 0o700 });
-  const run = (testPaths: string) => {
-    const result = spawnSync(
-      '/bin/bash',
-      ['--noprofile', '--norc', '-e', '-c', stepScript('Run checks against real data')],
-      {
-        env: {
-          PATH: `${dir}:/usr/bin:/bin`,
-          NODE_ENV: 'test',
-          RUNNER_TEMP: dir,
-          LOG_PREFIX: 'xlsx',
-          TEST_PATHS: testPaths,
-        },
-        encoding: 'utf8',
-      },
-    );
-    expect(result.status).toBe(0);
-    return readFileSync(join(dir, 'args'), 'utf8').trim().split('\n');
-  };
-  expect(run('src/a.node.test.tsx src/b.node.test.tsx')).toEqual([
+it('Run checks は出力を非公開ファイルへ送り、公開経路になる環境変数を検査対象コードから外す', () => {
+  const dir = tempDir();
+  mkdirSync(join(dir, 'bin'));
+  mkdirSync(join(dir, 'head'));
+  mkdirSync(join(dir, 'base'));
+  writeFileSync(
+    join(dir, 'bin', 'pnpm'),
+    [
+      '#!/bin/bash',
+      'echo PRIVATE_RESUME_TEXT',
+      's=unset; [ -n "$GITHUB_STEP_SUMMARY" ] && s=set; t=unset; [ -n "$ACTIONS_RUNTIME_TOKEN" ] && t=set',
+      'echo "summary=$s token=$t cwd=$(basename "$PWD")" >> "$RUNNER_TEMP/seen"',
+      'printf "%s\\n" "$@" > "$RUNNER_TEMP/args-$(basename "$PWD")"',
+      'exit 3',
+      '',
+    ].join('\n'),
+    { mode: 0o700 },
+  );
+  const result = runStep('Run checks against real data', dir, {
+    RUNNER_TEMP: dir,
+    BASE_REF: 'abc123',
+    TEST_PATHS: 'src/a.node.test.tsx src/b.node.test.tsx',
+    GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+    ACTIONS_RUNTIME_TOKEN: 'runtime-token',
+  });
+  // 検査が落ちても step は止めない（判定は Judge results が行う）。
+  expect(result.status).toBe(0);
+  expect(result.stdout + result.stderr).not.toContain('PRIVATE');
+  expect(readFileSync(join(dir, 'real-data', 'head.exit'), 'utf8').trim()).toBe('3');
+  expect(readFileSync(join(dir, 'real-data', 'base.exit'), 'utf8').trim()).toBe('3');
+  expect(readFileSync(join(dir, 'real-data', 'head.log'), 'utf8')).toContain('PRIVATE_RESUME_TEXT');
+  expect(statSync(join(dir, 'real-data', 'head.log')).mode & 0o777).toBe(0o600);
+  expect(readFileSync(join(dir, 'seen'), 'utf8')).toBe(
+    'summary=unset token=unset cwd=head\nsummary=unset token=unset cwd=base\n',
+  );
+  expect(readFileSync(join(dir, 'args-head'), 'utf8').trim().split('\n')).toEqual([
     'exec',
     'vitest',
     'run',
@@ -97,44 +120,134 @@ it('Run checks は TEST_PATHS の各ファイルだけを vitest に渡す', () 
     'vitest.config.pdf.ts',
     'src/a.node.test.tsx',
     'src/b.node.test.tsx',
+    '--reporter=default',
+    '--reporter=json',
+    `--outputFile.json=${dir}/real-data/head.json`,
   ]);
-  expect(run('')).toEqual(['exec', 'vitest', 'run', '--config', 'vitest.config.pdf.ts']);
 });
-it.each([
-  ['passed', 'passed', 0, ''],
-  ['failed', 'passed', 1, '::error::PDF'],
-  ['', 'passed', 1, '::error::PDF'],
-  ['failed', 'failed', 0, '::warning::PDF'],
-  ['passed', 'failed', 0, ''],
-])('PR の判定: head=%s base=%s なら exit %i', (head, base, code, marker) => {
-  const result = spawnSync(
-    '/bin/bash',
-    ['--noprofile', '--norc', '-e', '-c', stepScript('Compare head with base', prWorkflow)],
-    {
-      env: {
-        PATH: '/usr/bin:/bin',
-        NODE_ENV: 'test',
-        HEAD_JOB: 'success',
-        PDF_HEAD: head,
-        PDF_BASE: base,
-        XLSX_HEAD: 'passed',
-        XLSX_BASE: 'passed',
-      },
-      encoding: 'utf8',
-    },
-  );
-  expect(result.status).toBe(code);
-  if (marker) expect(result.stdout).toContain(marker);
-});
-it('fork や draft で検査を飛ばした PR は判定を通す', () => {
-  const result = spawnSync(
-    '/bin/bash',
-    ['--noprofile', '--norc', '-e', '-c', stepScript('Compare head with base', prWorkflow)],
-    {
-      env: { PATH: '/usr/bin:/bin', NODE_ENV: 'test', HEAD_JOB: 'skipped' },
-      encoding: 'utf8',
-    },
-  );
+it('夜間（base なし）は head だけを検査し、TEST_PATHS が空なら全件を流す', () => {
+  const dir = tempDir();
+  mkdirSync(join(dir, 'bin'));
+  mkdirSync(join(dir, 'head'));
+  writeFileSync(join(dir, 'bin', 'pnpm'), '#!/bin/bash\nprintf "%s\\n" "$@" > "$RUNNER_TEMP/args"\n', { mode: 0o700 });
+  const result = runStep('Run checks against real data', dir, { RUNNER_TEMP: dir, BASE_REF: '', TEST_PATHS: '' });
   expect(result.status).toBe(0);
-  expect(result.stdout).toContain('::notice::');
+  expect(readFileSync(join(dir, 'args'), 'utf8').trim().split('\n').slice(0, 5)).toEqual([
+    'exec',
+    'vitest',
+    'run',
+    '--config',
+    'vitest.config.pdf.ts',
+  ]);
+  expect(() => readFileSync(join(dir, 'real-data', 'base.exit'))).toThrow();
+});
+
+type Assertion = { fullName: string; status: 'passed' | 'failed' };
+function report(root: string, files: Record<string, Assertion[]>, success: boolean) {
+  return JSON.stringify({
+    success,
+    testResults: Object.entries(files).map(([file, assertionResults]) => ({
+      name: `${root}/${file}`,
+      status: assertionResults.some((a) => a.status === 'failed') ? 'failed' : 'passed',
+      assertionResults: assertionResults.map((a) => ({ ...a, failureMessages: ['PRIVATE_ASSERTION_TEXT'] })),
+    })),
+  });
+}
+function judge(opts: {
+  head?: Record<string, Assertion[]>;
+  base?: Record<string, Assertion[]>;
+  headExit?: number;
+  baseRef?: string;
+  outcome?: string;
+  log?: string;
+}) {
+  const dir = tempDir();
+  const data = join(dir, 'real-data');
+  mkdirSync(data);
+  const write = (side: 'head' | 'base', files: Record<string, Assertion[]>) => {
+    const ok = Object.values(files).every((list) => list.every((a) => a.status === 'passed'));
+    writeFileSync(join(data, `${side}.json`), report(join(dir, side), files, ok));
+  };
+  if (opts.head) write('head', opts.head);
+  if (opts.base) write('base', opts.base);
+  writeFileSync(join(data, 'head.exit'), `${opts.headExit ?? 0}\n`);
+  writeFileSync(join(data, 'head.log'), opts.log ?? 'PRIVATE_RESUME_TEXT\n');
+  return runStep('Judge results', dir, {
+    RUNNER_TEMP: dir,
+    GITHUB_WORKSPACE: dir,
+    CHECK_NAME: 'PDF',
+    TEST_OUTCOME: opts.outcome ?? 'success',
+    BASE_REF: opts.baseRef ?? '',
+  });
+}
+const pass = (fullName: string): Assertion => ({ fullName, status: 'passed' });
+const fail = (fullName: string): Assertion => ({ fullName, status: 'failed' });
+
+it('夜間: 全件通れば成功し、件数行だけを公開ログへ出す', () => {
+  const result = judge({
+    head: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    log: 'PRIVATE_RESUME_TEXT\n PDF_LAYOUT_COUNTS overlap=0\n',
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('PDF_LAYOUT_COUNTS overlap=0');
+  expect(result.stdout).not.toContain('PRIVATE');
+});
+it('夜間: 落ちたテストの ID を出して失敗する（assertion の文は出さない）', () => {
+  const result = judge({ head: { 'src/a.node.test.tsx': [fail('はみ出さない')] }, headExit: 1 });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('× src/a.node.test.tsx::はみ出さない');
+  expect(result.stdout).not.toContain('PRIVATE');
+});
+it('検査を最後まで実行できなかった時は崩れと判定せずに失敗する', () => {
+  const result = judge({ outcome: 'skipped' });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('検査を最後まで実行できなかった');
+});
+it('比較: base は通るのに head で落ちたテストだけを PR の失敗にする', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [fail('はみ出さない'), fail('データ由来')] },
+    base: { 'src/a.node.test.tsx': [pass('はみ出さない'), fail('データ由来')] },
+    headExit: 1,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('× src/a.node.test.tsx::はみ出さない');
+  expect(result.stdout).toContain('base でも × src/a.node.test.tsx::データ由来');
+  expect(result.stdout).not.toContain('× src/a.node.test.tsx::データ由来\n× ');
+  expect(result.stdout).not.toContain('PRIVATE');
+});
+it('比較: base でも落ちる失敗だけなら警告に留めて通す', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [fail('データ由来')] },
+    base: { 'src/a.node.test.tsx': [fail('データ由来')] },
+    headExit: 1,
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('::warning::PDF');
+});
+it('比較: PR で追加・改名されたテストの名前は公開ログへ出さない', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [fail('PRIVATE_NAME_FROM_PR')] },
+    base: { 'src/a.node.test.tsx': [pass('既存のテスト')] },
+    headExit: 1,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('× src/a.node.test.tsx::（この PR で追加・改名されたテスト）');
+  expect(result.stdout).not.toContain('PRIVATE');
+});
+it('比較: base の検査結果が無ければ崩れと判定せずに失敗する', () => {
+  const result = judge({ baseRef: 'abc', head: { 'src/a.node.test.tsx': [pass('崩れない')] } });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('base（main 側）の検査を最後まで実行できなかった');
+});
+it('比較: base で落ちていたテストを PR が直した時は成功にする', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [pass('データ由来')] },
+    base: { 'src/a.node.test.tsx': [fail('データ由来')] },
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('この PR の変更で新たに落ちたテストはない');
 });

@@ -1,8 +1,8 @@
 name: PDF Layout Check
 
 # PDF のレイアウトは本文の長さで崩れる。本文は DB 側で変わるので、コードが無変更でも
-# ある日突然崩れる。毎朝実データを引いて崩れを見張る。PR の変更による崩れは
-# real-data-pr-check.yml が見る。検査の本体は real-data-check.yml に共通化してある。
+# ある日突然崩れる。毎朝実データを引いて崩れを見張る。
+# 検査の本体（本文を公開ログへ出さない仕組みを含む）は real-data-check.yml に共通化してある。
 # 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（この workflow 名で登録済み）。
 on:
   schedule:
