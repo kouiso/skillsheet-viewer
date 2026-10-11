@@ -20,6 +20,7 @@ interface PickerResponse {
 interface DocsView {
   setIncludeFolders: (include: boolean) => DocsView;
   setSelectFolderEnabled: (enabled: boolean) => DocsView;
+  setMimeTypes: (mimeTypes: string) => DocsView;
 }
 interface Picker {
   setVisible: (visible: boolean) => void;
@@ -93,7 +94,12 @@ export async function pickDriveFolder(input: {
   if (!picker) throw new Error('Picker の初期化に失敗しました');
 
   return new Promise<PickedDriveFolder | null>((resolve) => {
-    const view = new picker.picker.DocsView().setIncludeFolders(true).setSelectFolderEnabled(true);
+    // フォルダ以外を選択させない（ファイルを選ぶとその ID が親フォルダとして記録され、
+    // アップロードが必ず失敗する）。setSelectFolderEnabled だけではファイルも選べてしまう。
+    const view = new picker.picker.DocsView()
+      .setMimeTypes('application/vnd.google-apps.folder')
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(true);
     const instance = new picker.picker.PickerBuilder()
       .addView(view)
       .enableFeature(picker.picker.Feature.SUPPORT_DRIVES)

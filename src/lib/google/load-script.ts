@@ -23,7 +23,9 @@ export function loadScriptOnce(src: string): Promise<void> {
     el.async = true;
     el.onload = () => resolve();
     el.onerror = () => {
-      // 失敗をキャッシュに残すとリロードしない限り復帰不能になるため消す。
+      // 失敗した script 要素を残すと再試行時に「読み込み済み」と誤認されるため取り除く。
+      // promise もキャッシュから消し、次回呼び出しでやり直せるようにする。
+      el.remove();
       pending.delete(src);
       reject(new Error(`スクリプトの読み込みに失敗しました: ${src}`));
     };

@@ -82,6 +82,10 @@ export function useDriveSave({
   const [saving, setSaving] = useState(false);
 
   const enabled = canEdit && setting.data?.enabled === true;
+  // setting の取得失敗は機能ごと隠さない（環境変数未設定の enabled:false とは別物）。
+  // DB 権限不足等をオーナーに黙って隠すと障害に気づけないため、エラー表示のために
+  // メニュー自体は残す（issue §5「DBエラーは握りつぶさない」）。
+  const available = enabled || setting.isError;
   const client = setting.data?.enabled === true ? setting.data.client : null;
   const destination = setting.data?.enabled === true ? (setting.data.destination ?? null) : null;
 
@@ -191,7 +195,7 @@ export function useDriveSave({
 
   return useMemo(
     () => ({
-      available: enabled,
+      available,
       loading: canEdit && setting.isPending,
       preparing,
       settingError: setting.isError ? 'Drive 保存の設定を読み込めませんでした' : null,
@@ -201,6 +205,6 @@ export function useDriveSave({
       pickFolder,
       save,
     }),
-    [enabled, canEdit, setting.isPending, setting.isError, preparing, destination, picking, saving, pickFolder, save],
+    [available, canEdit, setting.isPending, setting.isError, preparing, destination, picking, saving, pickFolder, save],
   );
 }
