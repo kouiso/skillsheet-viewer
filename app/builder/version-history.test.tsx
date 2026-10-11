@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentSnapshot } from '@/db/document-service';
 import { documentDifferences, VersionHistory, type VersionHistoryApi } from './version-history';
@@ -14,10 +14,11 @@ const snapshot = (revision: string, editable = true): DocumentSnapshot => ({
 function setup(overrides: Partial<VersionHistoryApi> = {}, editable = true, restoreBlockedReason?: string) {
   const api = {
     list: vi.fn().mockResolvedValue(
+      // 2分以上あけて、自動保存のまとまりにたたまれない2版にする。
       ['2', '1'].map((revision) => ({
         revision,
         title: '合成',
-        recordedAt: '2026-10-06T00:00:00Z',
+        recordedAt: `2026-10-06T00:${revision === '2' ? '10' : '00'}:00Z`,
         action: 'save',
         restoredFrom: null,
         restoredBefore: null,
@@ -321,5 +322,75 @@ describe('シート全体の版の履歴', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeEnabled());
     finish(snapshot('2'));
     await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1'));
+  });
+});
+
+describe('自動保存のまとまり', () => {
+  // 版4〜2 は30秒おきの自動保存、版1 は作成。新しい順で返す。
+  const rows = [
+    ['4', '00:01:00', 'save'],
+    ['3', '00:00:30', 'save'],
+    ['2', '00:00:00', 'save'],
+    ['1', '23:50:00', 'create'],
+  ].map(([revision, time, action]) => ({
+    revision,
+    title: '合成',
+    recordedAt: `2026-10-0${time.startsWith('23') ? '5' : '6'}T${time}Z`,
+    action,
+    restoredFrom: null,
+    restoredBefore: null,
+  }));
+  function setupGrouped() {
+    return setup({ list: vi.fn().mockResolvedValue(rows) });
+  }
+
+  it('続けた保存を1行にたたみ、回数と版の範囲を出す', async () => {
+    setupGrouped();
+    const toggle = await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText(/保存 3回 · 版 2〜4/)).toBeInTheDocument();
+    // たたんでいる間は中の版の行を出さない。作成の版は1行のまま出す。
+    expect(screen.queryByRole('button', { name: /^版 3/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^版 1/ })).toBeInTheDocument();
+  });
+
+  it('時刻の範囲は分が変わったときだけ「〜」で終わりを出す', async () => {
+    // 「版 2〜4」にも〜があるので、時刻の行（ボタン内の最初の span）だけを見る。
+    const timeLine = async () => (await screen.findByText(/保存 3回/)).closest('button')?.querySelector('span') ?? null;
+    setupGrouped();
+    expect(await timeLine()).toHaveTextContent(/〜.*の編集/);
+    cleanup();
+    // 同じ分のうちに収まる3回の保存。
+    const sameMinute = rows.map((row, i) => (i < 3 ? { ...row, recordedAt: `2026-10-06T00:00:0${3 - i}Z` } : row));
+    setup({ list: vi.fn().mockResolvedValue(sameMinute) });
+    const line = await timeLine();
+    expect(line).toHaveTextContent(/の編集/);
+    expect(line).not.toHaveTextContent('〜');
+  });
+
+  it('まとまりの行を押すと、その中で最新の版を比較先にする', async () => {
+    setupGrouped();
+    await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
+    fireEvent.click(screen.getByText(/保存 3回/));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('4'));
+  });
+
+  it('開くと中の版を選べ、そこから戻せる', async () => {
+    const { api } = setupGrouped();
+    fireEvent.click(await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' }));
+    expect(screen.getByRole('button', { name: '版 2〜4 の内訳を閉じる' })).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(screen.getByRole('button', { name: /^版 3/ }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('3'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
+    await screen.findByRole('alertdialog');
+    expect(api.previewRestore).toHaveBeenCalledWith('3', '2');
+  });
+
+  it('比較の選択肢には、たたんだ版も含めてすべての版を出す', async () => {
+    setupGrouped();
+    await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
+    const options = within(screen.getByRole('combobox', { name: '比較先' })).getAllByRole('option');
+    expect(options.map((option) => option.getAttribute('value'))).toEqual(['4', '3', '2', '1']);
   });
 });
