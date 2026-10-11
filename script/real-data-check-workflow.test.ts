@@ -123,25 +123,23 @@ it('Dump blocks from database は機密ログを公開せず終了コードを�
   expect(readFileSync(log, 'utf8')).toContain('PRIVATE_RESUME_TEXT');
   expect(statSync(log).mode & 0o777).toBe(0o600);
 });
-it('Run checks は出力を非公開ファイルへ送り、PR 側はネットワーク無しのコンテナで動かす', () => {
+// 呼ばれた側（head / base）ごとに引数を残し、その側のレポートを出力先へ書く偽の docker。
+const sideDocker = [
+  'side=$(printf "%s\\n" "$@" | sed -n "s#^--outputFile.json=/out/\\(head\\|base\\)\\.json\\$#\\1#p")',
+  'printf "%s\\n" "$@" > "$RUNNER_TEMP/docker-args-$side"',
+  'echo PRIVATE_RESUME_TEXT',
+];
+it('Run checks は比較モードで base も head もネットワーク無しの同じコンテナで動かし、出力を非公開にする', () => {
   const dir = tempDir();
   mkdirSync(join(dir, 'bin'));
   mkdirSync(join(dir, 'head'));
   mkdirSync(join(dir, 'base'));
-  writeFileSync(
-    join(dir, 'bin', 'pnpm'),
-    [
-      '#!/bin/bash',
-      'echo PRIVATE_RESUME_TEXT',
-      's=unset; [ -n "$GITHUB_STEP_SUMMARY" ] && s=set; t=unset; [ -n "$ACTIONS_RUNTIME_TOKEN" ] && t=set',
-      'echo "summary=$s token=$t cwd=$(basename "$PWD")" >> "$RUNNER_TEMP/seen"',
-      'printf "%s\\n" "$@" > "$RUNNER_TEMP/args-$(basename "$PWD")"',
-      'exit 3',
-      '',
-    ].join('\n'),
-    { mode: 0o700 },
-  );
-  fakeDocker(dir, ['echo PRIVATE_RESUME_TEXT', 'echo "{}" > "$RUNNER_TEMP/real-data/out/head.json"', 'exit 4']);
+  writeFileSync(join(dir, 'bin', 'pnpm'), '#!/bin/bash\necho "runner pnpm" >> "$RUNNER_TEMP/seen"\n', { mode: 0o700 });
+  fakeDocker(dir, [
+    ...sideDocker,
+    'echo "{\\"side\\":\\"$side\\"}" > "$RUNNER_TEMP/real-data/out/$side.json"',
+    '[ "$side" = head ] && exit 4; exit 3',
+  ]);
   const blocks = join(dir, 'real-data', 'blocks.json');
   const result = runStep('Run checks against real data', dir, {
     RUNNER_TEMP: dir,
@@ -149,51 +147,59 @@ it('Run checks は出力を非公開ファイルへ送り、PR 側はネット�
     REAL_BLOCKS_JSON: blocks,
     BASE_REF: 'abc123',
     TEST_PATHS: 'src/a.node.test.tsx src/b.node.test.tsx',
-    GITHUB_STEP_SUMMARY: join(dir, 'summary'),
-    ACTIONS_RUNTIME_TOKEN: 'runtime-token',
   });
   // 検査が落ちても step は止めない（判定は Judge results が行う）。
   expect(result.status).toBe(0);
   expect(result.stdout + result.stderr).not.toContain('PRIVATE');
   expect(readFileSync(join(dir, 'real-data', 'head.exit'), 'utf8').trim()).toBe('4');
   expect(readFileSync(join(dir, 'real-data', 'base.exit'), 'utf8').trim()).toBe('3');
-  expect(readFileSync(join(dir, 'real-data', 'head.json'), 'utf8').trim()).toBe('{}');
+  expect(readFileSync(join(dir, 'real-data', 'head.json'), 'utf8').trim()).toBe('{"side":"head"}');
+  expect(readFileSync(join(dir, 'real-data', 'base.json'), 'utf8').trim()).toBe('{"side":"base"}');
   expect(readFileSync(join(dir, 'real-data', 'head.log'), 'utf8')).toContain('PRIVATE_RESUME_TEXT');
   expect(statSync(join(dir, 'real-data', 'head.log')).mode & 0o777).toBe(0o600);
-  // base（main 側）は runner 上で、公開経路になる環境変数を外して動かす。
-  expect(readFileSync(join(dir, 'seen'), 'utf8')).toBe('summary=unset token=unset cwd=base\n');
-  const args = readFileSync(join(dir, 'docker-args'), 'utf8').trim().split('\n');
-  expect(args.slice(0, 4)).toEqual(['run', '--rm', '--network', 'none']);
-  expect(args).toContain('type=tmpfs,destination=/w/.git');
-  expect(args).toContain(`${blocks}:/data/blocks.json:ro`);
-  // コンテナへ渡す環境変数はこの 3 つだけ（secret もトークンも渡さない）。
-  expect(args.flatMap((a, i) => (args[i - 1] === '-e' ? [a] : []))).toEqual([
-    'HOME=/tmp',
-    'CI=true',
-    'REAL_BLOCKS_JSON=/data/blocks.json',
-  ]);
-  expect(args.slice(args.indexOf('real-data-sandbox') + 1)).toEqual([
-    'node',
-    'node_modules/vitest/vitest.mjs',
-    'run',
-    '--config',
-    'vitest.config.pdf.ts',
-    '--maxWorkers=2',
-    'src/a.node.test.tsx',
-    'src/b.node.test.tsx',
-    '--reporter=default',
-    '--reporter=json',
-    '--outputFile.json=/out/head.json',
-  ]);
-  expect(readFileSync(join(dir, 'args-base'), 'utf8')).toContain(`--outputFile.json=${dir}/real-data/base.json`);
+  // 比較モードでは runner 上で検査を動かさない。
+  expect(() => readFileSync(join(dir, 'seen'))).toThrow();
+  for (const side of ['head', 'base']) {
+    const args = readFileSync(join(dir, `docker-args-${side}`), 'utf8')
+      .trim()
+      .split('\n');
+    expect(args.slice(0, 4)).toEqual(['run', '--rm', '--network', 'none']);
+    expect(args).toContain(`${dir}/${side}:/w`);
+    expect(args).toContain('type=tmpfs,destination=/w/.git');
+    expect(args).toContain(`${blocks}:/data/blocks.json:ro`);
+    // コンテナへ渡す環境変数はこの 3 つだけ（secret もトークンも渡さない）。
+    expect(args.flatMap((a, i) => (args[i - 1] === '-e' ? [a] : []))).toEqual([
+      'HOME=/tmp',
+      'CI=true',
+      'REAL_BLOCKS_JSON=/data/blocks.json',
+    ]);
+    expect(args.slice(args.indexOf('real-data-sandbox') + 1)).toEqual([
+      'node',
+      'node_modules/vitest/vitest.mjs',
+      'run',
+      '--config',
+      'vitest.config.pdf.ts',
+      '--maxWorkers=2',
+      'src/a.node.test.tsx',
+      'src/b.node.test.tsx',
+      '--reporter=default',
+      '--reporter=json',
+      `--outputFile.json=/out/${side}.json`,
+    ]);
+  }
 });
-it('Run checks は PR 側が置いたシンボリックリンクのレポートを受け取らない', () => {
+it('Run checks は PR 側が置いたシンボリックリンクや base 用の偽レポートを受け取らない', () => {
   const dir = tempDir();
   mkdirSync(join(dir, 'bin'));
   mkdirSync(join(dir, 'head'));
   mkdirSync(join(dir, 'base'));
-  writeFileSync(join(dir, 'bin', 'pnpm'), '#!/bin/bash\n', { mode: 0o700 });
-  fakeDocker(dir, ['ln -s /etc/hostname "$RUNNER_TEMP/real-data/out/head.json"']);
+  fakeDocker(dir, [
+    ...sideDocker,
+    'if [ "$side" = head ]; then',
+    '  ln -s /etc/hostname "$RUNNER_TEMP/real-data/out/head.json"',
+    '  echo forged > "$RUNNER_TEMP/real-data/out/base.json"',
+    'fi',
+  ]);
   const result = runStep('Run checks against real data', dir, {
     RUNNER_TEMP: dir,
     GITHUB_WORKSPACE: dir,
@@ -202,6 +208,13 @@ it('Run checks は PR 側が置いたシンボリックリンクのレポート�
   });
   expect(result.status).toBe(0);
   expect(() => readFileSync(join(dir, 'real-data', 'head.json'))).toThrow();
+  expect(() => readFileSync(join(dir, 'real-data', 'base.json'))).toThrow();
+});
+it('runner 上の pnpm は比較モードでは base、夜間では head の版を使う', () => {
+  expect(workflow).toMatch(
+    /package_json_file: \$\{\{ inputs\.base-ref != '' && 'base\/package\.json' \|\| 'head\/package\.json' \}\}/,
+  );
+  expect(workflow).toContain("if: inputs.raster-deps && inputs.base-ref == ''");
 });
 it('夜間（base なし）は head だけを検査し、TEST_PATHS が空なら全件を流す', () => {
   const dir = tempDir();
@@ -239,14 +252,15 @@ function judge(opts: {
   baseRef?: string;
   outcome?: string;
   log?: string;
+  baseLog?: string;
 }) {
   const dir = tempDir();
   const data = join(dir, 'real-data');
   mkdirSync(data);
   const write = (side: 'head' | 'base', files: Record<string, Assertion[]>) => {
     const ok = Object.values(files).every((list) => list.every((a) => a.status === 'passed'));
-    // 比較モードの head はコンテナの /w で動くので、レポートのパスもそこから始まる。
-    const root = side === 'head' && opts.baseRef ? '/w' : join(dir, side);
+    // 比較モードは base も head もコンテナの /w で動くので、レポートのパスもそこから始まる。
+    const root = opts.baseRef ? '/w' : join(dir, side);
     writeFileSync(join(data, `${side}.json`), report(root, files, ok));
   };
   if (opts.head) write('head', opts.head);
@@ -254,6 +268,7 @@ function judge(opts: {
   writeFileSync(join(data, 'head.exit'), `${opts.headExit ?? 0}\n`);
   if (opts.base) writeFileSync(join(data, 'base.exit'), `${opts.baseExit ?? 0}\n`);
   writeFileSync(join(data, 'head.log'), opts.log ?? 'PRIVATE_RESUME_TEXT\n');
+  if (opts.baseLog) writeFileSync(join(data, 'base.log'), opts.baseLog);
   return runStep('Judge results', dir, {
     RUNNER_TEMP: dir,
     GITHUB_WORKSPACE: dir,
@@ -369,4 +384,31 @@ it('比較: base に無いテストファイルはパスも公開ログへ出さ
   expect(result.status).toBe(1);
   expect(result.stdout).toContain('× （この PR で追加・改名されたテストファイル）');
   expect(result.stdout).not.toContain('PRIVATE');
+});
+const unhandled = '\u001b[31mVitest caught 1 unhandled error during the test run.\u001b[39m\nPRIVATE_RESUME_TEXT\n';
+it('比較: 共通の失敗に加えて head だけで未処理の例外が起きたら PR の失敗にする', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [fail('データ由来')] },
+    base: { 'src/a.node.test.tsx': [fail('データ由来')] },
+    headExit: 1,
+    baseExit: 1,
+    log: unhandled,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('× (unhandled)');
+  expect(result.stdout).not.toContain('PRIVATE');
+});
+it('比較: base でも同じく未処理の例外が起きていれば警告に留める', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    base: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    headExit: 1,
+    baseExit: 1,
+    log: unhandled,
+    baseLog: unhandled,
+  });
+  expect(result.status).toBe(0);
+  expect(result.stdout).toContain('base でも × (unhandled)');
 });

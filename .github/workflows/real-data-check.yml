@@ -82,7 +82,8 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
         with:
-          package_json_file: head/package.json
+          # runner 上で pnpm を使うのは、比較モードでは base、夜間では head。PR の版に引きずられないようにする。
+          package_json_file: ${{ inputs.base-ref != '' && 'base/package.json' || 'head/package.json' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
@@ -90,7 +91,7 @@ jobs:
           # ci.yml と同じ理由で mise.toml を読めないため、バージョンを手動で同期させる。
           node-version: '22.21.1'
           cache: 'pnpm'
-          cache-dependency-path: head/pnpm-lock.yaml
+          cache-dependency-path: ${{ inputs.base-ref != '' && 'base/pnpm-lock.yaml' || 'head/pnpm-lock.yaml' }}
 
       - name: Install dependencies (nightly)
         if: inputs.base-ref == ''
@@ -103,8 +104,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install system dependencies for PDF rasterization
-        if: inputs.raster-deps
+        if: inputs.raster-deps && inputs.base-ref == ''
         # ci.yml の test ジョブと同じ依存。ラスタ検査が PDF ページをビットマップ化する。
+        # 比較モードでは base も head もコンテナで検査するので、コンテナの側に入れる。
         run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
 
       - name: Validate target sheet
@@ -192,23 +194,26 @@ jobs:
               continue
             fi
             status=0
-            if [[ "$side" == head && -n "$BASE_REF" ]]; then
-              # PR のコードはネットワーク無しのコンテナで動かし、実データは読み取り専用で見せる。
-              # 書けるのは head の作業ツリー（.git を除く）とレポートの出力先だけ。
+            if [[ -n "$BASE_REF" ]]; then
+              # 比較モードは base も head も同じコンテナで検査する。PDF のラスタ化に使う gs / ImageMagick /
+              # poppler の版が両側で揃わないと、レンダラの差が PR の崩れに見えてしまうため。
+              # head（PR）のコードを runner 上で動かさないためでもあり、ネットワークは無し、
+              # 実データは読み取り専用で見せる。書けるのは作業ツリー（.git を除く）とレポートの出力先だけ。
               docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true \
                 -e REAL_BLOCKS_JSON=/data/blocks.json \
-                -v "$GITHUB_WORKSPACE/head:/w" --mount type=tmpfs,destination=/w/.git \
+                -v "$GITHUB_WORKSPACE/$side:/w" --mount type=tmpfs,destination=/w/.git \
                 -v "$REAL_BLOCKS_JSON:/data/blocks.json:ro" \
                 -v "$RUNNER_TEMP/real-data/out:/out" -w /w real-data-sandbox \
                 node node_modules/vitest/vitest.mjs run --config vitest.config.pdf.ts --maxWorkers=2 "${paths[@]}" \
-                  --reporter=default --reporter=json --outputFile.json=/out/head.json \
-                  > "$RUNNER_TEMP/real-data/head.log" 2>&1 || status=$?
+                  --reporter=default --reporter=json --outputFile.json="/out/$side.json" \
+                  > "$RUNNER_TEMP/real-data/$side.log" 2>&1 || status=$?
               # シンボリックリンクは runner 上の別ファイルを読ませる細工になりうるので受け取らない。
-              if [[ -f "$RUNNER_TEMP/real-data/out/head.json" && ! -L "$RUNNER_TEMP/real-data/out/head.json" ]]; then
-                mv "$RUNNER_TEMP/real-data/out/head.json" "$RUNNER_TEMP/real-data/head.json"
+              if [[ -f "$RUNNER_TEMP/real-data/out/$side.json" && ! -L "$RUNNER_TEMP/real-data/out/$side.json" ]]; then
+                mv "$RUNNER_TEMP/real-data/out/$side.json" "$RUNNER_TEMP/real-data/$side.json"
               fi
-              echo "$status" > "$RUNNER_TEMP/real-data/head.exit"
-              echo "Real data checks on head finished (exit $status)."
+              rm -rf "$RUNNER_TEMP/real-data/out" && mkdir "$RUNNER_TEMP/real-data/out"
+              echo "$status" > "$RUNNER_TEMP/real-data/$side.exit"
+              echo "Real data checks on $side finished (exit $status)."
               continue
             fi
             (
@@ -235,9 +240,9 @@ jobs:
           dir="$RUNNER_TEMP/real-data"
           # 落ちたテストの ID（ファイル::テスト名）。テストが 1 本も読めずに落ちたファイルは
           # ファイル::(suite)、テストの外で落ちた実行は (run) で表す。
-          # レポートのファイルパスの前置き。比較モードの head はコンテナの /w で動かしている。
+          # レポートのファイルパスの前置き。比較モードは base も head もコンテナの /w で動かしている。
           root_of() {
-            if [[ "$1" == head && -n "$BASE_REF" ]]; then echo /w/; else echo "$GITHUB_WORKSPACE/$1/"; fi
+            if [[ -n "$BASE_REF" ]]; then echo /w/; else echo "$GITHUB_WORKSPACE/$1/"; fi
           }
           failed_ids() {
             local side=$1 ids
@@ -248,7 +253,12 @@ jobs:
               ] as $ids
               | if ($ids | length) == 0 and .success == false then "(run)" else $ids[] end
             ' "$dir/$side.json" | sort -u)
-            # 未処理の例外などは JSON 上で全件通過のまま終了コードだけを 0 以外にするため、それも (run) とする。
+            # 未処理の例外は JSON レポートに載らず、終了コードと出力にだけ現れる。assertion の失敗と
+            # 同時に起きても見逃さないよう、(unhandled) として別に数える。
+            if sed 's/\x1b\[[0-9;]*m//g' "$dir/$side.log" 2>/dev/null | grep -Eq '^Vitest caught [0-9]+ unhandled error'; then
+              ids=$(printf '%s\n%s\n' "$ids" '(unhandled)' | sed '/^$/d' | sort -u)
+            fi
+            # それ以外の理由で、落ちたテストが無いのに終了コードが 0 以外の実行は (run) とする。
             if [[ -z "$ids" && "$(cat "$dir/$side.exit" 2>/dev/null)" != 0 ]]; then
               ids="(run)"
             fi
@@ -307,7 +317,7 @@ jobs:
 
           echo "::error::$CHECK_NAME: base（main 側）では通るのに、この PR の変更で落ちたテストがある"
           while IFS= read -r id; do
-            if [[ "$id" == '(run)' ]] || grep -Fxq -- "$id" <<< "$base_all"; then
+            if [[ "$id" == '(run)' || "$id" == '(unhandled)' ]] || grep -Fxq -- "$id" <<< "$base_all"; then
               echo "× $id"
             elif sed 's/::.*//' <<< "$base_all" | grep -Fxq -- "${id%%::*}"; then
               # head で追加・改名されたテストの名前はレビュー前のコードが決めた文字列なので出さない。
