@@ -60,16 +60,51 @@ it('DB の接続 URL は dump にだけ渡し、比較モードでは main 側�
   const run = workflow.split('      - name: Run checks against real data\n')[1]?.split('\n      - name:')[0] ?? '';
   expect(run).not.toContain('secrets.');
 });
-it('比較モードでは PR 側の依存（lifecycle script）を dump の後に入れる', () => {
+it('比較モードでは PR 側の依存（lifecycle script）を dump の後に、実データの無いコンテナで入れる', () => {
   const at = (name: string) => workflow.indexOf(`      - name: ${name}\n`);
-  expect(at('Install dependencies (head)')).toBeGreaterThan(at('Dump blocks from database'));
+  expect(at('Install dependencies (head, sandboxed)')).toBeGreaterThan(at('Dump blocks from database'));
   expect(at('Install dependencies (base)')).toBeLessThan(at('Dump blocks from database'));
-  const head = workflow.split('      - name: Install dependencies (head)\n')[1]?.split('\n      - name:')[0] ?? '';
+  const head =
+    workflow.split('      - name: Install dependencies (head, sandboxed)\n')[1]?.split('\n      - name:')[0] ?? '';
   expect(head).toContain("if: inputs.base-ref != ''");
+  expect(head).toContain('docker run --rm');
+  expect(head).toContain('--mount type=tmpfs,destination=/w/.git');
+  expect(head).not.toContain('RUNNER_TEMP');
+  expect(head).not.toContain('secrets.');
   const nightly =
     workflow.split('      - name: Install dependencies (nightly)\n')[1]?.split('\n      - name:')[0] ?? '';
   expect(nightly).toContain("if: inputs.base-ref == ''");
   expect(at('Install dependencies (nightly)')).toBeLessThan(at('Dump blocks from database'));
+});
+function fakeDocker(dir: string, body: string[]) {
+  writeFileSync(
+    join(dir, 'bin', 'docker'),
+    ['#!/bin/bash', 'printf "%s\\n" "$@" > "$RUNNER_TEMP/docker-args"', ...body, ''].join('\n'),
+    { mode: 0o700 },
+  );
+}
+it('PR 用のコンテナは packageManager の pnpm の版だけを受け取り、形式が違えば作らない', () => {
+  for (const [packageManager, ok] of [
+    ['pnpm@10.33.0', true],
+    ['pnpm@10.33.0; curl evil', false],
+    ['npm@10.0.0', false],
+  ] as const) {
+    const dir = tempDir();
+    mkdirSync(join(dir, 'bin'));
+    mkdirSync(join(dir, 'head'));
+    writeFileSync(join(dir, 'head', 'package.json'), JSON.stringify({ packageManager }));
+    fakeDocker(dir, ['cat > "$RUNNER_TEMP/dockerfile"']);
+    const result = runStep('Build sandbox for PR code', dir, { RUNNER_TEMP: dir, RASTER_DEPS: 'true' });
+    expect(result.status).toBe(ok ? 0 : 1);
+    if (!ok) {
+      expect(() => readFileSync(join(dir, 'docker-args'))).toThrow();
+      continue;
+    }
+    expect(readFileSync(join(dir, 'docker-args'), 'utf8')).toContain('PNPM_VERSION=10.33.0\n');
+    expect(readFileSync(join(dir, 'dockerfile'), 'utf8')).toMatch(
+      /^FROM node:22\.21\.1-bookworm-slim@sha256:[0-9a-f]{64}\n/,
+    );
+  }
 });
 it('Dump blocks from database は機密ログを公開せず終了コードを保持する', () => {
   const dir = tempDir();
@@ -88,7 +123,7 @@ it('Dump blocks from database は機密ログを公開せず終了コードを�
   expect(readFileSync(log, 'utf8')).toContain('PRIVATE_RESUME_TEXT');
   expect(statSync(log).mode & 0o777).toBe(0o600);
 });
-it('Run checks は出力を非公開ファイルへ送り、公開経路になる環境変数を検査対象コードから外す', () => {
+it('Run checks は出力を非公開ファイルへ送り、PR 側はネットワーク無しのコンテナで動かす', () => {
   const dir = tempDir();
   mkdirSync(join(dir, 'bin'));
   mkdirSync(join(dir, 'head'));
@@ -106,8 +141,12 @@ it('Run checks は出力を非公開ファイルへ送り、公開経路にな�
     ].join('\n'),
     { mode: 0o700 },
   );
+  fakeDocker(dir, ['echo PRIVATE_RESUME_TEXT', 'echo "{}" > "$RUNNER_TEMP/real-data/out/head.json"', 'exit 4']);
+  const blocks = join(dir, 'real-data', 'blocks.json');
   const result = runStep('Run checks against real data', dir, {
     RUNNER_TEMP: dir,
+    GITHUB_WORKSPACE: dir,
+    REAL_BLOCKS_JSON: blocks,
     BASE_REF: 'abc123',
     TEST_PATHS: 'src/a.node.test.tsx src/b.node.test.tsx',
     GITHUB_STEP_SUMMARY: join(dir, 'summary'),
@@ -116,16 +155,26 @@ it('Run checks は出力を非公開ファイルへ送り、公開経路にな�
   // 検査が落ちても step は止めない（判定は Judge results が行う）。
   expect(result.status).toBe(0);
   expect(result.stdout + result.stderr).not.toContain('PRIVATE');
-  expect(readFileSync(join(dir, 'real-data', 'head.exit'), 'utf8').trim()).toBe('3');
+  expect(readFileSync(join(dir, 'real-data', 'head.exit'), 'utf8').trim()).toBe('4');
   expect(readFileSync(join(dir, 'real-data', 'base.exit'), 'utf8').trim()).toBe('3');
+  expect(readFileSync(join(dir, 'real-data', 'head.json'), 'utf8').trim()).toBe('{}');
   expect(readFileSync(join(dir, 'real-data', 'head.log'), 'utf8')).toContain('PRIVATE_RESUME_TEXT');
   expect(statSync(join(dir, 'real-data', 'head.log')).mode & 0o777).toBe(0o600);
-  expect(readFileSync(join(dir, 'seen'), 'utf8')).toBe(
-    'summary=unset token=unset cwd=head\nsummary=unset token=unset cwd=base\n',
-  );
-  expect(readFileSync(join(dir, 'args-head'), 'utf8').trim().split('\n')).toEqual([
-    'exec',
-    'vitest',
+  // base（main 側）は runner 上で、公開経路になる環境変数を外して動かす。
+  expect(readFileSync(join(dir, 'seen'), 'utf8')).toBe('summary=unset token=unset cwd=base\n');
+  const args = readFileSync(join(dir, 'docker-args'), 'utf8').trim().split('\n');
+  expect(args.slice(0, 4)).toEqual(['run', '--rm', '--network', 'none']);
+  expect(args).toContain('type=tmpfs,destination=/w/.git');
+  expect(args).toContain(`${blocks}:/data/blocks.json:ro`);
+  // コンテナへ渡す環境変数はこの 3 つだけ（secret もトークンも渡さない）。
+  expect(args.flatMap((a, i) => (args[i - 1] === '-e' ? [a] : []))).toEqual([
+    'HOME=/tmp',
+    'CI=true',
+    'REAL_BLOCKS_JSON=/data/blocks.json',
+  ]);
+  expect(args.slice(args.indexOf('real-data-sandbox') + 1)).toEqual([
+    'node',
+    'node_modules/vitest/vitest.mjs',
     'run',
     '--config',
     'vitest.config.pdf.ts',
@@ -134,8 +183,25 @@ it('Run checks は出力を非公開ファイルへ送り、公開経路にな�
     'src/b.node.test.tsx',
     '--reporter=default',
     '--reporter=json',
-    `--outputFile.json=${dir}/real-data/head.json`,
+    '--outputFile.json=/out/head.json',
   ]);
+  expect(readFileSync(join(dir, 'args-base'), 'utf8')).toContain(`--outputFile.json=${dir}/real-data/base.json`);
+});
+it('Run checks は PR 側が置いたシンボリックリンクのレポートを受け取らない', () => {
+  const dir = tempDir();
+  mkdirSync(join(dir, 'bin'));
+  mkdirSync(join(dir, 'head'));
+  mkdirSync(join(dir, 'base'));
+  writeFileSync(join(dir, 'bin', 'pnpm'), '#!/bin/bash\n', { mode: 0o700 });
+  fakeDocker(dir, ['ln -s /etc/hostname "$RUNNER_TEMP/real-data/out/head.json"']);
+  const result = runStep('Run checks against real data', dir, {
+    RUNNER_TEMP: dir,
+    GITHUB_WORKSPACE: dir,
+    BASE_REF: 'abc123',
+    TEST_PATHS: '',
+  });
+  expect(result.status).toBe(0);
+  expect(() => readFileSync(join(dir, 'real-data', 'head.json'))).toThrow();
 });
 it('夜間（base なし）は head だけを検査し、TEST_PATHS が空なら全件を流す', () => {
   const dir = tempDir();
@@ -179,7 +245,9 @@ function judge(opts: {
   mkdirSync(data);
   const write = (side: 'head' | 'base', files: Record<string, Assertion[]>) => {
     const ok = Object.values(files).every((list) => list.every((a) => a.status === 'passed'));
-    writeFileSync(join(data, `${side}.json`), report(join(dir, side), files, ok));
+    // 比較モードの head はコンテナの /w で動くので、レポートのパスもそこから始まる。
+    const root = side === 'head' && opts.baseRef ? '/w' : join(dir, side);
+    writeFileSync(join(data, `${side}.json`), report(root, files, ok));
   };
   if (opts.head) write('head', opts.head);
   if (opts.base) write('base', opts.base);
@@ -290,4 +358,15 @@ it('夜間: テストは全件通っても実行が異常終了したら失敗�
   const result = judge({ head: { 'src/a.node.test.tsx': [pass('崩れない')] }, headExit: 1 });
   expect(result.status).toBe(1);
   expect(result.stdout).toContain('× (run)');
+});
+it('比較: base に無いテストファイルはパスも公開ログへ出さない', () => {
+  const result = judge({
+    baseRef: 'abc',
+    head: { 'src/PRIVATE_FILE.node.test.tsx': [fail('PRIVATE_NAME_FROM_PR')], 'src/a.node.test.tsx': [pass('既存')] },
+    base: { 'src/a.node.test.tsx': [pass('既存')] },
+    headExit: 1,
+  });
+  expect(result.status).toBe(1);
+  expect(result.stdout).toContain('× （この PR で追加・改名されたテストファイル）');
+  expect(result.stdout).not.toContain('PRIVATE');
 });

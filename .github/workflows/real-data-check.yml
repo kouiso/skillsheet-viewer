@@ -12,6 +12,10 @@ name: Real Data Check
 # base-ref を渡すと PR 用の比較モードになる。
 # - DB の接続 URL は base（main 側）のコードの dump にだけ渡す。head（PR）のコードには
 #   抜き出し済みの JSON ファイルしか渡さない
+# - head のコード（依存の lifecycle script を含む）は runner 上では一度も動かさず、使い捨ての
+#   コンテナの中だけで動かす。依存のインストールは実データを見せずにネットワークありで、
+#   検査は実データを読み取り専用で見せてネットワーク無しで行う。コンテナが終わると中のプロセスは
+#   すべて消えるので、実データを外へ送ったり後続の step に細工を残したりする経路が無い
 # - 同じ 1 回の dump で base と head を検査し、テスト単位で「head で新たに落ちたもの」だけを
 #   PR の責任とする。base でも落ちるものは実データや設定が原因として警告に留める
 # - head で新しく追加・改名されたテストの名前は、レビュー前のコードが決めた文字列なので
@@ -138,13 +142,38 @@ jobs:
         # 非秘密値だけを書く evidence ファイルで、本文・認証情報は入らない。
         run: cat "$RUNNER_TEMP/real-data/blocks.evidence"
 
-      # head（PR）の依存は dump の後に入れる。pnpm install は package.json の lifecycle script を
-      # 実行し、そこで残したプロセスは同じユーザーで動く dump の環境変数（DB の接続 URL）を
-      # /proc から読めてしまうため。夜間モードでは head が dump するので、ここでは既に入っている。
-      - name: Install dependencies (head)
+      # head（PR）のコードを動かすコンテナ。中身はこの workflow（main の版）が決め、PR が選べるのは
+      # pnpm の版だけ（形式を検査してから渡す）。夜間モードでは head が main なので使わない。
+      - name: Build sandbox for PR code
         if: inputs.base-ref != ''
-        working-directory: head
-        run: pnpm install --frozen-lockfile
+        env:
+          RASTER_DEPS: ${{ inputs.raster-deps }}
+        run: |
+          pnpm_version=$(jq -r '.packageManager // ""' head/package.json | sed -n 's/^pnpm@\([0-9][0-9.]*\)$/\1/p')
+          if [[ ! "$pnpm_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo '::error::head/package.json の packageManager から pnpm の版を読めなかった。'
+            exit 1
+          fi
+          docker build -q -t real-data-sandbox --build-arg "PNPM_VERSION=$pnpm_version" --build-arg "RASTER_DEPS=$RASTER_DEPS" - <<'EOF'
+          FROM node:22.21.1-bookworm-slim@sha256:25b3eb23a00590b7499f2a2ce939322727fcce1b15fdd69754fcd09536a3ae2c
+          ARG PNPM_VERSION
+          ARG RASTER_DEPS=false
+          RUN if [ "$RASTER_DEPS" = true ]; then apt-get update && apt-get install -y --no-install-recommends poppler-utils ghostscript imagemagick && rm -rf /var/lib/apt/lists/*; fi
+          RUN npm install -g "pnpm@$PNPM_VERSION"
+          EOF
+
+      # head（PR）の依存はコンテナの中で入れる。pnpm install は package.json の lifecycle script を
+      # 実行するため、runner 上で動かすと、残したプロセスや環境ファイル（GITHUB_ENV など）への
+      # 書き込みを通じて、実データや後続の step に手が届いてしまう。ここでは実データも secret も
+      # コンテナへ渡さない。
+      - name: Install dependencies (head, sandboxed)
+        if: inputs.base-ref != ''
+        # .git は空の tmpfs で隠す。job の最後に actions/checkout の後片付けが runner 上で
+        # git を動かすため、.git/config に細工を残されるとそこでコマンドを実行されてしまう。
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true \
+            -v "$GITHUB_WORKSPACE/head:/w" --mount type=tmpfs,destination=/w/.git \
+            -w /w real-data-sandbox pnpm install --frozen-lockfile
 
       - name: Run checks against real data
         id: test
@@ -156,13 +185,32 @@ jobs:
         # （書けたら公開ページに載る経路になるため）。
         run: |
           umask 077
-          mkdir -p "$RUNNER_TEMP/real-data"
+          mkdir -p "$RUNNER_TEMP/real-data/out"
           read -ra paths <<< "$TEST_PATHS"
           for side in head base; do
             if [[ "$side" == base && -z "$BASE_REF" ]]; then
               continue
             fi
             status=0
+            if [[ "$side" == head && -n "$BASE_REF" ]]; then
+              # PR のコードはネットワーク無しのコンテナで動かし、実データは読み取り専用で見せる。
+              # 書けるのは head の作業ツリー（.git を除く）とレポートの出力先だけ。
+              docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true \
+                -e REAL_BLOCKS_JSON=/data/blocks.json \
+                -v "$GITHUB_WORKSPACE/head:/w" --mount type=tmpfs,destination=/w/.git \
+                -v "$REAL_BLOCKS_JSON:/data/blocks.json:ro" \
+                -v "$RUNNER_TEMP/real-data/out:/out" -w /w real-data-sandbox \
+                node node_modules/vitest/vitest.mjs run --config vitest.config.pdf.ts --maxWorkers=2 "${paths[@]}" \
+                  --reporter=default --reporter=json --outputFile.json=/out/head.json \
+                  > "$RUNNER_TEMP/real-data/head.log" 2>&1 || status=$?
+              # シンボリックリンクは runner 上の別ファイルを読ませる細工になりうるので受け取らない。
+              if [[ -f "$RUNNER_TEMP/real-data/out/head.json" && ! -L "$RUNNER_TEMP/real-data/out/head.json" ]]; then
+                mv "$RUNNER_TEMP/real-data/out/head.json" "$RUNNER_TEMP/real-data/head.json"
+              fi
+              echo "$status" > "$RUNNER_TEMP/real-data/head.exit"
+              echo "Real data checks on head finished (exit $status)."
+              continue
+            fi
             (
               cd "$side"
               env -u GITHUB_STEP_SUMMARY -u GITHUB_OUTPUT -u GITHUB_ENV -u GITHUB_PATH -u GITHUB_STATE \
@@ -187,9 +235,13 @@ jobs:
           dir="$RUNNER_TEMP/real-data"
           # 落ちたテストの ID（ファイル::テスト名）。テストが 1 本も読めずに落ちたファイルは
           # ファイル::(suite)、テストの外で落ちた実行は (run) で表す。
+          # レポートのファイルパスの前置き。比較モードの head はコンテナの /w で動かしている。
+          root_of() {
+            if [[ "$1" == head && -n "$BASE_REF" ]]; then echo /w/; else echo "$GITHUB_WORKSPACE/$1/"; fi
+          }
           failed_ids() {
             local side=$1 ids
-            ids=$(jq -r --arg root "$GITHUB_WORKSPACE/$side/" '
+            ids=$(jq -r --arg root "$(root_of "$side")" '
               [ .testResults[] | (.name | ltrimstr($root)) as $f
                 | ([.assertionResults[] | select(.status == "failed") | "\($f)::\(.fullName)"]) as $a
                 | if ($a | length) > 0 then $a[] elif .status == "failed" then "\($f)::(suite)" else empty end
@@ -204,7 +256,7 @@ jobs:
           }
           all_ids() {
             local side=$1
-            jq -r --arg root "$GITHUB_WORKSPACE/$side/" '
+            jq -r --arg root "$(root_of "$side")" '
               .testResults[] | (.name | ltrimstr($root)) as $f | .assertionResults[] | "\($f)::\(.fullName)"
             ' "$dir/$side.json" | sort -u
           }
@@ -255,11 +307,14 @@ jobs:
 
           echo "::error::$CHECK_NAME: base（main 側）では通るのに、この PR の変更で落ちたテストがある"
           while IFS= read -r id; do
-            if grep -Fxq -- "$id" <<< "$base_all"; then
+            if [[ "$id" == '(run)' ]] || grep -Fxq -- "$id" <<< "$base_all"; then
               echo "× $id"
-            else
+            elif sed 's/::.*//' <<< "$base_all" | grep -Fxq -- "${id%%::*}"; then
               # head で追加・改名されたテストの名前はレビュー前のコードが決めた文字列なので出さない。
               echo "× ${id%%::*}::（この PR で追加・改名されたテスト）"
+            else
+              # ファイルパスも、base に無ければ PR のコードが決めた文字列なので出さない。
+              echo "× （この PR で追加・改名されたテストファイル）"
             fi
           done <<< "$new_failed"
           exit 1
