@@ -17,28 +17,32 @@ export function groupVersions(versions: readonly VersionSummary[]): VersionRow[]
   let run: VersionSummary[] = [];
   const flush = () => {
     if (run.length === 1) rows.push({ kind: 'single', version: run[0] });
-    else if (run.length > 1) rows.push({ kind: 'group', versions: [...run].reverse() });
+    else if (run.length > 1) rows.push({ kind: 'group', versions: run });
     run = [];
   };
-  // 区切りは「古いほうから見て、直前の保存とまとまりの始まり」で決まるので古い順に走査する。
-  for (const version of [...versions].reverse()) {
+  // まとまりの起点は新しい側。区切りは「新しいほうから見て、直近の保存と
+  // まとまりの先頭（最新版）」で決まるので新しい順に走査する。
+  // こうすると一覧の末尾へ古い版を追加読み込みしても既存のまとまりの
+  // 境界は変わらず、伸びるのは一番古いまとまりの下端だけになる
+  // （開閉キーを group.versions[0]（最新）で持つ UI と対になる）。
+  for (const version of versions) {
     if (version.action !== 'save') {
       flush();
       rows.push({ kind: 'single', version });
       continue;
     }
     const at = Date.parse(version.recordedAt);
-    const first = run[0];
-    const last = run.at(-1);
+    const newest = run[0];
+    const prev = run.at(-1);
     // 時刻が読めない版は他とまとめない（NaN との比較は常に false）。
     const joins =
-      first !== undefined &&
-      last !== undefined &&
-      at - Date.parse(last.recordedAt) < IDLE_GAP_MS &&
-      at - Date.parse(first.recordedAt) < MAX_SPAN_MS;
+      newest !== undefined &&
+      prev !== undefined &&
+      Date.parse(prev.recordedAt) - at < IDLE_GAP_MS &&
+      Date.parse(newest.recordedAt) - at < MAX_SPAN_MS;
     if (!joins) flush();
     run.push(version);
   }
   flush();
-  return rows.reverse();
+  return rows;
 }

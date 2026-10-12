@@ -354,6 +354,24 @@ describe('自動保存のまとまり', () => {
     expect(screen.getByRole('button', { name: /^版 1/ })).toBeInTheDocument();
   });
 
+  it('10分超の連続保存がページをまたいでも最新側を起点にまとめる', async () => {
+    // 20件の自動保存を1.5分おき(合計28.5分)に並べ、先頭10件→20件の順で読む。
+    // まとまりの起点は最新側なので、既存グループの開閉キー(最新版)は追加分でも変わらない。
+    const many = Array.from({ length: 20 }, (_, i) => ({
+      revision: String(20 - i),
+      title: '合成',
+      recordedAt: new Date(Date.parse('2026-10-06T00:00:00Z') + (19 - i) * 1.5 * 60_000).toISOString(),
+      action: 'save',
+      restoredFrom: null,
+      restoredBefore: null,
+    }));
+    setup({ list: vi.fn().mockResolvedValue(many.slice(0, 10)) });
+    await screen.findByRole('button', { name: '版 14〜20 の内訳を開く' });
+    setup({ list: vi.fn().mockResolvedValue(many) });
+    // 最新グループは同じまとまりのまま残る（下端だけが伸びる）
+    expect(await screen.findByRole('button', { name: /版 14〜20 の内訳を開く/ })).toBeInTheDocument();
+  });
+
   it('時刻の範囲は分が変わったときだけ「〜」で終わりを出す', async () => {
     // 「版 2〜4」にも〜があるので、時刻の行（ボタン内の最初の span）だけを見る。
     const timeLine = async () => (await screen.findByText(/保存 3回/)).closest('button')?.querySelector('span') ?? null;

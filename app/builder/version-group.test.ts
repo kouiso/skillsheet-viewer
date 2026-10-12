@@ -29,13 +29,30 @@ describe('自動保存の版を一覧でたたむ', () => {
     expect(shape(groupVersions(versions([0], [2])))).toEqual(['2', '1']);
   });
 
-  it('手を止めずに続けても、まとまりの最初から10分で区切る', () => {
+  it('手を止めずに続けても、まとまりの最新から10分で区切る', () => {
     const minutes = Array.from({ length: 12 }, (_, i): [number] => [i * 1.5]);
-    // 0〜9分の7件で1まとまり、10.5分から次のまとまり。
+    // 新しい側を起点に10分: 16.5〜7.5分の7件で1まとまり、6分から次のまとまり。
     expect(shape(groupVersions(versions(...minutes)))).toEqual([
-      ['12', '11', '10', '9', '8'],
-      ['7', '6', '5', '4', '3', '2', '1'],
+      ['12', '11', '10', '9', '8', '7', '6'],
+      ['5', '4', '3', '2', '1'],
     ]);
+  });
+
+  it('次ページの古い版を足しても既存のまとまりは壊れず、伸びるのは末尾だけ', () => {
+    // 10分超の連続保存を20件用意し、10件ずつのページで読む。
+    const all = versions(...Array.from({ length: 20 }, (_, i): [number] => [i * 1.5]));
+    const page1 = all.slice(0, 10);
+    const rows1 = shape(groupVersions(page1));
+    const rows2 = shape(groupVersions(all));
+    // 1ページ目の上位まとまりは追加読み込み後も同じキー（最新版）で同じ構成
+    expect(rows2[0]).toEqual(rows1[0]);
+    // 差が出るのは末尾のまとまりだけ。最後以外の行は内容ごと不変
+    expect(rows2.slice(0, rows1.length - 1)).toEqual(rows1.slice(0, -1));
+    // 20件連続(0〜28.5分): 最新起点10分ごとに区切られる
+    expect(rows2.length).toBeGreaterThanOrEqual(3);
+    // どの版も必ずどれか1行に1回だけ入る（脱落・重複なし）
+    const flat = rows2.flat();
+    expect(flat).toEqual(all.map((v) => v.revision));
   });
 
   it('保存以外の版は常に1行で、前後のまとまりを分ける', () => {
