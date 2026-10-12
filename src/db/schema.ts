@@ -148,6 +148,20 @@ export const viewerLoginAttempt = pgTable(
 );
 
 /**
+ * Google Drive 保存先フォルダ（オーナーごと 1 行）。
+ * Google Picker で一度選んだフォルダを記録し、別端末でも同じ保存先へ保存する。
+ * Drive 側でフォルダ名が変わっても追従しない — folder_name_at_selection は
+ * 「選んだ時点の名前」の表示用で、保存先の識別は folder_id が担う。
+ * 共有ドライブの ID は持たない（Picker から取れず、アップロードにも要らないため）。
+ */
+export const driveDestination = pgTable('drive_destination', {
+  ownerId: text('owner_id').primaryKey(),
+  folderId: text('folder_id').notNull(),
+  folderNameAtSelection: text('folder_name_at_selection').notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().default(sql`now()`),
+});
+
+/**
  * Better Auth コアテーブル（user/session/account/verification）。
  * better-auth v1.6 のデフォルト Drizzle スキーマ（単数形テーブル名）に準拠。
  * email/password 認証で使用する。drizzleAdapter はスキーマのキー名でモデルを
