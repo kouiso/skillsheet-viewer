@@ -77,7 +77,22 @@ jobs:
         with:
           path: base
           ref: ${{ inputs.base-ref }}
+          # merge-base で base-ref が main に含まれることを確かめるため全履歴が要る
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify base-ref is committed on protected main
+        if: inputs.base-ref != ''
+        # caller は任意の SHA を渡せる。base のコードは runner 上で依存インストールと
+        # DB secrets を使う dump に使うので、protected な main へ確定済みのコードだけを
+        # 許可する（同じリポジトリの未保護ブランチを base に差し替える攻撃を防ぐ）。
+        working-directory: base
+        run: |
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo '::error::base-ref は main に含まれない commit を指す。DB secrets を使う検査は main 確定済みのコードにしか許可しない。'
+            exit 1
+          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
@@ -252,7 +267,7 @@ jobs:
                 | if ($a | length) > 0 then $a[] elif .status == "failed" then "\($f)::(suite)" else empty end
               ] as $ids
               | if ($ids | length) == 0 and .success == false then "(run)" else $ids[] end
-            ' "$dir/$side.json" | sort -u)
+            ' "$dir/$side.json" 2>>"$dir/jq.err" | sort -u)
             # 未処理の例外は JSON レポートに載らず、終了コードと出力にだけ現れる。assertion の失敗と
             # 同時に起きても見逃さないよう、(unhandled) として別に数える。
             if sed 's/\x1b\[[0-9;]*m//g' "$dir/$side.log" 2>/dev/null | grep -Eq '^Vitest caught [0-9]+ unhandled error'; then
@@ -268,10 +283,28 @@ jobs:
             local side=$1
             jq -r --arg root "$(root_of "$side")" '
               .testResults[] | (.name | ltrimstr($root)) as $f | .assertionResults[] | "\($f)::\(.fullName)"
-            ' "$dir/$side.json" | sort -u
+            ' "$dir/$side.json" 2>>"$dir/jq.err" | sort -u
           }
           report_ready() {
-            [[ -s "$dir/$1.json" ]] && jq -e '.testResults' "$dir/$1.json" > /dev/null 2>&1
+            # PR のコードが書いたレポートは構造を厳格検査する。検査を通らない JSON は
+            # 以降の jq へ渡さず、jq の stderr も公開ログへ出さない（本文混入を防ぐ）。
+            [[ -s "$dir/$1.json" && ! -L "$dir/$1.json" ]] &&
+              jq -e '
+                type == "object"
+                and (.success | type == "boolean")
+                and (.testResults | type == "array")
+                and (.testResults | all(
+                    type == "object"
+                    and (.name | type == "string")
+                    and (.status | type == "string")
+                    and (.assertionResults | type == "array")
+                    and (.assertionResults | all(
+                        type == "object"
+                        and (.status | type == "string")
+                        and (.fullName | type == "string")
+                    ))
+                ))
+              ' "$dir/$1.json" > /dev/null 2>>"$dir/jq.err"
           }
 
           if [[ "$TEST_OUTCOME" != success ]] || ! report_ready head; then
