@@ -73,19 +73,21 @@ export function CompanyLane({ companyPeriod, items }: { companyPeriod: string; i
                 style={{ left: row.left, width: row.width }}
               />
             </div>
-            <span className="col-start-2 min-w-0 break-words font-mono text-[12px] text-muted-foreground sm:col-start-auto sm:whitespace-nowrap">
-              {row.duration}
-            </span>
+            {row.duration ? (
+              <span className="col-start-2 min-w-0 break-words font-mono text-[12px] text-muted-foreground sm:col-start-auto sm:whitespace-nowrap">
+                {row.duration}
+              </span>
+            ) : null}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-[26px_minmax(0,1fr)_auto] gap-2.5 sm:grid-cols-[30px_minmax(0,1fr)_auto]">
+      <div className="grid grid-cols-[26px_minmax(0,1fr)] gap-2.5 sm:grid-cols-[30px_minmax(0,1fr)_auto]">
         <span aria-hidden />
         <div className="flex flex-wrap justify-between gap-2.5 border-t border-border pt-1.5">
           <span className="whitespace-nowrap font-mono text-[12px] text-muted-foreground">{lane.startLabel}</span>
           <span className="ml-auto whitespace-nowrap font-mono text-[12px] text-muted-foreground">{lane.endLabel}</span>
         </div>
-        <span aria-hidden />
+        <span aria-hidden className="hidden sm:block" />
       </div>
     </div>
   );
