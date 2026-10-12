@@ -8,17 +8,18 @@ on:
       - "pnpm-lock.yaml"
   workflow_dispatch:
 
-# 同一 workflow・同 ref の二重起動を潰す
+# 同一 workflow・同 ref の二重起動を潰す。main push は取り消さない
+# （cancel されるとそのコミット範囲のスキャンが二度と走らないため）
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   audit:
     name: Dependency Vulnerability Check
     # draft PR では走らない（ready_for_review で再走）。dispatch は pull_request が null なので
-    # != true で素通し（== false だと null 評価で誤 skip する罠）
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    # 前段の event_name 判定で素通し。既存の ci / semgrep / security-scan と同じ書き方に揃える
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

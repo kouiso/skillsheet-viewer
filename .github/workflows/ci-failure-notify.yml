@@ -3,6 +3,8 @@ name: CI Failure Slack Notify
 # 監視対象の workflow が main / develop で落ちたら Slack へ通知し、続けて Devin を呼ぶ。
 # 夜間の実データ検査（PDF / XLSX）と Deploy Smoke は失敗の大半がデータ・外部要因で、自動起動の
 # 価値が薄いため Devin は呼ばず Slack 通知だけに絞る（2026-10 コスト見直し）。
+# 除外対象でも追跡 issue は従来通り切る（失敗の見落としを防ぐため、issue 作成は Devin 起動と分離）。
+# 除外リストは env.DEVIN_EXCLUDE_WORKFLOWS に集約 — workflow 名を変えたらここも直すこと。
 # 同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
 # 食い潰す（09-20 / 09-22 に実際に起動失敗した）ので、未解決の失敗を workflow×ブランチ×起動契機
 # ごとに open issue 1 本で持ち、issue が無い時だけ Devin を呼ぶ。同じ契機で次に成功したら issue を
@@ -51,6 +53,8 @@ jobs:
       github.event.workflow_run.name != github.workflow &&
       github.event.workflow_run.head_repository.full_name == github.repository &&
       !startsWith(github.event.workflow_run.event, 'pull_request')
+    env:
+      DEVIN_EXCLUDE_WORKFLOWS: '["PDF Layout Check", "XLSX Format Check", "Deploy Smoke"]'
     env:
       WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
@@ -164,7 +168,7 @@ jobs:
         id: devin
         if: >-
           steps.tracking.outputs.number == '' &&
-          !contains(fromJSON('["PDF Layout Check", "XLSX Format Check", "Deploy Smoke"]'), github.event.workflow_run.name)
+          !contains(fromJSON(env.DEVIN_EXCLUDE_WORKFLOWS), github.event.workflow_run.name)
         env:
           DEVIN_USER_ID: ${{ vars.SLACK_DEVIN_USER_ID }}
           NOTIFY_TS: ${{ steps.slack.outputs.ts }}
@@ -268,11 +272,16 @@ jobs:
             exit 1
           fi
 
+      # 追跡 issue の作成は Devin 起動と分離する。除外対象の workflow（Devin を呼ばない）でも
+      # 失敗の追跡先が無いと毎朝 Slack に流れるだけになるため、起動の成否に関わらず切る。
       - name: Open failure issue
-        if: steps.started.outputs.status == 'started'
+        if: >-
+          steps.tracking.outputs.number == '' &&
+          (steps.started.outputs.status == 'started' || contains(fromJSON(env.DEVIN_EXCLUDE_WORKFLOWS), github.event.workflow_run.name))
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           TITLE: ${{ steps.tracking.outputs.title }}
+          DEVIN_INVOKED: ${{ steps.started.outputs.status }}
         with:
           script: |
             const label = process.env.TRACKING_LABEL;
@@ -294,7 +303,7 @@ jobs:
               title: process.env.TITLE,
               labels: [label],
               body: [
-                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗し、Slack で Devin に調査を依頼した（起動を確認済み）。`,
+                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗。${process.env.DEVIN_INVOKED === 'started' ? 'Slack で Devin に調査を依頼した（起動を確認済み）。' : 'Devin 呼び出し対象外の workflow のため Slack 通知のみ（追跡用にこの issue を起票）。'}`,
                 '',
                 `- run: ${process.env.RUN_URL}`,
                 `- commit: ${process.env.COMMIT_SHA}`,
