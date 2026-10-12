@@ -206,7 +206,7 @@ export function VersionHistory({
   const [notice, setNotice] = useState(false);
   const [noticeSeconds, setNoticeSeconds] = useState(10);
   const [noticeSerial, setNoticeSerial] = useState(0);
-  // 開いているまとまりを、その中で最も古い版で覚える（新しい保存が加わっても変わらない）。
+  // 開いているまとまりを、その中で最も新しい版で覚える（古い保存を読み込んでも変わらない）。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     if (!returnFocusRequested || busy || confirmation || conflict) return;
