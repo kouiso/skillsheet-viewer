@@ -1,0 +1,367 @@
+name: Real Data Check
+
+# 実データ（DB の本番シート）で PDF / XLSX の崩れを検査する共通の本体。
+# 夜間の xlsx-format-check.yml から呼ぶ。base-ref を渡すと PR 用の比較モードになる（後述）。
+# PDF の夜間検査は架空データ（script/generate-pdf-layout-fixture.mjs）で回しており、ここは使わない。
+#
+# 公開リポジトリなので、経歴の本文が公開ログへ出ない仕組みをここ 1 か所で持つ。
+# - 検査の出力・JSON レポートは非公開の一時ディレクトリへ書き、最後に消す
+# - 公開ログへ出すのは、この workflow 自身（jq）が JSON から取り出したテスト ID と件数だけ
+# - 検査対象コードの実行中は、実行サマリー・step 出力・artifact/cache 用トークンを環境から外す
+#
+# base-ref を渡すと PR 用の比較モードになる。
+# - DB の接続 URL は base（main 側）のコードの dump にだけ渡す。head（PR）のコードには
+#   抜き出し済みの JSON ファイルしか渡さない
+# - head のコード（依存の lifecycle script を含む）は runner 上では一度も動かさず、使い捨ての
+#   コンテナの中だけで動かす。依存のインストールは実データを見せずにネットワークありで、
+#   検査は実データを読み取り専用で見せてネットワーク無しで行う。コンテナが終わると中のプロセスは
+#   すべて消えるので、実データを外へ送ったり後続の step に細工を残したりする経路が無い
+# - 同じ 1 回の dump で base と head を検査し、テスト単位で「head で新たに落ちたもの」だけを
+#   PR の責任とする。base でも落ちるものは実データや設定が原因として警告に留める
+# - head で新しく追加・改名されたテストの名前は、レビュー前のコードが決めた文字列なので
+#   公開ログへ出さない（ファイルパスだけ出す）
+# PR 側は、この workflow を main の版に固定して呼ぶ（PR からこの仕組みを書き換えられないように）。
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: 'ログの見出し（pdf / xlsx など）'
+        type: string
+        required: true
+      sheet-id:
+        description: '検査するシートの UUID'
+        type: string
+        required: true
+      test-paths:
+        description: 'vitest に渡すテストファイル（空白区切り）。空なら *.node.test.tsx をすべて流す'
+        type: string
+        default: ''
+      raster-deps:
+        description: 'PDF ページをビットマップ化する検査のために poppler / ghostscript / imagemagick を入れる'
+        type: boolean
+        default: false
+      base-ref:
+        description: '比較モードで base として検査する commit。空なら比較せず head だけを検査する（夜間用）'
+        type: string
+        default: ''
+    secrets:
+      # 未設定でも起動はさせ、Validate で原因を名指しして止める。
+      database-url:
+        required: false
+      owner-id:
+        required: false
+
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CHECK_SHEET_ID: ${{ inputs.sheet-id }}
+      BASE_REF: ${{ inputs.base-ref }}
+    steps:
+      # head は呼び出したイベントの既定（PR なら merge commit、夜間なら main）。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          path: head
+          # 後続の pnpm install / tsx / vitest が実行する第三者コードへ
+          # Git 認証情報を渡さない。この job は push しない。
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        if: inputs.base-ref != ''
+        with:
+          path: base
+          ref: ${{ inputs.base-ref }}
+          # merge-base で base-ref が main に含まれることを確かめるため全履歴が要る
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify base-ref is committed on protected main
+        if: inputs.base-ref != ''
+        # caller は任意の SHA を渡せる。base のコードは runner 上で依存インストールと
+        # DB secrets を使う dump に使うので、protected な main へ確定済みのコードだけを
+        # 許可する（同じリポジトリの未保護ブランチを base に差し替える攻撃を防ぐ）。
+        working-directory: base
+        run: |
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo '::error::base-ref は main に含まれない commit を指す。DB secrets を使う検査は main 確定済みのコードにしか許可しない。'
+            exit 1
+          fi
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          # runner 上で pnpm を使うのは、比較モードでは base、夜間では head。PR の版に引きずられないようにする。
+          package_json_file: ${{ inputs.base-ref != '' && 'base/package.json' || 'head/package.json' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          # ci.yml と同じ理由で mise.toml を読めないため、バージョンを手動で同期させる。
+          node-version: '22.21.1'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ inputs.base-ref != '' && 'base/pnpm-lock.yaml' || 'head/pnpm-lock.yaml' }}
+
+      - name: Install dependencies (nightly)
+        if: inputs.base-ref == ''
+        working-directory: head
+        run: pnpm install --frozen-lockfile
+
+      - name: Install dependencies (base)
+        if: inputs.base-ref != ''
+        working-directory: base
+        run: pnpm install --frozen-lockfile
+
+      - name: Install system dependencies for PDF rasterization
+        if: inputs.raster-deps && inputs.base-ref == ''
+        # ci.yml の test ジョブと同じ依存。ラスタ検査が PDF ページをビットマップ化する。
+        # 比較モードでは base も head もコンテナで検査するので、コンテナの側に入れる。
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
+
+      - name: Validate target sheet
+        env:
+          CHECK_DATABASE_URL: ${{ secrets.database-url }}
+        run: |
+          if [[ -z "$CHECK_DATABASE_URL" ]]; then
+            echo '::error::The check database URL secret must be configured.'
+            exit 1
+          fi
+          if [[ ! "$CHECK_SHEET_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            echo '::error::The check sheet id must be configured with a sheet UUID.'
+            exit 1
+          fi
+
+      - name: Dump blocks from database
+        # 比較モードでは main 側のコードで dump する。DB の接続 URL を PR のコードへ渡さないため。
+        working-directory: ${{ inputs.base-ref != '' && 'base' || 'head' }}
+        env:
+          DATABASE_URL: ${{ secrets.database-url }}
+          SKILLSHEET_OWNER_ID: ${{ secrets.owner-id }}
+        # 本文やDBエラーは非公開の一時ファイルに限定する。成果物へはアップロードしない。
+        # シートは --sheet-id で明示する（正本の全件 dump はしない #348）。
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/real-data"
+          status=0
+          pnpm exec tsx script/dump-block.ts --out "$RUNNER_TEMP/real-data/blocks.json" --sheet-id "$CHECK_SHEET_ID" --evidence "$RUNNER_TEMP/real-data/blocks.evidence" > "$RUNNER_TEMP/real-data/dump.log" 2>&1 || status=$?
+          echo "Database dump finished (exit $status)."
+          exit "$status"
+
+      - name: Record dump evidence
+        # M07 の完了条件（接続先識別・owner一致・件数・スナップショット）を
+        # 非秘密の識別子だけで実行ログへ残す。内容は dump-block.ts が
+        # 非秘密値だけを書く evidence ファイルで、本文・認証情報は入らない。
+        run: cat "$RUNNER_TEMP/real-data/blocks.evidence"
+
+      # head（PR）のコードを動かすコンテナ。中身はこの workflow（main の版）が決め、PR が選べるのは
+      # pnpm の版だけ（形式を検査してから渡す）。夜間モードでは head が main なので使わない。
+      - name: Build sandbox for PR code
+        if: inputs.base-ref != ''
+        env:
+          RASTER_DEPS: ${{ inputs.raster-deps }}
+        run: |
+          pnpm_version=$(jq -r '.packageManager // ""' head/package.json | sed -n 's/^pnpm@\([0-9][0-9.]*\)$/\1/p')
+          if [[ ! "$pnpm_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo '::error::head/package.json の packageManager から pnpm の版を読めなかった。'
+            exit 1
+          fi
+          docker build -q -t real-data-sandbox --build-arg "PNPM_VERSION=$pnpm_version" --build-arg "RASTER_DEPS=$RASTER_DEPS" - <<'EOF'
+          FROM node:22.21.1-bookworm-slim@sha256:25b3eb23a00590b7499f2a2ce939322727fcce1b15fdd69754fcd09536a3ae2c
+          ARG PNPM_VERSION
+          ARG RASTER_DEPS=false
+          RUN if [ "$RASTER_DEPS" = true ]; then apt-get update && apt-get install -y --no-install-recommends poppler-utils ghostscript imagemagick && rm -rf /var/lib/apt/lists/*; fi
+          RUN npm install -g "pnpm@$PNPM_VERSION"
+          EOF
+
+      # head（PR）の依存はコンテナの中で入れる。pnpm install は package.json の lifecycle script を
+      # 実行するため、runner 上で動かすと、残したプロセスや環境ファイル（GITHUB_ENV など）への
+      # 書き込みを通じて、実データや後続の step に手が届いてしまう。ここでは実データも secret も
+      # コンテナへ渡さない。
+      - name: Install dependencies (head, sandboxed)
+        if: inputs.base-ref != ''
+        # .git は空の tmpfs で隠す。job の最後に actions/checkout の後片付けが runner 上で
+        # git を動かすため、.git/config に細工を残されるとそこでコマンドを実行されてしまう。
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true \
+            -v "$GITHUB_WORKSPACE/head:/w" --mount type=tmpfs,destination=/w/.git \
+            -w /w real-data-sandbox pnpm install --frozen-lockfile
+
+      - name: Run checks against real data
+        id: test
+        env:
+          REAL_BLOCKS_JSON: ${{ runner.temp }}/real-data/blocks.json
+          TEST_PATHS: ${{ inputs.test-paths }}
+        # assertion の失敗文には実経歴が含まれうるため、出力はすべて非公開ファイルへ送る。
+        # 実行サマリー・step 出力・環境ファイル・artifact/cache/OIDC 用の値は検査対象コードから外す
+        # （書けたら公開ページに載る経路になるため）。
+        run: |
+          umask 077
+          mkdir -p "$RUNNER_TEMP/real-data/out"
+          read -ra paths <<< "$TEST_PATHS"
+          for side in head base; do
+            if [[ "$side" == base && -z "$BASE_REF" ]]; then
+              continue
+            fi
+            status=0
+            if [[ -n "$BASE_REF" ]]; then
+              # 比較モードは base も head も同じコンテナで検査する。PDF のラスタ化に使う gs / ImageMagick /
+              # poppler の版が両側で揃わないと、レンダラの差が PR の崩れに見えてしまうため。
+              # head（PR）のコードを runner 上で動かさないためでもあり、ネットワークは無し、
+              # 実データは読み取り専用で見せる。書けるのは作業ツリー（.git を除く）とレポートの出力先だけ。
+              docker run --rm --network none --user "$(id -u):$(id -g)" -e HOME=/tmp -e CI=true \
+                -e REAL_BLOCKS_JSON=/data/blocks.json \
+                -v "$GITHUB_WORKSPACE/$side:/w" --mount type=tmpfs,destination=/w/.git \
+                -v "$REAL_BLOCKS_JSON:/data/blocks.json:ro" \
+                -v "$RUNNER_TEMP/real-data/out:/out" -w /w real-data-sandbox \
+                node node_modules/vitest/vitest.mjs run --config vitest.config.pdf.ts --maxWorkers=2 "${paths[@]}" \
+                  --reporter=default --reporter=json --outputFile.json="/out/$side.json" \
+                  > "$RUNNER_TEMP/real-data/$side.log" 2>&1 || status=$?
+              # シンボリックリンクは runner 上の別ファイルを読ませる細工になりうるので受け取らない。
+              if [[ -f "$RUNNER_TEMP/real-data/out/$side.json" && ! -L "$RUNNER_TEMP/real-data/out/$side.json" ]]; then
+                mv "$RUNNER_TEMP/real-data/out/$side.json" "$RUNNER_TEMP/real-data/$side.json"
+              fi
+              rm -rf "$RUNNER_TEMP/real-data/out" && mkdir "$RUNNER_TEMP/real-data/out"
+              echo "$status" > "$RUNNER_TEMP/real-data/$side.exit"
+              echo "Real data checks on $side finished (exit $status)."
+              continue
+            fi
+            (
+              cd "$side"
+              env -u GITHUB_STEP_SUMMARY -u GITHUB_OUTPUT -u GITHUB_ENV -u GITHUB_PATH -u GITHUB_STATE \
+                -u ACTIONS_RUNTIME_TOKEN -u ACTIONS_RUNTIME_URL -u ACTIONS_RESULTS_URL -u ACTIONS_CACHE_URL \
+                -u ACTIONS_ID_TOKEN_REQUEST_TOKEN -u ACTIONS_ID_TOKEN_REQUEST_URL \
+                pnpm exec vitest run --config vitest.config.pdf.ts --maxWorkers=2 "${paths[@]}" \
+                  --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/real-data/$side.json" \
+                  > "$RUNNER_TEMP/real-data/$side.log" 2>&1
+            ) || status=$?
+            echo "$status" > "$RUNNER_TEMP/real-data/$side.exit"
+            echo "Real data checks on $side finished (exit $status)."
+          done
+
+      - name: Judge results
+        if: always()
+        env:
+          CHECK_NAME: ${{ inputs.name }}
+          TEST_OUTCOME: ${{ steps.test.outcome }}
+        # 判定と公開ログへの書き出しは、この workflow 自身（jq）だけで行う。検査対象コードの出力は
+        # JSON レポートの構造化されたフィールド（ファイル・テスト名・成否）しか読まない。
+        run: |
+          dir="$RUNNER_TEMP/real-data"
+          # 落ちたテストの ID（ファイル::テスト名）。テストが 1 本も読めずに落ちたファイルは
+          # ファイル::(suite)、テストの外で落ちた実行は (run) で表す。
+          # レポートのファイルパスの前置き。比較モードは base も head もコンテナの /w で動かしている。
+          root_of() {
+            if [[ -n "$BASE_REF" ]]; then echo /w/; else echo "$GITHUB_WORKSPACE/$1/"; fi
+          }
+          failed_ids() {
+            local side=$1 ids
+            ids=$(jq -r --arg root "$(root_of "$side")" '
+              [ .testResults[] | (.name | ltrimstr($root)) as $f
+                | ([.assertionResults[] | select(.status == "failed") | "\($f)::\(.fullName)"]) as $a
+                | if ($a | length) > 0 then $a[] elif .status == "failed" then "\($f)::(suite)" else empty end
+              ] as $ids
+              | if ($ids | length) == 0 and .success == false then "(run)" else $ids[] end
+            ' "$dir/$side.json" 2>>"$dir/jq.err" | sort -u)
+            # 未処理の例外は JSON レポートに載らず、終了コードと出力にだけ現れる。assertion の失敗と
+            # 同時に起きても見逃さないよう、(unhandled) として別に数える。
+            if sed 's/\x1b\[[0-9;]*m//g' "$dir/$side.log" 2>/dev/null | grep -Eq '^Vitest caught [0-9]+ unhandled error'; then
+              ids=$(printf '%s\n%s\n' "$ids" '(unhandled)' | sed '/^$/d' | sort -u)
+            fi
+            # それ以外の理由で、落ちたテストが無いのに終了コードが 0 以外の実行は (run) とする。
+            if [[ -z "$ids" && "$(cat "$dir/$side.exit" 2>/dev/null)" != 0 ]]; then
+              ids="(run)"
+            fi
+            printf '%s\n' "$ids" | sed '/^$/d'
+          }
+          all_ids() {
+            local side=$1
+            jq -r --arg root "$(root_of "$side")" '
+              .testResults[] | (.name | ltrimstr($root)) as $f | .assertionResults[] | "\($f)::\(.fullName)"
+            ' "$dir/$side.json" 2>>"$dir/jq.err" | sort -u
+          }
+          report_ready() {
+            # PR のコードが書いたレポートは構造を厳格検査する。検査を通らない JSON は
+            # 以降の jq へ渡さず、jq の stderr も公開ログへ出さない（本文混入を防ぐ）。
+            [[ -s "$dir/$1.json" && ! -L "$dir/$1.json" ]] &&
+              jq -e '
+                type == "object"
+                and (.success | type == "boolean")
+                and (.testResults | type == "array")
+                and (.testResults | all(
+                    type == "object"
+                    and (.name | type == "string")
+                    and (.status | type == "string")
+                    and (.assertionResults | type == "array")
+                    and (.assertionResults | all(
+                        type == "object"
+                        and (.status | type == "string")
+                        and (.fullName | type == "string")
+                    ))
+                ))
+              ' "$dir/$1.json" > /dev/null 2>>"$dir/jq.err"
+          }
+
+          if [[ "$TEST_OUTCOME" != success ]] || ! report_ready head; then
+            echo "::error::$CHECK_NAME: 検査を最後まで実行できなかった（依存のインストール・DB からの抜き出し・設定のどれか）。PDF / XLSX の崩れとは判定していない。"
+            exit 1
+          fi
+
+          if [[ -z "$BASE_REF" ]]; then
+            # 夜間: main のコードなので、落ちたテスト名と規則ごとの件数をそのまま出す。
+            head_failed=$(failed_ids head)
+            # 規則ごとの件数（PDF_LAYOUT_COUNTS 行）は、既知の規則名と整数だけの行に限って出す
+            # （pdf-layout-check.yml と同じ形）。
+            sed 's/\x1b\[[0-9;]*m//g' "$dir/head.log" |
+              grep -E '^[[:space:]]*PDF_LAYOUT_COUNTS (early-break|mid-alnum-break|runt-line|kinsoku|long-paragraph|overflow|page-spill)=[0-9]+( (early-break|mid-alnum-break|runt-line|kinsoku|long-paragraph|overflow|page-spill)=[0-9]+)*[[:space:]]*$' || true
+            if [[ "$(cat "$dir/head.exit")" == 0 && -z "$head_failed" ]]; then
+              echo "$CHECK_NAME: 実データで通過"
+              exit 0
+            fi
+            echo "::error::$CHECK_NAME: 実データで落ちたテスト"
+            printf '%s\n' "$head_failed" | sed '/^$/d; s/^/× /'
+            exit 1
+          fi
+
+          if ! report_ready base; then
+            echo "::error::$CHECK_NAME: base（main 側）の検査を最後まで実行できなかった。この PR の変更による崩れとは判定していない。"
+            exit 1
+          fi
+
+          head_failed=$(failed_ids head)
+          base_failed=$(failed_ids base)
+          base_all=$(all_ids base)
+          new_failed=$(comm -23 <(printf '%s\n' "$head_failed" | sed '/^$/d') <(printf '%s\n' "$base_failed" | sed '/^$/d'))
+
+          if [[ -n "$base_failed" ]]; then
+            echo "::warning::$CHECK_NAME: base（main 側）でも落ちているテストがある。実データや設定が原因で、この PR の判定からは外した（夜間の検査と Devin 依頼で扱う）。"
+            printf '%s\n' "$base_failed" | sed 's/^/  base でも × /'
+          fi
+
+          if [[ -z "$new_failed" ]]; then
+            echo "$CHECK_NAME: この PR の変更で新たに落ちたテストはない"
+            exit 0
+          fi
+
+          echo "::error::$CHECK_NAME: base（main 側）では通るのに、この PR の変更で落ちたテストがある"
+          while IFS= read -r id; do
+            if [[ "$id" == '(run)' || "$id" == '(unhandled)' ]] || grep -Fxq -- "$id" <<< "$base_all"; then
+              echo "× $id"
+            elif sed 's/::.*//' <<< "$base_all" | grep -Fxq -- "${id%%::*}"; then
+              # head で追加・改名されたテストの名前はレビュー前のコードが決めた文字列なので出さない。
+              echo "× ${id%%::*}::（この PR で追加・改名されたテスト）"
+            else
+              # ファイルパスも、base に無ければ PR のコードが決めた文字列なので出さない。
+              echo "× （この PR で追加・改名されたテストファイル）"
+            fi
+          done <<< "$new_failed"
+          exit 1
+
+      - name: Remove private data and logs
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/real-data"
