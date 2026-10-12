@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { staleStatusAfterTries } = require('./devin-slack-relay.js');
+const { staleStatusAfterTries } = require('./devin-slack-relay.cjs');
 
 // 無応答スイープ: 上限(3)未満では triggered を維持、到達で failed（再投稿しない）
 test('stays triggered below STALE_TRIGGER_TRIES', () => {
