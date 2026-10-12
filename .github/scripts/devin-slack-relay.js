@@ -14,6 +14,12 @@ const FAILURE_RE =
 const MAX_TRIES = 3; // 6時間間隔で約18時間
 const STALE_TRIGGER_TRIES = 3; // 起動要求後に Devin の返信が無いまま許容する sweep 回数(約18時間)
 
+// 無応答スイープの遷移判定。上限到達で 'failed'（自動再投稿しない）になる。
+// この遷移を壊すと pending 復活で同じスレッドへ再投稿を繰り返す事故が起きるのでテストで固定する。
+function staleStatusAfterTries(tries) {
+  return tries >= STALE_TRIGGER_TRIES ? 'failed' : 'triggered';
+}
+
 const STATUS_LABELS = {
   queued: 'Queued',
   pending: 'Retry pending',
@@ -506,7 +512,7 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
 
   if (marker?.status === 'triggered' && marker?.ts) {
     // 遅延する Devin 応答を回収する。URLなら done。失敗なら pending。
-    // どちらも無い無応答が続く場合は tries を進めて上限で pending へ降格し再投稿に委ねる。
+    // どちらも無い無応答が続く場合は tries を進めて、上限で failed にして止める（自動再投稿はしない）。
     const r = await slackReplies(cfg, marker.ts);
     if (!r.ok) {
       // スレッドが消えているなら pending へ降格して次回新スレッドで再投稿させる
@@ -548,7 +554,7 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
       await removeTriggerLabel(issue.number);
     } else {
       const tries = (marker.tries || 0) + 1;
-      if (tries >= STALE_TRIGGER_TRIES) {
+      if (staleStatusAfterTries(tries) === 'failed') {
         // 無言が続く限り再投稿しない。pending に落とすと同じスレッドへ再投稿を繰り返すため、
         // failed（要手動対応）で止める
         await finalize(
@@ -611,4 +617,4 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
   }
 }
 
-module.exports = { dispatch, verify, sweep };
+module.exports = { dispatch, verify, sweep, staleStatusAfterTries };
