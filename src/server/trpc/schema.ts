@@ -36,3 +36,11 @@ export const githubSheetPathInputSchema = z.object({ path: z.string() });
 export const builderStateInputSchema = z.object({ sheetId: sheetIdSchema.optional() });
 
 export const viewerLoginInputSchema = z.object({ code: z.string() });
+
+// Picker が返すフォルダ ID・名前をそのまま記録する。Drive の ID 形式に厳密な
+// 公開仕様はないため非空チェックだけに留め、上限は DB 側の text 列を信じる
+// 代わりに悪意ある巨大入力を弾く程度に抑える。
+export const driveDestinationInputSchema = z.object({
+  folderId: z.string().min(1).max(256),
+  folderName: z.string().min(1).max(512),
+});
