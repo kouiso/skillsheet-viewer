@@ -7,6 +7,7 @@ import type { Block } from '@/db/block';
 import type { createDocumentHistory, VersionSummary } from '@/db/document-history';
 import type { DocumentSnapshot } from '@/db/document-service';
 import { assembleMarkdown, blockToItem } from './serialize';
+import { groupVersions } from './version-group';
 
 type HistoryService = ReturnType<typeof createDocumentHistory>;
 export type RestorePreview = Awaited<ReturnType<HistoryService['previewRestore']>>;
@@ -96,6 +97,23 @@ function fieldLabel(path: string) {
     .split('.')
     .map((part) => (/^\d+$/.test(part) ? `${Number(part) + 1}番目` : (labels[part] ?? part)))
     .join(' › ');
+}
+function groupStart(recordedAt: string) {
+  return new Date(recordedAt).toLocaleString('ja-JP', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+// まとまりは最長10分だが日付をまたぐことはあるので、そのときだけ終わりにも日付を出す。
+// 同じ分のうちに収まったときは「07:06〜07:06」と並べず、終わりを出さない（null）。
+function groupEnd(startAt: string, endAt: string) {
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  const time = (date: Date) => date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+  if (start.toDateString() !== end.toDateString()) return groupStart(endAt);
+  return time(start) === time(end) ? null : time(end);
 }
 const control =
   'min-h-11 rounded border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -188,6 +206,8 @@ export function VersionHistory({
   const [notice, setNotice] = useState(false);
   const [noticeSeconds, setNoticeSeconds] = useState(10);
   const [noticeSerial, setNoticeSerial] = useState(0);
+  // 開いているまとまりを、その中で最も新しい版で覚える（古い保存を読み込んでも変わらない）。
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   useEffect(() => {
     if (!returnFocusRequested || busy || confirmation || conflict) return;
     const origin = returnFocusRef.current;
@@ -313,6 +333,53 @@ export function VersionHistory({
       if (alive.current) setBusy(false);
     }
   }
+  function selectVersion(target: string) {
+    setFrom(revision);
+    setTo(target);
+    setMobileTab('compare');
+  }
+  function versionEntry(row: VersionSummary) {
+    return (
+      <>
+        <button
+          type="button"
+          className={`${control} w-full text-left ${to === row.revision ? 'border-primary bg-accent text-accent-foreground' : ''}`}
+          aria-current={to === row.revision ? 'true' : undefined}
+          disabled={busy}
+          onClick={() => selectVersion(row.revision)}
+        >
+          <span className="block font-semibold">
+            版 {row.revision}
+            {row.revision === revision ? '（現在）' : ''}
+          </span>
+          <time className="block text-xs" dateTime={row.recordedAt}>
+            {new Date(row.recordedAt).toLocaleString('ja-JP')}
+          </time>
+          <span className="block break-all text-xs">
+            {row.action === 'restore'
+              ? '復元した状態'
+              : row.action === 'create'
+                ? '作成'
+                : row.action === 'delete'
+                  ? '削除前の状態'
+                  : '保存'}
+          </span>
+        </button>
+        {row.restoredBefore !== null && (
+          <button
+            type="button"
+            className={`${control} mt-1 w-full`}
+            disabled={busy || Boolean(restoreBlockedReason)}
+            onClick={() => {
+              if (row.restoredBefore !== null) void prepare(row.restoredBefore, row.revision, true);
+            }}
+          >
+            版 {row.revision} の復元前（版 {row.restoredBefore}）を確認
+          </button>
+        )}
+      </>
+    );
+  }
   const differences = pair
     ? documentDifferences(
         { title: pair.from.title, blocks: pair.from.blocks },
@@ -402,50 +469,69 @@ export function VersionHistory({
           )}
           {!loading && !listError && rows.length === 0 && <p>保存された版がありません。</p>}
           <ol className="space-y-2">
-            {rows.map((row) => (
-              <li key={row.revision}>
-                <button
-                  type="button"
-                  className={`${control} w-full text-left ${to === row.revision ? 'border-primary bg-accent text-accent-foreground' : ''}`}
-                  aria-current={to === row.revision ? 'true' : undefined}
-                  disabled={busy}
-                  onClick={() => {
-                    setFrom(revision);
-                    setTo(row.revision);
-                    setMobileTab('compare');
-                  }}
-                >
-                  <span className="block font-semibold">
-                    版 {row.revision}
-                    {row.revision === revision ? '（現在）' : ''}
-                  </span>
-                  <time className="block text-xs" dateTime={row.recordedAt}>
-                    {new Date(row.recordedAt).toLocaleString('ja-JP')}
-                  </time>
-                  <span className="block break-all text-xs">
-                    {row.action === 'restore'
-                      ? '復元した状態'
-                      : row.action === 'create'
-                        ? '作成'
-                        : row.action === 'delete'
-                          ? '削除前の状態'
-                          : '保存'}
-                  </span>
-                </button>
-                {row.restoredBefore !== null && (
-                  <button
-                    type="button"
-                    className={`${control} mt-1 w-full`}
-                    disabled={busy || Boolean(restoreBlockedReason)}
-                    onClick={() => {
-                      if (row.restoredBefore !== null) void prepare(row.restoredBefore, row.revision, true);
-                    }}
-                  >
-                    版 {row.revision} の復元前（版 {row.restoredBefore}）を確認
-                  </button>
-                )}
-              </li>
-            ))}
+            {groupVersions(rows).map((group) => {
+              if (group.kind === 'single') return <li key={group.version.revision}>{versionEntry(group.version)}</li>;
+              const newest = group.versions[0];
+              const oldest = group.versions[group.versions.length - 1];
+              // WHY: 古い版を追加読み込みするとまとまりの下端(oldest)が伸びる。
+              //      開閉キーに newest を使うと読み込みで区切りが変わっても
+              //      開いていた内訳が閉じない。
+              const open = expanded.has(newest.revision);
+              const listId = `version-group-${newest.revision}`;
+              const selected = group.versions.some((version) => version.revision === to);
+              const end = groupEnd(oldest.recordedAt, newest.recordedAt);
+              return (
+                <li key={`group-${newest.revision}`}>
+                  <div className="flex min-w-0 gap-1">
+                    <button
+                      type="button"
+                      className={`${control} min-w-0 flex-1 text-left ${selected ? 'border-primary bg-accent text-accent-foreground' : ''}`}
+                      aria-current={selected ? 'true' : undefined}
+                      disabled={busy}
+                      onClick={() => selectVersion(newest.revision)}
+                    >
+                      <span className="block font-semibold">
+                        <time dateTime={oldest.recordedAt}>{groupStart(oldest.recordedAt)}</time>
+                        {end !== null && (
+                          <>
+                            〜<time dateTime={newest.recordedAt}>{end}</time>
+                          </>
+                        )}
+                        の編集
+                        {newest.revision === revision ? '（現在）' : ''}
+                      </span>
+                      <span className="block break-all text-xs">
+                        保存 {group.versions.length}回 · 版 {oldest.revision}〜{newest.revision}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`${control} shrink-0`}
+                      aria-expanded={open}
+                      aria-controls={listId}
+                      aria-label={`版 ${oldest.revision}〜${newest.revision} の${open ? '内訳を閉じる' : '内訳を開く'}`}
+                      onClick={() =>
+                        setExpanded((previous) => {
+                          const next = new Set(previous);
+                          if (open) next.delete(newest.revision);
+                          else next.add(newest.revision);
+                          return next;
+                        })
+                      }
+                    >
+                      <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+                    </button>
+                  </div>
+                  {open && (
+                    <ol id={listId} className="mt-1 space-y-1 border-l-2 border-border pl-2">
+                      {group.versions.map((version) => (
+                        <li key={version.revision}>{versionEntry(version)}</li>
+                      ))}
+                    </ol>
+                  )}
+                </li>
+              );
+            })}
           </ol>
           {more && (
             <button

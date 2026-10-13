@@ -2,6 +2,7 @@ name: Security Audit
 
 on:
   pull_request:
+    # ready_for_review を入れるのは、draft の間は走らせず、draft を外した時に走らせるため。
     types: [opened, reopened, synchronize, ready_for_review]
     paths:
       - "pnpm-lock.yaml"
@@ -15,8 +16,9 @@ jobs:
   audit:
     name: Dependency Vulnerability Check
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # draft の PR では走らせない（workflow_dispatch は対象外なので常に走る）。
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
