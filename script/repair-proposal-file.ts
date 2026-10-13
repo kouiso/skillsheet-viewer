@@ -53,7 +53,7 @@ export function persistPrivateRepairRecord(path: string, record: unknown): void 
 }
 
 /** 私有記録をJSONとして読む。戻り値の種別・承認内容は呼出元で検証する。 */
-export function readPrivateRepairRecord(path: string): unknown {
+export function readPrivateRepairText(path: string): string {
   const dir = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try {
     const directory = fstatSync(dir);
@@ -69,15 +69,19 @@ export function readPrivateRepairRecord(path: string): unknown {
       if (!file.isFile() || (file.mode & 0o077) !== 0 || (process.getuid && file.uid !== process.getuid())) {
         throw new Error('PRIVATE_FILE_REQUIRED');
       }
-      const body = readFileSync(fd, 'utf8');
-      const record: unknown = JSON.parse(body);
-      // 重複キーや非canonical表現を受け入れず、保存関数が固定したbyte列だけを読む。
-      if (canonicalJson(record) !== body) throw new Error('INVALID_REPAIR_RECORD');
-      return record;
+      return readFileSync(fd, 'utf8');
     } finally {
       closeSync(fd);
     }
   } finally {
     closeSync(dir);
   }
+}
+
+/** 私有JSON記録のbyte列と意味を照合する。 */
+export function readPrivateRepairRecord(path: string): unknown {
+  const body = readPrivateRepairText(path);
+  const record: unknown = JSON.parse(body);
+  if (canonicalJson(record) !== body) throw new Error('INVALID_REPAIR_RECORD');
+  return record;
 }
