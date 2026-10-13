@@ -39,7 +39,7 @@ BEGIN
   SELECT oid INTO runtime_oid FROM pg_roles WHERE rolname = current_setting('vars.runtime_role');
   -- 降格できない属性や所有権は、password・membershipを変える前に拒否する。
   IF EXISTS (SELECT FROM pg_roles WHERE oid = runtime_oid
-    AND (rolsuper OR rolreplication OR rolbypassrls OR rolconnlimit = 0
+    AND (rolname = SESSION_USER OR rolsuper OR rolreplication OR rolbypassrls OR rolconnlimit = 0
       OR rolvaliduntil <= clock_timestamp())) THEN
     RAISE EXCEPTION 'UNSAFE_RUNTIME_ROLE' USING ERRCODE = '42501';
   END IF;
@@ -96,6 +96,9 @@ $$;
 -- 残骸（境界対象テーブルへの直接 DML 等）も毎回消える。
 DO $$
 BEGIN
+  IF has_database_privilege(current_setting('vars.runtime_role'), current_database(), 'CREATE') THEN
+    EXECUTE format('REVOKE CREATE ON DATABASE %I FROM %I', current_database(), current_setting('vars.runtime_role'));
+  END IF;
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I', current_setting('vars.runtime_role'));
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I', current_setting('vars.runtime_role'));
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM %I', current_setting('vars.runtime_role'));
@@ -229,6 +232,14 @@ BEGIN
           'skillsheet_private.replace_sheet(uuid,text,text,jsonb,text)'::regprocedure,
           'skillsheet_private.create_sheet(uuid,text,jsonb,text)'::regprocedure,
           'skillsheet_private.delete_sheet(uuid,text,text)'::regprocedure))
+    OR has_database_privilege(runtime_oid, current_database(), 'CREATE')
+    -- 明示された将来テーブルへの自動grantも、role/PUBLIC経由の漏洩として停止する。
+    OR EXISTS (SELECT FROM pg_default_acl d
+      LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
+      CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+      WHERE d.defaclobjtype = 'r' AND (d.defaclnamespace = 0 OR n.nspname IN ('public','skillsheet_private'))
+        AND a.grantee IN (0, runtime_oid)
+        AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN'))
     OR has_schema_privilege(runtime_oid, 'public', 'CREATE')
     OR has_schema_privilege(runtime_oid, 'skillsheet_private', 'CREATE')
     OR has_function_privilege(runtime_oid, 'skillsheet_private.checked_blocks(jsonb)', 'EXECUTE') THEN
@@ -236,12 +247,9 @@ BEGIN
   END IF;
   -- MAINTAINはPG17で追加されたため、PG16では評価しない。
   IF current_setting('server_version_num')::integer >= 170000 THEN
-    IF EXISTS (SELECT FROM pg_auth_members
-    WHERE member = runtime_oid OR (roleid = runtime_oid AND member <> SESSION_USER::regrole))
-    OR has_table_privilege(runtime_oid, 'public.skill_sheets', 'MAINTAIN')
-      OR has_table_privilege(runtime_oid, 'public.blocks', 'MAINTAIN')
-      OR has_table_privilege(runtime_oid, 'public.skillsheet_state', 'MAINTAIN')
-      OR has_table_privilege(runtime_oid, 'skillsheet_private.principals', 'MAINTAIN') THEN
+    IF EXISTS (SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('public','skillsheet_private') AND c.relkind IN ('r','p','v','m','f')
+        AND has_table_privilege(runtime_oid, c.oid, 'MAINTAIN')) THEN
       RAISE EXCEPTION 'RUNTIME_BOUNDARY_PERMISSION_LEAK' USING ERRCODE = '42501';
     END IF;
   END IF;

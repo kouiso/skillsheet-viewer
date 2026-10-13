@@ -15,6 +15,7 @@ GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO runtime_proof_runtime;
 GRANT ALL ON ALL TABLES IN SCHEMA skillsheet_private TO runtime_proof_runtime;
 GRANT EXECUTE ON FUNCTION skillsheet_private.checked_blocks(jsonb) TO runtime_proof_runtime;
 GRANT CREATE ON SCHEMA public, skillsheet_private TO runtime_proof_runtime;
+GRANT CREATE ON DATABASE postgres TO runtime_proof_runtime;
 \ir install-runtime-role.sql
 
 DO $$
@@ -27,12 +28,14 @@ BEGIN
   IF EXISTS (SELECT FROM pg_auth_members WHERE member = runtime_oid OR roleid = runtime_oid) THEN
     RAISE EXCEPTION 'Runtime membership survived provisioning';
   END IF;
-  IF has_schema_privilege(runtime_oid, 'public', 'CREATE')
+  IF has_database_privilege(runtime_oid, current_database(), 'CREATE')
+    OR has_schema_privilege(runtime_oid, 'public', 'CREATE')
     OR has_schema_privilege(runtime_oid, 'skillsheet_private', 'CREATE') THEN
     RAISE EXCEPTION 'Runtime schema CREATE survived provisioning';
   END IF;
-  IF NOT has_table_privilege(runtime_oid, 'public."user"', 'SELECT,INSERT,UPDATE,DELETE')
-    OR NOT has_table_privilege(runtime_oid, 'public.drive_destination', 'SELECT,INSERT,UPDATE,DELETE') THEN
+  IF EXISTS (SELECT FROM unnest(ARRAY['public."user"','public.drive_destination']) AS relation(name)
+    CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS permission(name)
+    WHERE NOT has_table_privilege(runtime_oid, relation.name, permission.name)) THEN
     RAISE EXCEPTION 'Required auth and Drive privileges missing';
   END IF;
 END

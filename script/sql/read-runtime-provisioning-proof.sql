@@ -4,6 +4,8 @@ SELECT md5(jsonb_build_object(
     FROM pg_authid r WHERE rolname LIKE 'runtime_proof_%'),
   'memberships', (SELECT jsonb_agg(to_jsonb(m) ORDER BY roleid, member, grantor)
     FROM pg_auth_members m),
+  'database_acls', (SELECT jsonb_agg(jsonb_build_array(datname,datdba,datacl) ORDER BY datname) FROM pg_database),
+  'default_acls', (SELECT jsonb_agg(to_jsonb(d) ORDER BY defaclrole,defaclnamespace,defaclobjtype) FROM pg_default_acl d),
   'role_settings', (SELECT jsonb_agg(to_jsonb(s) ORDER BY setdatabase,setrole)
     FROM pg_db_role_setting s),
   'principals', (SELECT jsonb_agg(to_jsonb(p) ORDER BY login_name)
