@@ -137,9 +137,9 @@ jobs:
           echo "ts=$(echo "$RESPONSE" | jq -r '.ts')" >> "$GITHUB_OUTPUT"
 
       # 検索に失敗しても number は空になり、Devin を呼ぶ側へ倒れる（黙って呼ばないより重複の方がまし）。
+      # Devin を呼ばない workflow も、追跡 issue の有無を見る（title を下の起票でも使うため、常に実行する）。
       - name: Find open failure issue
         id: tracking
-        if: env.DEVIN_TARGET == 'true'
         continue-on-error: true
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         with:
@@ -267,11 +267,15 @@ jobs:
             exit 1
           fi
 
+      # Devin を呼ばない workflow（DEVIN_TARGET が false）も、失敗の追跡先が無いと毎朝 Slack に流れる
+      # だけになるため、追跡 issue はここで切る。Devin を呼んだ場合だけは、起動を確認できた時に限る
+      # （起動に失敗したら issue を作らず、次の失敗で呼び直すため）。
       - name: Open failure issue
-        if: steps.started.outputs.status == 'started'
+        if: steps.tracking.outputs.number == '' && (env.DEVIN_TARGET != 'true' || steps.started.outputs.status == 'started')
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           TITLE: ${{ steps.tracking.outputs.title }}
+          DEVIN_INVOKED: ${{ steps.started.outputs.status }}
         with:
           script: |
             const label = process.env.TRACKING_LABEL;
@@ -293,13 +297,21 @@ jobs:
               title: process.env.TITLE,
               labels: [label],
               body: [
-                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗し、Slack で Devin に調査を依頼した（起動を確認済み）。`,
+                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗。${
+                  process.env.DEVIN_INVOKED === 'started'
+                    ? 'Slack で Devin に調査を依頼した（起動を確認済み）。'
+                    : 'Devin 呼び出し対象外の workflow のため Slack 通知のみ（追跡用にこの issue を起票）。'
+                }`,
                 '',
                 `- run: ${process.env.RUN_URL}`,
                 `- commit: ${process.env.COMMIT_SHA}`,
                 '',
-                'この issue が open の間は、同じ workflow が同じ契機で再び失敗しても Devin を呼ばない（同時セッション上限を守るため）。',
-                '同じ契機で次に成功すると自動で close される。Devin が動いていない時は、この issue を手で close すると次の失敗で再び呼ばれる。',
+                process.env.DEVIN_INVOKED === 'started'
+                  ? 'この issue が open の間は、同じ workflow が同じ契機で再び失敗しても Devin を呼ばない（同時セッション上限を守るため）。'
+                  : 'この issue が open の間は、同じ失敗が続いても新しい issue は増えない（失敗は Slack に通知される）。',
+                process.env.DEVIN_INVOKED === 'started'
+                  ? '同じ契機で次に成功すると自動で close される。Devin が動いていない時は、この issue を手で close すると次の失敗で再び呼ばれる。'
+                  : '同じ契機で次に成功すると自動で close される。',
                 '',
                 // 成功で閉じる時に「この失敗より後に始まった実行か」を比べるための記録。
                 `<!-- last-failed-run-started-at: ${process.env.RUN_STARTED_AT} -->`,
@@ -338,7 +350,11 @@ jobs:
           THREAD_TS: ${{ steps.slack.outputs.ts }}
           ISSUE_URL: ${{ steps.tracking.outputs.url }}
         run: |
-          TEXT="前回からの未解決の失敗なので Devin は呼び直していません（対応状況: <${ISSUE_URL}|issue>）。Devin が動いていない場合は issue を close すると、次の失敗で再び呼びます。"
+          if [ "$DEVIN_TARGET" = true ]; then
+            TEXT="前回からの未解決の失敗なので Devin は呼び直していません（対応状況: <${ISSUE_URL}|issue>）。Devin が動いていない場合は issue を close すると、次の失敗で再び呼びます。"
+          else
+            TEXT="前回からの未解決の失敗です。追跡中の issue はこちら: <${ISSUE_URL}|issue>（Devin は呼ばない workflow です）。"
+          fi
           PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg thread_ts "$THREAD_TS" --arg text "$TEXT" \
             '{channel: $channel, thread_ts: $thread_ts, text: $text}')
           RESPONSE=$(curl -sf -X POST "https://slack.com/api/chat.postMessage" \
