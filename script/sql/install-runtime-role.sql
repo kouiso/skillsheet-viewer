@@ -3,16 +3,19 @@
 -- 読取・書込境界の install 済み DB へ管理接続で実行する。
 --
 -- 使い方（値はすべて必須）:
---   psql "$ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+--   PGSERVICE=skillsheet_admin psql -X -v ON_ERROR_STOP=1 \
 --     -v runtime_role='skillsheet_runtime' \
---     -v runtime_password='<generated>' \
 --     -v owner_id='<SKILLSHEET_OWNER_ID>' \
---     -f script/sql/install-runtime-role.sql
+--     -f "$PRIVATE_RUNTIME_WRAPPER"
+-- runtime_passwordは引数に置かず、0600の私有wrapperに次の2行を保存する:
+--   \set runtime_password '<generated>'
+--   \ir /absolute/path/to/script/sql/install-runtime-role.sql
 --
 -- runtime role は reader/writer の member にはしない（membership は SET ROLE を許し、
 -- 境界関数を迂回した直接テーブル操作を可能にするため）。USAGE + EXECUTE のみで、
 -- coreの5公開関数と、導入済みの履歴6公開関数以外には触れない。
--- 管理接続はpublic各objectのGRANT/REVOKE権限と境界ownerのADMIN権限が必要。
+-- 管理接続はCREATEROLE、public各objectのGRANT/REVOKE、境界ownerのADMIN、
+-- principalsのSELECT/INSERT/UPDATEが必要。CREATEDB=trueの降格にはCREATEDBも必要。
 -- 正規化するのは列挙属性・membership・ACL。role/DB別GUCは管理者の設定として保持する。
 -- GUCによるtimeout等の運用制限は、実際のLOGIN接続で別途疎通確認する。
 -- runtimeを管理する他の利用者へのmembershipは除去し、この実行管理者だけ保持する。
@@ -26,17 +29,21 @@
 -- $$ 内では psql 変数が展開されないため、一度カスタム GUC へ入れて
 -- current_setting() で読む。
 SET vars.runtime_role = :'runtime_role';
-SET vars.runtime_password = :'runtime_password';
 SET vars.owner_id = :'owner_id';
 
 BEGIN;
+SET LOCAL vars.runtime_password = :'runtime_password';
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
 DO $$
-DECLARE runtime_oid oid;
+DECLARE
+  runtime_oid oid;
+  runtime_createdb boolean;
+  runtime_createrole boolean;
 BEGIN
-  SELECT oid INTO runtime_oid FROM pg_roles WHERE rolname = current_setting('vars.runtime_role');
+  SELECT oid, rolcreatedb, rolcreaterole INTO runtime_oid, runtime_createdb, runtime_createrole
+  FROM pg_roles WHERE rolname = current_setting('vars.runtime_role');
   -- 降格できない属性や所有権は、password・membershipを変える前に拒否する。
   IF EXISTS (SELECT FROM pg_roles WHERE oid = runtime_oid
     AND (rolname = SESSION_USER OR rolsuper OR rolreplication OR rolbypassrls OR rolconnlimit = 0
@@ -51,19 +58,26 @@ BEGIN
       WHERE n.nspname IN ('public','skillsheet_private') AND p.proowner = runtime_oid) THEN
     RAISE EXCEPTION 'UNSAFE_RUNTIME_OWNERSHIP' USING ERRCODE = '42501';
   END IF;
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = current_setting('vars.runtime_role')) THEN
-    EXECUTE format(
-      'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L',
-      current_setting('vars.runtime_role'), current_setting('vars.runtime_password')
-    );
-  ELSE
-    -- SUPERUSER / REPLICATION / BYPASSRLS は superuser でないと ALTER できない
-    -- （NOSUPERUSER と書いても弾かれる）。管理可能な属性だけ宣言値へ収束する。
-    EXECUTE format(
-      'ALTER ROLE %I LOGIN NOCREATEDB NOCREATEROLE NOINHERIT PASSWORD %L',
-      current_setting('vars.runtime_role'), current_setting('vars.runtime_password')
-    );
-  END IF;
+  BEGIN
+    IF runtime_oid IS NULL THEN
+      EXECUTE format(
+        'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L',
+        current_setting('vars.runtime_role'), current_setting('vars.runtime_password')
+      );
+    ELSE
+      -- falseの属性を再指定すると、不要な管理権限の検査が発生する。
+      EXECUTE format(
+        'ALTER ROLE %I LOGIN %s %s NOINHERIT PASSWORD %L',
+        current_setting('vars.runtime_role'),
+        CASE WHEN runtime_createdb THEN 'NOCREATEDB' ELSE '' END,
+        CASE WHEN runtime_createrole THEN 'NOCREATEROLE' ELSE '' END,
+        current_setting('vars.runtime_password')
+      );
+    END IF;
+  EXCEPTION WHEN query_canceled OR assert_failure OR OTHERS THEN
+    -- 元の動的SQLやDETAILを再掲するとPASSWORDがログへ出る。
+    RAISE EXCEPTION 'RUNTIME_ROLE_ATTRIBUTE_UPDATE_FAILED' USING ERRCODE = SQLSTATE;
+  END;
 END
 $$;
 
@@ -138,14 +152,16 @@ $$;
 -- 新規借用分は剥がし、既存の管理者membershipは元のoptionへ戻す。
 -- 関数の REVOKE は owner ごとに分けて当てる（他 owner の関数は permission
 -- denied でスクリプト全体が止まる）。
--- 借用前の自分がgrantorであるmembershipだけを記録し、既存ADMIN/SET/INHERITを戻す。
+-- 暗黙のGRANTが選ぶgrantorは管理者本人とは限らない。全grantorを記録する。
 SELECT set_config('vars.owner_memberships', COALESCE((
-  SELECT jsonb_object_agg(r.rolname, jsonb_build_object(
-    'admin', am.admin_option, 'inherit', am.inherit_option, 'set', am.set_option))
+  SELECT jsonb_agg(jsonb_build_object(
+    'roleid', am.roleid, 'member', am.member, 'grantor', am.grantor,
+    'admin', am.admin_option, 'inherit', am.inherit_option, 'set', am.set_option)
+    ORDER BY am.roleid, am.member, am.grantor)
   FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid
-  WHERE am.member = CURRENT_USER::regrole AND am.grantor = CURRENT_USER::regrole
+  WHERE am.member = CURRENT_USER::regrole
     AND r.rolname IN ('skillsheet_document_reader','skillsheet_document_writer')
-), '{}'::jsonb)::text, true);
+), '[]'::jsonb)::text, true);
 GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
 SET ROLE skillsheet_document_writer;
 DO $$
@@ -231,18 +247,43 @@ $$;
 RESET ROLE;
 DO $$
 DECLARE
-  owner_role text;
+  membership record;
   original jsonb;
+  actual jsonb;
 BEGIN
-  FOREACH owner_role IN ARRAY ARRAY['skillsheet_document_reader','skillsheet_document_writer'] LOOP
-    original := current_setting('vars.owner_memberships')::jsonb -> owner_role;
+  FOR membership IN
+    SELECT am.*, r.rolname AS owner_role, g.rolname AS grantor_role
+    FROM pg_auth_members am
+    JOIN pg_roles r ON r.oid = am.roleid JOIN pg_roles g ON g.oid = am.grantor
+    WHERE am.member = CURRENT_USER::regrole
+      AND r.rolname IN ('skillsheet_document_reader','skillsheet_document_writer')
+  LOOP
+    SELECT value INTO original
+    FROM jsonb_array_elements(current_setting('vars.owner_memberships')::jsonb)
+    WHERE (value->>'roleid')::oid = membership.roleid
+      AND (value->>'member')::oid = membership.member
+      AND (value->>'grantor')::oid = membership.grantor;
     IF original IS NULL THEN
-      EXECUTE format('REVOKE %I FROM %I GRANTED BY %I', owner_role, CURRENT_USER, CURRENT_USER);
-    ELSE
-      EXECUTE format('GRANT %I TO %I WITH ADMIN %s, INHERIT %s, SET %s',
-        owner_role, CURRENT_USER, original->>'admin', original->>'inherit', original->>'set');
+      EXECUTE format('REVOKE %I FROM %I GRANTED BY %I',
+        membership.owner_role, CURRENT_USER, membership.grantor_role);
+    ELSIF membership.admin_option IS DISTINCT FROM (original->>'admin')::boolean
+       OR membership.inherit_option IS DISTINCT FROM (original->>'inherit')::boolean
+       OR membership.set_option IS DISTINCT FROM (original->>'set')::boolean THEN
+      EXECUTE format('GRANT %I TO %I WITH ADMIN %s, INHERIT %s, SET %s GRANTED BY %I',
+        membership.owner_role, CURRENT_USER,
+        original->>'admin', original->>'inherit', original->>'set', membership.grantor_role);
     END IF;
   END LOOP;
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'roleid', am.roleid, 'member', am.member, 'grantor', am.grantor,
+    'admin', am.admin_option, 'inherit', am.inherit_option, 'set', am.set_option)
+    ORDER BY am.roleid, am.member, am.grantor), '[]'::jsonb)
+  INTO actual FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid
+  WHERE am.member = CURRENT_USER::regrole
+    AND r.rolname IN ('skillsheet_document_reader','skillsheet_document_writer');
+  IF actual IS DISTINCT FROM current_setting('vars.owner_memberships')::jsonb THEN
+    RAISE EXCEPTION 'UNSAFE_ADMIN_MEMBERSHIP_DRIFT' USING ERRCODE = '42501';
+  END IF;
 END
 $$;
 

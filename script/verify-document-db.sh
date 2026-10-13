@@ -67,6 +67,110 @@ DROP OWNED BY runtime_proof_admin_managed, runtime_proof_admin, runtime_proof_gu
 DROP ROLE runtime_proof_admin_managed, runtime_proof_admin, runtime_proof_guest;
 SQL
 printf '別grantorの管理membership残存を拒否・rollback: PASS\n'
+psql "${psql_args[@]}" -f "$repo_dir/script/sql/test-runtime-admin-grantor-provisioning.sql" >"$run_dir/runtime-admin-grantor-provisioning.log" 2>&1
+printf '別superuser・継承ADMIN・全grantor membership維持: PASS\n'
+# 管理権のない別LOGINへの拒否は、passwordをエラーへ出さず同じ接続のGUCも消す。
+psql "${psql_args[@]}" >"$run_dir/password-denial-fixture.log" 2>&1 <<'SQL'
+CREATE ROLE runtime_proof_password_admin LOGIN CREATEROLE NOCREATEDB NOINHERIT;
+CREATE ROLE runtime_proof_foreign_password_manager LOGIN CREATEROLE NOCREATEDB NOINHERIT;
+SQL
+psql "${psql_args[@]}" -U runtime_proof_foreign_password_manager \
+  -c 'CREATE ROLE runtime_proof_password_target LOGIN NOCREATEDB NOCREATEROLE NOINHERIT' \
+  >"$run_dir/password-foreign-role.log" 2>&1
+psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/password-denial.before"
+psql "${psql_args[@]}" -At -c 'SELECT md5(jsonb_agg(to_jsonb(r) ORDER BY rolname)::text) FROM pg_authid r' >"$run_dir/password-roles.before"
+psql "${psql_args[@]}" -U runtime_proof_password_admin -v VERBOSITY=verbose \
+  -v installer_file="$repo_dir/script/sql/install-runtime-role.sql" \
+  >"$run_dir/password-denial.log" 2>&1 <<'SQL'
+\set ON_ERROR_STOP off
+\set runtime_role runtime_proof_password_target
+\set runtime_password synthetic-f3-redaction-marker
+\set owner_id runtime-proof-password-owner
+\i :installer_file
+ROLLBACK;
+\set ON_ERROR_STOP on
+DO $$ BEGIN
+ IF coalesce(current_setting('vars.runtime_password',true),'')<>'' THEN
+  RAISE EXCEPTION 'PASSWORD_GUC_SURVIVED_FAILURE';
+ END IF;
+END $$;
+SQL
+# wrapperのexitだけでは失敗を証明できない。元SQLSTATE・秘匿message・全catalog一致を確認する。
+rg -q 'ERROR:  42501:.*RUNTIME_ROLE_ATTRIBUTE_UPDATE_FAILED' "$run_dir/password-denial.log"
+if rg -q 'synthetic-f3-redaction-marker' "$run_dir/password-denial.log" "$run_dir/server.log"; then
+  printf '拒否時に合成passwordがログへ露出しました\n' >&2
+  exit 1
+fi
+psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/password-denial.after"
+psql "${psql_args[@]}" -At -c 'SELECT md5(jsonb_agg(to_jsonb(r) ORDER BY rolname)::text) FROM pg_authid r' >"$run_dir/password-roles.after"
+cmp "$run_dir/password-denial.before" "$run_dir/password-denial.after"
+cmp "$run_dir/password-roles.before" "$run_dir/password-roles.after"
+# OTHERSだけでは57014を捕捉しない。実ALTER ROLEのLock待機を取消して秘匿を検証する。
+psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/password-cancel.before"
+psql "${psql_args[@]}" -At -c 'SELECT md5(jsonb_agg(to_jsonb(r) ORDER BY rolname)::text) FROM pg_authid r' >"$run_dir/password-cancel-roles.before"
+mkfifo "$run_dir/password-cancel.fifo"
+PGAPPNAME=password-cancel-locker psql "${psql_args[@]}" \
+  <"$run_dir/password-cancel.fifo" >"$run_dir/password-cancel-locker.log" 2>&1 &
+password_locker_pid=$!
+exec {password_locker_fd}>"$run_dir/password-cancel.fifo"
+printf 'BEGIN;\nALTER ROLE runtime_proof_password_target CONNECTION LIMIT 7;\n' >&"$password_locker_fd"
+password_locker_seen=false
+for ((attempt=0; attempt<150; attempt++)); do
+  if [[ "$(psql "${psql_args[@]}" -At -c "SELECT count(*) FROM pg_stat_activity WHERE application_name='password-cancel-locker' AND state='idle in transaction'")" == 1 ]]; then
+    password_locker_seen=true; break
+  fi
+  sleep 0.01
+done
+[[ "$password_locker_seen" == true ]]
+PGAPPNAME=password-cancel-installer psql "${psql_args[@]}" -U runtime_proof_foreign_password_manager \
+  -v VERBOSITY=verbose -v installer_file="$repo_dir/script/sql/install-runtime-role.sql" \
+  >"$run_dir/password-cancel.log" 2>&1 <<'SQL' &
+\set ON_ERROR_STOP off
+\set runtime_role runtime_proof_password_target
+\set runtime_password synthetic-cancel-redaction-marker
+\set owner_id runtime-proof-password-owner
+\i :installer_file
+ROLLBACK;
+\set ON_ERROR_STOP on
+DO $$ BEGIN
+ IF coalesce(current_setting('vars.runtime_password',true),'')<>'' THEN
+  RAISE EXCEPTION 'PASSWORD_GUC_SURVIVED_CANCELLATION';
+ END IF;
+END $$;
+SELECT 'PASSWORD_GUC_EMPTY_PASS';
+SQL
+password_cancel_pid=$!
+password_wait_seen=false
+for ((attempt=0; attempt<150; attempt++)); do
+  if [[ "$(psql "${psql_args[@]}" -At -c "SELECT count(*) FROM pg_stat_activity WHERE application_name='password-cancel-installer' AND wait_event_type='Lock'")" == 1 ]]; then
+    password_wait_seen=true; break
+  fi
+  sleep 0.01
+done
+[[ "$password_wait_seen" == true ]]
+[[ "$(psql "${psql_args[@]}" -At -c "SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name='password-cancel-installer' AND wait_event_type='Lock'")" == t ]]
+wait "$password_cancel_pid"
+printf 'ROLLBACK;\n\\q\n' >&"$password_locker_fd"
+exec {password_locker_fd}>&-
+wait "$password_locker_pid"
+password_cancel_first_error="$(rg -m1 'ERROR:' "$run_dir/password-cancel.log")"
+[[ "$password_cancel_first_error" == *'ERROR:  57014:'*'RUNTIME_ROLE_ATTRIBUTE_UPDATE_FAILED'* ]]
+rg -q PASSWORD_GUC_EMPTY_PASS "$run_dir/password-cancel.log"
+if rg -q 'synthetic-cancel-redaction-marker' "$run_dir/password-cancel.log" "$run_dir/server.log"; then
+  printf '取消時に合成passwordがログへ露出しました\n' >&2
+  exit 1
+fi
+psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/password-cancel.after"
+psql "${psql_args[@]}" -At -c 'SELECT md5(jsonb_agg(to_jsonb(r) ORDER BY rolname)::text) FROM pg_authid r' >"$run_dir/password-cancel-roles.after"
+cmp "$run_dir/password-cancel.before" "$run_dir/password-cancel.after"
+cmp "$run_dir/password-cancel-roles.before" "$run_dir/password-cancel-roles.after"
+printf '実Lock待機の取消・57014維持・password秘匿・GUC消去・全catalog一致: PASS\n'
+psql "${psql_args[@]}" >"$run_dir/password-denial-cleanup.log" 2>&1 <<'SQL'
+DROP OWNED BY runtime_proof_password_target,runtime_proof_password_admin,runtime_proof_foreign_password_manager;
+DROP ROLE runtime_proof_password_target;
+DROP ROLE runtime_proof_password_admin,runtime_proof_foreign_password_manager;
+SQL
+printf '他管理者runtime拒否・42501維持・password秘匿・GUC消去・全catalog一致: PASS\n'
 
 # 特権属性・所有権・PUBLIC由来の権限は、安全に降格できたと推測しない。
 psql "${psql_args[@]}" >"$run_dir/unsafe-runtime-fixtures.log" 2>&1 <<'SQL'

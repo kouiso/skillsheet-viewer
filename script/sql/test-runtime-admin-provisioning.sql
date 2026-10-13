@@ -9,6 +9,10 @@ GRANT skillsheet_document_reader, skillsheet_document_writer TO runtime_proof_ad
 SET SESSION AUTHORIZATION runtime_proof_admin;
 GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER
   WITH ADMIN FALSE, INHERIT FALSE, SET FALSE;
+CREATE TEMP TABLE runtime_proof_admin_boundary_before AS
+ SELECT roleid,member,grantor,admin_option,inherit_option,set_option FROM pg_auth_members
+ WHERE member=SESSION_USER::regrole
+ AND roleid IN('skillsheet_document_reader'::regrole,'skillsheet_document_writer'::regrole);
 \set runtime_role runtime_proof_admin_managed
 \set runtime_password synthetic-admin-proof-only
 \set owner_id runtime-proof-admin-owner
@@ -20,6 +24,19 @@ SELECT roleid::regrole, member::regrole, grantor::regrole, admin_option, inherit
 FROM pg_auth_members WHERE roleid = 'runtime_proof_admin_managed'::regrole;
 DO $$
 BEGIN
+  IF EXISTS (
+    (SELECT roleid,member,grantor,admin_option,inherit_option,set_option FROM pg_auth_members
+     WHERE member=SESSION_USER::regrole
+     AND roleid IN('skillsheet_document_reader'::regrole,'skillsheet_document_writer'::regrole)
+     EXCEPT SELECT * FROM runtime_proof_admin_boundary_before)
+    UNION ALL
+    (SELECT * FROM runtime_proof_admin_boundary_before
+     EXCEPT SELECT roleid,member,grantor,admin_option,inherit_option,set_option FROM pg_auth_members
+     WHERE member=SESSION_USER::regrole
+     AND roleid IN('skillsheet_document_reader'::regrole,'skillsheet_document_writer'::regrole))
+  ) THEN
+    RAISE EXCEPTION 'Complete boundary membership snapshot changed';
+  END IF;
   IF (SELECT rolconnlimit FROM pg_roles WHERE rolname='runtime_proof_admin_managed') <> 5 THEN
     RAISE EXCEPTION 'Finite connection limit changed on reinstall';
   END IF;
