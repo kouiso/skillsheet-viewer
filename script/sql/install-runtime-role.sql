@@ -19,7 +19,9 @@
 -- 正規化するのは列挙属性・membership・ACL。role/DB別GUCは管理者の設定として保持する。
 -- GUCによるtimeout等の運用制限は、実際のLOGIN接続で別途疎通確認する。
 -- runtimeを管理する他の利用者へのmembershipは除去し、この実行管理者だけ保持する。
--- PostgreSQL 16+ 前提（GRANT ... WITH SET 句を使う）。
+-- log_statement=all、SQL全文の監視・echoは秘密入力も記録するため、管理者が無効化する。
+-- lock-waitログが有効なら、PASSWORD文だけをdeadlock検査より短い待機に制限する。
+-- server/clientはPostgreSQL 16+ 前提（WITH SET、psqlのbindを使う）。
 --
 -- 既存 role には手作業や旧版の GRANT 残骸・INHERIT 属性・membership が残りうる。
 -- ALTER ROLE では属性しか正規化できず付与済みの権限は消えないため、毎回
@@ -28,11 +30,30 @@
 --
 -- $$ 内では psql 変数が展開されないため、一度カスタム GUC へ入れて
 -- current_setting() で読む。
+BEGIN;
+-- 必須変数の入力失敗も同じtransactionを中断し、前回の値で再設定しない。
 SET vars.runtime_role = :'runtime_role';
 SET vars.owner_id = :'owner_id';
-
-BEGIN;
-SET LOCAL vars.runtime_password = :'runtime_password';
+-- utilityのSETへ秘密を埋め込むとPG17のpg_stat_statementsに残る。入力前に監視条件を検査する。
+\set runtime_password_input_allowed false
+SELECT COALESCE(current_setting('pg_stat_statements.track', true), 'none') <> 'all'
+  AND current_setting('log_statement') <> 'all' AS runtime_password_input_allowed
+\gset
+\if :{?runtime_password}
+\if :runtime_password_input_allowed
+  SELECT set_config('vars.runtime_password', $1, true) IS NOT NULL
+  \bind :runtime_password
+  \g
+\else
+  DO $$ BEGIN
+    RAISE EXCEPTION 'UNSAFE_RUNTIME_PASSWORD_TELEMETRY' USING ERRCODE = '42501';
+  END $$;
+\endif
+\else
+  DO $$ BEGIN
+    RAISE EXCEPTION 'INVALID_RUNTIME_PASSWORD' USING ERRCODE = '22023';
+  END $$;
+\endif
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
@@ -41,7 +62,14 @@ DECLARE
   runtime_oid oid;
   runtime_createdb boolean;
   runtime_createrole boolean;
+  credential_lock_timeout text;
+  credential_lock_ms numeric;
+  deadlock_timeout_ms numeric;
+  credential_wait_ms bigint;
 BEGIN
+  IF current_setting('vars.runtime_password') = '' THEN
+    RAISE EXCEPTION 'INVALID_RUNTIME_PASSWORD' USING ERRCODE = '22023';
+  END IF;
   SELECT oid, rolcreatedb, rolcreaterole INTO runtime_oid, runtime_createdb, runtime_createrole
   FROM pg_roles WHERE rolname = current_setting('vars.runtime_role');
   -- 降格できない属性や所有権は、password・membershipを変える前に拒否する。
@@ -58,7 +86,21 @@ BEGIN
       WHERE n.nspname IN ('public','skillsheet_private') AND p.proowner = runtime_oid) THEN
     RAISE EXCEPTION 'UNSAFE_RUNTIME_OWNERSHIP' USING ERRCODE = '42501';
   END IF;
+  -- LOGのlock-wait報告は例外処理より先に動的PASSWORD文を記録しうる。
+  credential_lock_timeout := current_setting('lock_timeout');
+  IF current_setting('log_lock_waits')::boolean THEN
+    deadlock_timeout_ms := floor(EXTRACT(EPOCH FROM current_setting('deadlock_timeout')::interval) * 1000);
+    IF deadlock_timeout_ms <= 1 THEN
+      RAISE EXCEPTION 'UNSAFE_RUNTIME_PASSWORD_LOGGING' USING ERRCODE = '42501';
+    END IF;
+    credential_wait_ms := greatest(1, floor(deadlock_timeout_ms / 2)::bigint);
+    credential_lock_ms := EXTRACT(EPOCH FROM credential_lock_timeout::interval) * 1000;
+  END IF;
   BEGIN
+    IF credential_wait_ms IS NOT NULL
+      AND (credential_lock_ms = 0 OR credential_lock_ms > credential_wait_ms) THEN
+      PERFORM set_config('lock_timeout', credential_wait_ms::text || 'ms', true);
+    END IF;
     IF runtime_oid IS NULL THEN
       EXECUTE format(
         'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L',
@@ -74,6 +116,7 @@ BEGIN
         current_setting('vars.runtime_password')
       );
     END IF;
+    PERFORM set_config('lock_timeout', credential_lock_timeout, true);
   EXCEPTION WHEN query_canceled OR assert_failure OR OTHERS THEN
     -- 元の動的SQLやDETAILを再掲するとPASSWORDがログへ出る。
     RAISE EXCEPTION 'RUNTIME_ROLE_ATTRIBUTE_UPDATE_FAILED' USING ERRCODE = SQLSTATE;
@@ -350,6 +393,12 @@ BEGIN
       WHERE d.defaclobjtype IN ('r','S') AND (d.defaclnamespace = 0 OR n.nspname IN ('public','skillsheet_private'))
         AND a.grantee IN (0, runtime_oid)
         AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN','USAGE'))
+    -- 関数はruntimeへの明示grantだけを検査。PUBLICの組込既定は将来DDLごとに再検査する。
+    OR EXISTS (SELECT FROM pg_default_acl d
+      LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
+      CROSS JOIN LATERAL aclexplode(d.defaclacl) a
+      WHERE d.defaclobjtype = 'f' AND (d.defaclnamespace = 0 OR n.nspname IN ('public','skillsheet_private'))
+        AND a.grantee = runtime_oid AND a.privilege_type = 'EXECUTE')
     OR has_schema_privilege(runtime_oid, 'public', 'CREATE')
     OR has_schema_privilege(runtime_oid, 'skillsheet_private', 'CREATE')
     OR has_function_privilege(runtime_oid, 'skillsheet_private.checked_blocks(jsonb)', 'EXECUTE') THEN
