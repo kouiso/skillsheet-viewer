@@ -97,3 +97,45 @@ describe('ProjectEditor 狭幅対応', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: '案件ナビ' })).not.toBeInTheDocument());
   });
 });
+
+describe('フォーカス時のスクロール補正', () => {
+  const rafFlush = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  beforeEach(() => {
+    setNarrow(false);
+  });
+
+  it('フォーカス後の rAF で、対象を nearest へ scrollIntoView する', async () => {
+    const spy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+    const { container } = render(
+      <ProjectEditor data={mockData} onChange={vi.fn()} onSelectionChange={vi.fn()} showPreview={false} />,
+    );
+    const wrap = container.querySelector('.form-wrap') as HTMLElement;
+    expect(wrap).not.toBeNull();
+    wrap.setAttribute('tabindex', '-1');
+    wrap.focus();
+    await rafFlush();
+    expect(spy).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+  });
+
+  it('rAF までにフォーカスが外れていたら scrollIntoView しない', async () => {
+    const spy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+    const { container } = render(
+      <ProjectEditor data={mockData} onChange={vi.fn()} onSelectionChange={vi.fn()} showPreview={false} />,
+    );
+    const wrap = container.querySelector('.form-wrap') as HTMLElement;
+    wrap.setAttribute('tabindex', '-1');
+    wrap.focus();
+    wrap.blur();
+    await rafFlush();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('form-wrap の外をフォーカスしても scrollIntoView しない', async () => {
+    const spy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+    render(<ProjectEditor data={mockData} onChange={vi.fn()} onSelectionChange={vi.fn()} showPreview={false} />);
+    screen.getByTitle('集中モード（ナビを畳む）').focus();
+    await rafFlush();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
