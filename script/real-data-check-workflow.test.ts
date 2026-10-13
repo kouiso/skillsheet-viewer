@@ -334,6 +334,29 @@ it('比較: PR で追加・改名されたテストの名前は公開ログへ�
   expect(result.stdout).toContain('× src/a.node.test.tsx::（この PR で追加・改名されたテスト）');
   expect(result.stdout).not.toContain('PRIVATE');
 });
+it('比較: PR のコードが出した件数行は、通っても落ちても公開ログへ出さない', () => {
+  // 件数行（PDF_LAYOUT_COUNTS）を公開ログへ出してよいのは、main のコードだけが動く夜間の検査。
+  // PR 側のコードは整数の桁も行数も自由に決められ、実データを符号化して流せてしまうため。
+  // doc/pdf-export-and-data-update.md の「数十〜数百ビット」という受け入れの前提がこの分岐に乗っている。
+  const log = 'PDF_LAYOUT_COUNTS overflow=12345678901234567890\nPDF_LAYOUT_COUNTS kinsoku=1 runt-line=2\n';
+  const passed = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    base: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    log,
+  });
+  expect(passed.status).toBe(0);
+  expect(passed.stdout).not.toContain('PDF_LAYOUT_COUNTS');
+  const failed = judge({
+    baseRef: 'abc',
+    head: { 'src/a.node.test.tsx': [fail('崩れない')] },
+    base: { 'src/a.node.test.tsx': [pass('崩れない')] },
+    headExit: 1,
+    log,
+  });
+  expect(failed.status).toBe(1);
+  expect(failed.stdout).not.toContain('PDF_LAYOUT_COUNTS');
+});
 it('比較: base の検査結果が無ければ崩れと判定せずに失敗する', () => {
   const result = judge({ baseRef: 'abc', head: { 'src/a.node.test.tsx': [pass('崩れない')] } });
   expect(result.status).toBe(1);
