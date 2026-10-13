@@ -12,7 +12,8 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # main への push は連続しても先のスキャンを捨てない（後続は範囲が足りるとは限らない）
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   trufflehog:
