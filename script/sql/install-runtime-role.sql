@@ -78,6 +78,7 @@ BEGIN
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I', current_setting('vars.runtime_role'));
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I', current_setting('vars.runtime_role'));
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA public FROM %I', current_setting('vars.runtime_role'));
+  EXECUTE format('REVOKE ALL PRIVILEGES ON SCHEMA public FROM %I', current_setting('vars.runtime_role'));
   EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', current_setting('vars.runtime_role'));
   EXECUTE format(
     'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
@@ -134,6 +135,7 @@ BEGIN
        skillsheet_private.read_snapshot(uuid, text),
        skillsheet_private.list_sheets(text)
      FROM %I', current_setting('vars.runtime_role'));
+  EXECUTE format('REVOKE ALL PRIVILEGES ON SCHEMA skillsheet_private FROM %I', current_setting('vars.runtime_role'));
   EXECUTE format('GRANT USAGE ON SCHEMA skillsheet_private TO %I', current_setting('vars.runtime_role'));
   EXECUTE format(
     'GRANT EXECUTE ON FUNCTION
