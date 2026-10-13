@@ -111,7 +111,7 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
       <Card className="w-full max-w-md">
-        <CardContent className="p-8">
+        <CardContent className="p-4 sm:p-8">
           <div className="mb-4 flex justify-center">
             <LogIn aria-hidden="true" className="size-8 text-foreground" />
           </div>
