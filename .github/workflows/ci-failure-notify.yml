@@ -1,11 +1,12 @@
 name: CI Failure Slack Notify
 
-# 監視対象の workflow が main / develop で落ちたら Slack へ通知し、続けて Devin を呼ぶ。
-# 夜間の実データ検査（PDF / XLSX）は DB 本文の変化だけでも落ちるため、コードの差分を待たずに
-# Devin へ調査を渡す。ただし同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
+# 監視対象の workflow が main / develop で落ちたら Slack へ通知する。Devin を呼ぶのは CI / Security Scan の
+# push 失敗だけ（下の DEVIN_TARGET）。同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
 # 食い潰す（09-20 / 09-22 に実際に起動失敗した）ので、未解決の失敗を workflow×ブランチ×起動契機
-# ごとに open issue 1 本で持ち、issue が無い時だけ Devin を呼ぶ。同じ契機で次に成功したら issue を
-# 閉じ、次の失敗で再び呼べる状態へ戻す。
+# ごとに open issue 1 本で持つ。Devin を呼ぶ workflow は、issue が無い時だけ呼び、起動を確認できたら
+# issue を切る。呼ばない workflow（定期の PDF / XLSX 検査、Semgrep など）も、追跡先が無いと毎朝 Slack に
+# 流れるだけなので、issue が無ければ切る（手動実行 workflow_dispatch は復旧の契機が無いので切らない）。
+# 同じ契機で次に成功したら issue を閉じ、次の失敗で再び通知・呼び出しができる状態へ戻す。
 on:
   workflow_run:
     workflows:
@@ -140,6 +141,7 @@ jobs:
       # Devin を呼ばない workflow も、追跡 issue の有無を見る（title を下の起票でも使うため、常に実行する）。
       - name: Find open failure issue
         id: tracking
+        if: ${{ !cancelled() }}
         continue-on-error: true
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         with:
@@ -271,7 +273,12 @@ jobs:
       # だけになるため、追跡 issue はここで切る。Devin を呼んだ場合だけは、起動を確認できた時に限る
       # （起動に失敗したら issue を作らず、次の失敗で呼び直すため）。
       - name: Open failure issue
-        if: steps.tracking.outputs.number == '' && (env.DEVIN_TARGET != 'true' || steps.started.outputs.status == 'started')
+        # workflow_dispatch の失敗は、同じ契機で次に成功するのが手動実行だけで自動では閉じないので切らない。
+        if: >-
+          ${{ !cancelled() &&
+          github.event.workflow_run.event != 'workflow_dispatch' &&
+          steps.tracking.outputs.number == '' &&
+          (env.DEVIN_TARGET != 'true' || steps.started.outputs.status == 'started') }}
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           TITLE: ${{ steps.tracking.outputs.title }}
@@ -291,10 +298,13 @@ jobs:
                 description: 'main / develop の workflow 失敗を追跡する（ci-failure-notify.yml が開閉する）',
               });
             }
+            // 検索ステップが起動前に失敗すると title が空になる。close-on-recovery と同じ形で組み直す。
+            const title =
+              process.env.TITLE || `[CI失敗] ${process.env.WORKFLOW_NAME} (${process.env.HEAD_BRANCH}, ${process.env.RUN_EVENT})`;
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: process.env.TITLE,
+              title,
               labels: [label],
               body: [
                 `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗。${
@@ -319,7 +329,7 @@ jobs:
             });
 
       - name: Record recurrence
-        if: steps.tracking.outputs.number != ''
+        if: ${{ !cancelled() && steps.tracking.outputs.number != '' }}
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           ISSUE_NUMBER: ${{ steps.tracking.outputs.number }}

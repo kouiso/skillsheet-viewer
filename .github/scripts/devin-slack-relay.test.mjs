@@ -7,6 +7,11 @@ import { expect, test } from 'vitest';
 const require = createRequire(import.meta.url);
 const { staleStatusAfterTries, STALE_TRIGGER_TRIES } = require('./devin-slack-relay.cjs');
 
+// 上限の値そのもの。6 時間間隔の sweep で約 1 日（4 回）追跡してから failed にする。変えるなら意図して直す。
+test('STALE_TRIGGER_TRIES は 4（6時間間隔で約1日）', () => {
+  expect(STALE_TRIGGER_TRIES).toBe(4);
+});
+
 // 無応答スイープ: 上限未満では triggered を維持し、到達で failed（自動再投稿しない）。
 test('stays triggered below STALE_TRIGGER_TRIES', () => {
   expect(staleStatusAfterTries(0)).toBe('triggered');
