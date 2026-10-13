@@ -2,8 +2,10 @@
 SELECT md5(jsonb_build_object(
   'roles', (SELECT jsonb_agg(to_jsonb(r) ORDER BY rolname)
     FROM pg_authid r WHERE rolname LIKE 'runtime_proof_%'),
-  'memberships', (SELECT jsonb_agg(to_jsonb(m) ORDER BY roleid, member)
+  'memberships', (SELECT jsonb_agg(to_jsonb(m) ORDER BY roleid, member, grantor)
     FROM pg_auth_members m),
+  'role_settings', (SELECT jsonb_agg(to_jsonb(s) ORDER BY setdatabase,setrole)
+    FROM pg_db_role_setting s),
   'principals', (SELECT jsonb_agg(to_jsonb(p) ORDER BY login_name)
     FROM skillsheet_private.principals p),
   'schema_acls', (SELECT jsonb_agg(jsonb_build_array(nspname,nspowner,nspacl) ORDER BY nspname)
@@ -18,5 +20,5 @@ SELECT md5(jsonb_build_object(
     JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname IN ('public','skillsheet_private') AND a.attnum > 0 AND NOT a.attisdropped),
   'function_acls', (SELECT jsonb_agg(jsonb_build_array(p.oid,p.proowner,p.proacl) ORDER BY p.oid)
-    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='skillsheet_private')
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname IN ('public','skillsheet_private'))
 )::text);

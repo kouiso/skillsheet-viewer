@@ -12,6 +12,10 @@
 -- runtime role は reader/writer の member にはしない（membership は SET ROLE を許し、
 -- 境界関数を迂回した直接テーブル操作を可能にするため）。USAGE + EXECUTE のみで、
 -- 5 つの公開関数以外には触れない。
+-- 管理接続はpublic各objectのGRANT/REVOKE権限と境界ownerのADMIN権限が必要。
+-- 正規化するのは列挙属性・membership・ACL。role/DB別GUCは管理者の設定として保持する。
+-- GUCによるtimeout等の運用制限は、実際のLOGIN接続で別途疎通確認する。
+-- runtimeを管理する他の利用者へのmembershipは除去し、この実行管理者だけ保持する。
 -- PostgreSQL 16+ 前提（GRANT ... WITH SET 句を使う）。
 --
 -- 既存 role には手作業や旧版の GRANT 残骸・INHERIT 属性・membership が残りうる。
@@ -35,7 +39,8 @@ BEGIN
   SELECT oid INTO runtime_oid FROM pg_roles WHERE rolname = current_setting('vars.runtime_role');
   -- 降格できない属性や所有権は、password・membershipを変える前に拒否する。
   IF EXISTS (SELECT FROM pg_roles WHERE oid = runtime_oid
-    AND (rolsuper OR rolreplication OR rolbypassrls)) THEN
+    AND (rolsuper OR rolreplication OR rolbypassrls OR rolconnlimit = 0
+      OR rolvaliduntil <= clock_timestamp())) THEN
     RAISE EXCEPTION 'UNSAFE_RUNTIME_ROLE' USING ERRCODE = '42501';
   END IF;
   IF EXISTS (SELECT FROM pg_database WHERE datname = current_database() AND datdba = runtime_oid)
@@ -62,7 +67,7 @@ BEGIN
 END
 $$;
 
--- runtime が関わる membership をすべて除去（SET ROLE による境界迂回を防ぐ）。
+-- runtimeの昇格membershipを除去。信頼済み管理者のruntime管理権だけ保持する。
 -- 既存のものだけ剥がす: 無関係な role への REVOKE は権限不足で失敗しうる。
 DO $$
 DECLARE
@@ -74,6 +79,7 @@ BEGIN
     JOIN pg_roles r ON r.oid = am.roleid
     JOIN pg_roles me ON me.oid = am.member
     WHERE r.rolname = current_setting('vars.runtime_role')
+       AND me.rolname <> SESSION_USER
        OR me.rolname = current_setting('vars.runtime_role')
   LOOP
     EXECUTE format('REVOKE %I FROM %I', m.role, m.member);
@@ -118,9 +124,17 @@ $$;
 -- skillsheet_private 側の除去と付与は owner（reader/writer）として行う必要が
 -- あるため、接続ユーザーへ membership を一時貸出して SET ROLE で通す。
 -- 既存 membership が set_option=false でも WITH SET TRUE で借り直し、
--- 終わりに剥がして cluster 全域に残さない。
+-- 新規借用分は剥がし、既存の管理者membershipは元のoptionへ戻す。
 -- 関数の REVOKE は owner ごとに分けて当てる（他 owner の関数は permission
 -- denied でスクリプト全体が止まる）。
+-- 借用前の自分がgrantorであるmembershipだけを記録し、既存ADMIN/SET/INHERITを戻す。
+SELECT set_config('vars.owner_memberships', COALESCE((
+  SELECT jsonb_object_agg(r.rolname, jsonb_build_object(
+    'admin', am.admin_option, 'inherit', am.inherit_option, 'set', am.set_option))
+  FROM pg_auth_members am JOIN pg_roles r ON r.oid = am.roleid
+  WHERE am.member = CURRENT_USER::regrole AND am.grantor = CURRENT_USER::regrole
+    AND r.rolname IN ('skillsheet_document_reader','skillsheet_document_writer')
+), '{}'::jsonb)::text, true);
 GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
 SET ROLE skillsheet_document_writer;
 DO $$
@@ -160,7 +174,22 @@ BEGIN
 END
 $$;
 RESET ROLE;
-REVOKE skillsheet_document_reader, skillsheet_document_writer FROM CURRENT_USER;
+DO $$
+DECLARE
+  owner_role text;
+  original jsonb;
+BEGIN
+  FOREACH owner_role IN ARRAY ARRAY['skillsheet_document_reader','skillsheet_document_writer'] LOOP
+    original := current_setting('vars.owner_memberships')::jsonb -> owner_role;
+    IF original IS NULL THEN
+      EXECUTE format('REVOKE %I FROM %I GRANTED BY %I', owner_role, CURRENT_USER, CURRENT_USER);
+    ELSE
+      EXECUTE format('GRANT %I TO %I WITH ADMIN %s, INHERIT %s, SET %s',
+        owner_role, CURRENT_USER, original->>'admin', original->>'inherit', original->>'set');
+    END IF;
+  END LOOP;
+END
+$$;
 
 -- 境界関数は SESSION_USER を principals へ引いて owner を決めるため、
 -- runtime の login_name を登録しないと全呼び出しが UNMAPPED_PRINCIPAL になる。
@@ -172,7 +201,9 @@ ON CONFLICT (login_name) DO UPDATE SET owner_id = EXCLUDED.owner_id;
 DO $$
 DECLARE runtime_oid oid := current_setting('vars.runtime_role')::regrole;
 BEGIN
-  IF has_table_privilege(runtime_oid, 'public.skill_sheets', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+  IF EXISTS (SELECT FROM pg_auth_members
+    WHERE member = runtime_oid OR (roleid = runtime_oid AND member <> SESSION_USER::regrole))
+    OR has_table_privilege(runtime_oid, 'public.skill_sheets', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     OR has_table_privilege(runtime_oid, 'public.blocks', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     OR has_table_privilege(runtime_oid, 'public.skillsheet_state', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
     OR has_table_privilege(runtime_oid, 'skillsheet_private.principals', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
@@ -180,10 +211,39 @@ BEGIN
     OR has_any_column_privilege(runtime_oid, 'public.blocks', 'SELECT,INSERT,UPDATE,REFERENCES')
     OR has_any_column_privilege(runtime_oid, 'public.skillsheet_state', 'SELECT,INSERT,UPDATE,REFERENCES')
     OR has_any_column_privilege(runtime_oid, 'skillsheet_private.principals', 'SELECT,INSERT,UPDATE,REFERENCES')
+    -- 宣言した認証/Driveの基表以外は、view・matview・foreign table・列ACLも含め拒否する。
+    OR EXISTS (SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('public','skillsheet_private') AND c.relkind IN ('r','p','v','m','f')
+        AND NOT (n.nspname = 'public' AND c.relkind IN ('r','p') AND c.relname = ANY (ARRAY['user','session','account','verification','jwks','viewer_login_attempt',
+            'drive_destination','oauth_client','oauth_client_assertion','oauth_client_resource',
+            'oauth_consent','oauth_access_token','oauth_refresh_token','oauth_resource']))
+        AND (has_table_privilege(runtime_oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+          OR has_any_column_privilege(runtime_oid, c.oid, 'SELECT,INSERT,UPDATE,REFERENCES')))
+    OR EXISTS (SELECT FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege(runtime_oid, p.oid, 'EXECUTE'))
+    OR EXISTS (SELECT FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'skillsheet_private' AND has_function_privilege(runtime_oid, p.oid, 'EXECUTE')
+        AND p.oid NOT IN (
+          'skillsheet_private.read_snapshot(uuid,text)'::regprocedure,
+          'skillsheet_private.list_sheets(text)'::regprocedure,
+          'skillsheet_private.replace_sheet(uuid,text,text,jsonb,text)'::regprocedure,
+          'skillsheet_private.create_sheet(uuid,text,jsonb,text)'::regprocedure,
+          'skillsheet_private.delete_sheet(uuid,text,text)'::regprocedure))
     OR has_schema_privilege(runtime_oid, 'public', 'CREATE')
     OR has_schema_privilege(runtime_oid, 'skillsheet_private', 'CREATE')
     OR has_function_privilege(runtime_oid, 'skillsheet_private.checked_blocks(jsonb)', 'EXECUTE') THEN
     RAISE EXCEPTION 'RUNTIME_BOUNDARY_PERMISSION_LEAK' USING ERRCODE = '42501';
+  END IF;
+  -- MAINTAINはPG17で追加されたため、PG16では評価しない。
+  IF current_setting('server_version_num')::integer >= 170000 THEN
+    IF EXISTS (SELECT FROM pg_auth_members
+    WHERE member = runtime_oid OR (roleid = runtime_oid AND member <> SESSION_USER::regrole))
+    OR has_table_privilege(runtime_oid, 'public.skill_sheets', 'MAINTAIN')
+      OR has_table_privilege(runtime_oid, 'public.blocks', 'MAINTAIN')
+      OR has_table_privilege(runtime_oid, 'public.skillsheet_state', 'MAINTAIN')
+      OR has_table_privilege(runtime_oid, 'skillsheet_private.principals', 'MAINTAIN') THEN
+      RAISE EXCEPTION 'RUNTIME_BOUNDARY_PERMISSION_LEAK' USING ERRCODE = '42501';
+    END IF;
   END IF;
 END
 $$;

@@ -39,20 +39,69 @@ for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary 
 done
 psql "${psql_args[@]}" -f "$repo_dir/script/sql/test-runtime-role-provisioning.sql" >"$run_dir/runtime-provisioning.log" 2>&1
 printf "runtime install再実行・実効権限・正規文書操作: PASS\n"
+psql "${psql_args[@]}" -f "$repo_dir/script/sql/test-runtime-admin-provisioning.sql" >"$run_dir/runtime-admin-provisioning.log" 2>&1
+printf "非superuser管理者の初回・再実行・membership維持: PASS\n"
+psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/foreign-manager.before"
+if psql "${psql_args[@]}" -U runtime_proof_admin -v runtime_role=runtime_proof_admin_managed \
+  -v runtime_password=synthetic-admin-proof-only -v owner_id=runtime-proof-admin-owner \
+  -f "$repo_dir/script/sql/install-runtime-role.sql" >"$run_dir/foreign-manager.log" 2>&1; then
+  printf '別grantorのruntime管理権が残っているのにinstallが成功しました\n' >&2
+  exit 1
+fi
+rg -q RUNTIME_BOUNDARY_PERMISSION_LEAK "$run_dir/foreign-manager.log"
+psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/foreign-manager.after"
+cmp "$run_dir/foreign-manager.before" "$run_dir/foreign-manager.after"
+psql "${psql_args[@]}" >"$run_dir/runtime-admin-cleanup.log" 2>&1 <<'SQL'
+DELETE FROM skillsheet_private.principals WHERE login_name = 'runtime_proof_admin_managed';
+DROP OWNED BY runtime_proof_admin_managed, runtime_proof_admin, runtime_proof_guest;
+DROP ROLE runtime_proof_admin_managed, runtime_proof_admin, runtime_proof_guest;
+SQL
+printf '別grantorの管理membership残存を拒否・rollback: PASS\n'
+
 # 特権属性・所有権・PUBLIC由来の権限は、安全に降格できたと推測しない。
-psql "${psql_args[@]}" -c '
+psql "${psql_args[@]}" >"$run_dir/unsafe-runtime-fixtures.log" 2>&1 <<'SQL'
 CREATE ROLE runtime_proof_bypass LOGIN BYPASSRLS;
 CREATE ROLE runtime_proof_replication LOGIN REPLICATION;
 CREATE ROLE runtime_proof_superuser LOGIN SUPERUSER;
 CREATE ROLE runtime_proof_owner LOGIN;
 CREATE TABLE public.runtime_proof_owned (id integer);
 ALTER TABLE public.runtime_proof_owned OWNER TO runtime_proof_owner;
+CREATE ROLE runtime_proof_expired LOGIN VALID UNTIL '2020-01-01';
+CREATE ROLE runtime_proof_connection_blocked LOGIN CONNECTION LIMIT 0;
+CREATE ROLE runtime_proof_public_definer LOGIN;
+CREATE FUNCTION public.runtime_proof_definer() RETURNS bigint LANGUAGE sql SECURITY DEFINER
+SET search_path=pg_catalog,public,pg_temp AS 'SELECT count(*) FROM public.skill_sheets';
+CREATE ROLE runtime_proof_public_view LOGIN;
+CREATE ROLE runtime_proof_public_view_column LOGIN;
+CREATE VIEW public.runtime_proof_leaky AS SELECT id, title FROM public.skill_sheets;
+CREATE ROLE runtime_proof_membership LOGIN;
+CREATE ROLE runtime_proof_grantor;
+GRANT skillsheet_document_writer TO runtime_proof_grantor WITH ADMIN TRUE, INHERIT FALSE, SET TRUE;
+SET ROLE runtime_proof_grantor;
+GRANT skillsheet_document_writer TO runtime_proof_membership WITH INHERIT FALSE, SET TRUE;
+RESET ROLE;
 CREATE ROLE runtime_proof_public_column LOGIN;
+CREATE ROLE runtime_proof_public_maintain LOGIN;
 CREATE ROLE runtime_proof_public_acl LOGIN;
-' >"$run_dir/unsafe-runtime-fixtures.log" 2>&1
-for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_superuser runtime_proof_owner runtime_proof_public_column runtime_proof_public_acl; do
+REVOKE ALL ON FUNCTION public.runtime_proof_definer() FROM PUBLIC;
+SQL
+for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_superuser runtime_proof_owner runtime_proof_public_view runtime_proof_public_view_column runtime_proof_membership runtime_proof_expired runtime_proof_connection_blocked runtime_proof_public_definer runtime_proof_public_column runtime_proof_public_maintain runtime_proof_public_acl; do
+  if [[ "$unsafe_role" == runtime_proof_public_maintain ]] && (( $(psql "${psql_args[@]}" -At -c "SHOW server_version_num") < 170000 )); then continue; fi
+  if [[ "$unsafe_role" == runtime_proof_public_view ]]; then
+    psql "${psql_args[@]}" -c 'GRANT SELECT ON public.runtime_proof_leaky TO PUBLIC' >"$run_dir/public-view-fixture.log" 2>&1
+  fi
+  if [[ "$unsafe_role" == runtime_proof_public_view_column ]]; then
+    psql "${psql_args[@]}" -c 'GRANT SELECT(title) ON public.runtime_proof_leaky TO PUBLIC' >"$run_dir/public-view-column-fixture.log" 2>&1
+  fi
+  if [[ "$unsafe_role" == runtime_proof_public_definer ]]; then
+    psql "${psql_args[@]}" -c 'GRANT EXECUTE ON FUNCTION public.runtime_proof_definer() TO PUBLIC' >"$run_dir/public-definer-fixture.log" 2>&1
+  fi
   if [[ "$unsafe_role" == runtime_proof_public_column ]]; then
     psql "${psql_args[@]}" -c 'GRANT SELECT(title), UPDATE(title) ON public.skill_sheets TO PUBLIC' >"$run_dir/public-column-fixture.log" 2>&1
+  fi
+  # PG17のMAINTAINもPUBLIC経由でruntimeへ漏れる権限として独立検証する。
+  if [[ "$unsafe_role" == runtime_proof_public_maintain ]]; then
+    psql "${psql_args[@]}" -c 'GRANT MAINTAIN ON public.skill_sheets TO PUBLIC' >"$run_dir/public-maintain-fixture.log" 2>&1
   fi
   if [[ "$unsafe_role" == runtime_proof_public_acl ]]; then
     psql "${psql_args[@]}" -c 'GRANT SELECT ON public.skill_sheets TO PUBLIC' >"$run_dir/public-acl-fixture.log" 2>&1
@@ -65,20 +114,39 @@ for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_
   fi
   case "$unsafe_role" in
     runtime_proof_owner) expected_error=UNSAFE_RUNTIME_OWNERSHIP ;;
-    runtime_proof_public_column|runtime_proof_public_acl) expected_error=RUNTIME_BOUNDARY_PERMISSION_LEAK ;;
+    runtime_proof_public_view|runtime_proof_public_view_column|runtime_proof_membership|runtime_proof_public_definer|runtime_proof_public_column|runtime_proof_public_maintain|runtime_proof_public_acl) expected_error=RUNTIME_BOUNDARY_PERMISSION_LEAK ;;
     *) expected_error=UNSAFE_RUNTIME_ROLE ;;
   esac
   rg -q "$expected_error" "$run_dir/$unsafe_role.log"
   psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/$unsafe_role.after"
   cmp "$run_dir/$unsafe_role.before" "$run_dir/$unsafe_role.after"
+  if [[ "$unsafe_role" == runtime_proof_public_view ]]; then
+    psql "${psql_args[@]}" -c 'REVOKE SELECT ON public.runtime_proof_leaky FROM PUBLIC' >"$run_dir/public-view-cleanup.log" 2>&1
+  fi
+  if [[ "$unsafe_role" == runtime_proof_public_view_column ]]; then
+    psql "${psql_args[@]}" -c 'REVOKE SELECT(title) ON public.runtime_proof_leaky FROM PUBLIC' >"$run_dir/public-view-column-cleanup.log" 2>&1
+  fi
+  if [[ "$unsafe_role" == runtime_proof_public_definer ]]; then
+    psql "${psql_args[@]}" -c 'REVOKE EXECUTE ON FUNCTION public.runtime_proof_definer() FROM PUBLIC' >"$run_dir/public-definer-cleanup.log" 2>&1
+  fi
   if [[ "$unsafe_role" == runtime_proof_public_column ]]; then
     psql "${psql_args[@]}" -c 'REVOKE SELECT(title), UPDATE(title) ON public.skill_sheets FROM PUBLIC' >"$run_dir/public-column-cleanup.log" 2>&1
   fi
+  if [[ "$unsafe_role" == runtime_proof_public_maintain ]]; then
+    psql "${psql_args[@]}" -c 'REVOKE MAINTAIN ON public.skill_sheets FROM PUBLIC' >"$run_dir/public-maintain-cleanup.log" 2>&1
+  fi
+  if [[ "$unsafe_role" == runtime_proof_public_acl ]]; then
+    psql "${psql_args[@]}" -c 'REVOKE SELECT ON public.skill_sheets FROM PUBLIC' >"$run_dir/public-acl-cleanup.log" 2>&1
+  fi
 done
 psql "${psql_args[@]}" -c '
-REVOKE SELECT ON public.skill_sheets FROM PUBLIC;
+SET ROLE runtime_proof_grantor;
+REVOKE skillsheet_document_writer FROM runtime_proof_membership;
+RESET ROLE;
+DROP VIEW public.runtime_proof_leaky;
+DROP FUNCTION public.runtime_proof_definer();
 DROP TABLE public.runtime_proof_owned;
-DROP ROLE runtime_proof_bypass, runtime_proof_replication, runtime_proof_superuser, runtime_proof_owner, runtime_proof_public_column, runtime_proof_public_acl;
+DROP ROLE runtime_proof_bypass, runtime_proof_replication, runtime_proof_superuser, runtime_proof_owner, runtime_proof_public_view, runtime_proof_public_view_column, runtime_proof_membership, runtime_proof_grantor, runtime_proof_expired, runtime_proof_connection_blocked, runtime_proof_public_definer, runtime_proof_public_column, runtime_proof_public_maintain, runtime_proof_public_acl;
 ' >"$run_dir/unsafe-runtime-cleanup.log" 2>&1
 printf '特権・所有権・PUBLIC権限の拒否と失敗時rollback: PASS\n'
 

@@ -1,7 +1,19 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  accessSync,
+  constants,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { delimiter, isAbsolute, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 
 const workflowsDir = new URL('../.github/workflows/', import.meta.url);
@@ -28,8 +40,25 @@ function tempDir(): string {
   dirs.push(dir);
   return dir;
 }
+// 必須のjqだけを実行可能な絶対パスへ解決し、fixtureのbinへ渡す。
+function fixtureJq(): string {
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    if (!isAbsolute(dir)) continue;
+    try {
+      const executable = realpathSync(join(dir, 'jq'));
+      accessSync(executable, constants.X_OK);
+      if (statSync(executable).isFile()) return executable;
+    } catch {
+      // 存在しないPATH要素や実行権限のない候補は読み飛ばす。
+    }
+  }
+  throw new Error('real-data workflow tests require executable jq on the parent PATH');
+}
 // 開発者のshell設定・資格情報・ツールshimを子プロセスへ引き継がない。
 function runStep(name: string, cwd: string, env: Record<string, string>) {
+  const executable = fixtureJq();
+  mkdirSync(join(cwd, 'bin'), { recursive: true });
+  symlinkSync(executable, join(cwd, 'bin', 'jq'));
   return spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript(name)], {
     cwd,
     env: { PATH: `${cwd}/bin:/usr/bin:/bin`, NODE_ENV: 'test', ...env },
