@@ -60,7 +60,7 @@
 | Sentry だけ止める | Vercel の `NEXT_PUBLIC_SENTRY_DSN` を空にして再デプロイ |
 | PostHog だけ止める | Vercel の `NEXT_PUBLIC_POSTHOG_KEY` を空にして再デプロイ |
 | 両方一時停止 | Sentry / PostHog 側のプロジェクト設定で ingestion を止める（コード変更不要） |
-| ローカルで確認だけしたい | `.env.local` に `NEXT_PUBLIC_OBSERVABILITY_FORCE=1` を追加。**検証後は必ず消す**（消し忘れると `pnpm test:e2e` が本番プロジェクトに書く） |
+| ローカルで確認だけしたい | `.env.local` に `NEXT_PUBLIC_OBSERVABILITY_FORCE=1` を追加。**検証後は必ず消す**（消し忘れると手元の e2e（`pnpm test:e2e:local`）が本番プロジェクトに書く） |
 
 ## コードでは保証できないもの（ベンダー側の設定）
 
