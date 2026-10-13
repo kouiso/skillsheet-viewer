@@ -18,7 +18,8 @@ const state = vi.hoisted(() => ({
   partialJournal: false,
   realJournal: false,
 }));
-vi.mock('./repair-proposal-file', () => ({
+vi.mock('./repair-proposal-file', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./repair-proposal-file')>()),
   readPrivateRepairRecord: (path: string) => {
     const key = basename(path);
     if (!state.records.has(key)) throw new Error('MISSING_RECORD');
@@ -144,38 +145,44 @@ beforeEach(() => {
 });
 
 describe('narrative interruption recovery', () => {
-  it('real reader rejects a canonical event whose final newline was lost before DB access', async () => {
-    const { db, execute, proposal } = setup();
-    const privateDirectory = mkdtempSync(join(tmpdir(), 'narrative-tail-'));
-    const entry = {
-      version: 1,
-      state: 'approved',
-      owner,
-      sheetId,
-      expectedRevision: proposal.expectedRevision,
-      beforeHash: proposal.beforeHash,
-      afterHash: proposal.afterHash,
-      changeIds: proposal.changes.map(({ blockId, targetId, field }) => `${blockId}:${targetId}:${field}`),
-      at: new Date().toISOString(),
-    };
-    try {
-      writeFileSync(join(privateDirectory, 'journal.jsonl'), canonicalJson(entry), { mode: 0o600 });
-      state.realJournal = true;
-      await expect(applyNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
-      await expect(revertNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
-      expect(execute).not.toHaveBeenCalled();
-      writeFileSync(join(privateDirectory, 'journal.jsonl'), `${canonicalJson(entry)}\n`, { mode: 0o600 });
-      await expect(applyNarrative(db, owner, privateDirectory, sheetId)).resolves.toEqual({ sheetId, revision: '43' });
-      writeFileSync(join(privateDirectory, 'journal.jsonl'), canonicalJson({ ...entry, state: 'db-applied' }), {
-        mode: 0o600,
-      });
-      await expect(applyNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
-      await expect(revertNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
-      expect(execute).toHaveBeenCalledTimes(1);
-    } finally {
-      rmSync(privateDirectory, { recursive: true, force: true });
-    }
-  });
+  it.skipIf(process.platform !== 'linux')(
+    'real reader rejects a canonical event whose final newline was lost before DB access',
+    async () => {
+      const { db, execute, proposal } = setup();
+      const privateDirectory = mkdtempSync(join(tmpdir(), 'narrative-tail-'));
+      const entry = {
+        version: 1,
+        state: 'approved',
+        owner,
+        sheetId,
+        expectedRevision: proposal.expectedRevision,
+        beforeHash: proposal.beforeHash,
+        afterHash: proposal.afterHash,
+        changeIds: proposal.changes.map(({ blockId, targetId, field }) => `${blockId}:${targetId}:${field}`),
+        at: new Date().toISOString(),
+      };
+      try {
+        writeFileSync(join(privateDirectory, 'journal.jsonl'), canonicalJson(entry), { mode: 0o600 });
+        state.realJournal = true;
+        await expect(applyNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
+        await expect(revertNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
+        expect(execute).not.toHaveBeenCalled();
+        writeFileSync(join(privateDirectory, 'journal.jsonl'), `${canonicalJson(entry)}\n`, { mode: 0o600 });
+        await expect(applyNarrative(db, owner, privateDirectory, sheetId)).resolves.toEqual({
+          sheetId,
+          revision: '43',
+        });
+        writeFileSync(join(privateDirectory, 'journal.jsonl'), canonicalJson({ ...entry, state: 'db-applied' }), {
+          mode: 0o600,
+        });
+        await expect(applyNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
+        await expect(revertNarrative(db, owner, privateDirectory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
+        expect(execute).toHaveBeenCalledTimes(1);
+      } finally {
+        rmSync(privateDirectory, { recursive: true, force: true });
+      }
+    },
+  );
   it('stops apply and revert before DB writes when a journal line is partial', async () => {
     const { db, execute } = setup();
     state.partialJournal = true;
