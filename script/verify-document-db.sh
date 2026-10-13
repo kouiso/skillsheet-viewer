@@ -12,7 +12,7 @@ unset DATABASE_URL
 for binary in initdb pg_ctl psql pg_dumpall rg pnpm cmp; do command -v "$binary" >/dev/null; done
 cleanup() {
   local cleanup_result=0
-  for cluster in data restored; do
+  for cluster in data restored history-data; do
     if [[ -f "$run_dir/$cluster/postmaster.pid" ]]; then
       pg_ctl -D "$run_dir/$cluster" -m fast -w stop >>"$run_dir/server.log" 2>&1 || cleanup_result=1
     fi
@@ -270,6 +270,19 @@ done
 psql -X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55441 -U cas_runtime -d postgres \
   -f "$repo_dir/script/sql/test-document-create-after-delete.sql" >"$run_dir/restored-create-after-delete.log" 2>&1
 printf '別cluster復旧・文書3表一致・復旧後権限試験: PASS\n'
+
+# 境界owner roleはcluster共通なので、既存seedから独立した新clusterで履歴を検証する。
+initdb -D "$run_dir/history-data" -U history_admin --auth=trust --no-locale -E UTF8 >"$run_dir/history-init.log" 2>&1
+pg_ctl -D "$run_dir/history-data" -l "$run_dir/history-server.log" -o "-c listen_addresses='' -k '$run_dir' -p 55442" -w start >/dev/null
+history_args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55442 -U history_admin -d postgres)
+for migration in "$repo_dir"/drizzle/migration/*.sql; do
+  psql "${history_args[@]}" -f "$migration" >>"$run_dir/history-migrations.log" 2>&1
+done
+for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary install-document-history; do
+  psql "${history_args[@]}" -f "$repo_dir/script/sql/$stage.sql" >"$run_dir/history-$stage.log" 2>&1
+done
+psql "${history_args[@]}" -f "$repo_dir/script/sql/test-runtime-history-provisioning.sql" >"$run_dir/runtime-history-provisioning.log" 2>&1
+printf '現行履歴の初回・再実行・限定権限・CAS・削除復元: PASS\n'
 
 cleanup
 trap - EXIT

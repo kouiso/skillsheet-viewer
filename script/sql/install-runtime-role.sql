@@ -11,7 +11,7 @@
 --
 -- runtime role は reader/writer の member にはしない（membership は SET ROLE を許し、
 -- 境界関数を迂回した直接テーブル操作を可能にするため）。USAGE + EXECUTE のみで、
--- 5 つの公開関数以外には触れない。
+-- coreの5公開関数と、導入済みの履歴6公開関数以外には触れない。
 -- 管理接続はpublic各objectのGRANT/REVOKE権限と境界ownerのADMIN権限が必要。
 -- 正規化するのは列挙属性・membership・ACL。role/DB別GUCは管理者の設定として保持する。
 -- GUCによるtimeout等の運用制限は、実際のLOGIN接続で別途疎通確認する。
@@ -149,7 +149,18 @@ SELECT set_config('vars.owner_memberships', COALESCE((
 GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
 SET ROLE skillsheet_document_writer;
 DO $$
-DECLARE private_sequence record;
+DECLARE
+  private_sequence record;
+  history_signature text;
+  history_function regprocedure;
+  history_public_signatures CONSTANT text[] := ARRAY[
+    'skillsheet_private.history_list(uuid,text,integer,text)',
+    'skillsheet_private.history_read(uuid,text,text)',
+    'skillsheet_private.history_count_after(uuid,text,text,text)',
+    'skillsheet_private.history_restore(uuid,text,text,text)',
+    'skillsheet_private.deleted_document_list(text)',
+    'skillsheet_private.restore_deleted_document(uuid,text,text)'
+  ];
 BEGIN
   FOR private_sequence IN
     SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -171,6 +182,23 @@ BEGIN
        skillsheet_private.create_sheet(uuid, text, jsonb, text),
        skillsheet_private.delete_sheet(uuid, text, text)
      TO %I', current_setting('vars.runtime_role'));
+  -- 履歴導入前は存在しない。導入済みの公開関数だけ再付与し、internalの残骸も除去する。
+  FOREACH history_signature IN ARRAY history_public_signatures || ARRAY[
+    'skillsheet_private.capture_document(uuid,text,bigint,text,text)',
+    'skillsheet_private.capture_document_blocks()',
+    'skillsheet_private.capture_document_trigger()',
+    'skillsheet_private.history_owner(text)'
+  ] LOOP
+    history_function := to_regprocedure(history_signature);
+    IF history_function IS NOT NULL THEN
+      EXECUTE format('REVOKE ALL PRIVILEGES ON FUNCTION %s FROM %I',
+        history_function, current_setting('vars.runtime_role'));
+      IF history_signature = ANY (history_public_signatures) THEN
+        EXECUTE format('GRANT EXECUTE ON FUNCTION %s TO %I',
+          history_function, current_setting('vars.runtime_role'));
+      END IF;
+    END IF;
+  END LOOP;
 END
 $$;
 RESET ROLE;
@@ -263,7 +291,16 @@ BEGIN
           'skillsheet_private.list_sheets(text)'::regprocedure,
           'skillsheet_private.replace_sheet(uuid,text,text,jsonb,text)'::regprocedure,
           'skillsheet_private.create_sheet(uuid,text,jsonb,text)'::regprocedure,
-          'skillsheet_private.delete_sheet(uuid,text,text)'::regprocedure))
+          'skillsheet_private.delete_sheet(uuid,text,text)'::regprocedure)
+        -- NULLのNOT INで未知関数を見逃さない。未導入signatureは一致しない。
+        AND NOT EXISTS (SELECT FROM unnest(ARRAY[
+          to_regprocedure('skillsheet_private.history_list(uuid,text,integer,text)'),
+          to_regprocedure('skillsheet_private.history_read(uuid,text,text)'),
+          to_regprocedure('skillsheet_private.history_count_after(uuid,text,text,text)'),
+          to_regprocedure('skillsheet_private.history_restore(uuid,text,text,text)'),
+          to_regprocedure('skillsheet_private.deleted_document_list(text)'),
+          to_regprocedure('skillsheet_private.restore_deleted_document(uuid,text,text)')
+        ]) AS allowed(signature) WHERE allowed.signature = p.oid))
     OR has_database_privilege(runtime_oid, current_database(), 'CREATE')
     -- 明示された将来テーブル/sequenceへの自動grantも、role/PUBLIC経由の漏洩として停止する。
     OR EXISTS (SELECT FROM pg_default_acl d
