@@ -14,6 +14,12 @@ const FAILURE_RE =
 const MAX_TRIES = 3; // 明示的な失敗返信に対する再投稿の上限。再投稿は Devin セッションを新たに消費する
 const STALE_TRIGGER_TRIES = 4; // 起動要求後に Devin の返信が無いまま追跡する sweep 回数(6時間間隔で約1日)
 
+// 無応答スイープの遷移判定。上限到達で 'failed'（自動再投稿しない）になる。
+// ここが pending に戻ると、同じスレッドへ再投稿を繰り返して Devin セッションを量産するため、テストで固定する。
+function staleStatusAfterTries(tries) {
+  return tries >= STALE_TRIGGER_TRIES ? 'failed' : 'triggered';
+}
+
 const STATUS_LABELS = {
   queued: 'Queued',
   pending: 'Retry pending',
@@ -553,7 +559,7 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
       await removeTriggerLabel(issue.number);
     } else {
       const tries = (marker.tries || 0) + 1;
-      if (tries >= STALE_TRIGGER_TRIES) {
+      if (staleStatusAfterTries(tries) === 'failed') {
         // 無言は「起動済みで作業中」の可能性が高い。pending へ降格して再投稿すると
         // 重複 Devin セッションを量産するため、自動再投稿はしない。
         // triggered のまま残すと、確認後にラベルを付け直しても dispatch が「起動済み」と
@@ -618,4 +624,4 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
   }
 }
 
-module.exports = { dispatch, verify, sweep };
+module.exports = { dispatch, verify, sweep, staleStatusAfterTries, STALE_TRIGGER_TRIES };
