@@ -133,9 +133,7 @@ describe('フォーカス時のスクロール補正', () => {
 
   it('form-wrap の外をフォーカスしても scrollIntoView しない', async () => {
     const spy = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
-    render(
-      <ProjectEditor data={mockData} onChange={vi.fn()} onSelectionChange={vi.fn()} showPreview={false} />,
-    );
+    render(<ProjectEditor data={mockData} onChange={vi.fn()} onSelectionChange={vi.fn()} showPreview={false} />);
     screen.getByTitle('集中モード（ナビを畳む）').focus();
     await rafFlush();
     expect(spy).not.toHaveBeenCalled();
