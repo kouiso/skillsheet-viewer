@@ -47,9 +47,13 @@ CREATE ROLE runtime_proof_superuser LOGIN SUPERUSER;
 CREATE ROLE runtime_proof_owner LOGIN;
 CREATE TABLE public.runtime_proof_owned (id integer);
 ALTER TABLE public.runtime_proof_owned OWNER TO runtime_proof_owner;
+CREATE ROLE runtime_proof_public_column LOGIN;
 CREATE ROLE runtime_proof_public_acl LOGIN;
 ' >"$run_dir/unsafe-runtime-fixtures.log" 2>&1
-for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_superuser runtime_proof_owner runtime_proof_public_acl; do
+for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_superuser runtime_proof_owner runtime_proof_public_column runtime_proof_public_acl; do
+  if [[ "$unsafe_role" == runtime_proof_public_column ]]; then
+    psql "${psql_args[@]}" -c 'GRANT SELECT(title), UPDATE(title) ON public.skill_sheets TO PUBLIC' >"$run_dir/public-column-fixture.log" 2>&1
+  fi
   if [[ "$unsafe_role" == runtime_proof_public_acl ]]; then
     psql "${psql_args[@]}" -c 'GRANT SELECT ON public.skill_sheets TO PUBLIC' >"$run_dir/public-acl-fixture.log" 2>&1
   fi
@@ -61,17 +65,20 @@ for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_
   fi
   case "$unsafe_role" in
     runtime_proof_owner) expected_error=UNSAFE_RUNTIME_OWNERSHIP ;;
-    runtime_proof_public_acl) expected_error=RUNTIME_BOUNDARY_PERMISSION_LEAK ;;
+    runtime_proof_public_column|runtime_proof_public_acl) expected_error=RUNTIME_BOUNDARY_PERMISSION_LEAK ;;
     *) expected_error=UNSAFE_RUNTIME_ROLE ;;
   esac
   rg -q "$expected_error" "$run_dir/$unsafe_role.log"
   psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/$unsafe_role.after"
   cmp "$run_dir/$unsafe_role.before" "$run_dir/$unsafe_role.after"
+  if [[ "$unsafe_role" == runtime_proof_public_column ]]; then
+    psql "${psql_args[@]}" -c 'REVOKE SELECT(title), UPDATE(title) ON public.skill_sheets FROM PUBLIC' >"$run_dir/public-column-cleanup.log" 2>&1
+  fi
 done
 psql "${psql_args[@]}" -c '
 REVOKE SELECT ON public.skill_sheets FROM PUBLIC;
 DROP TABLE public.runtime_proof_owned;
-DROP ROLE runtime_proof_bypass, runtime_proof_replication, runtime_proof_superuser, runtime_proof_owner, runtime_proof_public_acl;
+DROP ROLE runtime_proof_bypass, runtime_proof_replication, runtime_proof_superuser, runtime_proof_owner, runtime_proof_public_column, runtime_proof_public_acl;
 ' >"$run_dir/unsafe-runtime-cleanup.log" 2>&1
 printf '特権・所有権・PUBLIC権限の拒否と失敗時rollback: PASS\n'
 

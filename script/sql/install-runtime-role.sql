@@ -30,7 +30,22 @@ SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
 DO $$
+DECLARE runtime_oid oid;
 BEGIN
+  SELECT oid INTO runtime_oid FROM pg_roles WHERE rolname = current_setting('vars.runtime_role');
+  -- 降格できない属性や所有権は、password・membershipを変える前に拒否する。
+  IF EXISTS (SELECT FROM pg_roles WHERE oid = runtime_oid
+    AND (rolsuper OR rolreplication OR rolbypassrls)) THEN
+    RAISE EXCEPTION 'UNSAFE_RUNTIME_ROLE' USING ERRCODE = '42501';
+  END IF;
+  IF EXISTS (SELECT FROM pg_database WHERE datname = current_database() AND datdba = runtime_oid)
+    OR EXISTS (SELECT FROM pg_namespace WHERE nspname IN ('public','skillsheet_private') AND nspowner = runtime_oid)
+    OR EXISTS (SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('public','skillsheet_private') AND c.relowner = runtime_oid)
+    OR EXISTS (SELECT FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname IN ('public','skillsheet_private') AND p.proowner = runtime_oid) THEN
+    RAISE EXCEPTION 'UNSAFE_RUNTIME_OWNERSHIP' USING ERRCODE = '42501';
+  END IF;
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = current_setting('vars.runtime_role')) THEN
     EXECUTE format(
       'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS PASSWORD %L',
@@ -152,5 +167,25 @@ REVOKE skillsheet_document_reader, skillsheet_document_writer FROM CURRENT_USER;
 INSERT INTO skillsheet_private.principals (login_name, owner_id)
 VALUES (current_setting('vars.runtime_role'), current_setting('vars.owner_id'))
 ON CONFLICT (login_name) DO UPDATE SET owner_id = EXCLUDED.owner_id;
+
+-- PUBLIC等の継承権限は直接REVOKEだけでは消えない。共有権限を勝手に変更せず停止する。
+DO $$
+DECLARE runtime_oid oid := current_setting('vars.runtime_role')::regrole;
+BEGIN
+  IF has_table_privilege(runtime_oid, 'public.skill_sheets', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+    OR has_table_privilege(runtime_oid, 'public.blocks', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+    OR has_table_privilege(runtime_oid, 'public.skillsheet_state', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+    OR has_table_privilege(runtime_oid, 'skillsheet_private.principals', 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+    OR has_any_column_privilege(runtime_oid, 'public.skill_sheets', 'SELECT,INSERT,UPDATE,REFERENCES')
+    OR has_any_column_privilege(runtime_oid, 'public.blocks', 'SELECT,INSERT,UPDATE,REFERENCES')
+    OR has_any_column_privilege(runtime_oid, 'public.skillsheet_state', 'SELECT,INSERT,UPDATE,REFERENCES')
+    OR has_any_column_privilege(runtime_oid, 'skillsheet_private.principals', 'SELECT,INSERT,UPDATE,REFERENCES')
+    OR has_schema_privilege(runtime_oid, 'public', 'CREATE')
+    OR has_schema_privilege(runtime_oid, 'skillsheet_private', 'CREATE')
+    OR has_function_privilege(runtime_oid, 'skillsheet_private.checked_blocks(jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'RUNTIME_BOUNDARY_PERMISSION_LEAK' USING ERRCODE = '42501';
+  END IF;
+END
+$$;
 
 COMMIT;

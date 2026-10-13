@@ -12,6 +12,11 @@ SELECT md5(jsonb_build_object(
       ORDER BY n.nspname,c.relname)
     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname IN ('public','skillsheet_private')),
+  'column_acls', (SELECT jsonb_agg(jsonb_build_array(n.nspname,c.relname,a.attnum,a.attacl)
+      ORDER BY n.nspname,c.relname,a.attnum)
+    FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid
+    JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname IN ('public','skillsheet_private') AND a.attnum > 0 AND NOT a.attisdropped),
   'function_acls', (SELECT jsonb_agg(jsonb_build_array(p.oid,p.proowner,p.proacl) ORDER BY p.oid)
     FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='skillsheet_private')
 )::text);
