@@ -37,6 +37,8 @@ for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary 
   psql "${psql_args[@]}" -f "$repo_dir/script/sql/$stage.sql" >"$run_dir/$stage.log" 2>&1
   printf '%s: PASS\n' "$stage"
 done
+psql "${psql_args[@]}" -f "$repo_dir/script/sql/test-runtime-role-provisioning.sql" >"$run_dir/runtime-provisioning.log" 2>&1
+printf "runtime install再実行・実効権限・正規文書操作: PASS\n"
 # 2接続目が実際にロック待ちになったことを観測し、直列実行を競合試験と誤認しない。
 psql "${psql_args[@]}" -f "$repo_dir/script/sql/seed-document-cas-proof.sql" >"$run_dir/cas-seed.log" 2>&1
 cas_args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55440 -U cas_runtime -d postgres)
