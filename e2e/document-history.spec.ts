@@ -28,6 +28,51 @@ function clientFor(page: Page) {
   });
 }
 
+test('consecutive saves collapse into one history row that expands to every version', async ({ page }) => {
+  await login(page);
+  const client = clientFor(page);
+  const sheetId = randomUUID();
+  const blockId = randomUUID();
+  const body = (text: string) => [{ id: blockId, type: 'markdown', order: 0, data: { markdown: text } }];
+  const created = await client.sheet.create.mutate({ sheetId, title: 'History group', blocks: body('v0') });
+  try {
+    // 自動保存と同じく間を置かずに3回保存する。2分未満なので1つのまとまりになる。
+    let revision = created.revision;
+    const saved: string[] = [];
+    for (const text of ['v1', 'v2', 'v3']) {
+      revision = (
+        await client.sheet.save.mutate({
+          sheetId,
+          expectedRevision: revision,
+          title: 'History group',
+          blocks: body(text),
+        })
+      ).revision;
+      saved.push(revision);
+    }
+    const [oldest, , newest] = saved;
+
+    await page.goto(`/builder?sheet=${sheetId}`);
+    await page.getByRole('button', { name: '版の履歴を開く', exact: true }).click();
+    const list = page.getByRole('complementary', { name: '保存された版' });
+    const toggle = list.getByRole('button', { name: `版 ${oldest}〜${newest} の内訳を開く`, exact: true });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(list.getByText(`保存 3回 · 版 ${oldest}〜${newest}`, { exact: true })).toBeVisible();
+    // 作成の版はたたまず1行で残る。保存の版はたたんでいる間は行として出ない。
+    await expect(list.getByText(`版 ${created.revision}`, { exact: true })).toBeVisible();
+    await expect(list.getByText(`版 ${saved[1]}`, { exact: true })).toHaveCount(0);
+
+    await toggle.click();
+    for (const version of saved) await expect(list.getByText(`版 ${version}`, { exact: false }).first()).toBeVisible();
+    await list.getByRole('button', { name: new RegExp(`^版 ${saved[1]}`) }).click();
+    await expect(page.getByRole('combobox', { name: '比較先' })).toHaveValue(saved[1]);
+  } finally {
+    const current = await client.sheet.builderState.query({ sheetId });
+    if (current.status === 'OK')
+      await client.sheet.delete.mutate({ sheetId, expectedRevision: current.snapshot.revision });
+  }
+});
+
 test('history records immutable snapshots, restores and undoes through UI, and rejects stale CAS', async ({ page }) => {
   await login(page);
   const client = clientFor(page);
