@@ -1,0 +1,49 @@
+name: Real Data Check (main)
+
+# merge 後の main で、実データ（DB の本番シート）を使って PDF / XLSX の崩れを検査する。
+# PR では実データを使わない。PR のコードに実データを読ませると、公開ログに出る
+# 「どのテストが落ちたか」で情報を持ち出せてしまい、ネットワークを切っても塞げないため。
+# PR は ci.yml の架空データで見て、実データはレビューを通って main に入ったコードだけで見る。
+# 実データで崩れていた場合は、直前に merge した変更か DB の本文の変化のどちらかなので、
+# 失敗は ci-failure-notify.yml が Slack と Devin へ渡す（push の失敗として扱う）。
+# 検査の本体は real-data-check.yml。そこで commit が main に含まれていることも確かめる。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'doc/**'
+  # 手動実行も main の commit にしか効かない（本体が main の祖先でない commit を止める）。
+  workflow_dispatch:
+
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
+# 続けて merge された時は、新しい commit の検査が古い commit の分も含むので、古い実行は止める。
+concurrency:
+  group: real-data-main-check
+  cancel-in-progress: true
+
+jobs:
+  pdf:
+    name: PDF (real data)
+    uses: ./.github/workflows/real-data-check.yml
+    with:
+      name: PDF
+      sheet-id: ${{ vars.PDF_CHECK_SHEET_ID }}
+      raster-deps: true
+    secrets:
+      database-url: ${{ secrets.PDF_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}
+
+  xlsx:
+    name: XLSX (real data)
+    uses: ./.github/workflows/real-data-check.yml
+    with:
+      name: XLSX
+      sheet-id: ${{ vars.XLSX_CHECK_SHEET_ID }}
+      test-paths: src/lib/export/xlsx-format-check.node.test.tsx
+    secrets:
+      database-url: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}
