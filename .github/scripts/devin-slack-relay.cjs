@@ -11,8 +11,8 @@ const MARKER_RE = /<!-- devin-slack-triggered([^>]*)-->/;
 const SESSION_URL_RE = /https:\/\/(?:[\w-]+\.)*devin\.ai\/sessions\/[0-9a-f]+/;
 const FAILURE_RE =
   /Failed to create Devin|Failed to start|Failed to launch|couldn'?t start|could not start|unable to start|error creating session/i;
-const MAX_TRIES = 36; // 10分間隔で約6時間
-const STALE_TRIGGER_TRIES = 6; // 起動要求後に Devin の返信が無いまま許容する sweep 回数(約1時間)
+const MAX_TRIES = 3; // 明示的な失敗返信に対する再投稿の上限。再投稿は Devin セッションを新たに消費する
+const STALE_TRIGGER_TRIES = 4; // 起動要求後に Devin の返信が無いまま追跡する sweep 回数(6時間間隔で約1日)
 
 const STATUS_LABELS = {
   queued: 'Queued',
@@ -549,14 +549,16 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
     } else {
       const tries = (marker.tries || 0) + 1;
       if (tries >= STALE_TRIGGER_TRIES) {
+        // 無言は「起動済みで作業中」の可能性が高い。pending へ降格して再投稿すると
+        // 重複 Devin セッションを量産するため、追跡だけやめて再投稿はしない。
         await finalize(
           github,
           context,
           core,
           issue,
-          { ts: marker.ts, status: 'pending', tries },
+          { ts: marker.ts, status: 'triggered', tries },
           cfg,
-          'Devin 応答なし。定期実行で再投稿します',
+          'Devin の返信を確認できないまま追跡を打ち切りました。自動再投稿はしません。Slack スレッドを直接確認してください',
         );
         await removeTriggerLabel(issue.number);
       } else {

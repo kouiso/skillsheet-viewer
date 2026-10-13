@@ -5,10 +5,16 @@ on:
     branches: [main]
     types: [closed]
 
+# closed は merge 後の 1 回きりの検査。後続の merge を待たせても結果は捨てずに全部流す。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   check-quality:
     name: Post-merge quality check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.event.pull_request.merged == true
     permissions:
       contents: read
