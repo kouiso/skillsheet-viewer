@@ -8,6 +8,7 @@ on:
       - "**/*.tsx"
       - "**/*.js"
       - "**/*.mjs"
+      - "**/*.cjs"
       # ゲート自体の変更でも動作確認できるよう対象に含める。
       - ".github/workflows/semgrep.yml"
   push:

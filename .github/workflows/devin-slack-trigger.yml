@@ -11,7 +11,7 @@ permissions:
 jobs:
   trigger-devin:
     name: Trigger Devin via Slack
-    runs-on: ${{ vars.RUNNER_LINUX || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     if: |
       github.event.label.name == 'devin' ||
@@ -34,7 +34,7 @@ jobs:
           TRIGGER_LABEL: devin
         with:
           script: |
-            const relay = require('./.github/scripts/devin-slack-relay.js');
+            const relay = require('./.github/scripts/devin-slack-relay.cjs');
             await relay.dispatch({ github, context, core });
 
       # Devin 側の即時エラーはスレッド返信として返る。起動遅延を吸収するため待つ。
@@ -53,5 +53,5 @@ jobs:
           TRIGGER_LABEL: devin
         with:
           script: |
-            const relay = require('./.github/scripts/devin-slack-relay.js');
+            const relay = require('./.github/scripts/devin-slack-relay.cjs');
             await relay.verify({ github, context, core });
