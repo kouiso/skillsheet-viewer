@@ -1,0 +1,53 @@
+name: Real Data Check (main)
+
+# merge 後の main で、実データ（DB の本番シート）を使って PDF / XLSX の崩れを検査する。
+# PR では実データを使わない。PR のコードに実データを読ませると、公開ログに出る
+# 「どのテストが落ちたか」で情報を持ち出せてしまい、ネットワークを切っても塞げないため。
+# PR は ci.yml の架空データで見て、実データはレビューを通って main に入ったコードだけで見る。
+# 実データで崩れていた場合は、直前に merge した変更か DB の本文の変化のどちらかなので、
+# 失敗は ci-failure-notify.yml が Slack と Devin へ渡す（push の失敗として扱う）。
+# 検査の本体は real-data-check.yml。そこで commit が main に含まれていることも確かめる。
+# 本体は @main で呼び、呼び出し側が持つ写しに左右されないようにする。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'doc/**'
+  # 手動実行（workflow_dispatch）は置かない。手動実行は選んだブランチの workflow ファイルそのものを
+  # 動かせるので、ブランチ側で steps を差し替えて本番 DB の secret を読めてしまう。push と schedule は
+  # main のファイルしか動かさない。再実行したい時は GitHub の Re-run（同じ commit の同じファイル）を使う。
+
+# 読むだけの job なので token の権限も読み取りに絞る。
+permissions:
+  contents: read
+
+# commit ごとに別の group にして、実行を止めない。読むだけの検査なので並んで走ってよい。
+# 古い実行を止める方式にすると、古い commit の Re-run が main 先頭の検査を止め、
+# 古い commit だけが成功して、最新のコードが実データで検査されないまま残る。
+concurrency:
+  group: real-data-main-check-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  pdf:
+    name: PDF (real data)
+    uses: kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main
+    with:
+      name: PDF
+      sheet-id: ${{ vars.PDF_CHECK_SHEET_ID }}
+      raster-deps: true
+    secrets:
+      database-url: ${{ secrets.PDF_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}
+
+  xlsx:
+    name: XLSX (real data)
+    uses: kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main
+    with:
+      name: XLSX
+      sheet-id: ${{ vars.XLSX_CHECK_SHEET_ID }}
+      test-paths: src/lib/export/xlsx-format-check.node.test.tsx
+    secrets:
+      database-url: ${{ secrets.XLSX_CHECK_DATABASE_URL }}
+      owner-id: ${{ secrets.SKILLSHEET_OWNER_ID }}

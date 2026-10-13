@@ -15,6 +15,7 @@ on:
       - "PR Labeler"
       - "PDF Layout Check"
       - "XLSX Format Check"
+      - "Real Data Check (main)"
       - "Security Audit"
       - "Security Scan"
       - "Semgrep"
@@ -52,9 +53,10 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       !startsWith(github.event.workflow_run.event, 'pull_request')
     env:
-      # Devin（有料・同時セッション上限あり）を呼ぶのは CI / Security Scan の push 失敗だけ。
+      # Devin（有料・同時セッション上限あり）を呼ぶのは CI / Security Scan / Real Data Check (main) の
+      # push 失敗だけ。どれも「直前に merge した変更」が原因の候補になる失敗。
       # 定期チェックや Deploy Smoke の失敗は Slack 通知までで止め、Devin セッションを消費しない。
-      DEVIN_TARGET: ${{ contains(fromJSON('["CI","Security Scan"]'), github.event.workflow_run.name) && github.event.workflow_run.event == 'push' }}
+      DEVIN_TARGET: ${{ contains(fromJSON('["CI","Security Scan","Real Data Check (main)"]'), github.event.workflow_run.name) && github.event.workflow_run.event == 'push' }}
       WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
       RUN_EVENT: ${{ github.event.workflow_run.event }}

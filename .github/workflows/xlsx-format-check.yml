@@ -2,13 +2,13 @@ name: XLSX Format Check
 
 # xlsx の書式はテンプレ複写・結合・罫線で構成され、コード変更でも DB 本文変化でも
 # 崩れうる。毎朝実データを引いて崩れを見張る（pdf-layout-check.yml の xlsx 版）。
-# 検査の本体は real-data-check.yml。
+# 検査の本体は real-data-check.yml。手動実行は置かない（選んだブランチの workflow が動いて、
+# 本番 DB の secret を読めてしまうため。schedule は main のファイルしか動かさない）。
 # 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（この workflow 名で登録済み）。
 on:
   schedule:
     # JST 06:00。朝いちで気づけるようにする。
     - cron: '0 21 * * *'
-  workflow_dispatch:
 
 # 読むだけの job なので token の権限も読み取りに絞る。
 permissions:
@@ -17,7 +17,7 @@ permissions:
 jobs:
   xlsx-format-check:
     name: XLSX format check (real data)
-    uses: ./.github/workflows/real-data-check.yml
+    uses: kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main
     with:
       name: xlsx
       sheet-id: ${{ vars.XLSX_CHECK_SHEET_ID }}
