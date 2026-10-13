@@ -346,7 +346,8 @@ it('比較: PR のコードが出した件数行は、通っても落ちても�
     log,
   });
   expect(passed.status).toBe(0);
-  expect(passed.stdout).not.toContain('PDF_LAYOUT_COUNTS');
+  // Actions は stderr も公開ログへ出すので、stdout と stderr の両方を見る。
+  expect(`${passed.stdout}${passed.stderr}`).not.toContain('PDF_LAYOUT_COUNTS');
   const failed = judge({
     baseRef: 'abc',
     head: { 'src/a.node.test.tsx': [fail('崩れない')] },
@@ -355,7 +356,7 @@ it('比較: PR のコードが出した件数行は、通っても落ちても�
     log,
   });
   expect(failed.status).toBe(1);
-  expect(failed.stdout).not.toContain('PDF_LAYOUT_COUNTS');
+  expect(`${failed.stdout}${failed.stderr}`).not.toContain('PDF_LAYOUT_COUNTS');
 });
 it('比較: base の検査結果が無ければ崩れと判定せずに失敗する', () => {
   const result = judge({ baseRef: 'abc', head: { 'src/a.node.test.tsx': [pass('崩れない')] } });
