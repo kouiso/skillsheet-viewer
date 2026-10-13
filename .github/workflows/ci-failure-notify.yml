@@ -355,7 +355,8 @@ jobs:
       # Devin を呼ばなかった理由を通知スレッドに残す。黙って呼ばないと、人間には依頼が漏れたのか
       # 対応中なのか区別がつかない。
       - name: Point thread at open issue
-        if: steps.tracking.outputs.number != ''
+        # 再発の記録（API）が失敗しても、通知スレッドへの案内は出す。スレッドの ts は Slack 通知が成功した時だけある。
+        if: ${{ !cancelled() && steps.slack.outcome == 'success' && steps.tracking.outputs.number != '' }}
         env:
           THREAD_TS: ${{ steps.slack.outputs.ts }}
           ISSUE_URL: ${{ steps.tracking.outputs.url }}
