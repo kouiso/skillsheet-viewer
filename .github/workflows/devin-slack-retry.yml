@@ -6,7 +6,7 @@ name: Devin Slack Retry
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '0 */6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -35,5 +35,5 @@ jobs:
           TRIGGER_LABEL: devin
         with:
           script: |
-            const relay = require('./.github/scripts/devin-slack-relay.js');
+            const relay = require('./.github/scripts/devin-slack-relay.cjs');
             await relay.sweep({ github, context, core });
