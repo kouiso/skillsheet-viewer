@@ -106,7 +106,7 @@ function groupStart(recordedAt: string) {
     minute: '2-digit',
   });
 }
-// まとまりは最長10分だが日付をまたぐことはあるので、そのときだけ終わりにも日付を出す。
+// まとまりは時刻の幅が最長10分未満だが、日付をまたぐことはあるので、そのときだけ終わりにも日付を出す。
 // 同じ分のうちに収まったときは「07:06〜07:06」と並べず、終わりを出さない（null）。
 function groupEnd(startAt: string, endAt: string) {
   const start = new Date(startAt);
@@ -116,13 +116,12 @@ function groupEnd(startAt: string, endAt: string) {
   return time(start) === time(end) ? null : time(end);
 }
 // まとまりの時刻の範囲。recordedAt は DB の now() で、並行した保存では版番号の順と逆になりうるため、
-// 位置（最古・最新の版）ではなく時刻の最小・最大で取る。読める時刻が無ければ位置で代用する。
+// 位置（最古・最新の版）ではなく時刻の最小・最大で取る。groupVersions が作るまとまりは、
+// 全員が読める時刻を持つ（読めない版は単独の行になる）。
 function groupSpan(versions: readonly VersionSummary[]) {
-  const dated = versions.filter((version) => Number.isFinite(Date.parse(version.recordedAt)));
-  const pool = dated.length > 0 ? dated : versions;
   const time = (version: VersionSummary) => Date.parse(version.recordedAt);
-  const first = pool.reduce((a, b) => (time(b) < time(a) ? b : a));
-  const last = pool.reduce((a, b) => (time(b) > time(a) ? b : a));
+  const first = versions.reduce((a, b) => (time(b) < time(a) ? b : a));
+  const last = versions.reduce((a, b) => (time(b) > time(a) ? b : a));
   return { first: first.recordedAt, last: last.recordedAt };
 }
 const control =

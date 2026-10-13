@@ -433,6 +433,19 @@ describe('自動保存のまとまり', () => {
     );
     expect(first).toBe('2026-10-06T00:00:00Z');
     expect(last).toBe('2026-10-06T00:01:30Z');
+    // 見えている文字も、早い方から遅い方へ（期待値は実行環境の時刻帯で同じ書式から作る）。
+    const startText = new Date('2026-10-06T00:00:00Z').toLocaleString('ja-JP', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const endText = new Date('2026-10-06T00:01:30Z').toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const times = Array.from(header?.querySelectorAll('time') ?? []).map((time) => time.textContent);
+    expect(times).toEqual([startText, endText]);
   });
 
   it('内訳を開いている間は、選んだ版だけが選択中（aria-current）で、閉じるとまとまりの行に移る', async () => {
