@@ -37,7 +37,7 @@ jobs:
         run: |
           docs_only=false
           if [ "$EVENT_NAME" = pull_request ]; then
-            files=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename') || files=""
+            files=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)') || files=""
             # 取得に失敗した場合や変更ファイルが空の場合は docs-only 扱いにせず e2e を走らせる。
             if [ -n "$files" ] && ! printf '%s\n' "$files" | grep -qvE '(\.md$|^doc/)'; then
               docs_only=true

@@ -12,8 +12,9 @@ permissions:
   security-events: write
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # main への push は連続しても先のスキャンを捨てない（後続は範囲が足りるとは限らない）
+  # main への push は run 毎に別グループにして、どの push のスキャンも捨てない。
+  # push 毎のスキャン範囲は before..after なので、間の push を飛ばすと未検査の区間が残る。
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
