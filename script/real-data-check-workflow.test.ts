@@ -138,7 +138,9 @@ it('実データの検査を呼ぶ workflow は PR から起動されない', ()
   const callers = readdirSync(workflowsDir).filter(
     (file) =>
       file.endsWith('.yml') &&
-      /uses:\s*\.\/\.github\/workflows\/real-data-check\.yml/.test(readFileSync(new URL(file, workflowsDir), 'utf8')),
+      /uses:\s*kouiso\/skillsheet-viewer\/\.github\/workflows\/real-data-check\.yml@main/.test(
+        readFileSync(new URL(file, workflowsDir), 'utf8'),
+      ),
   );
   expect(callers.sort()).toEqual(['real-data-main-check.yml', 'xlsx-format-check.yml']);
   for (const file of callers) {
@@ -146,10 +148,13 @@ it('実データの検査を呼ぶ workflow は PR から起動されない', ()
     const onBlock = text.split(/^on:\n/m)[1]?.split(/^\S/m)[0] ?? '';
     expect(onBlock, file).not.toMatch(/pull_request/);
   }
-  // 外部のリポジトリや main 以外の ref から、この検査を直接呼ばせない。
+  // 本体は必ずこのリポジトリの @main から呼ぶ。相対パスだと、手動実行で選んだブランチの写しが読まれ、
+  // 確認を外したまま本番 DB の secret を受け取れてしまう。外部のリポジトリや他の ref も許さない。
   for (const file of readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'))) {
     const text = readFileSync(new URL(file, workflowsDir), 'utf8');
-    expect(text, file).not.toMatch(/uses:\s*[\w.-]+\/[\w.-]+\/\.github\/workflows\/real-data-check\.yml@/);
+    for (const [, ref] of text.matchAll(/uses:\s*(\S*real-data-check\.yml\S*)/g)) {
+      expect(ref, file).toBe('kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main');
+    }
   }
 });
 it('PR 用の実データ検査 workflow は存在しない', () => {
@@ -166,6 +171,15 @@ it('merge 後の main の検査は main への push と手動実行だけで動�
   const notify = readFileSync(new URL('ci-failure-notify.yml', workflowsDir), 'utf8');
   expect(notify).toContain('- "Real Data Check (main)"');
   expect(notify).toMatch(/DEVIN_TARGET:.*"Real Data Check \(main\)"/);
+});
+it('merge 後の検査は、本体を @main から呼び、手動実行は push 検査を止めない', () => {
+  const text = readFileSync(new URL('real-data-main-check.yml', workflowsDir), 'utf8');
+  const uses = [...text.matchAll(/^\s+uses: (\S+)$/gm)].map((m) => m[1]);
+  expect(uses).toEqual([
+    'kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main',
+    'kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main',
+  ]);
+  expect(text).toMatch(/group: real-data-main-check-\$\{\{ github\.event_name \}\}/);
 });
 it('Dump blocks from database は機密ログを公開せず終了コードを保持する', () => {
   const dir = tempDir();
@@ -309,6 +323,27 @@ it('検査を最後まで実行できなかった時は崩れと判定せずに�
   const broken = judge({ rawReport: '{ PRIVATE_BROKEN' });
   expect(broken.status).toBe(1);
   expect(broken.stdout + broken.stderr).not.toContain('PRIVATE');
+});
+it('形が崩れた JSON レポートは、中の値を公開ログに出さず失敗にする', () => {
+  for (const rawReport of [
+    JSON.stringify({
+      success: false,
+      testResults: [{ name: 'a', status: 'failed', assertionResults: 'PRIVATE_TEXT' }],
+    }),
+    JSON.stringify({
+      success: false,
+      testResults: [
+        { name: 'a', status: 'failed', assertionResults: [{ status: 'failed', fullName: { v: 'PRIVATE_TEXT' } }] },
+      ],
+    }),
+    JSON.stringify({ success: 'PRIVATE_TEXT', testResults: [] }),
+    JSON.stringify({ success: false, testResults: 'PRIVATE_TEXT' }),
+  ]) {
+    const result = judge({ rawReport, exit: 1 });
+    expect(result.status).toBe(1);
+    expect(result.stdout + result.stderr).toContain('検査を最後まで実行できなかった');
+    expect(result.stdout + result.stderr).not.toContain('PRIVATE');
+  }
 });
 it('テストは全件通っても実行が異常終了したら (run) の失敗にする', () => {
   const result = judge({ files: { 'src/a.node.test.tsx': [pass('崩れない')] }, exit: 1 });

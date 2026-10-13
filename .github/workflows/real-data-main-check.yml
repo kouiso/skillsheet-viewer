@@ -7,6 +7,8 @@ name: Real Data Check (main)
 # 実データで崩れていた場合は、直前に merge した変更か DB の本文の変化のどちらかなので、
 # 失敗は ci-failure-notify.yml が Slack と Devin へ渡す（push の失敗として扱う）。
 # 検査の本体は real-data-check.yml。そこで commit が main に含まれていることも確かめる。
+# 本体は @main で呼ぶ。相対パスだと、手動実行で選んだブランチの写しが読まれ、そのブランチが
+# main に含まれる確認を外したまま本番 DB の secret を受け取れてしまうため。
 on:
   push:
     branches: [main]
@@ -21,14 +23,15 @@ permissions:
   contents: read
 
 # 続けて merge された時は、新しい commit の検査が古い commit の分も含むので、古い実行は止める。
+# 手動実行は別の group にする。古い ref への手動実行が、main の先頭の push 検査を止めないように。
 concurrency:
-  group: real-data-main-check
+  group: real-data-main-check-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
   pdf:
     name: PDF (real data)
-    uses: ./.github/workflows/real-data-check.yml
+    uses: kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main
     with:
       name: PDF
       sheet-id: ${{ vars.PDF_CHECK_SHEET_ID }}
@@ -39,7 +42,7 @@ jobs:
 
   xlsx:
     name: XLSX (real data)
-    uses: ./.github/workflows/real-data-check.yml
+    uses: kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main
     with:
       name: XLSX
       sheet-id: ${{ vars.XLSX_CHECK_SHEET_ID }}

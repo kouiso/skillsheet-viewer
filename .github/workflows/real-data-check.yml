@@ -155,7 +155,14 @@ jobs:
           dir="$RUNNER_TEMP/real-data"
           report="$dir/report.json"
 
-          if [[ "$TEST_OUTCOME" != success ]] || [[ ! -s "$report" ]] || ! jq -e '.testResults' "$report" > /dev/null 2>&1; then
+          if [[ "$TEST_OUTCOME" != success ]] || [[ ! -s "$report" ]] || ! jq -e '
+                (.success | type == "boolean")
+                and (.testResults | type == "array")
+                and all(.testResults[];
+                  (.name | type == "string") and (.status | type == "string")
+                  and (.assertionResults | type == "array")
+                  and all(.assertionResults[]; (.status | type == "string") and (.fullName | type == "string")))
+              ' "$report" > /dev/null 2>&1; then
             echo "::error::$CHECK_NAME: 検査を最後まで実行できなかった（依存のインストール・DB からの抜き出し・設定のどれか）。PDF / XLSX の崩れとは判定していない。"
             exit 1
           fi
@@ -168,7 +175,7 @@ jobs:
               | if ($a | length) > 0 then $a[] elif .status == "failed" then "\($f)::(suite)" else empty end
             ] as $ids
             | if ($ids | length) == 0 and .success == false then "(run)" else $ids[] end
-          ' "$report" | sort -u)
+          ' "$report" 2> /dev/null | sort -u)
           # 未処理の例外は JSON レポートに載らず、終了コードと出力にだけ現れる。assertion の失敗と
           # 同時に起きても見逃さないよう、(unhandled) として別に数える。
           if sed 's/\x1b\[[0-9;]*m//g' "$dir/report.log" 2>/dev/null | grep -Eq '^Vitest caught [0-9]+ unhandled error'; then

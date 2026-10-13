@@ -17,7 +17,7 @@ permissions:
 jobs:
   xlsx-format-check:
     name: XLSX format check (real data)
-    uses: ./.github/workflows/real-data-check.yml
+    uses: kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main
     with:
       name: xlsx
       sheet-id: ${{ vars.XLSX_CHECK_SHEET_ID }}
