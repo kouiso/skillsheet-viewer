@@ -381,6 +381,51 @@ describe('自動保存のまとまり', () => {
     expect(screen.queryByRole('button', { name: '版 34〜40 の内訳を開く' })).not.toBeInTheDocument();
   });
 
+  it('一覧の下端で開いたまとまりは、前の版を読み込んで下端が伸びても閉じない', async () => {
+    // 1ページ目(20件)の最後のまとまりは、読み込みで最古の版が変わる。開閉キーが最古の版だとここで閉じる。
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      revision: String(40 - i),
+      title: '合成',
+      recordedAt: new Date(Date.parse('2026-10-06T00:00:00Z') + (39 - i) * 1.5 * 60_000).toISOString(),
+      action: 'save',
+      restoredFrom: null,
+      restoredBefore: null,
+    }));
+    const list = vi.fn().mockImplementation(async (before?: string) => {
+      const start = before === undefined ? 0 : many.findIndex((row) => row.revision === before) + 1;
+      return many.slice(start, start + 20);
+    });
+    setup({ list });
+    // 1ページ目は版 40〜21。いちばん下のまとまりは版 21〜26。
+    fireEvent.click(await screen.findByRole('button', { name: '版 21〜26 の内訳を開く' }));
+    fireEvent.click(screen.getByRole('button', { name: '前の版を読み込む' }));
+    // 読み込むと、そのまとまりは版 20〜26 に伸びる。開いたまま残る。
+    expect(await screen.findByRole('button', { name: '版 20〜26 の内訳を閉じる' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+  });
+
+  it('内訳の版を選んで閉じても、まとまりの行が選択中として示される', async () => {
+    setupGrouped();
+    const toggle = await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: /^版 3/ }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('3'));
+    fireEvent.click(screen.getByRole('button', { name: '版 2〜4 の内訳を閉じる' }));
+    const header = screen.getByText(/保存 3回/).closest('button');
+    expect(header).toHaveAttribute('aria-current', 'true');
+  });
+
+  it('時刻が版番号の順と逆でも、時刻の範囲は早い方から遅い方へ出す', async () => {
+    // 版 3 のほうが版 4 より遅い時刻。位置（最古・最新の版）で範囲を作ると「00:01〜00:00」と逆になる。
+    const skewed = rows.map((row) => (row.revision === '4' ? { ...row, recordedAt: '2026-10-06T00:00:10Z' } : row));
+    skewed[1] = { ...skewed[1], recordedAt: '2026-10-06T00:01:00Z' };
+    setup({ list: vi.fn().mockResolvedValue(skewed) });
+    const line = (await screen.findByText(/保存 3回/)).closest('button')?.querySelector('span');
+    expect(line?.textContent).toMatch(/00:00.*〜.*00:01/);
+  });
+
   it('時刻の範囲は分が変わったときだけ「〜」で終わりを出す', async () => {
     // 「版 2〜4」にも〜があるので、時刻の行（ボタン内の最初の span）だけを見る。
     const timeLine = async () => (await screen.findByText(/保存 3回/)).closest('button')?.querySelector('span') ?? null;
