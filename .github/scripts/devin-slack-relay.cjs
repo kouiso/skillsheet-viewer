@@ -550,15 +550,17 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
       const tries = (marker.tries || 0) + 1;
       if (tries >= STALE_TRIGGER_TRIES) {
         // 無言は「起動済みで作業中」の可能性が高い。pending へ降格して再投稿すると
-        // 重複 Devin セッションを量産するため、追跡だけやめて再投稿はしない。
+        // 重複 Devin セッションを量産するため、自動再投稿はしない。
+        // triggered のまま残すと、確認後にラベルを付け直しても dispatch が「起動済み」と
+        // 読んで弾くので、手動再投稿できる failed に落とす。
         await finalize(
           github,
           context,
           core,
           issue,
-          { ts: marker.ts, status: 'triggered', tries },
+          { ts: marker.ts, status: 'failed', tries },
           cfg,
-          'Devin の返信を確認できないまま追跡を打ち切りました。自動再投稿はしません。Slack スレッドを直接確認してください',
+          'Devin 応答なし。自動再投稿はしません。Slack スレッドを確認し、未起動ならラベルを付け直してください',
         );
         await removeTriggerLabel(issue.number);
       } else {
