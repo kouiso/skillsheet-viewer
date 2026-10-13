@@ -5,14 +5,14 @@ import { createRequire } from 'node:module';
 import { expect, test } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const { staleStatusAfterTries } = require('./devin-slack-relay.cjs');
+const { staleStatusAfterTries, STALE_TRIGGER_TRIES } = require('./devin-slack-relay.cjs');
 
-// 無応答スイープ: 上限(3)未満では triggered を維持、到達で failed（再投稿しない）
+// 無応答スイープ: 上限未満では triggered を維持し、到達で failed（自動再投稿しない）。
 test('stays triggered below STALE_TRIGGER_TRIES', () => {
-  expect(staleStatusAfterTries(1)).toBe('triggered');
-  expect(staleStatusAfterTries(2)).toBe('triggered');
+  expect(staleStatusAfterTries(0)).toBe('triggered');
+  expect(staleStatusAfterTries(STALE_TRIGGER_TRIES - 1)).toBe('triggered');
 });
 test('transitions to failed at STALE_TRIGGER_TRIES, never pending', () => {
-  expect(staleStatusAfterTries(3)).toBe('failed');
-  expect(staleStatusAfterTries(10)).toBe('failed');
+  expect(staleStatusAfterTries(STALE_TRIGGER_TRIES)).toBe('failed');
+  expect(staleStatusAfterTries(STALE_TRIGGER_TRIES + 10)).toBe('failed');
 });

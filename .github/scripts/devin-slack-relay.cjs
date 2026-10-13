@@ -11,11 +11,11 @@ const MARKER_RE = /<!-- devin-slack-triggered([^>]*)-->/;
 const SESSION_URL_RE = /https:\/\/(?:[\w-]+\.)*devin\.ai\/sessions\/[0-9a-f]+/;
 const FAILURE_RE =
   /Failed to create Devin|Failed to start|Failed to launch|couldn'?t start|could not start|unable to start|error creating session/i;
-const MAX_TRIES = 3; // 6時間間隔で約18時間
-const STALE_TRIGGER_TRIES = 3; // 起動要求後に Devin の返信が無いまま許容する sweep 回数(約18時間)
+const MAX_TRIES = 3; // 明示的な失敗返信に対する再投稿の上限。再投稿は Devin セッションを新たに消費する
+const STALE_TRIGGER_TRIES = 4; // 起動要求後に Devin の返信が無いまま追跡する sweep 回数(6時間間隔で約1日)
 
 // 無応答スイープの遷移判定。上限到達で 'failed'（自動再投稿しない）になる。
-// この遷移を壊すと pending 復活で同じスレッドへ再投稿を繰り返す事故が起きるのでテストで固定する。
+// ここが pending に戻ると、同じスレッドへ再投稿を繰り返して Devin セッションを量産するため、テストで固定する。
 function staleStatusAfterTries(tries) {
   return tries >= STALE_TRIGGER_TRIES ? 'failed' : 'triggered';
 }
@@ -512,7 +512,7 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
 
   if (marker?.status === 'triggered' && marker?.ts) {
     // 遅延する Devin 応答を回収する。URLなら done。失敗なら pending。
-    // どちらも無い無応答が続く場合は tries を進めて、上限で failed にして止める（自動再投稿はしない）。
+    // どちらも無い無応答が続く場合は tries を進めて上限で pending へ降格し再投稿に委ねる。
     const r = await slackReplies(cfg, marker.ts);
     if (!r.ok) {
       // スレッドが消えているなら pending へ降格して次回新スレッドで再投稿させる
@@ -555,8 +555,10 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
     } else {
       const tries = (marker.tries || 0) + 1;
       if (staleStatusAfterTries(tries) === 'failed') {
-        // 無言が続く限り再投稿しない。pending に落とすと同じスレッドへ再投稿を繰り返すため、
-        // failed（要手動対応）で止める
+        // 無言は「起動済みで作業中」の可能性が高い。pending へ降格して再投稿すると
+        // 重複 Devin セッションを量産するため、自動再投稿はしない。
+        // triggered のまま残すと、確認後にラベルを付け直しても dispatch が「起動済み」と
+        // 読んで弾くので、手動再投稿できる failed に落とす。
         await finalize(
           github,
           context,
@@ -564,7 +566,7 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
           issue,
           { ts: marker.ts, status: 'failed', tries },
           cfg,
-          'Devin 応答なし（無言）。自動再投稿はしません。再開するにはラベルを付け直してください',
+          'Devin 応答なし。自動再投稿はしません。Slack スレッドを確認し、未起動ならラベルを付け直してください',
         );
         await removeTriggerLabel(issue.number);
       } else {
@@ -617,4 +619,4 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
   }
 }
 
-module.exports = { dispatch, verify, sweep, staleStatusAfterTries };
+module.exports = { dispatch, verify, sweep, staleStatusAfterTries, STALE_TRIGGER_TRIES };

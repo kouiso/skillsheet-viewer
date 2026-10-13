@@ -83,7 +83,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative min-w-[220px] flex-1">
+        <div className="relative min-w-0 max-w-full flex-[1_1_220px]">
           {/* U+2315（テキストグリフ）だけ lucide の SVG アイコン群と質感が揃わず、
               aria-hidden も無かった（#152 S-5）。 */}
           <Search
@@ -114,7 +114,7 @@ export function TechFilter({ all, active, query, onQueryChange, onToggle, onClea
       </div>
       <p className="text-[12px] leading-relaxed text-muted-foreground">{searchHint}</p>
 
-      <div className="relative min-w-[220px] max-w-[420px]">
+      <div className="relative min-w-0 w-full max-w-[420px]">
         <input
           value={techQuery}
           role="combobox"

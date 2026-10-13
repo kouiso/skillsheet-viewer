@@ -7,23 +7,23 @@ on:
   push:
     branches: [main]
 
-# 同一 workflow・同 ref の二重起動を潰す。main push は取り消さない
-# （cancel されるとそのコミット範囲のスキャンが二度と走らないため）
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 permissions:
   contents: read
   security-events: write
+
+concurrency:
+  # main への push は run 毎に別グループにして、どの push のスキャンも捨てない。
+  # push 毎のスキャン範囲は before..after なので、間の push を飛ばすと未検査の区間が残る。
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   trufflehog:
     name: Secret Scan
     runs-on: ubuntu-latest
-    # draft の PR では走らせない（push は対象外なので常に走る）。ci.yml と同じ条件。
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     timeout-minutes: 10
+    # draft の PR では走らせない（push は対象外なので常に走る）。
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
