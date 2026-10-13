@@ -3,7 +3,11 @@ import { dirname, resolve } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
+import { assertIsolatedE2eEnv } from './script/require-isolated-db';
 
+// e2e は使い捨ての隔離 DB でだけ動かす。次の .env.local の読み込みは正本の共有 DB（本番）を指す
+// DATABASE_URL を持ち込むので、読む前の環境で判定する（#346）。
+assertIsolatedE2eEnv(process.env);
 // Playwright 実行プロセスでも .env.local を読み込む（Web サーバーは Next.js が読むがテスト本体は読まないため）。
 const rootDir = dirname(fileURLToPath(import.meta.url));
 function loadEnvFile(path: string) {
@@ -19,14 +23,6 @@ function loadEnvFile(path: string) {
   }
 }
 loadEnvFile(resolve(rootDir, '.env.local'));
-// e2e 専用 DB（#346）。.env.local の DATABASE_URL は正本の共有 DB を指すため、
-// e2e が migrate・行作成・principals 張替えを行うと本番データを壊す。
-// .env.e2e（または環境変数）に E2E_DATABASE_URL を置けば、このプロセスと
-// webServer 双方の DATABASE_URL を e2e 専用 DB へ切り替える。
-loadEnvFile(resolve(rootDir, '.env.e2e'));
-if (process.env.E2E_DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
-}
 
 const baseURL = process.env.PLAYWRIGHT_BASEURL ?? 'http://127.0.0.1:3210';
 const chromePath = process.env.CHROME_PATH;
