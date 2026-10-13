@@ -496,7 +496,7 @@ export function VersionHistory({
                   <div className="flex min-w-0 gap-1">
                     <button
                       type="button"
-                      className={`${control} min-w-0 flex-1 text-left ${selected ? 'border-primary bg-accent text-accent-foreground' : ''}`}
+                      className={`${control} min-w-0 flex-1 text-left ${selected && !open ? 'border-primary bg-accent text-accent-foreground' : ''}`}
                       aria-current={selected && !open ? 'true' : undefined}
                       disabled={busy}
                       onClick={() => selectVersion(newest.revision)}

@@ -73,9 +73,18 @@ describe('自動保存の版を一覧でたたむ', () => {
       rows.flatMap((row) => (row.kind === 'single' ? [row.version.revision] : row.versions.map((v) => v.revision))),
     ).toEqual(['3', '2', '1']);
     expect(shape(rows)).toEqual([['3', '2', '1']]);
-    // 逆転が2分より大きくても、新しい版の時刻のほうが早いだけなので、つながった保存として同じまとまりに入れる
-    // （時刻の絶対値の差で見ると、並行した保存が別々の行に割れてしまう）。
-    expect(shape(groupVersions(versions([0], [5], [1])))).toEqual([['3', '2'], '1']);
+    // 逆転が2分以上なら並行した保存ではない（時計のずれ・後からの投入）ので、別のまとまりにする。
+    // 符号付きの差で見ると、数時間逆転した版も同じまとまりに入り、「10:00〜翌 09:00 の編集」になってしまう。
+    expect(shape(groupVersions(versions([0], [5], [1])))).toEqual(['3', '2', '1']);
+    expect(shape(groupVersions(versions([0], [600], [1])))).toEqual(['3', '2', '1']);
+    // 時刻が逆向きに並び続けても、まとまりの最新から10分で区切る（符号付きの差では永遠につながってしまう）。
+    const reversedChain = versions([12], [10.5], [9], [7.5], [6], [4.5], [3], [1.5], [0]);
+    expect(shape(groupVersions(reversedChain))).toEqual([
+      ['9', '8', '7', '6', '5', '4', '3'],
+      ['2', '1'],
+    ]);
+    // 逆転が2分未満（並行した保存）なら同じまとまりに入る。
+    expect(shape(groupVersions(versions([0], [1.5], [1])))).toEqual([['3', '2', '1']]);
   });
 
   it('保存以外の版は常に1行で、前後のまとまりを分ける', () => {
