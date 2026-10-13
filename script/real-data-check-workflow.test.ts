@@ -148,8 +148,8 @@ it('実データの検査を呼ぶ workflow は PR から起動されない', ()
     const onBlock = text.split(/^on:\n/m)[1]?.split(/^\S/m)[0] ?? '';
     expect(onBlock, file).not.toMatch(/pull_request/);
   }
-  // 本体は必ずこのリポジトリの @main から呼ぶ。相対パスだと、手動実行で選んだブランチの写しが読まれ、
-  // 確認を外したまま本番 DB の secret を受け取れてしまう。外部のリポジトリや他の ref も許さない。
+  // 本体は必ずこのリポジトリの @main から呼ぶ。呼び出し側が持つ写しに左右されないよう固定する。
+  // 外部のリポジトリや他の ref も許さない。
   for (const file of readdirSync(workflowsDir).filter((f) => f.endsWith('.yml'))) {
     const text = readFileSync(new URL(file, workflowsDir), 'utf8');
     for (const [, ref] of text.matchAll(/uses:\s*(\S*real-data-check\.yml\S*)/g)) {
@@ -157,14 +157,21 @@ it('実データの検査を呼ぶ workflow は PR から起動されない', ()
     }
   }
 });
+it('本番 DB の secret を渡す workflow に、ブランチを選べる手動実行を置かない', () => {
+  // workflow_dispatch は選んだブランチのファイルそのものを動かすので、steps を差し替えて secret を読める。
+  for (const file of ['real-data-main-check.yml', 'xlsx-format-check.yml']) {
+    const text = readFileSync(new URL(file, workflowsDir), 'utf8');
+    const onBlock = text.split(/^on:\n/m)[1]?.split(/^\S/m)[0] ?? '';
+    expect(onBlock, file).not.toContain('workflow_dispatch');
+  }
+});
 it('PR 用の実データ検査 workflow は存在しない', () => {
   expect(readdirSync(workflowsDir)).not.toContain('real-data-pr-check.yml');
 });
-it('merge 後の main の検査は main への push と手動実行だけで動き、失敗は通知の対象になる', () => {
+it('merge 後の main の検査は main への push だけで動き、失敗は通知の対象になる', () => {
   const text = readFileSync(new URL('real-data-main-check.yml', workflowsDir), 'utf8');
   const onBlock = text.split(/^on:\n/m)[1]?.split(/^\S/m)[0] ?? '';
   expect(onBlock).toMatch(/push:\s*\n\s*branches: \[main\]/);
-  expect(onBlock).toContain('workflow_dispatch:');
   expect(text).toContain('name: Real Data Check (main)');
   expect(text).toMatch(/secrets:\s*\n\s*database-url: \$\{\{ secrets\.PDF_CHECK_DATABASE_URL \}\}/);
   expect(text).toMatch(/secrets:\s*\n\s*database-url: \$\{\{ secrets\.XLSX_CHECK_DATABASE_URL \}\}/);
@@ -172,14 +179,13 @@ it('merge 後の main の検査は main への push と手動実行だけで動�
   expect(notify).toContain('- "Real Data Check (main)"');
   expect(notify).toMatch(/DEVIN_TARGET:.*"Real Data Check \(main\)"/);
 });
-it('merge 後の検査は、本体を @main から呼び、手動実行は push 検査を止めない', () => {
+it('merge 後の検査は、本体を @main から呼ぶ', () => {
   const text = readFileSync(new URL('real-data-main-check.yml', workflowsDir), 'utf8');
   const uses = [...text.matchAll(/^\s+uses: (\S+)$/gm)].map((m) => m[1]);
   expect(uses).toEqual([
     'kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main',
     'kouiso/skillsheet-viewer/.github/workflows/real-data-check.yml@main',
   ]);
-  expect(text).toMatch(/group: real-data-main-check-\$\{\{ github\.event_name \}\}/);
 });
 it('Dump blocks from database は機密ログを公開せず終了コードを保持する', () => {
   const dir = tempDir();

@@ -7,25 +7,24 @@ name: Real Data Check (main)
 # 実データで崩れていた場合は、直前に merge した変更か DB の本文の変化のどちらかなので、
 # 失敗は ci-failure-notify.yml が Slack と Devin へ渡す（push の失敗として扱う）。
 # 検査の本体は real-data-check.yml。そこで commit が main に含まれていることも確かめる。
-# 本体は @main で呼ぶ。相対パスだと、手動実行で選んだブランチの写しが読まれ、そのブランチが
-# main に含まれる確認を外したまま本番 DB の secret を受け取れてしまうため。
+# 本体は @main で呼び、呼び出し側が持つ写しに左右されないようにする。
 on:
   push:
     branches: [main]
     paths-ignore:
       - '**/*.md'
       - 'doc/**'
-  # 手動実行も main の commit にしか効かない（本体が main の祖先でない commit を止める）。
-  workflow_dispatch:
+  # 手動実行（workflow_dispatch）は置かない。手動実行は選んだブランチの workflow ファイルそのものを
+  # 動かせるので、ブランチ側で steps を差し替えて本番 DB の secret を読めてしまう。push と schedule は
+  # main のファイルしか動かさない。再実行したい時は GitHub の Re-run（同じ commit の同じファイル）を使う。
 
 # 読むだけの job なので token の権限も読み取りに絞る。
 permissions:
   contents: read
 
 # 続けて merge された時は、新しい commit の検査が古い commit の分も含むので、古い実行は止める。
-# 手動実行は別の group にする。古い ref への手動実行が、main の先頭の push 検査を止めないように。
 concurrency:
-  group: real-data-main-check-${{ github.event_name }}
+  group: real-data-main-check
   cancel-in-progress: true
 
 jobs:
