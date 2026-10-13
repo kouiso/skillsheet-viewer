@@ -355,21 +355,30 @@ describe('自動保存のまとまり', () => {
   });
 
   it('10分超の連続保存がページをまたいでも最新側を起点にまとめる', async () => {
-    // 20件の自動保存を1.5分おき(合計28.5分)に並べ、先頭10件→20件の順で読む。
-    // まとまりの起点は最新側なので、既存グループの開閉キー(最新版)は追加分でも変わらない。
-    const many = Array.from({ length: 20 }, (_, i) => ({
-      revision: String(20 - i),
+    // 40件の自動保存を1.5分おきに並べ、1ページ20件で読む。
+    // まとまりの起点は最新側なので、開いておいた最新のまとまりは「前の版を読み込む」でも閉じない。
+    const many = Array.from({ length: 40 }, (_, i) => ({
+      revision: String(40 - i),
       title: '合成',
-      recordedAt: new Date(Date.parse('2026-10-06T00:00:00Z') + (19 - i) * 1.5 * 60_000).toISOString(),
+      recordedAt: new Date(Date.parse('2026-10-06T00:00:00Z') + (39 - i) * 1.5 * 60_000).toISOString(),
       action: 'save',
       restoredFrom: null,
       restoredBefore: null,
     }));
-    setup({ list: vi.fn().mockResolvedValue(many.slice(0, 10)) });
-    await screen.findByRole('button', { name: '版 14〜20 の内訳を開く' });
-    setup({ list: vi.fn().mockResolvedValue(many) });
-    // 最新グループは同じまとまりのまま残る（下端だけが伸びる）
-    expect(await screen.findByRole('button', { name: /版 14〜20 の内訳を開く/ })).toBeInTheDocument();
+    const list = vi.fn().mockImplementation(async (before?: string) => {
+      const start = before === undefined ? 0 : many.findIndex((row) => row.revision === before) + 1;
+      return many.slice(start, start + 20);
+    });
+    setup({ list });
+    fireEvent.click(await screen.findByRole('button', { name: '版 34〜40 の内訳を開く' }));
+    expect(screen.getByRole('button', { name: '版 34〜40 の内訳を閉じる' })).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: '前の版を読み込む' }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    await screen.findByRole('button', { name: '版 1〜5 の内訳を開く' });
+    // 区切りがずれず、開いていた内訳も開いたまま残る。
+    expect(screen.getByRole('button', { name: '版 34〜40 の内訳を閉じる' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: '版 34〜40 の内訳を開く' })).not.toBeInTheDocument();
   });
 
   it('時刻の範囲は分が変わったときだけ「〜」で終わりを出す', async () => {
