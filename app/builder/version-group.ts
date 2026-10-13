@@ -35,11 +35,13 @@ export function groupVersions(versions: readonly VersionSummary[]): VersionRow[]
     const newest = run[0];
     const prev = run.at(-1);
     // 時刻が読めない版は他とまとめない（NaN との比較は常に false）。
+    // 並行した保存では recordedAt が版番号の順と逆になりうるので、差は絶対値で見る。
+    // 逆転が数秒なら同じまとまり、2分以上なら（時計のずれ・後からの投入など）別のまとまりにする。
     const joins =
       newest !== undefined &&
       prev !== undefined &&
-      Date.parse(prev.recordedAt) - at < IDLE_GAP_MS &&
-      Date.parse(newest.recordedAt) - at < MAX_SPAN_MS;
+      Math.abs(Date.parse(prev.recordedAt) - at) < IDLE_GAP_MS &&
+      Math.abs(Date.parse(newest.recordedAt) - at) < MAX_SPAN_MS;
     if (!joins) flush();
     run.push(version);
   }

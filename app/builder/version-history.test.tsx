@@ -418,12 +418,42 @@ describe('自動保存のまとまり', () => {
   });
 
   it('時刻が版番号の順と逆でも、時刻の範囲は早い方から遅い方へ出す', async () => {
-    // 版 3 のほうが版 4 より遅い時刻。位置（最古・最新の版）で範囲を作ると「00:01〜00:00」と逆になる。
-    const skewed = rows.map((row) => (row.revision === '4' ? { ...row, recordedAt: '2026-10-06T00:00:10Z' } : row));
-    skewed[1] = { ...skewed[1], recordedAt: '2026-10-06T00:01:00Z' };
+    // 最古の版(2)の時刻が最も遅く、版 3 が最も早い。位置（最古・最新の版）で範囲を作ると始まりと終わりが逆になる。
+    // 表示は時刻帯に依存するので、<time> の dateTime で順序を確かめる。
+    const skewed = rows.map((row) => {
+      if (row.revision === '2') return { ...row, recordedAt: '2026-10-06T00:01:30Z' };
+      if (row.revision === '3') return { ...row, recordedAt: '2026-10-06T00:00:00Z' };
+      if (row.revision === '4') return { ...row, recordedAt: '2026-10-06T00:00:40Z' };
+      return row;
+    });
     setup({ list: vi.fn().mockResolvedValue(skewed) });
-    const line = (await screen.findByText(/保存 3回/)).closest('button')?.querySelector('span');
-    expect(line?.textContent).toMatch(/00:00.*〜.*00:01/);
+    const header = (await screen.findByText(/保存 3回/)).closest('button');
+    const [first, last] = Array.from(header?.querySelectorAll('time') ?? []).map((time) =>
+      time.getAttribute('datetime'),
+    );
+    expect(first).toBe('2026-10-06T00:00:00Z');
+    expect(last).toBe('2026-10-06T00:01:30Z');
+  });
+
+  it('内訳を開いている間は、選んだ版だけが選択中（aria-current）で、閉じるとまとまりの行に移る', async () => {
+    setupGrouped();
+    const toggle = await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
+    const header = screen.getByText(/保存 3回/).closest('button');
+    // 閉じている間は、まとまりの内訳の一覧が存在しないので aria-controls を付けない。
+    expect(toggle).not.toHaveAttribute('aria-controls');
+    fireEvent.click(toggle);
+    const open = screen.getByRole('button', { name: '版 2〜4 の内訳を閉じる' });
+    const controlled = open.getAttribute('aria-controls');
+    expect(controlled).toBeTruthy();
+    expect(document.getElementById(controlled as string)).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^版 3/ }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('3'));
+    // 開いている間：選んだ版の行だけが aria-current。まとまりの行は付けず、見た目の強調も出さない。
+    expect(header).not.toHaveAttribute('aria-current');
+    expect(header?.className).not.toContain('border-primary');
+    expect(screen.getByRole('button', { name: /^版 3/ })).toHaveAttribute('aria-current', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '版 2〜4 の内訳を閉じる' }));
+    expect(screen.getByText(/保存 3回/).closest('button')).toHaveAttribute('aria-current', 'true');
   });
 
   it('時刻の範囲は分が変わったときだけ「〜」で終わりを出す', async () => {
