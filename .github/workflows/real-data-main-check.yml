@@ -22,10 +22,12 @@ on:
 permissions:
   contents: read
 
-# 続けて merge された時は、新しい commit の検査が古い commit の分も含むので、古い実行は止める。
+# commit ごとに別の group にして、実行を止めない。読むだけの検査なので並んで走ってよい。
+# 古い実行を止める方式にすると、古い commit の Re-run が main 先頭の検査を止め、
+# 古い commit だけが成功して、最新のコードが実データで検査されないまま残る。
 concurrency:
-  group: real-data-main-check
-  cancel-in-progress: true
+  group: real-data-main-check-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   pdf:

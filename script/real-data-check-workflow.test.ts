@@ -157,6 +157,12 @@ it('実データの検査を呼ぶ workflow は PR から起動されない', ()
     }
   }
 });
+it('merge 後の検査は commit ごとの group で、他の commit の実行を止めない', () => {
+  const text = readFileSync(new URL('real-data-main-check.yml', workflowsDir), 'utf8');
+  expect(text).toMatch(/group: real-data-main-check-\$\{\{ github\.sha \}\}/);
+  expect(text).toMatch(/cancel-in-progress: false/);
+  expect(text).not.toMatch(/cancel-in-progress: true/);
+});
 it('本番 DB の secret を渡す workflow に、ブランチを選べる手動実行を置かない', () => {
   // workflow_dispatch は選んだブランチのファイルそのものを動かすので、steps を差し替えて secret を読める。
   for (const file of ['real-data-main-check.yml', 'xlsx-format-check.yml']) {
