@@ -161,7 +161,7 @@ async function ensureLabel(github, repo, name, color, description) {
 const LABEL_DEFS = {
   'devin-queued': { color: '0e8a16', desc: 'Devin 起動を定期実行にキューイング' },
   'devin-waiting': { color: 'fbca04', desc: 'Devin 起動失敗。定期実行で再試行中' },
-  'devin-failed': { color: 'd93f0b', desc: 'Devin 起動リトライ上限到達' },
+  'devin-failed': { color: 'd93f0b', desc: 'Devin 起動リトライ上限到達または無応答。要手動対応' },
 };
 
 async function syncLabels(github, repo, issueNumber, status, cfg) {
@@ -203,7 +203,7 @@ function statusCommentBody({ permalink, sessionUrl, status, ts, tries, note }) {
     triggered: '起動要求送信済み',
     pending: '失敗。定期実行で再試行中',
     done: 'Devin セッション起動済み',
-    failed: '再試行上限到達。要手動対応',
+    failed: '再試行上限到達または Devin 無応答。要手動対応',
   }[status];
   const lines = [
     ':robot_face: Devin 起動リレー',
@@ -506,7 +506,7 @@ async function sweepIssue(github, context, core, cfg, issue, labels, removeTrigg
 
   if (marker?.status === 'triggered' && marker?.ts) {
     // 遅延する Devin 応答を回収する。URLなら done。失敗なら pending。
-    // どちらも無い無応答が続く場合は tries を進めて上限で pending へ降格し再投稿に委ねる。
+    // どちらも無い無応答が続く場合は tries を進め、上限で failed にして止める(自動で再投稿しない)。
     const r = await slackReplies(cfg, marker.ts);
     if (!r.ok) {
       // スレッドが消えているなら pending へ降格して次回新スレッドで再投稿させる
