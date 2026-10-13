@@ -39,6 +39,42 @@ for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary 
 done
 psql "${psql_args[@]}" -f "$repo_dir/script/sql/test-runtime-role-provisioning.sql" >"$run_dir/runtime-provisioning.log" 2>&1
 printf "runtime install再実行・実効権限・正規文書操作: PASS\n"
+# 特権属性・所有権・PUBLIC由来の権限は、安全に降格できたと推測しない。
+psql "${psql_args[@]}" -c '
+CREATE ROLE runtime_proof_bypass LOGIN BYPASSRLS;
+CREATE ROLE runtime_proof_replication LOGIN REPLICATION;
+CREATE ROLE runtime_proof_superuser LOGIN SUPERUSER;
+CREATE ROLE runtime_proof_owner LOGIN;
+CREATE TABLE public.runtime_proof_owned (id integer);
+ALTER TABLE public.runtime_proof_owned OWNER TO runtime_proof_owner;
+CREATE ROLE runtime_proof_public_acl LOGIN;
+' >"$run_dir/unsafe-runtime-fixtures.log" 2>&1
+for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_superuser runtime_proof_owner runtime_proof_public_acl; do
+  if [[ "$unsafe_role" == runtime_proof_public_acl ]]; then
+    psql "${psql_args[@]}" -c 'GRANT SELECT ON public.skill_sheets TO PUBLIC' >"$run_dir/public-acl-fixture.log" 2>&1
+  fi
+  psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/$unsafe_role.before"
+  if psql "${psql_args[@]}" -v runtime_role="$unsafe_role" -v runtime_password=synthetic-verification-only \
+    -v owner_id=runtime-proof-unsafe -f "$repo_dir/script/sql/install-runtime-role.sql" >"$run_dir/$unsafe_role.log" 2>&1; then
+    printf '不正runtimeへのinstallが成功しました: %s\n' "$unsafe_role" >&2
+    exit 1
+  fi
+  case "$unsafe_role" in
+    runtime_proof_owner) expected_error=UNSAFE_RUNTIME_OWNERSHIP ;;
+    runtime_proof_public_acl) expected_error=RUNTIME_BOUNDARY_PERMISSION_LEAK ;;
+    *) expected_error=UNSAFE_RUNTIME_ROLE ;;
+  esac
+  rg -q "$expected_error" "$run_dir/$unsafe_role.log"
+  psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/$unsafe_role.after"
+  cmp "$run_dir/$unsafe_role.before" "$run_dir/$unsafe_role.after"
+done
+psql "${psql_args[@]}" -c '
+REVOKE SELECT ON public.skill_sheets FROM PUBLIC;
+DROP TABLE public.runtime_proof_owned;
+DROP ROLE runtime_proof_bypass, runtime_proof_replication, runtime_proof_superuser, runtime_proof_owner, runtime_proof_public_acl;
+' >"$run_dir/unsafe-runtime-cleanup.log" 2>&1
+printf '特権・所有権・PUBLIC権限の拒否と失敗時rollback: PASS\n'
+
 # 2接続目が実際にロック待ちになったことを観測し、直列実行を競合試験と誤認しない。
 psql "${psql_args[@]}" -f "$repo_dir/script/sql/seed-document-cas-proof.sql" >"$run_dir/cas-seed.log" 2>&1
 cas_args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55440 -U cas_runtime -d postgres)

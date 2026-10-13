@@ -1,0 +1,17 @@
+-- 不正な既存runtimeへのinstall失敗が、認可・password・ACLを変えないことを比較する。
+SELECT md5(jsonb_build_object(
+  'roles', (SELECT jsonb_agg(to_jsonb(r) ORDER BY rolname)
+    FROM pg_authid r WHERE rolname LIKE 'runtime_proof_%'),
+  'memberships', (SELECT jsonb_agg(to_jsonb(m) ORDER BY roleid, member)
+    FROM pg_auth_members m),
+  'principals', (SELECT jsonb_agg(to_jsonb(p) ORDER BY login_name)
+    FROM skillsheet_private.principals p),
+  'schema_acls', (SELECT jsonb_agg(jsonb_build_array(nspname,nspowner,nspacl) ORDER BY nspname)
+    FROM pg_namespace WHERE nspname IN ('public','skillsheet_private')),
+  'relation_acls', (SELECT jsonb_agg(jsonb_build_array(n.nspname,c.relname,c.relowner,c.relacl)
+      ORDER BY n.nspname,c.relname)
+    FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname IN ('public','skillsheet_private')),
+  'function_acls', (SELECT jsonb_agg(jsonb_build_array(p.oid,p.proowner,p.proacl) ORDER BY p.oid)
+    FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='skillsheet_private')
+)::text);
