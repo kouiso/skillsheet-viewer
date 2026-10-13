@@ -16,3 +16,78 @@ test('transitions to failed at STALE_TRIGGER_TRIES, never pending', () => {
   expect(staleStatusAfterTries(STALE_TRIGGER_TRIES)).toBe('failed');
   expect(staleStatusAfterTries(STALE_TRIGGER_TRIES + 10)).toBe('failed');
 });
+
+// ---- sweep() を実際に走らせる ----
+// Devin が無言のまま sweep（6時間ごと）が繰り返されたとき、上限で failed になり、
+// Slack へ再投稿せず、トリガーラベルを外すことを、GitHub と Slack を差し替えて確かめる。
+const { sweep } = require('./devin-slack-relay.cjs');
+
+function fakeGithub({ labels, commentBody }) {
+  const state = { labels: new Set(labels), comments: [{ id: 1, user: { type: 'Bot' }, body: commentBody }] };
+  const issue = {
+    number: 7,
+    title: '合成の issue',
+    html_url: 'https://example.test/issues/7',
+    labels: [],
+    pull_request: undefined,
+  };
+  const github = {
+    paginate: async (fn) =>
+      fn === github.rest.issues.listForRepo
+        ? [{ ...issue, labels: [...state.labels].map((name) => ({ name })) }]
+        : state.comments,
+    rest: {
+      issues: {
+        listForRepo: () => {},
+        listComments: () => {},
+        createComment: async ({ body }) =>
+          state.comments.push({ id: state.comments.length + 1, user: { type: 'Bot' }, body }),
+        updateComment: async ({ comment_id, body }) => {
+          state.comments.find((c) => c.id === comment_id).body = body;
+        },
+        addLabels: async ({ labels: added }) => {
+          for (const name of added) state.labels.add(name);
+        },
+        removeLabel: async ({ name }) => {
+          state.labels.delete(name);
+        },
+        createLabel: async () => {},
+      },
+    },
+  };
+  return { github, state };
+}
+
+test('sweep: 無言が上限まで続くと failed になり、再投稿せずトリガーラベルを外す', async () => {
+  Object.assign(process.env, { SLACK_BOT_TOKEN: 'x', SLACK_CHANNEL_ID: 'C1', DEVIN_USER_ID: 'U1' });
+  const posted = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (String(url).includes('chat.postMessage')) posted.push(options.body);
+    // 親メッセージだけで Devin の返信が無い（無言）スレッド
+    return { json: async () => ({ ok: true, messages: [{ text: '親' }] }) };
+  };
+  try {
+    const { github, state } = fakeGithub({
+      labels: ['for-devin'],
+      commentBody:
+        '- Slack スレッド: なし\n- Devin セッション: 未起動\n<!-- devin-slack-triggered ts=1.1 status=triggered tries=0 -->',
+    });
+    const context = { repo: { owner: 'o', repo: 'r' } };
+    const core = { info() {}, warning() {}, setOutput() {} };
+    const statusAfter = () => /status=(\w+)/.exec(state.comments[0].body)[1];
+
+    for (let sweepCount = 1; sweepCount < STALE_TRIGGER_TRIES; sweepCount++) {
+      await sweep({ github, context, core });
+      expect(statusAfter()).toBe('triggered');
+      expect(state.labels.has('for-devin')).toBe(true);
+    }
+    await sweep({ github, context, core });
+    expect(statusAfter()).toBe('failed');
+    expect(state.labels.has('devin-failed')).toBe(true);
+    expect(state.labels.has('for-devin')).toBe(false);
+    expect(posted).toEqual([]);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

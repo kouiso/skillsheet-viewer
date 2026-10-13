@@ -267,11 +267,15 @@ jobs:
             exit 1
           fi
 
+      # Devin を呼ばない workflow（DEVIN_TARGET が false）も、失敗の追跡先が無いと毎朝 Slack に流れる
+      # だけになるため、追跡 issue はここで切る。Devin を呼んだ場合だけは、起動を確認できた時に限る
+      # （起動に失敗したら issue を作らず、次の失敗で呼び直すため）。
       - name: Open failure issue
-        if: steps.started.outputs.status == 'started'
+        if: steps.tracking.outputs.number == '' && (env.DEVIN_TARGET != 'true' || steps.started.outputs.status == 'started')
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           TITLE: ${{ steps.tracking.outputs.title }}
+          DEVIN_INVOKED: ${{ steps.started.outputs.status }}
         with:
           script: |
             const label = process.env.TRACKING_LABEL;
@@ -293,7 +297,11 @@ jobs:
               title: process.env.TITLE,
               labels: [label],
               body: [
-                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗し、Slack で Devin に調査を依頼した（起動を確認済み）。`,
+                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗。${
+                  process.env.DEVIN_INVOKED === 'started'
+                    ? 'Slack で Devin に調査を依頼した（起動を確認済み）。'
+                    : 'Devin 呼び出し対象外の workflow のため Slack 通知のみ（追跡用にこの issue を起票）。'
+                }`,
                 '',
                 `- run: ${process.env.RUN_URL}`,
                 `- commit: ${process.env.COMMIT_SHA}`,
