@@ -55,6 +55,29 @@ describe('自動保存の版を一覧でたたむ', () => {
     expect(flat).toEqual(all.map((v) => v.revision));
   });
 
+  it('まとまりの最新からちょうど10分あいた保存は同じまとまりに入れない', () => {
+    // 新しい側(10分)から見て、0分の版は差がちょうど10分。他は2分未満の間隔でつながっている。
+    const input = versions([0], [1.9], [3.8], [5.7], [7.6], [9.5], [10]);
+    expect(shape(groupVersions(input))).toEqual([['7', '6', '5', '4', '3', '2'], '1']);
+    // 9.9分なら同じまとまりに入る。
+    expect(shape(groupVersions(versions([0.1], [1.9], [3.8], [5.7], [7.6], [9.5], [10])))).toEqual([
+      ['7', '6', '5', '4', '3', '2', '1'],
+    ]);
+  });
+
+  it('時刻が版番号の順と逆（並行した保存）でも、版は脱落・重複せずまとまる', () => {
+    // 版 2 のほうが版 3 より後の時刻になっている（recordedAt は DB の now() で、並行すると逆転しうる）。
+    const input = versions([0], [1.0], [0.5]);
+    const rows = groupVersions(input);
+    expect(
+      rows.flatMap((row) => (row.kind === 'single' ? [row.version.revision] : row.versions.map((v) => v.revision))),
+    ).toEqual(['3', '2', '1']);
+    expect(shape(rows)).toEqual([['3', '2', '1']]);
+    // 逆転が2分より大きくても、新しい版の時刻のほうが早いだけなので、つながった保存として同じまとまりに入れる
+    // （時刻の絶対値の差で見ると、並行した保存が別々の行に割れてしまう）。
+    expect(shape(groupVersions(versions([0], [5], [1])))).toEqual([['3', '2'], '1']);
+  });
+
   it('保存以外の版は常に1行で、前後のまとまりを分ける', () => {
     expect(shape(groupVersions(versions([0, 'create'], [0.2], [0.4], [0.6, 'restore'], [0.8], [1])))).toEqual([
       ['6', '5'],
