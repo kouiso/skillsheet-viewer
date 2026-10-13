@@ -2,6 +2,7 @@ name: TruffleHog Secret Scan
 
 on:
   pull_request:
+    # ready_for_review を入れるのは、draft の間は走らせず、draft を外した時に走らせるため。
     types: [opened, reopened, synchronize, ready_for_review]
   push:
     branches: [main]
@@ -20,6 +21,7 @@ jobs:
     name: Secret Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # draft の PR では走らせない（push は対象外なので常に走る）。
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     steps:
       - name: Checkout
