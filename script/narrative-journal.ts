@@ -59,6 +59,7 @@ export function appendNarrativeJournal(path: string, entry: NarrativeJournalEntr
 export function readNarrativeJournal(path: string): NarrativeJournalEntry[] {
   if (!existsSync(path)) return [];
   const body = readFileSync(path, 'utf8');
+  if (body.length > 0 && !body.endsWith('\n')) throw new Error('INVALID_JOURNAL_ENTRY');
   return body
     .split('\n')
     .filter((line) => line.length > 0)
