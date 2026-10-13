@@ -1,3 +1,4 @@
+import { isUtf8 } from 'node:buffer';
 import { closeSync, constants, fstatSync, fsyncSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { canonicalJson } from '../src/db/document-contract';
@@ -31,7 +32,8 @@ export function persistPrivateRepairRecord(path: string, record: unknown): void 
         if (!file.isFile() || (file.mode & 0o077) !== 0 || (process.getuid && file.uid !== process.getuid())) {
           throw new Error('PRIVATE_FILE_REQUIRED');
         }
-        if (readFileSync(existing, 'utf8') !== body) throw new Error('PROPOSAL_FILE_CONFLICT');
+        const raw = readFileSync(existing);
+        if (!isUtf8(raw) || raw.toString('utf8') !== body) throw new Error('PROPOSAL_FILE_CONFLICT');
         // 前回が書込み後・同期前に中断していても、成功を返す前に記録を永続化する。
         fsyncSync(existing);
         fsyncSync(dir);
@@ -69,7 +71,9 @@ export function readPrivateRepairText(path: string): string {
       if (!file.isFile() || (file.mode & 0o077) !== 0 || (process.getuid && file.uid !== process.getuid())) {
         throw new Error('PRIVATE_FILE_REQUIRED');
       }
-      return readFileSync(fd, 'utf8');
+      const raw = readFileSync(fd);
+      if (!isUtf8(raw)) throw new Error('INVALID_REPAIR_RECORD');
+      return raw.toString('utf8');
     } finally {
       closeSync(fd);
     }

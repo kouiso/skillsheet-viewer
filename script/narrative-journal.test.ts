@@ -96,6 +96,28 @@ describe('journalの型と読取境界', () => {
     expect(() => appendNarrativeJournal(target, entry('db-applied'))).toThrow('INVALID_JOURNAL_ENTRY');
     expect(readFileSync(target, 'utf8')).toBe(broken);
   });
+  itLinux.each([
+    { invalid: [0xff] },
+    { invalid: [0xc0, 0xaf] },
+    { invalid: [0xed, 0xa0, 0x80] },
+    { invalid: [0xe2, 0x82] },
+  ])('不正UTF-8を読取・追記で拒否して元bytesを保つ %j', ({ invalid }) => {
+    const target = path.join(dir(), 'journal.jsonl');
+    const row = canonicalJson({ ...entry('approved'), owner: 'BYTE_MARKER' });
+    const [prefix, suffix] = row.split('BYTE_MARKER');
+    const raw = Buffer.concat([Buffer.from(prefix), Buffer.from(invalid), Buffer.from(`${suffix}\n`)]);
+    writeFileSync(target, raw, { mode: 0o600 });
+    expect(() => readNarrativeJournal(target)).toThrow('INVALID_REPAIR_RECORD');
+    expect(() => appendNarrativeJournal(target, entry('db-applied'))).toThrow('INVALID_JOURNAL_ENTRY');
+    expect(readFileSync(target)).toEqual(raw);
+  });
+  itLinux('正しいUTF-8の日本語と置換文字は変更せず読む', () => {
+    const target = path.join(dir(), 'journal.jsonl');
+    const value = { ...entry('approved'), owner: '合成所有者�' };
+    appendNarrativeJournal(target, value);
+    expect(readNarrativeJournal(target)).toEqual([value]);
+    expect(readFileSync(target)).toEqual(Buffer.from(`${canonicalJson(value)}\n`));
+  });
   itLinux('公開ファイルとsymlinkを読まず拒否する', () => {
     const directory = dir();
     const target = path.join(directory, 'journal.jsonl');

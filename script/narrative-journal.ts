@@ -4,6 +4,7 @@
  * 1行=1イベントのcanonical JSONで、 approved / db-applied / sync-pending / synced / reverted
  * を時系列に残す。追記しかしないので中断後も先行イベントを壊さない。
  */
+import { isUtf8 } from 'node:buffer';
 import { closeSync, constants, fstatSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { canonicalJson, isRevision } from '../src/db/document-contract';
@@ -49,7 +50,9 @@ export function appendNarrativeJournal(path: string, entry: NarrativeJournalEntr
         throw new Error('PRIVATE_FILE_REQUIRED');
       }
       // 中断で途切れた行に新しいJSONを連結しない。既存記録は修復を推測せず拒否する。
-      parseNarrativeJournal(readFileSync(fd, 'utf8'));
+      const raw = readFileSync(fd);
+      if (!isUtf8(raw)) throw new Error('INVALID_JOURNAL_ENTRY');
+      parseNarrativeJournal(raw.toString('utf8'));
       const bytes = Buffer.from(`${canonicalJson(entry)}\n`);
       if (writeSync(fd, bytes) !== bytes.length) throw new Error('INCOMPLETE_JOURNAL_WRITE');
       fsyncSync(fd);
