@@ -57,7 +57,11 @@ pg_bin() {
 psql_as() { # <role> <dir> <psql args...>
   local role=$1 dir=$2
   shift 2
-  psql -X -v ON_ERROR_STOP=1 -h "$dir/sock" -p "$PORT" -U "$role" -d postgres "$@"
+  # PG_BIN を指定した環境では psql も PATH に無いことがある。サーバーと同じ bin から探し、無ければ PATH に任せる。
+  local psql=psql bin
+  bin=$(pg_bin 2>/dev/null || true)
+  [[ -n "$bin" && -x "$bin/psql" ]] && psql="$bin/psql"
+  "$psql" -X -v ON_ERROR_STOP=1 -h "$dir/sock" -p "$PORT" -U "$role" -d postgres "$@"
 }
 
 up() {
@@ -195,10 +199,12 @@ run() {
   # shellcheck disable=SC2064
   trap "down '$dir'; rm -rf '$base'" EXIT
   up "$dir"
-  set -a
-  # shellcheck disable=SC1091
-  . "$dir/env"
-  set +a
+  # env ファイルは GITHUB_ENV 用の KEY=値 の行で、シェルの構文ではない。source すると値の空白や $ が
+  # 解釈されて、owner の作成に使った値と食い違う。行ごとに最初の = で割り、そのまま export する。
+  local key value
+  while IFS='=' read -r key value; do
+    [[ -n "$key" ]] && export "$key=$value"
+  done <"$dir/env"
   NODE_OPTIONS="--import $REPO_ROOT/script/isolated-neon-preload.mjs ${NODE_OPTIONS:-}" "$@" || status=$?
   return "$status"
 }

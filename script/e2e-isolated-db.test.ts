@@ -168,6 +168,15 @@ describe('実行する側の関門', () => {
     expect(headless).not.toMatch(/DATABASE_URL:\s*process\.env\.DATABASE_URL\s*\?\?/);
   });
 
+  it('env ファイルは source せず、行ごとに読んで export する（値の空白や $ を解釈しない）', () => {
+    expect(script).not.toMatch(/^\s*\. "\$dir\/env"/m);
+    expect(script).toContain("IFS='=' read -r key value");
+  });
+
+  it('psql も PG_BIN から探す', () => {
+    expect(script).toContain('"$bin/psql"');
+  });
+
   it('libpq の環境変数を継承しない（PG_BIN だけは残す）', () => {
     expect(script).toMatch(/for pg_variable in \$\{!PG@\}/);
     expect(script).toContain('PG_BIN');
