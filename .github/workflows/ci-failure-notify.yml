@@ -306,8 +306,12 @@ jobs:
                 `- run: ${process.env.RUN_URL}`,
                 `- commit: ${process.env.COMMIT_SHA}`,
                 '',
-                'この issue が open の間は、同じ workflow が同じ契機で再び失敗しても Devin を呼ばない（同時セッション上限を守るため）。',
-                '同じ契機で次に成功すると自動で close される。Devin が動いていない時は、この issue を手で close すると次の失敗で再び呼ばれる。',
+                process.env.DEVIN_INVOKED === 'started'
+                  ? 'この issue が open の間は、同じ workflow が同じ契機で再び失敗しても Devin を呼ばない（同時セッション上限を守るため）。'
+                  : 'この issue が open の間は、同じ失敗が続いても新しい issue は増えない（失敗は Slack に通知される）。',
+                process.env.DEVIN_INVOKED === 'started'
+                  ? '同じ契機で次に成功すると自動で close される。Devin が動いていない時は、この issue を手で close すると次の失敗で再び呼ばれる。'
+                  : '同じ契機で次に成功すると自動で close される。',
                 '',
                 // 成功で閉じる時に「この失敗より後に始まった実行か」を比べるための記録。
                 `<!-- last-failed-run-started-at: ${process.env.RUN_STARTED_AT} -->`,

@@ -59,6 +59,7 @@ function fakeGithub({ labels, commentBody }) {
 }
 
 test('sweep: 無言が上限まで続くと failed になり、再投稿せずトリガーラベルを外す', async () => {
+  const envBefore = { ...process.env };
   Object.assign(process.env, { SLACK_BOT_TOKEN: 'x', SLACK_CHANNEL_ID: 'C1', DEVIN_USER_ID: 'U1' });
   const posted = [];
   const realFetch = globalThis.fetch;
@@ -89,5 +90,9 @@ test('sweep: 無言が上限まで続くと failed になり、再投稿せず�
     expect(posted).toEqual([]);
   } finally {
     globalThis.fetch = realFetch;
+    for (const key of ['SLACK_BOT_TOKEN', 'SLACK_CHANNEL_ID', 'DEVIN_USER_ID']) {
+      if (envBefore[key] === undefined) delete process.env[key];
+      else process.env[key] = envBefore[key];
+    }
   }
 });
