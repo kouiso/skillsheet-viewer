@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VersionSummary } from '@/db/document-history';
-import { groupVersions, type VersionRow } from './version-group';
+import { groupVersions, MAX_SPAN_MS, type VersionRow } from './version-group';
 
 const base = Date.parse('2026-10-11T03:00:00Z');
 // 引数は古い順に書き、一覧と同じ新しい順に並べ替えて渡す。
@@ -83,6 +83,16 @@ describe('自動保存の版を一覧でたたむ', () => {
       ['9', '8', '7', '6', '5', '4', '3'],
       ['2', '1'],
     ]);
+    // 時刻がジグザグに並んでも、まとまりの時刻の幅（最小〜最大）は10分を超えない。
+    const zigzag = versions([0], [1.9], [3.8], [5.7], [7.6], [9.5], [7.7], [5.8], [3.9], [2.0], [0.1], [-1.8], [-3.7]);
+    for (const row of groupVersions(zigzag)) {
+      if (row.kind === 'single') continue;
+      const times = row.versions.map((v) => Date.parse(v.recordedAt));
+      expect(Math.max(...times) - Math.min(...times)).toBeLessThan(MAX_SPAN_MS);
+    }
+    // 幅は最小の時刻からも測る：新しい側から 5分 → 0分 と下がったあと 10.2分まで戻ると、最小(0)から 10.2 分で別のまとまり。
+    const dip = versions([10.2], [9], [7.5], [6], [4.5], [3], [1.5], [0], [1], [2], [3], [4], [5]);
+    expect(shape(groupVersions(dip))).toEqual([['13', '12', '11', '10', '9', '8', '7', '6', '5', '4', '3', '2'], '1']);
     // 逆転が2分未満（並行した保存）なら同じまとまりに入る。
     expect(shape(groupVersions(versions([0], [1.5], [1])))).toEqual([['3', '2', '1']]);
   });

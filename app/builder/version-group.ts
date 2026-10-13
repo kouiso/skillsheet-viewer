@@ -20,11 +20,12 @@ export function groupVersions(versions: readonly VersionSummary[]): VersionRow[]
     else if (run.length > 1) rows.push({ kind: 'group', versions: run });
     run = [];
   };
-  // まとまりの起点は新しい側。区切りは「新しいほうから見て、直近の保存と
-  // まとまりの先頭（最新版）」で決まるので新しい順に走査する。
-  // こうすると一覧の末尾へ古い版を追加読み込みしても既存のまとまりの
+  // まとまりの起点は新しい側。区切りは「新しいほうから見て、直近の保存と、まとまりの時刻の幅」で
+  // 決まるので、新しい順に走査する。こうすると一覧の末尾へ古い版を追加読み込みしても既存のまとまりの
   // 境界は変わらず、伸びるのは一番古いまとまりの下端だけになる
   // （開閉キーを group.versions[0]（最新）で持つ UI と対になる）。
+  let lo = Number.NaN; // まとまりの最も早い時刻
+  let hi = Number.NaN; // まとまりの最も遅い時刻
   for (const version of versions) {
     if (version.action !== 'save') {
       flush();
@@ -32,17 +33,23 @@ export function groupVersions(versions: readonly VersionSummary[]): VersionRow[]
       continue;
     }
     const at = Date.parse(version.recordedAt);
-    const newest = run[0];
     const prev = run.at(-1);
     // 時刻が読めない版は他とまとめない（NaN との比較は常に false）。
     // 並行した保存では recordedAt が版番号の順と逆になりうるので、差は絶対値で見る。
     // 逆転が数秒なら同じまとまり、2分以上なら（時計のずれ・後からの投入など）別のまとまりにする。
+    // まとまりの時刻の幅（最小〜最大）も10分未満に収め、逆転が続いても「最長10分」を超えない。
     const joins =
-      newest !== undefined &&
       prev !== undefined &&
       Math.abs(Date.parse(prev.recordedAt) - at) < IDLE_GAP_MS &&
-      Math.abs(Date.parse(newest.recordedAt) - at) < MAX_SPAN_MS;
-    if (!joins) flush();
+      Math.max(hi, at) - Math.min(lo, at) < MAX_SPAN_MS;
+    if (!joins) {
+      flush();
+      lo = at;
+      hi = at;
+    } else {
+      lo = Math.min(lo, at);
+      hi = Math.max(hi, at);
+    }
     run.push(version);
   }
   flush();
