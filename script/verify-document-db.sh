@@ -97,9 +97,16 @@ CREATE ROLE runtime_proof_database_create LOGIN;
 CREATE ROLE runtime_proof_default_acl LOGIN;
 CREATE ROLE runtime_proof_default_direct LOGIN;
 CREATE ROLE runtime_proof_auth_maintain LOGIN;
+CREATE ROLE runtime_proof_auth_truncate LOGIN;
+CREATE ROLE runtime_proof_auth_references LOGIN;
+CREATE ROLE runtime_proof_auth_trigger LOGIN;
+CREATE ROLE runtime_proof_auth_column_reference LOGIN;
+CREATE ROLE runtime_proof_public_sequence LOGIN;
+CREATE ROLE runtime_proof_default_sequence LOGIN;
+CREATE SEQUENCE public.runtime_proof_sequence;
 REVOKE ALL ON FUNCTION public.runtime_proof_definer() FROM PUBLIC;
 SQL
-for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_superuser runtime_proof_owner runtime_proof_public_view runtime_proof_public_view_column runtime_proof_membership runtime_proof_expired runtime_proof_connection_blocked runtime_proof_public_definer runtime_proof_public_column runtime_proof_public_maintain runtime_proof_public_acl runtime_proof_database_create runtime_proof_default_acl runtime_proof_default_direct runtime_proof_auth_maintain; do
+for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_superuser runtime_proof_owner runtime_proof_public_view runtime_proof_public_view_column runtime_proof_membership runtime_proof_expired runtime_proof_connection_blocked runtime_proof_public_definer runtime_proof_public_column runtime_proof_public_maintain runtime_proof_public_acl runtime_proof_database_create runtime_proof_default_acl runtime_proof_default_direct runtime_proof_auth_maintain runtime_proof_auth_truncate runtime_proof_auth_references runtime_proof_auth_trigger runtime_proof_auth_column_reference runtime_proof_public_sequence runtime_proof_default_sequence; do
   if [[ "$unsafe_role" == runtime_proof_public_maintain || "$unsafe_role" == runtime_proof_auth_maintain ]] && (( $(psql "${psql_args[@]}" -At -c "SHOW server_version_num") < 170000 )); then continue; fi
   if [[ "$unsafe_role" == runtime_proof_public_view ]]; then
     psql "${psql_args[@]}" -c 'GRANT SELECT ON public.runtime_proof_leaky TO PUBLIC' >"$run_dir/public-view-fixture.log" 2>&1
@@ -132,6 +139,17 @@ for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_
   if [[ "$unsafe_role" == runtime_proof_auth_maintain ]]; then
     psql "${psql_args[@]}" -c 'GRANT MAINTAIN ON public."user" TO PUBLIC' >"$run_dir/auth-maintain-fixture.log" 2>&1
   fi
+  case "$unsafe_role" in
+    runtime_proof_auth_truncate|runtime_proof_auth_references|runtime_proof_auth_trigger)
+      extra_privilege="${unsafe_role##runtime_proof_auth_}"
+      psql "${psql_args[@]}" -c "GRANT $extra_privilege ON public.session TO PUBLIC" >"$run_dir/$unsafe_role-fixture.log" 2>&1 ;;
+    runtime_proof_auth_column_reference)
+      psql "${psql_args[@]}" -c 'GRANT REFERENCES(email) ON public."user" TO PUBLIC' >"$run_dir/$unsafe_role-fixture.log" 2>&1 ;;
+    runtime_proof_public_sequence)
+      psql "${psql_args[@]}" -c 'GRANT SELECT ON SEQUENCE public.runtime_proof_sequence TO PUBLIC' >"$run_dir/$unsafe_role-fixture.log" 2>&1 ;;
+    runtime_proof_default_sequence)
+      psql "${psql_args[@]}" -c 'ALTER DEFAULT PRIVILEGES FOR ROLE skillsheet_document_writer IN SCHEMA skillsheet_private GRANT USAGE ON SEQUENCES TO PUBLIC' >"$run_dir/$unsafe_role-fixture.log" 2>&1 ;;
+  esac
   psql "${psql_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/$unsafe_role.before"
   if psql "${psql_args[@]}" -v runtime_role="$unsafe_role" -v runtime_password=synthetic-verification-only \
     -v owner_id=runtime-proof-unsafe -f "$repo_dir/script/sql/install-runtime-role.sql" >"$run_dir/$unsafe_role.log" 2>&1; then
@@ -140,7 +158,7 @@ for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_
   fi
   case "$unsafe_role" in
     runtime_proof_owner) expected_error=UNSAFE_RUNTIME_OWNERSHIP ;;
-    runtime_proof_public_view|runtime_proof_public_view_column|runtime_proof_membership|runtime_proof_public_definer|runtime_proof_public_column|runtime_proof_public_maintain|runtime_proof_public_acl|runtime_proof_database_create|runtime_proof_default_acl|runtime_proof_default_direct|runtime_proof_auth_maintain) expected_error=RUNTIME_BOUNDARY_PERMISSION_LEAK ;;
+    runtime_proof_public_view|runtime_proof_public_view_column|runtime_proof_membership|runtime_proof_public_definer|runtime_proof_public_column|runtime_proof_public_maintain|runtime_proof_public_acl|runtime_proof_database_create|runtime_proof_default_acl|runtime_proof_default_direct|runtime_proof_auth_maintain|runtime_proof_auth_truncate|runtime_proof_auth_references|runtime_proof_auth_trigger|runtime_proof_auth_column_reference|runtime_proof_public_sequence|runtime_proof_default_sequence) expected_error=RUNTIME_BOUNDARY_PERMISSION_LEAK ;;
     *) expected_error=UNSAFE_RUNTIME_ROLE ;;
   esac
   rg -q "$expected_error" "$run_dir/$unsafe_role.log"
@@ -176,15 +194,26 @@ for unsafe_role in runtime_proof_bypass runtime_proof_replication runtime_proof_
   if [[ "$unsafe_role" == runtime_proof_auth_maintain ]]; then
     psql "${psql_args[@]}" -c 'REVOKE MAINTAIN ON public."user" FROM PUBLIC' >"$run_dir/auth-maintain-cleanup.log" 2>&1
   fi
+  case "$unsafe_role" in
+    runtime_proof_auth_truncate|runtime_proof_auth_references|runtime_proof_auth_trigger)
+      psql "${psql_args[@]}" -c "REVOKE $extra_privilege ON public.session FROM PUBLIC" >"$run_dir/$unsafe_role-cleanup.log" 2>&1 ;;
+    runtime_proof_auth_column_reference)
+      psql "${psql_args[@]}" -c 'REVOKE REFERENCES(email) ON public."user" FROM PUBLIC' >"$run_dir/$unsafe_role-cleanup.log" 2>&1 ;;
+    runtime_proof_public_sequence)
+      psql "${psql_args[@]}" -c 'REVOKE SELECT ON SEQUENCE public.runtime_proof_sequence FROM PUBLIC' >"$run_dir/$unsafe_role-cleanup.log" 2>&1 ;;
+    runtime_proof_default_sequence)
+      psql "${psql_args[@]}" -c 'ALTER DEFAULT PRIVILEGES FOR ROLE skillsheet_document_writer IN SCHEMA skillsheet_private REVOKE USAGE ON SEQUENCES FROM PUBLIC' >"$run_dir/$unsafe_role-cleanup.log" 2>&1 ;;
+  esac
 done
 psql "${psql_args[@]}" -c '
 SET ROLE runtime_proof_grantor;
 REVOKE skillsheet_document_writer FROM runtime_proof_membership;
 RESET ROLE;
 DROP VIEW public.runtime_proof_leaky;
+DROP SEQUENCE public.runtime_proof_sequence;
 DROP FUNCTION public.runtime_proof_definer();
 DROP TABLE public.runtime_proof_owned;
-DROP ROLE runtime_proof_bypass, runtime_proof_replication, runtime_proof_superuser, runtime_proof_owner, runtime_proof_public_view, runtime_proof_public_view_column, runtime_proof_membership, runtime_proof_grantor, runtime_proof_expired, runtime_proof_connection_blocked, runtime_proof_public_definer, runtime_proof_public_column, runtime_proof_public_maintain, runtime_proof_public_acl, runtime_proof_database_create, runtime_proof_default_acl, runtime_proof_default_direct, runtime_proof_auth_maintain;
+DROP ROLE runtime_proof_bypass, runtime_proof_replication, runtime_proof_superuser, runtime_proof_owner, runtime_proof_public_view, runtime_proof_public_view_column, runtime_proof_membership, runtime_proof_grantor, runtime_proof_expired, runtime_proof_connection_blocked, runtime_proof_public_definer, runtime_proof_public_column, runtime_proof_public_maintain, runtime_proof_public_acl, runtime_proof_database_create, runtime_proof_default_acl, runtime_proof_default_direct, runtime_proof_auth_maintain, runtime_proof_auth_truncate, runtime_proof_auth_references, runtime_proof_auth_trigger, runtime_proof_auth_column_reference, runtime_proof_public_sequence, runtime_proof_default_sequence;
 ' >"$run_dir/unsafe-runtime-cleanup.log" 2>&1
 printf '特権・所有権・PUBLIC権限の拒否と失敗時rollback: PASS\n'
 

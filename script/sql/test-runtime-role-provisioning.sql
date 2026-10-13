@@ -16,6 +16,9 @@ GRANT ALL ON ALL TABLES IN SCHEMA skillsheet_private TO runtime_proof_runtime;
 GRANT EXECUTE ON FUNCTION skillsheet_private.checked_blocks(jsonb) TO runtime_proof_runtime;
 GRANT CREATE ON SCHEMA public, skillsheet_private TO runtime_proof_runtime;
 GRANT CREATE ON DATABASE postgres TO runtime_proof_runtime;
+CREATE SEQUENCE skillsheet_private.runtime_proof_sequence;
+ALTER SEQUENCE skillsheet_private.runtime_proof_sequence OWNER TO skillsheet_document_writer;
+GRANT ALL ON SEQUENCE skillsheet_private.runtime_proof_sequence TO runtime_proof_runtime;
 \ir install-runtime-role.sql
 
 DO $$
@@ -32,6 +35,9 @@ BEGIN
     OR has_schema_privilege(runtime_oid, 'public', 'CREATE')
     OR has_schema_privilege(runtime_oid, 'skillsheet_private', 'CREATE') THEN
     RAISE EXCEPTION 'Runtime schema CREATE survived provisioning';
+  END IF;
+  IF has_sequence_privilege(runtime_oid, 'skillsheet_private.runtime_proof_sequence', 'SELECT,USAGE,UPDATE') THEN
+    RAISE EXCEPTION 'Runtime private sequence privileges survived provisioning';
   END IF;
   IF EXISTS (SELECT FROM unnest(ARRAY['public."user"','public.drive_destination']) AS relation(name)
     CROSS JOIN unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE']) AS permission(name)
@@ -79,6 +85,11 @@ BEGIN
   BEGIN
     PERFORM skillsheet_private.checked_blocks('[]');
     RAISE EXCEPTION 'Internal validator EXECUTE permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM nextval('skillsheet_private.runtime_proof_sequence'::regclass);
+    RAISE EXCEPTION 'Private sequence nextval permitted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
   IF skillsheet_private.read_snapshot(NULL, 'runtime-proof-owner')->>'status' IS DISTINCT FROM 'EMPTY'

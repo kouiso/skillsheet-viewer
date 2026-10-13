@@ -95,7 +95,15 @@ $$;
 -- いったん public schema の権限を全除去してから宣言分だけ付け直すことで、
 -- 残骸（境界対象テーブルへの直接 DML 等）も毎回消える。
 DO $$
+DECLARE private_sequence record;
 BEGIN
+  FOR private_sequence IN
+    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'skillsheet_private' AND c.relkind = 'S' AND c.relowner = CURRENT_USER::regrole
+  LOOP
+    EXECUTE format('REVOKE ALL PRIVILEGES ON SEQUENCE skillsheet_private.%I FROM %I',
+      private_sequence.relname, current_setting('vars.runtime_role'));
+  END LOOP;
   IF has_database_privilege(current_setting('vars.runtime_role'), current_database(), 'CREATE') THEN
     EXECUTE format('REVOKE CREATE ON DATABASE %I FROM %I', current_database(), current_setting('vars.runtime_role'));
   END IF;
@@ -141,7 +149,15 @@ SELECT set_config('vars.owner_memberships', COALESCE((
 GRANT skillsheet_document_reader, skillsheet_document_writer TO CURRENT_USER WITH SET TRUE;
 SET ROLE skillsheet_document_writer;
 DO $$
+DECLARE private_sequence record;
 BEGIN
+  FOR private_sequence IN
+    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'skillsheet_private' AND c.relkind = 'S' AND c.relowner = CURRENT_USER::regrole
+  LOOP
+    EXECUTE format('REVOKE ALL PRIVILEGES ON SEQUENCE skillsheet_private.%I FROM %I',
+      private_sequence.relname, current_setting('vars.runtime_role'));
+  END LOOP;
   EXECUTE format(
     'REVOKE ALL PRIVILEGES ON FUNCTION
        skillsheet_private.replace_sheet(uuid, text, text, jsonb, text),
@@ -160,7 +176,15 @@ $$;
 RESET ROLE;
 SET ROLE skillsheet_document_reader;
 DO $$
+DECLARE private_sequence record;
 BEGIN
+  FOR private_sequence IN
+    SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'skillsheet_private' AND c.relkind = 'S' AND c.relowner = CURRENT_USER::regrole
+  LOOP
+    EXECUTE format('REVOKE ALL PRIVILEGES ON SEQUENCE skillsheet_private.%I FROM %I',
+      private_sequence.relname, current_setting('vars.runtime_role'));
+  END LOOP;
   EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA skillsheet_private FROM %I', current_setting('vars.runtime_role'));
   EXECUTE format(
     'REVOKE ALL PRIVILEGES ON FUNCTION
@@ -222,6 +246,14 @@ BEGIN
             'oauth_consent','oauth_access_token','oauth_refresh_token','oauth_resource']))
         AND (has_table_privilege(runtime_oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
           OR has_any_column_privilege(runtime_oid, c.oid, 'SELECT,INSERT,UPDATE,REFERENCES')))
+    -- 認証基表も宣言した4種DML以外の権限（列REFERENCES含む）は与えない。
+    OR EXISTS (SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('public','skillsheet_private') AND c.relkind IN ('r','p','v','m','f')
+        AND (has_table_privilege(runtime_oid, c.oid, 'TRUNCATE,REFERENCES,TRIGGER')
+          OR has_any_column_privilege(runtime_oid, c.oid, 'REFERENCES')))
+    OR EXISTS (SELECT FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname IN ('public','skillsheet_private') AND c.relkind = 'S'
+        AND CASE WHEN c.relkind = 'S' THEN has_sequence_privilege(runtime_oid, c.oid, 'SELECT,USAGE,UPDATE') ELSE false END)
     OR EXISTS (SELECT FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'public' AND p.prosecdef AND has_function_privilege(runtime_oid, p.oid, 'EXECUTE'))
     OR EXISTS (SELECT FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -233,13 +265,13 @@ BEGIN
           'skillsheet_private.create_sheet(uuid,text,jsonb,text)'::regprocedure,
           'skillsheet_private.delete_sheet(uuid,text,text)'::regprocedure))
     OR has_database_privilege(runtime_oid, current_database(), 'CREATE')
-    -- 明示された将来テーブルへの自動grantも、role/PUBLIC経由の漏洩として停止する。
+    -- 明示された将来テーブル/sequenceへの自動grantも、role/PUBLIC経由の漏洩として停止する。
     OR EXISTS (SELECT FROM pg_default_acl d
       LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
       CROSS JOIN LATERAL aclexplode(d.defaclacl) a
-      WHERE d.defaclobjtype = 'r' AND (d.defaclnamespace = 0 OR n.nspname IN ('public','skillsheet_private'))
+      WHERE d.defaclobjtype IN ('r','S') AND (d.defaclnamespace = 0 OR n.nspname IN ('public','skillsheet_private'))
         AND a.grantee IN (0, runtime_oid)
-        AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN'))
+        AND a.privilege_type IN ('SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN','USAGE'))
     OR has_schema_privilege(runtime_oid, 'public', 'CREATE')
     OR has_schema_privilege(runtime_oid, 'skillsheet_private', 'CREATE')
     OR has_function_privilege(runtime_oid, 'skillsheet_private.checked_blocks(jsonb)', 'EXECUTE') THEN
