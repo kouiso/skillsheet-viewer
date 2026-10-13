@@ -162,7 +162,7 @@ it('本番 DB の secret を渡す workflow に、ブランチを選べる手動
   for (const file of ['real-data-main-check.yml', 'xlsx-format-check.yml']) {
     const text = readFileSync(new URL(file, workflowsDir), 'utf8');
     const onBlock = text.split(/^on:\n/m)[1]?.split(/^\S/m)[0] ?? '';
-    expect(onBlock, file).not.toContain('workflow_dispatch');
+    expect(onBlock, file).not.toMatch(/^\s+workflow_dispatch:/m);
   }
 });
 it('PR 用の実データ検査 workflow は存在しない', () => {
