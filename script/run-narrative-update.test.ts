@@ -67,7 +67,9 @@ vi.mock('../src/db/document-service', () => ({
 const owner = 'synthetic-owner';
 const sheetId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const directory = '/synthetic-private';
-function setup() {
+function setup(
+  ids = { company: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', project: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' },
+) {
   const before: DocumentSnapshot = {
     sheetId,
     title: 'Synthetic',
@@ -81,7 +83,7 @@ function setup() {
         data: {
           companies: [
             {
-              id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              id: ids.company,
               name: 'Synthetic Company',
               kind: '自社',
               period: '2020.04 — ',
@@ -90,8 +92,8 @@ function setup() {
           ],
           items: [
             {
-              id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
-              companyId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+              id: ids.project,
+              companyId: ids.company,
               title: 'Synthetic Project',
               scope: '',
               period: '2021.01 — 2021.12',
@@ -296,6 +298,15 @@ describe('saved narrative record validation', () => {
     await expect(applyNarrative(db, owner, directory, sheetId)).rejects.toThrow(expected[target]);
     expect(execute).not.toHaveBeenCalled();
   });
+  it('applies and reverts approved proposals whose company/project IDs are opaque strings', async () => {
+    // 文書契約（isProjectBlockData）は ID を文字列としか要求しない。既存・取込み文書の c1 / p1 でも動くこと。
+    const { db, execute } = setup({ company: 'c1', project: 'p1' });
+    await expect(applyNarrative(db, owner, directory, sheetId)).resolves.toMatchObject({ revision: '43' });
+    await expect(revertNarrative(db, owner, directory, sheetId)).resolves.toMatchObject({ revision: '44' });
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(state.journal.map((entry) => entry.state)).toEqual(['db-applied', 'sync-pending', 'reverted']);
+  });
+
   it('rejects malformed journal entries instead of using them to suppress state events', async () => {
     const { db, execute, proposal } = setup();
     // ハッシュと state だけの不正行（owner・sheetId・revision・changeIds なし）

@@ -2,7 +2,7 @@
  * 本人文章（案件の comment/duties/acquired/scope/role、会社の note/kind）の更新案を作る。
  *
  * タイトル・会社名の文字列一致は「候補を探す」ためだけに使い、書き換え対象の同一性は
- * 解決した blockId + targetId(UUID) + field と before/after hash に束縛する。
+ * 解決した blockId + targetId + field と before/after hash に束縛する。
  * 同名タイトルが複数ある場合は解決せず失敗させる（推測で片方を選ばない）。
  *
  * このファイルはDBへ触れない。proposal は未承認（approved:false）で、

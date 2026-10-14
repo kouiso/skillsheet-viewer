@@ -30,7 +30,9 @@ const beforeSchema = z
 const change = z
   .object({
     blockId: z.guid(),
-    targetId: z.guid(),
+    // 文書契約は会社・案件 ID を任意の文字列として許す（既存・取込み文書の c1 / p1 など）。
+    // journal の changeId は blockId:targetId:field なので、区切りの ':' だけは含めない。
+    targetId: z.string().regex(/^[^:]+$/),
     targetKind: z.enum(['project', 'company']),
     field: z.string(),
     beforeHash: hash,
