@@ -2,7 +2,7 @@
  * 本人文章（案件の comment/duties/acquired/scope/role、会社の note/kind）の更新案を作る。
  *
  * タイトル・会社名の文字列一致は「候補を探す」ためだけに使い、書き換え対象の同一性は
- * 解決した blockId + targetId(UUID) + field と before/after hash に束縛する。
+ * 解決した blockId + targetId + field と before/after hash に束縛する。
  * 同名タイトルが複数ある場合は解決せず失敗させる（推測で片方を選ばない）。
  *
  * このファイルはDBへ触れない。proposal は未承認（approved:false）で、
@@ -75,6 +75,14 @@ function resolveUnique<T extends { id: string }>(matches: T[], label: string): T
   if (matches.length === 0) return null;
   if (matches.length > 1) throw new Error(`AMBIGUOUS_NARRATIVE_TARGET: ${label}`);
   return matches[0];
+}
+
+/**
+ * journal の changeId は blockId:targetId:field なので、区切りの ':' を含む ID は扱えない。
+ * apply 時に初めて失敗しないよう、提案の作成と承認照合の段階で拒否する。
+ */
+export function assertNarrativeIdUsable(id: string): void {
+  if (!id || id.includes(':')) throw new Error(`NARRATIVE_ID_HAS_DELIMITER: ${id}`);
 }
 
 export function proposeNarrativeUpdate(
@@ -160,6 +168,10 @@ export function proposeNarrativeUpdate(
     }
   }
 
+  for (const change of changes) {
+    assertNarrativeIdUsable(change.blockId);
+    assertNarrativeIdUsable(change.targetId);
+  }
   return {
     version: 1,
     kind: 'narrative-update-proposal',
@@ -219,6 +231,10 @@ export function verifyNarrativeProposal(
   }
   if (proposal.kind !== 'narrative-update-proposal' || proposal.owner !== owner) {
     throw new Error('STALE_OR_CHANGED_NARRATIVE');
+  }
+  for (const change of proposal.changes) {
+    assertNarrativeIdUsable(change.blockId);
+    assertNarrativeIdUsable(change.targetId);
   }
   const freshBefore = {
     owner,

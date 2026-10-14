@@ -15,19 +15,16 @@ import { canonicalJson } from '../src/db/document-contract';
 import { createDocumentService, type DocumentSnapshot } from '../src/db/document-service';
 import { applyNarrativeUpdate } from './apply-narrative';
 import { readNarrative } from './apply-project-narrative';
+import { loadNarrativeUpdate, narrativeAppliedRecord } from './load-narrative-update';
 import { recordNarrativeApproval } from './narrative-approval';
 import {
   appendNarrativeJournal,
   type NarrativeJournalEntry,
   narrativeChangeId,
   readNarrativeJournal,
+  validateNarrativeJournalEntry,
 } from './narrative-journal';
-import {
-  type NarrativeProposal,
-  narrativeApprovalChanges,
-  proposeNarrativeUpdate,
-  verifyNarrativeProposal,
-} from './narrative-proposal';
+import { type NarrativeProposal, proposeNarrativeUpdate, verifyNarrativeProposal } from './narrative-proposal';
 import { persistPrivateRepairRecord, readPrivateRepairRecord } from './repair-proposal-file';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -153,84 +150,124 @@ async function approveNarrative(
   return approval;
 }
 
-async function applyNarrative(db: Pick<Database, 'execute'>, owner: string, directory: string, sheetId: string) {
-  const proposal = readPrivateRepairRecord(join(directory, 'proposal.json')) as NarrativeProposal;
-  const approval = readPrivateRepairRecord(join(directory, 'approved.json')) as ReturnType<
-    typeof recordNarrativeApproval
-  >;
-  if (proposal.sheetId.toLowerCase() !== sheetId.toLowerCase()) throw new Error('NARRATIVE_TARGET_MISMATCH');
-  const service = createDocumentService(db, owner);
-  const current = await service.read(sheetId);
-  if (current.status !== 'OK') throw new Error('DOCUMENT_UNAVAILABLE');
-  // DB更新より先にjournalを検証する。追記時の同一fd検証は残すが、DB適用後に初めて壊れた記録へ
-  // 気づくと「本番は変わったのに db-applied / sync-pending が残らない」状態になるため。
-  readNarrativeJournal(join(directory, JOURNAL));
-  // DB更新より先に承認と復旧情報をdurable化する。
-  persistPrivateRepairRecord(join(directory, 'before.json'), { owner, snapshot: current.snapshot });
-  const after = await applyNarrativeUpdate(db, owner, proposal, approval);
-  // CASと読戻しが成功してから記録する。書込み前に記録すると未適用を適用済みに見せる。
-  persistPrivateRepairRecord(join(directory, 'db-applied.json'), {
-    version: 1,
-    kind: 'narrative-update-db-applied',
-    owner,
-    sheetId: proposal.sheetId,
-    revision: after.revision,
-    beforeHash: proposal.beforeHash,
-    afterHash: proposal.afterHash,
-    changes: narrativeApprovalChanges(proposal.changes),
+/**
+ * journal の全行を保存契約（validateNarrativeJournalEntry）で検証してから、この操作（owner・sheetId・revision・hash・change一覧）と
+ * 同一の行だけを記録済みとして扱う。不正行は重複抑止に使わず拒否する。
+ */
+function recordedJournalStates(
+  journal: unknown[],
+  owner: string,
+  proposal: NarrativeProposal,
+): Set<NarrativeJournalEntry['state']> {
+  const entries = journal.map((raw) => {
+    validateNarrativeJournalEntry(raw);
+    return raw;
   });
-  appendNarrativeJournal(join(directory, JOURNAL), journalEntry('db-applied', owner, proposal));
-  // DB→Markdownの順序契約: DB適用が済んだ時点でMarkdown側はまだ未反映。
-  appendNarrativeJournal(join(directory, JOURNAL), journalEntry('sync-pending', owner, proposal));
+  const identity = journalEntry('approved', owner, proposal);
+  const changeIds = canonicalJson(identity.changeIds);
+  return new Set(
+    entries
+      .filter(
+        (entry) =>
+          entry.owner === identity.owner &&
+          entry.sheetId === identity.sheetId &&
+          entry.expectedRevision === identity.expectedRevision &&
+          entry.beforeHash === identity.beforeHash &&
+          entry.afterHash === identity.afterHash &&
+          canonicalJson(entry.changeIds) === changeIds,
+      )
+      .map((entry) => entry.state),
+  );
+}
+
+const sameContent = (snapshot: DocumentSnapshot, before: DocumentSnapshot, blocks: DocumentSnapshot['blocks']) =>
+  snapshot.sheetId === before.sheetId &&
+  snapshot.title === before.title &&
+  canonicalJson(snapshot.blocks) === canonicalJson(blocks);
+
+export async function applyNarrative(db: Pick<Database, 'execute'>, owner: string, directory: string, sheetId: string) {
+  // 部分行・不正行のあるjournalへ追記して証跡を壊さない。保存記録の読込やDB更新より先に検証する。
+  const journal = readNarrativeJournal(join(directory, JOURNAL));
+  const { before, proposal, approval } = loadNarrativeUpdate(directory, owner, sheetId);
+  const recorded = recordedJournalStates(journal, owner, proposal);
+  const service = createDocumentService(db, owner);
+  const current = await service.read(before.sheetId);
+  if (current.status !== 'OK') throw new Error('NARRATIVE_RESUME_CONFLICT');
+  let after: DocumentSnapshot;
+  if (current.snapshot.revision === before.revision && sameContent(current.snapshot, before, before.blocks)) {
+    after = await applyNarrativeUpdate(db, owner, proposal, approval);
+  } else if (
+    BigInt(current.snapshot.revision) === BigInt(before.revision) + 1n &&
+    sameContent(current.snapshot, before, proposal.blocks)
+  ) {
+    // CAS後に応答または完了記録を失った場合だけ再開する。
+    after = current.snapshot;
+  } else {
+    throw new Error('NARRATIVE_RESUME_CONFLICT');
+  }
+  persistPrivateRepairRecord(join(directory, 'db-applied.json'), narrativeAppliedRecord(owner, before, proposal));
+  // 再開・再実行で同じ状態を再追記しない（synced の後に sync-pending へ戻さない）。
+  if (!recorded.has('db-applied'))
+    appendNarrativeJournal(join(directory, JOURNAL), journalEntry('db-applied', owner, proposal));
+  if (!recorded.has('sync-pending') && !recorded.has('synced'))
+    appendNarrativeJournal(join(directory, JOURNAL), journalEntry('sync-pending', owner, proposal));
   return { sheetId: after.sheetId, revision: after.revision };
 }
 
-async function revertNarrative(db: Pick<Database, 'execute'>, owner: string, directory: string, sheetId: string) {
-  const beforeRecord = readPrivateRepairRecord(join(directory, 'before.json')) as {
-    owner: string;
-    snapshot: DocumentSnapshot;
-  };
-  const applied = readPrivateRepairRecord(join(directory, 'db-applied.json')) as {
-    revision: string;
-    beforeHash: string;
-    afterHash: string;
-  };
-  const proposal = readPrivateRepairRecord(join(directory, 'proposal.json')) as NarrativeProposal;
-  if (beforeRecord.owner !== owner || beforeRecord.snapshot.sheetId.toLowerCase() !== sheetId.toLowerCase()) {
-    throw new Error('NARRATIVE_REVERT_CONFLICT');
+export async function revertNarrative(
+  db: Pick<Database, 'execute'>,
+  owner: string,
+  directory: string,
+  sheetId: string,
+) {
+  // 戻しも同じく、保存記録の読込やDB更新より先にjournalを検証する。
+  const journal = readNarrativeJournal(join(directory, JOURNAL));
+  const { before, proposal } = loadNarrativeUpdate(directory, owner, sheetId);
+  const recorded = recordedJournalStates(journal, owner, proposal);
+  const applied = narrativeAppliedRecord(owner, before, proposal);
+  if (canonicalJson(readPrivateRepairRecord(join(directory, 'db-applied.json'))) !== canonicalJson(applied)) {
+    throw new Error('NARRATIVE_APPLIED_RECORD_MISMATCH');
   }
+  const request = { ...applied, kind: 'narrative-update-revert-requested' };
+  const revertedRevision = (BigInt(before.revision) + 2n).toString();
   const service = createDocumentService(db, owner);
-  const current = await service.read(sheetId);
+  const current = await service.read(before.sheetId);
   if (current.status !== 'OK') throw new Error('NARRATIVE_REVERT_CONFLICT');
   const snapshot = current.snapshot;
-  const appliedRevision = applied.revision;
-  if (snapshot.revision !== appliedRevision || canonicalJson(snapshot.blocks) !== canonicalJson(proposal.blocks)) {
-    throw new Error('NARRATIVE_REVERT_CONFLICT');
+  if (snapshot.revision === revertedRevision && sameContent(snapshot, before, before.blocks)) {
+    if (canonicalJson(readPrivateRepairRecord(join(directory, 'revert-requested.json'))) !== canonicalJson(request)) {
+      throw new Error('NARRATIVE_REVERT_CONFLICT');
+    }
+  } else {
+    if (snapshot.revision !== applied.revision || !sameContent(snapshot, before, proposal.blocks)) {
+      throw new Error('NARRATIVE_REVERT_CONFLICT');
+    }
+    persistPrivateRepairRecord(join(directory, 'revert-requested.json'), request);
+    const result = await db.execute(sql`select skillsheet_private.replace_sheet(
+      ${before.sheetId}::uuid, ${applied.revision}::text, ${before.title}::text,
+      ${canonicalJson(before.blocks)}::jsonb, ${owner}::text) as result`);
+    const rows = Array.isArray(result) ? result : result.rows;
+    if ((rows[0] as { result?: { status?: string } } | undefined)?.result?.status !== 'OK') {
+      throw new Error('NARRATIVE_REVERT_CONFLICT');
+    }
   }
-  // 戻しも同じく、DBを書き換える前にjournalを検証する。
-  readNarrativeJournal(join(directory, JOURNAL));
-  const result = await db.execute(sql`select skillsheet_private.replace_sheet(
-    ${sheetId}::uuid, ${appliedRevision}::text, ${snapshot.title}::text,
-    ${canonicalJson(beforeRecord.snapshot.blocks)}::jsonb, ${owner}::text) as result`);
-  const rows = Array.isArray(result) ? result : result.rows;
-  if ((rows[0] as { result?: { status?: string } } | undefined)?.result?.status !== 'OK') {
-    throw new Error('NARRATIVE_REVERT_CONFLICT');
-  }
-  const after = await service.read(sheetId);
-  if (after.status !== 'OK' || canonicalJson(after.snapshot.blocks) !== canonicalJson(beforeRecord.snapshot.blocks)) {
+  const after = await service.read(before.sheetId);
+  if (
+    after.status !== 'OK' ||
+    after.snapshot.revision !== revertedRevision ||
+    !sameContent(after.snapshot, before, before.blocks)
+  ) {
     throw new Error('NARRATIVE_REVERT_READBACK_MISMATCH');
   }
-  appendNarrativeJournal(join(directory, JOURNAL), journalEntry('reverted', owner, proposal));
+  // 完了記録を失っても固定済み要求とDB全文の一致から安全に再開できる。
   persistPrivateRepairRecord(join(directory, 'reverted.json'), {
-    version: 1,
+    ...applied,
     kind: 'narrative-update-reverted',
-    owner,
-    sheetId,
-    revision: after.snapshot.revision,
-    beforeHash: applied.beforeHash,
-    afterHash: applied.afterHash,
+    revision: revertedRevision,
   });
-  return { sheetId, revision: after.snapshot.revision };
+  if (!recorded.has('reverted'))
+    appendNarrativeJournal(join(directory, JOURNAL), journalEntry('reverted', owner, proposal));
+  return { sheetId: before.sheetId, revision: after.snapshot.revision };
 }
 
 /** .envを読まず、明示接続先へだけ接続する。 */
