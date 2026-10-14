@@ -82,6 +82,43 @@ BEGIN
     RAISE EXCEPTION 'SET ROLE permitted';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
+  -- 権限昇格の各経路: memberでないroleへのGRANT要求・自分のroleの第三者可譲渡・
+  -- 属性書換・新規role作成・保護表へのself grant・表定義の変更は全て拒否される。
+  BEGIN
+    EXECUTE 'GRANT skillsheet_document_writer TO runtime_proof_runtime';
+    RAISE EXCEPTION 'GRANT boundary role to self permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'GRANT runtime_proof_runtime TO runtime_proof_member';
+    RAISE EXCEPTION 'GRANT own role onward permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'ALTER ROLE runtime_proof_runtime SUPERUSER';
+    RAISE EXCEPTION 'ALTER ROLE self SUPERUSER permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'ALTER ROLE boundary_admin NOLOGIN';
+    RAISE EXCEPTION 'ALTER ROLE another role permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'CREATE ROLE runtime_proof_spawn';
+    RAISE EXCEPTION 'CREATE ROLE permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'GRANT SELECT ON public.skill_sheets TO runtime_proof_runtime';
+    RAISE EXCEPTION 'Self grant on protected table permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'ALTER TABLE public.skill_sheets ADD COLUMN runtime_proof_injected text';
+    RAISE EXCEPTION 'Direct ALTER TABLE permitted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   BEGIN
     PERFORM skillsheet_private.checked_blocks('[]');
     RAISE EXCEPTION 'Internal validator EXECUTE permitted';

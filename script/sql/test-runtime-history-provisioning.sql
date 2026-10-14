@@ -150,4 +150,60 @@ BEGIN
  IF skillsheet_private.deleted_document_list('runtime-proof-history-owner') IS DISTINCT FROM '[]'::jsonb THEN RAISE EXCEPTION 'Restored deletion ledger remains'; END IF;
  IF skillsheet_private.history_read('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa10','4','runtime-proof-history-owner') IS DISTINCT FROM r THEN RAISE EXCEPTION 'Deleted restore history not atomic'; END IF;
 END $$;
+
+-- 比較用に削除台帳へ1件置く。これ以降に壊す既定状態とは独立のfixture。
+DO $$
+BEGIN
+ IF skillsheet_private.create_sheet('dddddddd-dddd-4ddd-8ddd-dddddddddd10','scratch','[]','runtime-proof-history-owner')->>'status' IS DISTINCT FROM 'OK'
+  OR skillsheet_private.delete_sheet('dddddddd-dddd-4ddd-8ddd-dddddddddd10','0','runtime-proof-history-owner')->>'status' IS DISTINCT FROM 'OK' THEN
+  RAISE EXCEPTION 'Scratch deleted fixture failed';
+ END IF;
+END $$;
 RESET SESSION AUTHORIZATION;
+
+-- 不正な既定状態（文書あり・既定0件）で create/delete/削除復元が拒否され、
+-- 文書・版履歴・削除台帳・state が一切変わらないことを行数と全行ハッシュで比較する。
+-- 本体表のみの不変は test-skillsheet-write-boundary.sql で固定済みだが、
+-- document_versions / deleted_documents はそのclusterに無いためここで5表まとめて見る。
+UPDATE public.skill_sheets SET is_default = false WHERE owner_id = 'runtime-proof-history-owner';
+CREATE TEMP VIEW m10_state_fingerprint AS SELECT
+ jsonb_build_object(
+  'sheets', (SELECT count(*) FROM public.skill_sheets),
+  'blocks', (SELECT count(*) FROM public.blocks),
+  'state', (SELECT count(*) FROM public.skillsheet_state),
+  'versions', (SELECT count(*) FROM public.document_versions),
+  'deleted', (SELECT count(*) FROM public.deleted_documents),
+  'hash', md5(concat_ws('|',
+   coalesce((SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id)::text FROM public.skill_sheets s), ''),
+   coalesce((SELECT jsonb_agg(to_jsonb(b) ORDER BY b.id)::text FROM public.blocks b), ''),
+   coalesce((SELECT jsonb_agg(to_jsonb(t) ORDER BY t.owner_id)::text FROM public.skillsheet_state t), ''),
+   coalesce((SELECT jsonb_agg(to_jsonb(v) ORDER BY v.sheet_id, v.revision)::text FROM public.document_versions v), ''),
+   coalesce((SELECT jsonb_agg(to_jsonb(d) ORDER BY d.sheet_id)::text FROM public.deleted_documents d), '')
+  ))
+ ) AS fingerprint;
+GRANT SELECT ON m10_state_fingerprint TO runtime_proof_history;
+
+SET SESSION AUTHORIZATION runtime_proof_history;
+DO $$
+DECLARE before_fingerprint jsonb; after_fingerprint jsonb;
+BEGIN
+ EXECUTE 'SELECT fingerprint FROM pg_temp.m10_state_fingerprint' INTO before_fingerprint;
+ IF skillsheet_private.create_sheet('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee10','invalid state create','[]','runtime-proof-history-owner')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN
+  RAISE EXCEPTION 'Create accepted under invalid default state';
+ END IF;
+ IF skillsheet_private.delete_sheet('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa10','4','runtime-proof-history-owner')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN
+  RAISE EXCEPTION 'Delete accepted under invalid default state';
+ END IF;
+ IF skillsheet_private.restore_deleted_document('dddddddd-dddd-4ddd-8ddd-dddddddddd10','1','runtime-proof-history-owner')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN
+  RAISE EXCEPTION 'Deleted restore accepted under invalid default state';
+ END IF;
+ EXECUTE 'SELECT fingerprint FROM pg_temp.m10_state_fingerprint' INTO after_fingerprint;
+ IF before_fingerprint IS DISTINCT FROM after_fingerprint THEN
+  RAISE EXCEPTION 'Invalid default rejection mutated documents or history';
+ END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+
+-- fixtureを元に戻しておく（この後の確認があっても既定1件の正しい状態で読めるように）。
+UPDATE public.skill_sheets SET is_default = true WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa10';
+DELETE FROM public.deleted_documents WHERE sheet_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddd10';
