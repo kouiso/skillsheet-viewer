@@ -5,7 +5,7 @@
  * を時系列に残す。追記しかしないので中断後も先行イベントを壊さない。
  */
 import { isUtf8 } from 'node:buffer';
-import { closeSync, constants, fstatSync, fsyncSync, openSync, readFileSync, writeSync } from 'node:fs';
+import { closeSync, constants, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { canonicalJson, isRevision } from '../src/db/document-contract';
 
@@ -137,8 +137,19 @@ export function readNarrativeJournal(path: string): NarrativeJournalEntry[] {
   try {
     body = readPrivateRepairText(path);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    // ENOENT は最終ファイルが本当に無いと確かめられたときだけ「記録なし」にする。
+    // /proc が無い・見えない等で fd 経由の open だけが失敗した場合は、読めないことを隠さず失敗させる。
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT' && isMissingFile(path)) return [];
     throw error;
   }
   return parseNarrativeJournal(body);
+}
+
+function isMissingFile(path: string): boolean {
+  try {
+    lstatSync(path);
+    return false;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'ENOENT';
+  }
 }
