@@ -10,6 +10,7 @@
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
+import { z } from 'zod';
 import { createDb, type Database } from '../src/db/client';
 import { canonicalJson } from '../src/db/document-contract';
 import { createDocumentService, type DocumentSnapshot } from '../src/db/document-service';
@@ -149,14 +150,47 @@ async function approveNarrative(
   return approval;
 }
 
-/** 同じ beforeHash / afterHash について journal に記録済みの状態。 */
+const journalEntrySchema = z
+  .object({
+    version: z.literal(1),
+    state: z.enum(['approved', 'db-applied', 'sync-pending', 'synced', 'reverted']),
+    owner: z.string().min(1),
+    sheetId: z.string().min(1),
+    expectedRevision: z.string().regex(/^\d+$/),
+    beforeHash: z.string().min(1),
+    afterHash: z.string().min(1),
+    changeIds: z.array(z.string().min(1)),
+    at: z.iso.datetime(),
+  })
+  .strict();
+
+/**
+ * journal の全行をスキーマで検証してから、この操作（owner・sheetId・revision・hash・change一覧）と
+ * 同一の行だけを記録済みとして扱う。不正行は重複抑止に使わず拒否する。
+ */
 function recordedJournalStates(
-  journal: NarrativeJournalEntry[],
-  proposal: { beforeHash: string; afterHash: string },
+  journal: unknown[],
+  owner: string,
+  proposal: NarrativeProposal,
 ): Set<NarrativeJournalEntry['state']> {
+  const entries = journal.map((raw) => {
+    const parsed = journalEntrySchema.safeParse(raw);
+    if (!parsed.success) throw new Error('INVALID_JOURNAL_ENTRY');
+    return parsed.data;
+  });
+  const identity = journalEntry('approved', owner, proposal);
+  const changeIds = canonicalJson(identity.changeIds);
   return new Set(
-    journal
-      .filter((entry) => entry.beforeHash === proposal.beforeHash && entry.afterHash === proposal.afterHash)
+    entries
+      .filter(
+        (entry) =>
+          entry.owner === identity.owner &&
+          entry.sheetId === identity.sheetId &&
+          entry.expectedRevision === identity.expectedRevision &&
+          entry.beforeHash === identity.beforeHash &&
+          entry.afterHash === identity.afterHash &&
+          canonicalJson(entry.changeIds) === changeIds,
+      )
       .map((entry) => entry.state),
   );
 }
@@ -169,7 +203,7 @@ const sameContent = (snapshot: DocumentSnapshot, before: DocumentSnapshot, block
 export async function applyNarrative(db: Pick<Database, 'execute'>, owner: string, directory: string, sheetId: string) {
   const { before, proposal, approval } = loadNarrativeUpdate(directory, owner, sheetId);
   // 部分行のあるjournalへ追記して証跡を壊さない。修復前にDBを書き換えない。
-  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), proposal);
+  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), owner, proposal);
   const service = createDocumentService(db, owner);
   const current = await service.read(before.sheetId);
   if (current.status !== 'OK') throw new Error('NARRATIVE_RESUME_CONFLICT');
@@ -201,7 +235,7 @@ export async function revertNarrative(
   sheetId: string,
 ) {
   const { before, proposal } = loadNarrativeUpdate(directory, owner, sheetId);
-  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), proposal);
+  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), owner, proposal);
   const applied = narrativeAppliedRecord(owner, before, proposal);
   if (canonicalJson(readPrivateRepairRecord(join(directory, 'db-applied.json'))) !== canonicalJson(applied)) {
     throw new Error('NARRATIVE_APPLIED_RECORD_MISMATCH');

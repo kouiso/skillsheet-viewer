@@ -295,6 +295,24 @@ describe('saved narrative record validation', () => {
     await expect(applyNarrative(db, owner, directory, sheetId)).rejects.toThrow(expected[target]);
     expect(execute).not.toHaveBeenCalled();
   });
+  it('rejects malformed journal entries instead of using them to suppress state events', async () => {
+    const { db, execute, proposal } = setup();
+    // ハッシュと state だけの不正行（owner・sheetId・revision・changeIds なし）
+    state.journal.push({ beforeHash: proposal.beforeHash, afterHash: proposal.afterHash, state: 'synced' });
+    await expect(applyNarrative(db, owner, directory, sheetId)).rejects.toThrow('INVALID_JOURNAL_ENTRY');
+    expect(execute).not.toHaveBeenCalled();
+    expect(state.journal.map((entry) => entry.state)).toEqual(['synced']);
+  });
+
+  it('does not treat a valid entry for another operation identity as recorded', async () => {
+    const { db } = setup();
+    await applyNarrative(db, owner, directory, sheetId);
+    const [applied] = state.journal;
+    state.journal = [{ ...applied, owner: 'synthetic-other-owner', state: 'synced' } as typeof applied];
+    await applyNarrative(db, owner, directory, sheetId);
+    expect(state.journal.map((entry) => entry.state)).toEqual(['synced', 'db-applied', 'sync-pending']);
+  });
+
   it('does not re-append completed journal states when apply or revert is re-run', async () => {
     const { db } = setup();
     const states = () => state.journal.map((entry) => entry.state);
