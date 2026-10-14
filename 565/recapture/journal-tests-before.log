@@ -1,0 +1,260 @@
+
+ RUN  v3.2.6 /workspace/.work/evaud/8608fe8
+
+ ❯ script/narrative-journal.procfs.test.ts (2 tests | 1 failed) 11ms
+   × procfs が使えないときの journal 読取 > journal が存在するのに fd 経由で開けない場合は「記録なし」にせず失敗する 9ms
+     → expected [Function] to throw an error
+   ✓ procfs が使えないときの journal 読取 > journal が本当に無い場合だけ空として扱う 1ms
+ ❯ script/narrative-journal.test.ts (25 tests | 20 failed | 1 skipped) 41ms
+   ✓ append-only journal > 状態遷移を時系列で追記・読み戻す 5ms
+   × append-only journal > 非canonicalな行は読み戻しで拒否する 8ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   ✓ append-only journal > 未作成なら空を返す 0ms
+   ✓ append-only journal > changeIdはblock+target+fieldで一意 0ms
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する null 5ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"future","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":["approved"],"owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":" ","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"01","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"invalid","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"invalid","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"invalid"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["a"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["a:b:c","a:b:c"],"at":"2026-09-17T00:00:00.000Z"} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z","extra":true} 1ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+   × journalの型と読取境界 > 正常行を読むが途中行と空行を拒否する 1ms
+     → (0 , parseNarrativeJournal) is not a function
+   × journalの型と読取境界 > 途中行が残ったjournalへ追記せず元のbyte列を保つ 2ms
+     → expected [Function] to throw an error
+   × journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[255]} 1ms
+     → expected [Function] to throw an error
+   × journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[192,175]} 1ms
+     → expected [Function] to throw an error
+   × journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[237,160,128]} 1ms
+     → expected [Function] to throw an error
+   × journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[226,130]} 1ms
+     → expected [Function] to throw an error
+   ✓ journalの型と読取境界 > 正しいUTF-8の日本語と置換文字は変更せず読む 4ms
+   × journalの型と読取境界 > 公開ファイルとsymlinkを読まず拒否する 1ms
+     → expected [Function] to throw an error
+   ↓ journalの型と読取境界 > 非Linuxで記録の存在を推測しない
+ ❯ script/run-narrative-update.journal-preflight.test.ts (2 tests | 2 failed) 15ms
+   × DB を書き換える前の journal 検証 > apply は壊れた journal を DB 更新より前に拒否する 12ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got 'Cannot read properties of undefined (…'
+   × DB を書き換える前の journal 検証 > revert も壊れた journal を DB 更新より前に拒否する 2ms
+     → expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got 'Cannot read properties of undefined (…'
+ ❯ script/repair-proposal-file.test.ts (5 tests | 1 failed) 261ms
+   ✓ 未承認修復案の非公開保存 > 固定した記録だけを読み、公開ファイル・壊れたJSON・重複キー・symlinkを拒否する 5ms
+   ✓ 未承認修復案の非公開保存 > 同一案の再保存は許可し、別案の上書きは拒否する 2ms
+   × 未承認修復案の非公開保存 > 不正UTF-8の不変記録を読まず再保存も拒否する 6ms
+     → expected [Function] to throw an error
+   ✓ 未承認修復案の非公開保存 > 既存FIFOは書き手を待たず拒否する 245ms
+   ✓ 未承認修復案の非公開保存 > 公開権限のディレクトリやsymlinkの既存ファイルへ書き込まない 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 24 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  script/narrative-journal.procfs.test.ts > procfs が使えないときの journal 読取 > journal が存在するのに fd 経由で開けない場合は「記録なし」にせず失敗する
+AssertionError: expected [Function] to throw an error
+
+- Expected: 
+null
+
++ Received: 
+undefined
+
+ ❯ script/narrative-journal.procfs.test.ts:30:46
+     28|     const file = path.join(d, 'journal.jsonl');
+     29|     writeFileSync(file, '', { mode: 0o600 });
+     30|     expect(() => readNarrativeJournal(file)).toThrow('ENOENT');
+       |                                              ^
+     31|   });
+     32| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/24]⎯
+
+ FAIL  script/narrative-journal.test.ts > append-only journal > 非canonicalな行は読み戻しで拒否する
+AssertionError: expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+
+Expected: "INVALID_JOURNAL_ENTRY"
+Received: "(0 , __vite_ssr_import_5__.parseNarrativeJournal) is not a function"
+
+ ❯ script/narrative-journal.test.ts:56:69
+     54|     const file = path.join(dir(), 'journal.jsonl');
+     55|     writeFileSync(file, '{ "state": "approved" }\n'); // 整形済みJSONでなくかつ…
+     56|     expect(() => parseNarrativeJournal(readFileSync(file, 'utf8'))).to…
+       |                                                                     ^
+     57|   });
+     58| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/24]⎯
+
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する null
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"future","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":["approved"],"owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":" ","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"01","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"invalid","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"invalid","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"invalid"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["a"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["a:b:c","a:b:c"],"at":"2026-09-17T00:00:00.000Z"}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > canonical JSONでも不正な記録を拒否する {"version":1,"state":"approved","owner":"owner-a","sheetId":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa","expectedRevision":"42","beforeHash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","afterHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","changeIds":["bbbb:dddd:duties"],"at":"2026-09-17T00:00:00.000Z","extra":true}
+AssertionError: expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got '(0 , parseNarra…'
+
+Expected: "INVALID_JOURNAL_ENTRY"
+Received: "(0 , __vite_ssr_import_5__.parseNarrativeJournal) is not a function"
+
+ ❯ script/narrative-journal.test.ts:83:70
+     81|     { ...entry('approved'), extra: true },
+     82|   ])('canonical JSONでも不正な記録を拒否する %j', (value) => {
+     83|     expect(() => parseNarrativeJournal(`${canonicalJson(value)}\n`)).t…
+       |                                                                      ^
+     84|   });
+     85|   it('正常行を読むが途中行と空行を拒否する', () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/24]⎯
+
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > 正常行を読むが途中行と空行を拒否する
+TypeError: (0 , parseNarrativeJournal) is not a function
+ ❯ script/narrative-journal.test.ts:87:12
+     85|   it('正常行を読むが途中行と空行を拒否する', () => {
+     86|     const row = canonicalJson(entry('approved'));
+     87|     expect(parseNarrativeJournal(`${row}\n`)).toEqual([entry('approved…
+       |            ^
+     88|     expect(() => parseNarrativeJournal(row)).toThrow('INVALID_JOURNAL_…
+     89|     expect(() => parseNarrativeJournal(`${row}\n\n`)).toThrow('INVALID…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/24]⎯
+
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > 途中行が残ったjournalへ追記せず元のbyte列を保つ
+AssertionError: expected [Function] to throw an error
+
+- Expected: 
+null
+
++ Received: 
+undefined
+
+ ❯ script/narrative-journal.test.ts:96:71
+     94|     const broken = `${canonicalJson(entry('approved'))}\n{"version":`;
+     95|     writeFileSync(target, broken, { mode: 0o600 });
+     96|     expect(() => appendNarrativeJournal(target, entry('db-applied'))).…
+       |                                                                       ^
+     97|     expect(readFileSync(target, 'utf8')).toBe(broken);
+     98|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/24]⎯
+
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[255]}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[192,175]}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[237,160,128]}
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > 不正UTF-8を読取・追記で拒否して元bytesを保つ {"invalid":[226,130]}
+AssertionError: expected [Function] to throw an error
+
+- Expected: 
+null
+
++ Received: 
+undefined
+
+ ❯ script/narrative-journal.test.ts:110:48
+    108|     const raw = Buffer.concat([Buffer.from(prefix), Buffer.from(invali…
+    109|     writeFileSync(target, raw, { mode: 0o600 });
+    110|     expect(() => readNarrativeJournal(target)).toThrow('INVALID_REPAIR…
+       |                                                ^
+    111|     expect(() => appendNarrativeJournal(target, entry('db-applied'))).…
+    112|     expect(readFileSync(target)).toEqual(raw);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/24]⎯
+
+ FAIL  script/narrative-journal.test.ts > journalの型と読取境界 > 公開ファイルとsymlinkを読まず拒否する
+AssertionError: expected [Function] to throw an error
+
+- Expected: 
+null
+
++ Received: 
+undefined
+
+ ❯ script/narrative-journal.test.ts:125:48
+    123|     const target = path.join(directory, 'journal.jsonl');
+    124|     writeFileSync(target, `${canonicalJson(entry('approved'))}\n`, { m…
+    125|     expect(() => readNarrativeJournal(target)).toThrow('PRIVATE_FILE_R…
+       |                                                ^
+    126|     chmodSync(target, 0o600);
+    127|     const link = path.join(directory, 'link.jsonl');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/24]⎯
+
+ FAIL  script/repair-proposal-file.test.ts > 未承認修復案の非公開保存 > 不正UTF-8の不変記録を読まず再保存も拒否する
+AssertionError: expected [Function] to throw an error
+
+- Expected: 
+null
+
++ Received: 
+undefined
+
+ ❯ script/repair-proposal-file.test.ts:68:49
+     66|     const raw = Buffer.concat([Buffer.from(prefix), Buffer.from([0xff]…
+     67|     writeFileSync(path, raw, { mode: 0o600 });
+     68|     expect(() => readPrivateRepairRecord(path)).toThrow('INVALID_REPAI…
+       |                                                 ^
+     69|     // 置換後の文字列が同じでも元bytesが異なれば同一記録ではない。
+     70|     expect(() => persistRepairProposal(path, value)).toThrow('PROPOSAL…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/24]⎯
+
+ FAIL  script/run-narrative-update.journal-preflight.test.ts > DB を書き換える前の journal 検証 > apply は壊れた journal を DB 更新より前に拒否する
+AssertionError: expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got 'Cannot read properties of undefined (…'
+
+Expected: "INVALID_JOURNAL_ENTRY"
+Received: "Cannot read properties of undefined (reading 'revision')"
+
+ ❯ script/run-narrative-update.journal-preflight.test.ts:63:5
+     61| describe('DB を書き換える前の journal 検証', () => {
+     62|   itLinux('apply は壊れた journal を DB 更新より前に拒否する', async () => {
+     63|     await expect(executeNarrativeCommand(args('apply'), 'postgres://un…
+       |     ^
+     64|     expect(mocks.applyNarrativeUpdate).not.toHaveBeenCalled();
+     65|     expect(mocks.persistPrivateRepairRecord).not.toHaveBeenCalled();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/24]⎯
+
+ FAIL  script/run-narrative-update.journal-preflight.test.ts > DB を書き換える前の journal 検証 > revert も壊れた journal を DB 更新より前に拒否する
+AssertionError: expected [Function] to throw error including 'INVALID_JOURNAL_ENTRY' but got 'Cannot read properties of undefined (…'
+
+Expected: "INVALID_JOURNAL_ENTRY"
+Received: "Cannot read properties of undefined (reading 'rows')"
+
+ ❯ script/run-narrative-update.journal-preflight.test.ts:69:5
+     67| 
+     68|   itLinux('revert も壊れた journal を DB 更新より前に拒否する', async () => {
+     69|     await expect(executeNarrativeCommand(args('revert'), 'postgres://u…
+       |     ^
+     70|     expect(mocks.execute).not.toHaveBeenCalled();
+     71|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/24]⎯
+
+
+ Test Files  4 failed (4)
+      Tests  24 failed | 9 passed | 1 skipped (34)
+   Start at  03:10:47
+   Duration  725ms (transform 263ms, setup 0ms, collect 803ms, tests 327ms, environment 1ms, prepare 296ms)
+
+exit=1

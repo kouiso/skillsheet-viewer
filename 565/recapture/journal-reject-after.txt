@@ -1,0 +1,10 @@
+## commit e033ed6
+# 架空データのみ（実データ不使用）
+1 正常な記録: 受け入れた（1件）
+2 状態が "future": 拒否 -> INVALID_JOURNAL_ENTRY
+3 sheetId が "invalid": 拒否 -> INVALID_JOURNAL_ENTRY
+4 hash が "invalid": 拒否 -> INVALID_JOURNAL_ENTRY
+5 余分なキー extra: 拒否 -> INVALID_JOURNAL_ENTRY
+6 null: 拒否 -> INVALID_JOURNAL_ENTRY
+7 末尾が途中行の journal へ追記: 追記を拒否・元のまま=true -> INVALID_JOURNAL_ENTRY
+exit=0

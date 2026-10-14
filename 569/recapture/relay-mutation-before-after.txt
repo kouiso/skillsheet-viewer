@@ -1,0 +1,31 @@
+# #569 証跡: Devin→Slack リレー (.github/scripts/devin-slack-relay.cjs) のテスト有無で、壊した時に検出できるか
+# base=e033ed6 (マージ前 main) / head=295c17b (マージ後)。架空の GitHub/Slack (fetch 差し替え) のみ。実データ・秘密値なし
+## relay 本体の差分 (base→head):
+(空なら本体は無変更＝テスト追加のみ)
+
+## [変更前 base e033ed6] テストファイルの有無
+なし → リレーを壊しても検出する仕組みがない
+
+## [変更後 head 295c17b] そのまま実行
+ Test Files  1 passed (1)
+      Tests  27 passed (27)
+exit=0
+
+## [変更後] 壊すA: 無応答4回でも failed にせず再投稿を続ける (L20 'failed'→'triggered')
+  return tries >= STALE_TRIGGER_TRIES ? 'triggered' : 'triggered';
+   × sweep（定期実行） > Devin が無言のまま 4 回目の巡回で failed にし、自動では再投稿しない 11ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 26 passed (27)
+exit=1
+
+## [変更後] 壊すB: 再投稿上限を無効化 (L601 tries >= MAX_TRIES → false)
+    if (false) {
+   × sweep（定期実行） > 再投稿の上限（3 回）に達したら failed にして、それ以上投稿しない 9ms
+   × sweep（定期実行） > Slack が落ちていても tries は進む（無限に再投稿しない） 3ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ Test Files  1 failed (1)
+      Tests  2 failed | 25 passed (27)
+exit=1
+
+?? node_modules

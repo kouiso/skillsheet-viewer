@@ -1,0 +1,14 @@
+
+ RUN  v3.2.6 /workspace/.work/evaud/e033ed6
+
+ ✓ script/narrative-journal.procfs.test.ts (2 tests) 5ms
+ ✓ script/narrative-journal.test.ts (25 tests | 1 skipped) 36ms
+ ✓ script/run-narrative-update.journal-preflight.test.ts (2 tests) 8ms
+ ✓ script/repair-proposal-file.test.ts (5 tests) 265ms
+
+ Test Files  4 passed (4)
+      Tests  33 passed | 1 skipped (34)
+   Start at  03:10:48
+   Duration  710ms (transform 296ms, setup 0ms, collect 971ms, tests 314ms, environment 1ms, prepare 295ms)
+
+exit=0
