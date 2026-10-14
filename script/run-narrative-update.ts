@@ -186,9 +186,10 @@ const sameContent = (snapshot: DocumentSnapshot, before: DocumentSnapshot, block
   canonicalJson(snapshot.blocks) === canonicalJson(blocks);
 
 export async function applyNarrative(db: Pick<Database, 'execute'>, owner: string, directory: string, sheetId: string) {
+  // 部分行・不正行のあるjournalへ追記して証跡を壊さない。保存記録の読込やDB更新より先に検証する。
+  const journal = readNarrativeJournal(join(directory, JOURNAL));
   const { before, proposal, approval } = loadNarrativeUpdate(directory, owner, sheetId);
-  // 部分行のあるjournalへ追記して証跡を壊さない。修復前にDBを書き換えない。
-  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), owner, proposal);
+  const recorded = recordedJournalStates(journal, owner, proposal);
   const service = createDocumentService(db, owner);
   const current = await service.read(before.sheetId);
   if (current.status !== 'OK') throw new Error('NARRATIVE_RESUME_CONFLICT');
@@ -219,8 +220,10 @@ export async function revertNarrative(
   directory: string,
   sheetId: string,
 ) {
+  // 戻しも同じく、保存記録の読込やDB更新より先にjournalを検証する。
+  const journal = readNarrativeJournal(join(directory, JOURNAL));
   const { before, proposal } = loadNarrativeUpdate(directory, owner, sheetId);
-  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), owner, proposal);
+  const recorded = recordedJournalStates(journal, owner, proposal);
   const applied = narrativeAppliedRecord(owner, before, proposal);
   if (canonicalJson(readPrivateRepairRecord(join(directory, 'db-applied.json'))) !== canonicalJson(applied)) {
     throw new Error('NARRATIVE_APPLIED_RECORD_MISMATCH');
