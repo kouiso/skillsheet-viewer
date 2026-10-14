@@ -149,6 +149,18 @@ async function approveNarrative(
   return approval;
 }
 
+/** 同じ beforeHash / afterHash について journal に記録済みの状態。 */
+function recordedJournalStates(
+  journal: NarrativeJournalEntry[],
+  proposal: { beforeHash: string; afterHash: string },
+): Set<NarrativeJournalEntry['state']> {
+  return new Set(
+    journal
+      .filter((entry) => entry.beforeHash === proposal.beforeHash && entry.afterHash === proposal.afterHash)
+      .map((entry) => entry.state),
+  );
+}
+
 const sameContent = (snapshot: DocumentSnapshot, before: DocumentSnapshot, blocks: DocumentSnapshot['blocks']) =>
   snapshot.sheetId === before.sheetId &&
   snapshot.title === before.title &&
@@ -157,7 +169,7 @@ const sameContent = (snapshot: DocumentSnapshot, before: DocumentSnapshot, block
 export async function applyNarrative(db: Pick<Database, 'execute'>, owner: string, directory: string, sheetId: string) {
   const { before, proposal, approval } = loadNarrativeUpdate(directory, owner, sheetId);
   // 部分行のあるjournalへ追記して証跡を壊さない。修復前にDBを書き換えない。
-  readNarrativeJournal(join(directory, JOURNAL));
+  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), proposal);
   const service = createDocumentService(db, owner);
   const current = await service.read(before.sheetId);
   if (current.status !== 'OK') throw new Error('NARRATIVE_RESUME_CONFLICT');
@@ -174,8 +186,11 @@ export async function applyNarrative(db: Pick<Database, 'execute'>, owner: strin
     throw new Error('NARRATIVE_RESUME_CONFLICT');
   }
   persistPrivateRepairRecord(join(directory, 'db-applied.json'), narrativeAppliedRecord(owner, before, proposal));
-  appendNarrativeJournal(join(directory, JOURNAL), journalEntry('db-applied', owner, proposal));
-  appendNarrativeJournal(join(directory, JOURNAL), journalEntry('sync-pending', owner, proposal));
+  // 再開・再実行で同じ状態を再追記しない（synced の後に sync-pending へ戻さない）。
+  if (!recorded.has('db-applied'))
+    appendNarrativeJournal(join(directory, JOURNAL), journalEntry('db-applied', owner, proposal));
+  if (!recorded.has('sync-pending') && !recorded.has('synced'))
+    appendNarrativeJournal(join(directory, JOURNAL), journalEntry('sync-pending', owner, proposal));
   return { sheetId: after.sheetId, revision: after.revision };
 }
 
@@ -186,7 +201,7 @@ export async function revertNarrative(
   sheetId: string,
 ) {
   const { before, proposal } = loadNarrativeUpdate(directory, owner, sheetId);
-  readNarrativeJournal(join(directory, JOURNAL));
+  const recorded = recordedJournalStates(readNarrativeJournal(join(directory, JOURNAL)), proposal);
   const applied = narrativeAppliedRecord(owner, before, proposal);
   if (canonicalJson(readPrivateRepairRecord(join(directory, 'db-applied.json'))) !== canonicalJson(applied)) {
     throw new Error('NARRATIVE_APPLIED_RECORD_MISMATCH');
@@ -228,7 +243,8 @@ export async function revertNarrative(
     kind: 'narrative-update-reverted',
     revision: revertedRevision,
   });
-  appendNarrativeJournal(join(directory, JOURNAL), journalEntry('reverted', owner, proposal));
+  if (!recorded.has('reverted'))
+    appendNarrativeJournal(join(directory, JOURNAL), journalEntry('reverted', owner, proposal));
   return { sheetId: before.sheetId, revision: after.snapshot.revision };
 }
 

@@ -12,15 +12,13 @@ import {
 import { readPrivateRepairRecord } from './repair-proposal-file';
 
 const hash = z.string().regex(/^[0-9a-f]{64}$/);
-const block = z
-  .object({ id: z.string().uuid(), type: z.string(), order: z.number().int(), data: z.unknown() })
-  .strict();
+const block = z.object({ id: z.guid(), type: z.string(), order: z.number().int(), data: z.unknown() }).strict();
 const beforeSchema = z
   .object({
     owner: z.string().min(1),
     snapshot: z
       .object({
-        sheetId: z.string().uuid(),
+        sheetId: z.guid(),
         revision: z.string().refine(isRevision),
         title: z.string(),
         blocks: z.array(block),
@@ -31,8 +29,8 @@ const beforeSchema = z
   .strict();
 const change = z
   .object({
-    blockId: z.string().uuid(),
-    targetId: z.string().uuid(),
+    blockId: z.guid(),
+    targetId: z.guid(),
     targetKind: z.enum(['project', 'company']),
     field: z.string(),
     beforeHash: hash,
@@ -53,7 +51,7 @@ const proposalSchema = z
     kind: z.literal('narrative-update-proposal'),
     approved: z.literal(false),
     owner: z.string().min(1),
-    sheetId: z.string().uuid(),
+    sheetId: z.guid(),
     expectedRevision: z.string().refine(isRevision),
     beforeHash: hash,
     afterHash: hash,

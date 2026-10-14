@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import type { Database } from '../src/db/client';
 import { canonicalJson } from '../src/db/document-contract';
 import type { DocumentSnapshot } from '../src/db/document-service';
@@ -17,6 +18,7 @@ const state = vi.hoisted(() => ({
   failJournal: false,
   partialJournal: false,
   realJournal: false,
+  journal: [] as { state: string; beforeHash: string; afterHash: string }[],
 }));
 vi.mock('./repair-proposal-file', async (importOriginal) => ({
   ...(await importOriginal<typeof import('./repair-proposal-file')>()),
@@ -42,14 +44,15 @@ vi.mock('./narrative-journal', async (importOriginal) => {
     readNarrativeJournal: (path: string) => {
       if (state.realJournal) return actual.readNarrativeJournal(path);
       if (state.partialJournal) throw new Error('INVALID_JOURNAL_ENTRY');
-      return [];
+      return structuredClone(state.journal);
     },
     narrativeChangeId: () => 'synthetic-change',
-    appendNarrativeJournal: () => {
+    appendNarrativeJournal: (_path: string, entry: { state: string; beforeHash: string; afterHash: string }) => {
       if (state.failJournal) {
         state.failJournal = false;
         throw new Error('INJECTED_JOURNAL_FAILURE');
       }
+      state.journal.push(structuredClone(entry));
     },
   };
 });
@@ -142,6 +145,7 @@ beforeEach(() => {
   state.failJournal = false;
   state.partialJournal = false;
   state.realJournal = false;
+  state.journal = [];
 });
 
 describe('narrative interruption recovery', () => {
@@ -281,7 +285,26 @@ describe('saved narrative record validation', () => {
     if (target === 'approval') state.records.set('approved.json', { kind: 'wrong' });
     if (target === 'field')
       state.records.set('proposal.json', { ...proposal, changes: [{ ...proposal.changes[0], field: 'title' }] });
-    await expect(applyNarrative(db, owner, directory, sheetId)).rejects.toThrow();
+    const expected: Record<string, string | typeof ZodError> = {
+      before: 'STALE_OR_CHANGED_NARRATIVE',
+      validation: 'INVALID_NARRATIVE_RECORD',
+      proposal: ZodError,
+      approval: 'NARRATIVE_APPROVAL_MISMATCH',
+      field: ZodError,
+    };
+    await expect(applyNarrative(db, owner, directory, sheetId)).rejects.toThrow(expected[target]);
     expect(execute).not.toHaveBeenCalled();
+  });
+  it('does not re-append completed journal states when apply or revert is re-run', async () => {
+    const { db } = setup();
+    const states = () => state.journal.map((entry) => entry.state);
+    await applyNarrative(db, owner, directory, sheetId);
+    expect(states()).toEqual(['db-applied', 'sync-pending']);
+    state.journal.push({ ...state.journal[1], state: 'synced' });
+    await applyNarrative(db, owner, directory, sheetId);
+    expect(states()).toEqual(['db-applied', 'sync-pending', 'synced']);
+    await revertNarrative(db, owner, directory, sheetId);
+    await revertNarrative(db, owner, directory, sheetId);
+    expect(states()).toEqual(['db-applied', 'sync-pending', 'synced', 'reverted']);
   });
 });
