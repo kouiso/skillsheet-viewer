@@ -39,7 +39,7 @@ claude mcp list        # 認可前は「! Needs authentication」
 
 1. ブラウザが開き、`/api/auth/oauth2/authorize` から `/login` に進む
 2. **オーナーのアカウントで**ログインする（オーナー以外はトークン発行後も 403）
-3. `/consent` でスコープ（`skillsheet:read` / `skillsheet:write`）を確かめて許可する
+3. `/consent` でスコープが `skillsheet:read` のみであることを確かめて許可する
 4. Claude Code に戻り、`claude mcp list` が `✔ Connected` になる
 
 接続後の確認（読み取りのみ。書き込みツールは本番データを変えるので、確認目的では呼ばない）:

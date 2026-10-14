@@ -1,7 +1,7 @@
 claude 2.1.291 (Claude Code) / HEAD b45efe7d9e499655171e0b7b2c827f76b5f63f5d / 2026-10-14T13:50:25Z
 $ claude mcp add --scope local --transport http skillsheet https://skill-sheet-snowy.vercel.app/api/mcp
 Added HTTP MCP server skillsheet with URL: https://skill-sheet-snowy.vercel.app/api/mcp to local config
-File modified: /home/kouiso/.claude/.claude.json [project: /tmp/ss331]
+File modified: <redacted>
 $ claude mcp get skillsheet
 skillsheet:
   Scope: Local config (private to you in this project)
