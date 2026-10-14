@@ -65,14 +65,21 @@ const violations = result.samples.filter(
 
 ## 継続検査
 
-専用の使い捨てDBを準備してownerと文書境界を設定する。
-共有DBで初期化スクリプトを実行しない。
-CIと同じNodeと依存関係を使って次を実行する。
+DBは `script/e2e-isolated-db.sh` が実行ごとに立てて捨てる。共有DBやNeonには接続しない。
+`playwright.config.ts` はこのラッパーが設定する `DATABASE_URL`・`ISOLATED_NEON_PROXY`・preload が
+揃っていなければ起動しないため、Playwrightを直接実行せず必ずラッパー経由で動かす。
+CIと同じNodeと依存関係を使い、リポジトリのルートで次を実行する。
 
 ```sh
+pnpm install --frozen-lockfile
 pnpm run build
-pnpm test:playwright e2e/text-contrast.spec.ts e2e/contrast-render.spec.ts e2e/text-contrast-synthetic.spec.ts
+./script/e2e-isolated-db.sh run pnpm test:playwright \
+  e2e/text-contrast.spec.ts e2e/contrast-render.spec.ts e2e/text-contrast-synthetic.spec.ts
 ```
+
+`run` は使い捨てDBを起動し、所有者ユーザーを用意してからコマンドを実行し、終了時に片付ける。
+`SESSION_SECRET`・`VIEWER_CODE`・`REVALIDATE_SECRET` は `.env.local` から読まれるので、
+手元では使い捨ての値を置くか環境変数で渡す。Chromeの場所が既定と違う場合は `CHROME_PATH` を指定する。
 
 `e2e/text-contrast-synthetic.spec.ts` は上の架空シートを作り、見出しの変更まで同じ手順で再計測して
 `result.json` と一致することを確かめる。`CONTRAST_EVIDENCE_OUT=<dir>` を付けると同じ手順の画像8枚を書き出す。
