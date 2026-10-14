@@ -1,0 +1,443 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies", "pnpm.overrides", "pnpm.patchedDependencies". See https://pnpm.io/settings for the new home of each setting.
+
+> skillsheet-viewer@1.0.0 dev /workspace/q07-retake-430b/repo
+> next dev
+
+▲ Next.js 16.3.8 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://172.30.0.2:3000
+- Environments: .env.local
+✓ Ready in 389ms
+✓ Running next.config.ts took 480ms
+- Experiments (use with caution):
+  · clientTraceMetadata
+  ⨯ turbopackFileSystemCacheForBuild
+
+[env] GitHub 読み取り用の任意環境変数が未設定です: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO。 GitHub 経由の読み取り副系統は無効になります（DB 経由の表示には影響しません）。
+Failed to fetch DB sheets: Error [TRPCError]: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at async SheetsListPage (app/view/page.tsx:34:26)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } {
+  cause: undefined,
+  code: 'INTERNAL_SERVER_ERROR'
+}
+⨯ Error [TRPCError]: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at async SheetsListPage (app/view/page.tsx:34:26)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } {
+  cause: undefined,
+  code: 'INTERNAL_SERVER_ERROR',
+  digest: '3592351414'
+}
+ GET /view 200 in 1292ms (next.js: 365ms, proxy.ts: 192ms, application-code: 735ms)
+ POST /api/trpc/auth.login?batch=1 200 in 1787ms (next.js: 1521ms, application-code: 265ms)
+ POST /api/auth/sign-in/email 200 in 1222ms (next.js: 1037ms, application-code: 185ms)
+Failed to fetch DB sheets: Error [TRPCError]: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at async SheetsListPage (app/view/page.tsx:34:26)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } {
+  cause: undefined,
+  code: 'INTERNAL_SERVER_ERROR'
+}
+⨯ Error [TRPCError]: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at async SheetsListPage (app/view/page.tsx:34:26)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } {
+  cause: undefined,
+  code: 'INTERNAL_SERVER_ERROR',
+  digest: '3592351414'
+}
+ GET /view 200 in 150ms (next.js: 7ms, proxy.ts: 12ms, application-code: 131ms)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at SheetsListPage (app/view/page.tsx:34:26)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } (app/error.tsx:14:13)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at SheetsListPage (app/view/page.tsx:34:26)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } (app/error.tsx:14:13)
+Failed to load DB skill sheet: Error [TRPCError]: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at async Object.read (src/db/document-service.ts:110:7)
+    at async readViewerDocument (src/server/document-view.ts:15:18)
+    at async getCachedDbSheetRaw.tags (src/server/sheet-cache.ts:131:9)
+    at async getCachedDbSheet (src/server/sheet-cache.ts:142:28)
+    at async (src/server/trpc/router/sheet.ts:142:62)
+    at async DbSheetPage (app/view/db/page.tsx:33:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } {
+  code: 'INTERNAL_SERVER_ERROR',
+  [cause]: Error [DocumentError]: ACCESS_DENIED
+      at execute (src/db/document-service.ts:99:15)
+      at async Object.read (src/db/document-service.ts:110:7)
+      at async readViewerDocument (src/server/document-view.ts:15:18)
+      at async getCachedDbSheetRaw.tags (src/server/sheet-cache.ts:131:9)
+      at async getCachedDbSheet (src/server/sheet-cache.ts:142:28)
+      at async (src/server/trpc/router/sheet.ts:142:62)
+      at async DbSheetPage (app/view/db/page.tsx:33:34)
+     97 |     } catch (error) {
+     98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+  >  99 |         throw new DocumentError('ACCESS_DENIED');
+        |               ^
+    100 |       }
+    101 |       throw error;
+    102 |     } {
+    code: 'ACCESS_DENIED',
+    issues: []
+  }
+}
+⨯ Error [TRPCError]: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at async Object.read (src/db/document-service.ts:110:7)
+    at async readViewerDocument (src/server/document-view.ts:15:18)
+    at async getCachedDbSheetRaw.tags (src/server/sheet-cache.ts:131:9)
+    at async getCachedDbSheet (src/server/sheet-cache.ts:142:28)
+    at async (src/server/trpc/router/sheet.ts:142:62)
+    at async DbSheetPage (app/view/db/page.tsx:33:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } {
+  code: 'INTERNAL_SERVER_ERROR',
+  digest: '1115624290',
+  [cause]: Error [DocumentError]: ACCESS_DENIED
+      at execute (src/db/document-service.ts:99:15)
+      at async Object.read (src/db/document-service.ts:110:7)
+      at async readViewerDocument (src/server/document-view.ts:15:18)
+      at async getCachedDbSheetRaw.tags (src/server/sheet-cache.ts:131:9)
+      at async getCachedDbSheet (src/server/sheet-cache.ts:142:28)
+      at async (src/server/trpc/router/sheet.ts:142:62)
+      at async DbSheetPage (app/view/db/page.tsx:33:34)
+     97 |     } catch (error) {
+     98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+  >  99 |         throw new DocumentError('ACCESS_DENIED');
+        |               ^
+    100 |       }
+    101 |       throw error;
+    102 |     } {
+    code: 'ACCESS_DENIED',
+    issues: []
+  }
+}
+ GET /view/db 200 in 332ms (next.js: 207ms, proxy.ts: 10ms, application-code: 115ms)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at  Object.read (src/db/document-service.ts:110:7)
+    at  readViewerDocument (src/server/document-view.ts:15:18)
+    at  getCachedDbSheetRaw.tags (src/server/sheet-cache.ts:131:9)
+    at  getCachedDbSheet (src/server/sheet-cache.ts:142:28)
+    at <anonymous> (src/server/trpc/router/sheet.ts:142:62)
+    at  DbSheetPage (app/view/db/page.tsx:33:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } (app/error.tsx:14:13)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at  Object.read (src/db/document-service.ts:110:7)
+    at  readViewerDocument (src/server/document-view.ts:15:18)
+    at  getCachedDbSheetRaw.tags (src/server/sheet-cache.ts:131:9)
+    at  getCachedDbSheet (src/server/sheet-cache.ts:142:28)
+    at <anonymous> (src/server/trpc/router/sheet.ts:142:62)
+    at  DbSheetPage (app/view/db/page.tsx:33:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } (app/error.tsx:14:13)
+Failed to load sheet Error [TRPCError]: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at async Object.read (src/db/document-service.ts:110:7)
+    at async readViewerDocument (src/server/document-view.ts:15:18)
+    at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at async (src/server/trpc/router/sheet.ts:133:27)
+    at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } {
+  code: 'INTERNAL_SERVER_ERROR',
+  [cause]: Error [DocumentError]: ACCESS_DENIED
+      at execute (src/db/document-service.ts:99:15)
+      at async Object.read (src/db/document-service.ts:110:7)
+      at async readViewerDocument (src/server/document-view.ts:15:18)
+      at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+      at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+      at async (src/server/trpc/router/sheet.ts:133:27)
+      at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+     97 |     } catch (error) {
+     98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+  >  99 |         throw new DocumentError('ACCESS_DENIED');
+        |               ^
+    100 |       }
+    101 |       throw error;
+    102 |     } {
+    code: 'ACCESS_DENIED',
+    issues: []
+  }
+}
+⨯ Error [TRPCError]: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at async Object.read (src/db/document-service.ts:110:7)
+    at async readViewerDocument (src/server/document-view.ts:15:18)
+    at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at async (src/server/trpc/router/sheet.ts:133:27)
+    at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } {
+  code: 'INTERNAL_SERVER_ERROR',
+  digest: '2526724042',
+  [cause]: Error [DocumentError]: ACCESS_DENIED
+      at execute (src/db/document-service.ts:99:15)
+      at async Object.read (src/db/document-service.ts:110:7)
+      at async readViewerDocument (src/server/document-view.ts:15:18)
+      at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+      at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+      at async (src/server/trpc/router/sheet.ts:133:27)
+      at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+     97 |     } catch (error) {
+     98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+  >  99 |         throw new DocumentError('ACCESS_DENIED');
+        |               ^
+    100 |       }
+    101 |       throw error;
+    102 |     } {
+    code: 'ACCESS_DENIED',
+    issues: []
+  }
+}
+ GET /view/db/11111111-2222-4333-8444-555555555555 200 in 1107ms (next.js: 965ms, proxy.ts: 5ms, application-code: 137ms)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at  Object.read (src/db/document-service.ts:110:7)
+    at  readViewerDocument (src/server/document-view.ts:15:18)
+    at  getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at  getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at <anonymous> (src/server/trpc/router/sheet.ts:133:27)
+    at  DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } (app/error.tsx:14:13)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at  Object.read (src/db/document-service.ts:110:7)
+    at  readViewerDocument (src/server/document-view.ts:15:18)
+    at  getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at  getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at <anonymous> (src/server/trpc/router/sheet.ts:133:27)
+    at  DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } (app/error.tsx:14:13)
+Failed to load sheet Error [TRPCError]: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at async Object.read (src/db/document-service.ts:110:7)
+    at async readViewerDocument (src/server/document-view.ts:15:18)
+    at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at async (src/server/trpc/router/sheet.ts:133:27)
+    at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } {
+  code: 'INTERNAL_SERVER_ERROR',
+  [cause]: Error [DocumentError]: ACCESS_DENIED
+      at execute (src/db/document-service.ts:99:15)
+      at async Object.read (src/db/document-service.ts:110:7)
+      at async readViewerDocument (src/server/document-view.ts:15:18)
+      at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+      at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+      at async (src/server/trpc/router/sheet.ts:133:27)
+      at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+     97 |     } catch (error) {
+     98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+  >  99 |         throw new DocumentError('ACCESS_DENIED');
+        |               ^
+    100 |       }
+    101 |       throw error;
+    102 |     } {
+    code: 'ACCESS_DENIED',
+    issues: []
+  }
+}
+⨯ Error [TRPCError]: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at async Object.read (src/db/document-service.ts:110:7)
+    at async readViewerDocument (src/server/document-view.ts:15:18)
+    at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at async (src/server/trpc/router/sheet.ts:133:27)
+    at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } {
+  code: 'INTERNAL_SERVER_ERROR',
+  digest: '2526724042',
+  [cause]: Error [DocumentError]: ACCESS_DENIED
+      at execute (src/db/document-service.ts:99:15)
+      at async Object.read (src/db/document-service.ts:110:7)
+      at async readViewerDocument (src/server/document-view.ts:15:18)
+      at async getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+      at async getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+      at async (src/server/trpc/router/sheet.ts:133:27)
+      at async DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+     97 |     } catch (error) {
+     98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+  >  99 |         throw new DocumentError('ACCESS_DENIED');
+        |               ^
+    100 |       }
+    101 |       throw error;
+    102 |     } {
+    code: 'ACCESS_DENIED',
+    issues: []
+  }
+}
+ GET /view/db/22222222-3333-4444-8555-666666666666 200 in 168ms (next.js: 28ms, proxy.ts: 4ms, application-code: 136ms)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at  Object.read (src/db/document-service.ts:110:7)
+    at  readViewerDocument (src/server/document-view.ts:15:18)
+    at  getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at  getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at <anonymous> (src/server/trpc/router/sheet.ts:133:27)
+    at  DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } (app/error.tsx:14:13)
+[browser] Route error boundary: TRPCError: ACCESS_DENIED
+    at execute (src/db/document-service.ts:99:15)
+    at  Object.read (src/db/document-service.ts:110:7)
+    at  readViewerDocument (src/server/document-view.ts:15:18)
+    at  getCachedDbSheetByIdRaw.tags (src/server/sheet-cache.ts:112:9)
+    at  getCachedDbSheetById (src/server/sheet-cache.ts:123:28)
+    at <anonymous> (src/server/trpc/router/sheet.ts:133:27)
+    at  DbSheetByIdPage (app/view/db/[id]/page.tsx:42:34)
+   97 |     } catch (error) {
+   98 |       if (record(error) && (error.code === '42501' || (record(error.cause) && error.cause.code === '42501'))) {
+>  99 |         throw new DocumentError('ACCESS_DENIED');
+      |               ^
+  100 |       }
+  101 |       throw error;
+  102 |     } (app/error.tsx:14:13)
+Failed to load sheet for builder: Error [TRPCError]: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at async BuilderPage (app/builder/page.tsx:35:19)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } {
+  cause: undefined,
+  code: 'INTERNAL_SERVER_ERROR'
+}
+ GET /builder 200 in 751ms (next.js: 315ms, application-code: 436ms)
+Failed to load sheet for builder: Error [TRPCError]: ACCESS_DENIED
+    at documentCall (src/server/trpc/router/sheet.ts:48:13)
+    at async BuilderPage (app/builder/page.tsx:35:19)
+  46 |                 ? 'INTERNAL_SERVER_ERROR'
+  47 |                 : 'BAD_REQUEST';
+> 48 |       throw new TRPCError({ code, message: error.code });
+     |             ^
+  49 |     }
+  50 |     throw error;
+  51 |   } {
+  cause: undefined,
+  code: 'INTERNAL_SERVER_ERROR'
+}
+ GET /builder?sheet=11111111-2222-4333-8444-555555555555 200 in 115ms (next.js: 16ms, application-code: 100ms)
+  Reload env: .env.local
+ ELIFECYCLE  Command failed.
+[?25h
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies", "pnpm.overrides", "pnpm.patchedDependencies". See https://pnpm.io/settings for the new home of each setting.
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+╭ Warning ─────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│   Ignored build scripts: core-js@3.50.0.                                     │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+│   to run scripts.                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Done in 1.5s using pnpm v10.33.0

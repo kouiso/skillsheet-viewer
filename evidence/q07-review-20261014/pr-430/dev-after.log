@@ -1,0 +1,1032 @@
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies", "pnpm.overrides", "pnpm.patchedDependencies". See https://pnpm.io/settings for the new home of each setting.
+
+> skillsheet-viewer@1.0.0 dev /workspace/q07-retake-430b/repo
+> next dev
+
+▲ Next.js 16.3.8 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://172.30.0.2:3000
+- Environments: .env.local
+✓ Ready in 406ms
+✓ Running next.config.ts took 684ms
+- Experiments (use with caution):
+  · clientTraceMetadata
+  ⨯ turbopackFileSystemCacheForBuild
+
+[env] GitHub 読み取り用の任意環境変数が未設定です: GITHUB_TOKEN, GITHUB_OWNER, GITHUB_REPO。 GitHub 経由の読み取り副系統は無効になります（DB 経由の表示には影響しません）。
+ GET /view 200 in 1309ms (next.js: 368ms, proxy.ts: 176ms, application-code: 764ms)
+ POST /api/trpc/auth.login?batch=1 200 in 1510ms (next.js: 1268ms, application-code: 242ms)
+2026-10-14T06:24:56.811Z WARN [Better Auth]: User not found
+ POST /api/auth/sign-in/email 401 in 1274ms (next.js: 1109ms, application-code: 165ms)
+ GET /view 200 in 77ms (next.js: 5ms, proxy.ts: 6ms, application-code: 66ms)
+ GET /view/db 200 in 655ms (next.js: 266ms, proxy.ts: 6ms, application-code: 383ms)
+ GET /view/db/296e3262-a367-4a7f-b2ae-ced93610c090 200 in 1542ms (next.js: 1262ms, proxy.ts: 5ms, application-code: 275ms)
+ GET /view/db/fdd2bd63-728c-4923-8682-bda97fe18093 200 in 325ms (next.js: 37ms, proxy.ts: 9ms, application-code: 278ms)
+ GET /builder 200 in 565ms (next.js: 472ms, application-code: 93ms)
+ GET /login?next=/builder 200 in 119ms (next.js: 45ms, application-code: 75ms)
+ GET /builder?sheet=296e3262-a367-4a7f-b2ae-ced93610c090 200 in 79ms (next.js: 12ms, application-code: 67ms)
+ GET /login?next=/builder 200 in 40ms (next.js: 7ms, application-code: 33ms)
+2026-10-14T06:25:57.244Z WARN [Better Auth]: User not found
+ POST /api/auth/sign-in/email 401 in 255ms (next.js: 36ms, application-code: 219ms)
+ POST /api/auth/sign-in/email 200 in 223ms (next.js: 36ms, application-code: 187ms)
+ POST /api/trpc/auth.login?batch=1 200 in 137ms (next.js: 34ms, application-code: 103ms)
+ POST /api/auth/sign-in/email 200 in 206ms (next.js: 26ms, application-code: 180ms)
+ GET /builder 200 in 507ms (next.js: 15ms, application-code: 492ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <ProjectEditor data={{items:[...], ...}} onChange={function updateProjectData} showPreview={true} workspace={{...}}>
+      <div ref={{current:null}} className="shell work..." style={{...}}>
+        <Dialog>
+        <div>
+        <ProjectNav title="アウトライン" outlineBefore={<Fragment>} outlineAfter={<WorkspaceOutline>} ...>
+          <aside className="col-list">
+            <Dialog>
+            <div>
+            <div className="list-body ...">
+              <div>
+              <WorkspaceOutline>
+              <DndContext sensors={[...]} collisionDetection={function closestCenter} onDragEnd={function handleDragEnd}>
+                <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={2} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="架空商事 を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={1} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="架空の在庫管理画面 を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={8} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="サンプル勤怠ダッシュボード を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={2} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="見本システム を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={2} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="見本の予約受付システム を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={9} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="架空の請求書発行ツール を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={2} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="例示ラボ を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={3} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="例示用の社内ポータル を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={10} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="見本の会員管理API を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="サンプル製作所 を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={4} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="サンプル決済フォーム を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="仮想ソフト を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={5} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="架空の配送追跡アプリ を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="モック工房 を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={6} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="見本のアンケート集計 を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="試作デザイン を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={7} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="例示用のヘルプセンター を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                  <div className="co-group">
+                    <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                      <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                        <button
+                          type="button"
+                          className="co-grip touch-none"
+                          aria-label="個人開発 を並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-2"
+-                         aria-describedby="DndDescribedBy-1"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function useSyntheticListeners.useMemo}
+                        >
++                         ⋮⋮
+                        ...
+                    <div className="proj-list">
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <ProjectRow project={{id:"c00000...", ...}} visibleNo={11} active={false} ...>
+                          <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                            <button
+                              type="button"
+                              className="grip touch-none"
+                              aria-label="例示用の家計簿アプリ を並べ替え"
+                              role="button"
+                              tabIndex={0}
+                              aria-disabled={false}
+                              aria-pressed={undefined}
+                              aria-roledescription="sortable"
++                             aria-describedby="DndDescribedBy-2"
+-                             aria-describedby="DndDescribedBy-1"
+                              onPointerDown={function useSyntheticListeners.useMemo}
+                              onKeyDown={function useSyntheticListeners.useMemo}
+                            >
++                             ⋮⋮
+                            ...
+                      ...
+                ...
+                ...
+              ...
+            ...
+        ...
+ 
+ GET /builder?sheet=296e3262-a367-4a7f-b2ae-ced93610c090 200 in 137ms (next.js: 12ms, application-code: 125ms)
+[browser] A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:
+
+- A server/client branch `if (typeof window !== 'undefined')`.
+- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.
+- Date formatting in a user's locale which doesn't match the server.
+- External changing data without sending a snapshot of it along with the HTML.
+- Invalid HTML tag nesting.
+
+It can also happen if the client has a browser extension installed which messes with the HTML before React loaded.
+
+https://react.dev/link/hydration-mismatch
+
+  ...
+    <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+      <CanvasDroppable>
+        <div ref={function useNodeRef.useCallback[setNodeRef]} className={"min-h-16..."}>
+          <ProjectEditor data={{items:[...], ...}} onChange={function updateProjectData} showPreview={true} ...>
+            <div ref={{current:null}} className="shell work..." style={{...}}>
+              <Dialog>
+              <div>
+              <ProjectNav title="アウトライン" outlineBefore={<Fragment>} outlineAfter={<WorkspaceOutline>} ...>
+                <aside className="col-list">
+                  <Dialog>
+                  <div>
+                  <div className="list-body ...">
+                    <div>
+                    <WorkspaceOutline items={[...]} selectedId="c15d7d5f-4..." onSelect={function selectBlock} ...>
+                      <nav className="grid gap-1..." aria-label="ブロック一覧">
+                        <OutlineRow item={{id:"c15d7d...", ...}} index={0} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="プロフィールをドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                            ...
+                        <OutlineRow item={{id:"94ba8f...", ...}} index={1} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="統計をドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                        <OutlineRow item={{id:"53dbff...", ...}} index={2} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="言語をドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                        <OutlineRow item={{id:"e4d3e3...", ...}} index={3} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="フロントエンドをドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                        <OutlineRow item={{id:"363479...", ...}} index={4} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="バックエンドをドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                        <OutlineRow item={{id:"a60940...", ...}} index={5} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="データベースをドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                        <OutlineRow item={{id:"ddc047...", ...}} index={6} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="インフラをドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                        <OutlineRow item={{id:"0b3c33...", ...}} index={7} selectedId="c15d7d5f-4..." ...>
+                          <div ref={function useNodeRef.useCallback[setNodeRef]} className="min-w-0">
+                            <div className="flex min-w...">
+                              <button>
+                              <button
+                                ref={function useNodeRef.useCallback[setNodeRef]}
+                                type="button"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="draggable"
++                               aria-describedby="DndDescribedBy-0"
+-                               aria-describedby="DndDescribedBy-2"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                                aria-label="経歴（案件）をドラッグして移動"
+                                title="ドラッグして移動"
+                                className="min-h-11 min-w-11 rounded border border-border bg-card text-foreground hove..."
+                              >
+                    ...
+                      <SortableContext items={[...]} strategy={function verticalListSortingStrategy}>
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={2} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="架空商事 を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={1} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="架空の在庫管理画面 を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={8} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="サンプル勤怠ダッシュボード を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={2} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="見本システム を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={2} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="見本の予約受付システム を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={9} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="架空の請求書発行ツール を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={2} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="例示ラボ を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={3} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="例示用の社内ポータル を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={10} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="見本の会員管理API を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="サンプル製作所 を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={4} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="サンプル決済フォーム を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="仮想ソフト を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={5} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="架空の配送追跡アプリ を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="モック工房 を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={6} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="見本のアンケート集計 を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="試作デザイン を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={7} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="例示用のヘルプセンター を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                        <div className="co-group">
+                          <CompanyHeaderRow company={{id:"c00000...", ...}} count={1} open={true} ...>
+                            <div ref={function useCombinedRefs.useMemo} style={{...}} className="co-head-row">
+                              <button
+                                type="button"
+                                className="co-grip touch-none"
+                                aria-label="個人開発 を並べ替え"
+                                role="button"
+                                tabIndex={0}
+                                aria-disabled={false}
+                                aria-pressed={undefined}
+                                aria-roledescription="sortable"
++                               aria-describedby="DndDescribedBy-2"
+-                               aria-describedby="DndDescribedBy-3"
+                                onPointerDown={function useSyntheticListeners.useMemo}
+                                onKeyDown={function useSyntheticListeners.useMemo}
+                              >
++                               ⋮⋮
+                              ...
+                          ...
+                            <ProjectRow project={{id:"c00000...", ...}} visibleNo={11} active={false} ...>
+                              <div ref={function useCombinedRefs.useMemo} style={{...}} className="proj-item">
+                                <button
+                                  type="button"
+                                  className="grip touch-none"
+                                  aria-label="例示用の家計簿アプリ を並べ替え"
+                                  role="button"
+                                  tabIndex={0}
+                                  aria-disabled={false}
+                                  aria-pressed={undefined}
+                                  aria-roledescription="sortable"
++                                 aria-describedby="DndDescribedBy-2"
+-                                 aria-describedby="DndDescribedBy-3"
+                                  onPointerDown={function useSyntheticListeners.useMemo}
+                                  onKeyDown={function useSyntheticListeners.useMemo}
+                                >
++                                 ⋮⋮
+                                ...
+                    ...
+                  ...
+              <div className="col-main">
+                <div className="form-wrap ..." ref={{current:null}} onFocusCapture={function onFocusCapture}>
+                  <SortableBlock item={{id:"c15d7d...", ...}} onMarkdownChange={function updateMarkdown} ...>
+                    <div ref={function useCombinedRefs.useMemo} style={{...}} className="flex flex-...">
+                      <div className="flex w-ful...">
+                        <button
+                          type="button"
+                          className="inline-flex h-11 w-11 shrink-0 cursor-grab items-center justify-center rounded te..."
+                          aria-label="ブロックを並べ替え"
+                          role="button"
+                          tabIndex={0}
+                          aria-disabled={false}
+                          aria-pressed={undefined}
+                          aria-roledescription="sortable"
++                         aria-describedby="DndDescribedBy-0"
+-                         aria-describedby="DndDescribedBy-2"
+                          onPointerDown={function useSyntheticListeners.useMemo}
+                          onKeyDown={function handleKeyDown}
+                        >
+                        ...
+                      ...
+              ...
+    ...
+    ...
+    ...
+ 
+ ELIFECYCLE  Command failed.
+[?25h
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies", "pnpm.overrides", "pnpm.patchedDependencies". See https://pnpm.io/settings for the new home of each setting.
+Lockfile is up to date, resolution step is skipped
+Already up to date
+
+╭ Warning ─────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│   Ignored build scripts: core-js@3.50.0.                                     │
+│   Run "pnpm approve-builds" to pick which dependencies should be allowed     │
+│   to run scripts.                                                            │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Done in 1.5s using pnpm v10.33.0
