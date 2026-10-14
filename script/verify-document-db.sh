@@ -543,8 +543,20 @@ printf '関数default EXECUTEの3範囲を拒否・合法な別granteeと除去�
 psql "${psql_args[@]}" -f "$repo_dir/script/sql/seed-document-cas-proof.sql" >"$run_dir/cas-seed.log" 2>&1
 cas_args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55440 -U cas_runtime -d postgres)
 psql "${psql_args[@]}" -f "$repo_dir/script/sql/seed-period-repair-proof.sql" >"$run_dir/repair-seed.log" 2>&1
-(cd "$repo_dir" && pnpm exec tsx script/verify-repair-db.ts "$run_dir") >"$run_dir/repair-dry-run.log" 2>&1
-printf '修復案dry-run実DB検証: PASS\n'
+# 修復案の私有記録は /proc/self/fd 経由の Linux 専用（repair-proposal-file.test.ts の itLinux と同じ境界）。
+# macOS ではその経路が成立しないため、ここだけ skip して残りの実DB検証を続ける。
+if [[ "$(uname -s)" == Linux ]]; then
+  (cd "$repo_dir" && pnpm exec tsx script/verify-repair-db.ts "$run_dir") >"$run_dir/repair-dry-run.log" 2>&1
+  printf '修復案dry-run実DB検証: PASS\n'
+else
+  # dry-run 本体は skip するが、dry-run 末尾が「後続のCAS試験へ合成文書を残さない」ために行う
+  # 修復 fixture(sheet …91)の版付き削除だけは同じ実経路で再現する。残すと
+  # test-document-create-after-delete.sql が期待する「削除後に owner 空」の前提が崩れる。
+  psql "${cas_args[@]}" \
+    -c "SELECT skillsheet_private.delete_sheet('00000000-0000-4000-8000-000000000091','0','cas-proof')" \
+    >>"$run_dir/repair-seed.log" 2>&1
+  printf '修復案dry-run実DB検証: SKIP（/proc/self/fd は Linux 専用。fixture削除のみ再現）\n'
+fi
 observe_wait() {
   local application="$1" event_type="$2" seen=false
   for ((attempt=0; attempt<100; attempt++)); do
