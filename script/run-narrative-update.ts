@@ -16,7 +16,12 @@ import { createDocumentService, type DocumentSnapshot } from '../src/db/document
 import { applyNarrativeUpdate } from './apply-narrative';
 import { readNarrative } from './apply-project-narrative';
 import { recordNarrativeApproval } from './narrative-approval';
-import { appendNarrativeJournal, type NarrativeJournalEntry, narrativeChangeId } from './narrative-journal';
+import {
+  appendNarrativeJournal,
+  type NarrativeJournalEntry,
+  narrativeChangeId,
+  readNarrativeJournal,
+} from './narrative-journal';
 import {
   type NarrativeProposal,
   narrativeApprovalChanges,
@@ -157,6 +162,9 @@ async function applyNarrative(db: Pick<Database, 'execute'>, owner: string, dire
   const service = createDocumentService(db, owner);
   const current = await service.read(sheetId);
   if (current.status !== 'OK') throw new Error('DOCUMENT_UNAVAILABLE');
+  // DB更新より先にjournalを検証する。追記時の同一fd検証は残すが、DB適用後に初めて壊れた記録へ
+  // 気づくと「本番は変わったのに db-applied / sync-pending が残らない」状態になるため。
+  readNarrativeJournal(join(directory, JOURNAL));
   // DB更新より先に承認と復旧情報をdurable化する。
   persistPrivateRepairRecord(join(directory, 'before.json'), { owner, snapshot: current.snapshot });
   const after = await applyNarrativeUpdate(db, owner, proposal, approval);
@@ -199,6 +207,8 @@ async function revertNarrative(db: Pick<Database, 'execute'>, owner: string, dir
   if (snapshot.revision !== appliedRevision || canonicalJson(snapshot.blocks) !== canonicalJson(proposal.blocks)) {
     throw new Error('NARRATIVE_REVERT_CONFLICT');
   }
+  // 戻しも同じく、DBを書き換える前にjournalを検証する。
+  readNarrativeJournal(join(directory, JOURNAL));
   const result = await db.execute(sql`select skillsheet_private.replace_sheet(
     ${sheetId}::uuid, ${appliedRevision}::text, ${snapshot.title}::text,
     ${canonicalJson(beforeRecord.snapshot.blocks)}::jsonb, ${owner}::text) as result`);
