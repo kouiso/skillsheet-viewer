@@ -163,3 +163,37 @@ describe('承認記録の差分', () => {
     }
   });
 });
+
+describe('journal の changeId 区切りを含む ID', () => {
+  // changeId は blockId:targetId:field なので、':' を含む ID は承認前に拒否する（apply 時まで持ち越さない）。
+  const withIds = (company: string, item: string): DocumentSnapshot => {
+    const source = snapshot();
+    const data = source.blocks[0].data as ProjectBlockData;
+    data.companies[0].id = company;
+    data.items[0].id = item;
+    data.items[0].companyId = company;
+    return source;
+  };
+
+  it('提案の作成時に会社・案件 ID の ":" を拒否する', () => {
+    expect(() => proposeNarrativeUpdate('owner-a', withIds('c:1', 'p1'), narrative)).toThrow(
+      'NARRATIVE_ID_HAS_DELIMITER',
+    );
+    expect(() => proposeNarrativeUpdate('owner-a', withIds('c1', 'p:1'), narrative)).toThrow(
+      'NARRATIVE_ID_HAS_DELIMITER',
+    );
+  });
+
+  it('":" を含まない文字列 ID は提案・承認照合できる', () => {
+    const source = withIds('c1', 'p1');
+    const proposal = proposeNarrativeUpdate('owner-a', source, narrative);
+    expect(verifyNarrativeProposal('owner-a', source, proposal, proposal)).toEqual(proposal);
+  });
+
+  it('承認照合でも ":" を含む ID の change を拒否する', () => {
+    const source = snapshot();
+    const proposal = proposeNarrativeUpdate('owner-a', source, narrative);
+    const forged = { ...proposal, changes: proposal.changes.map((c) => ({ ...c, targetId: `${c.targetId}:x` })) };
+    expect(() => verifyNarrativeProposal('owner-a', source, forged, forged)).toThrow('NARRATIVE_ID_HAS_DELIMITER');
+  });
+});

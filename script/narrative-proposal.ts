@@ -77,6 +77,14 @@ function resolveUnique<T extends { id: string }>(matches: T[], label: string): T
   return matches[0];
 }
 
+/**
+ * journal の changeId は blockId:targetId:field なので、区切りの ':' を含む ID は扱えない。
+ * apply 時に初めて失敗しないよう、提案の作成と承認照合の段階で拒否する。
+ */
+export function assertNarrativeIdUsable(id: string): void {
+  if (!id || id.includes(':')) throw new Error(`NARRATIVE_ID_HAS_DELIMITER: ${id}`);
+}
+
 export function proposeNarrativeUpdate(
   owner: string,
   snapshot: DocumentSnapshot,
@@ -160,6 +168,10 @@ export function proposeNarrativeUpdate(
     }
   }
 
+  for (const change of changes) {
+    assertNarrativeIdUsable(change.blockId);
+    assertNarrativeIdUsable(change.targetId);
+  }
   return {
     version: 1,
     kind: 'narrative-update-proposal',
@@ -219,6 +231,10 @@ export function verifyNarrativeProposal(
   }
   if (proposal.kind !== 'narrative-update-proposal' || proposal.owner !== owner) {
     throw new Error('STALE_OR_CHANGED_NARRATIVE');
+  }
+  for (const change of proposal.changes) {
+    assertNarrativeIdUsable(change.blockId);
+    assertNarrativeIdUsable(change.targetId);
   }
   const freshBefore = {
     owner,
