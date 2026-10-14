@@ -1,0 +1,30 @@
+[
+  {
+    "theme": "light",
+    "width": 390,
+    "measured": 357,
+    "baselineViolations": 0,
+    "mutationDetected": 1
+  },
+  {
+    "theme": "light",
+    "width": 1280,
+    "measured": 366,
+    "baselineViolations": 0,
+    "mutationDetected": 1
+  },
+  {
+    "theme": "dark",
+    "width": 390,
+    "measured": 357,
+    "baselineViolations": 0,
+    "mutationDetected": 1
+  },
+  {
+    "theme": "dark",
+    "width": 1280,
+    "measured": 366,
+    "baselineViolations": 0,
+    "mutationDetected": 1
+  }
+]
