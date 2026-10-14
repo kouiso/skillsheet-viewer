@@ -118,7 +118,7 @@ psql "$ADMIN_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
 | `pnpm format` | Biome でフォーマット（`biome format --write .`） |
 | `pnpm type-check` | TypeScript 型チェック |
 | `pnpm test` | 全テスト（Vitest） |
-| `pnpm test:e2e` | 本番ビルドを Chrome/Chromium で検証し、`test-results/e2e/` に証跡を保存 |
+| `pnpm test:e2e:local` | 使い捨ての隔離 DB を立てて、Playwright と本番ビルドの Chrome/Chromium 検証を通す（`pnpm test:e2e` 単体は隔離 DB の外では起動しない）。`test-results/e2e/` に証跡を保存 |
 | `pnpm db:generate` | スキーマからマイグレーション生成（Drizzle） |
 | `pnpm db:migrate` | マイグレーション適用 |
 

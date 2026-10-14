@@ -146,18 +146,27 @@ public テーブル・write 系関数・境界 role への membership は一切�
 
 ### e2e 専用 DB の運用（#346 / #360）
 
-CI の e2e は本番と同じ Neon プロジェクト内の**別データベース** `skillsheet_e2e` を使う。接続文字列は GitHub secret の `E2E_DATABASE_URL` に置き、workflow では `DATABASE_URL` へコピーして各ステップに渡す（正本 `DATABASE_URL` / `neondb` を e2e が触ることはない）。ローカルでは `.env.e2e` の `E2E_DATABASE_URL` で切り替える（`playwright.config.ts` が `DATABASE_URL` を上書きする）。
+e2e は**実行ごとに作って捨てる自分専用の PostgreSQL** だけに接続する。本番・共有の DB（Neon）には接続しない。立ち上げと後片付けは `script/e2e-isolated-db.sh` に集約してあり、CI と手元で同じ手順を使う。
 
-e2e 実行ごとに `bootstrap-owner.ts` が一時オーナーを作成し `skillsheet_private.principals` の写像を張り替えるため、行・セッション・シートが蓄積する。これを消すため、ci.yml の `Migrate database` 直前に **`Reset E2E database`** ステップが入る。
+| やりたいこと | コマンド |
+|---|---|
+| 手元で e2e（Playwright と headless）を通す | `pnpm test:e2e:local` |
+| 特定のコマンドだけ隔離 DB で動かす | `./script/e2e-isolated-db.sh run pnpm test:e2e:playwright` |
+| DB を立てたままにして中を調べる | `./script/e2e-isolated-db.sh up <新しい絶対パス>` → 終わったら `down <同じパス>` |
 
-- `pnpm exec tsx script/reset-e2e-db.ts` が標準経路として **DROP DATABASE + CREATE DATABASE** を実行する（extension・grant・`drizzle.__drizzle_migrations` を含む全状態を消去）。DROP は対象 DB へ接続したまま打てないため、同一エンドポイントの保守 DB（`neondb` → `postgres` → `template1` の順で最初に繋がるもの）経由で発行する。保守 DB 内のデータには触れない。
-- 接続 role に CREATEDB が無い等で DB 単位の作り直しができない場合は、`public` / `drizzle` / `skillsheet_private` の DROP CASCADE + `public` 再作成へ自動フォールバックする。本アプリのオブジェクトはすべてスキーマ配下のため結果は同等。
-- 誤爆防止として、URL の dbname が `*_e2e` で終わらない場合はスクリプトが拒否する（`neondb` / `postgres` / `template*` は常に拒否）。
-- リセット後は schema 不在になるため、続く `Install document boundary` ステップは「完全 install」経路を通る。boundary role（`skillsheet_document_reader/writer`）は cluster 全域で共有され残るため、install SQL には `-v allow_existing_role=on` を渡して既存 role を再利用する（role は共有・schema は DB 単位、という非対称への対応）。
-- boundary install 後の権限付与は、workflow 内で一時的に `GRANT skillsheet_document_reader/writer TO CURRENT_USER` → `SET ROLE` → `GRANT USAGE/EXECUTE` + `principals` upsert → `REVOKE`（membership の貸し出しと返却）という経路を取る。接続ユーザーへの直接 membership は残さない（SET ROLE 迂回による境界関数 bypass を防ぐため）。
-- `skillsheet_e2e` は全 PR/実行で共有の1本なので、ci.yml の e2e 脚は job レベルの `concurrency`（`e2e-shared-db` グループ）で直列化する。同時実行すると互いが相手の DB を drop して両方失敗する。待機枠は1つのため、立て続けに来た実行は古い待機側がキャンセルされる（re-run で復帰）。
+必要なのは PostgreSQL 16 以上のサーバー（`initdb` / `pg_ctl`）と `psql`。**非 root の Linux で動かす**（`setsid` と Debian 系の `/usr/lib/postgresql/*/bin` を前提にしている。macOS などでは `PG_BIN` で bin ディレクトリを指定し、`setsid` を入れる）。ubuntu-latest には最初から入っている。`SESSION_SECRET` / `VIEWER_CODE` / `REVALIDATE_SECRET` は従来どおり `.env.local`（CI は secret）から読まれる。DB だけが隔離 DB に置き換わる。
 
-Neon branch を毎回作る案（案A）は `NEON_API_KEY` secret が未設定のため未採用。branch は親のデータを copy-on-write で引き継ぐため、残渣を抱えた DB を派生させるだけになり、真に fresh な DB には branch 上で別 DB を作る必要がある。API key を用意しても管理コストが上がるだけで、現行の drop+create と効果は変わらない。
+**仕組み**
+- Unix ソケットだけで待ち受ける（TCP は閉じる）。ソケットのディレクトリは作業ディレクトリ配下の `0700`
+- アプリは `@neondatabase/serverless` の WebSocket ドライバで DB に入るため、`script/e2e-db-bridge.ts`（`isolated-db-bridge.ts`）が 127.0.0.1 の WebSocket から Unix ソケットへ橋渡しし、`script/isolated-neon-preload.mjs`（`NODE_OPTIONS=--import ...`）がドライバの向け先を切り替える。アプリのコードは変えない
+- 接続する role `e2e_owner` は、スーパーユーザーではなく role を作れる所有者（`neondb_owner` に近い形。完全に同じではなく、本番の実行時 role よりは強い）にしてある。スーパーユーザーだと GRANT の漏れが e2e で見えなくなる
+- 実行ごとに `migration` → `bootstrap-owner.ts` で一時オーナー作成 → 文書境界（`install-skillsheet-{read,write}-boundary.sql`）→ `grant-e2e-runtime.sql`（`principals` の写像と最小権限）→ 履歴（`install-document-history.sql`、`grant-e2e-history.sql`）の順に当てる。接続 role への直接 membership は残さない（SET ROLE 迂回による境界関数 bypass を防ぐため）
+
+**守り（#346）**: `playwright.config.ts` は、`.env.local` を読む**前**に `script/require-isolated-db.ts` で向け先を確かめ、隔離 DB 以外（`DATABASE_URL` が違う、橋渡しの指定が無い、`NODE_OPTIONS` に preload が無い）なら起動しない。`script/headless-e2e.mjs`（`pnpm test:e2e`）も同じ関門（実体は `script/require-isolated-db.mjs`）を最初に通すので、隔離 DB の外では単独で実行できない。`.env.local` の正本の `DATABASE_URL` を拾って本番データを壊す事故を、手順の約束ではなく起動時の関門で防ぐ。
+
+**以前の方式との違い**: 以前は本番と同じ Neon プロジェクト内の共有 DB `skillsheet_e2e` を実行冒頭で drop + create していた。別の実行と同時に走ると互いの DB を消し合うため、全 run を `e2e-shared-db` グループで直列化していたが、待機枠は 1 つだけで、新しい実行が来ると古い待機は cancel され、緑の PR が何度も押し出された。実行ごとに DB を持つ今の方式では直列化そのものが要らない。**検証対象外になったもの**: Neon の pooler（`-pooler`、transaction モード）経由の挙動、TLS（wss）、照合順序（隔離 DB は `--locale=C`）。これらは e2e では見えない。Neon の branch を毎回作る案は `NEON_API_KEY` が要り、親のデータを引き継ぐため採らなかった。
+
+`E2E_DATABASE_URL`（GitHub secret、`.env.e2e`）はもう使わない。リポジトリの secret からは削除してよい。
 
 ### Google Drive 保存のセットアップ（#384）
 

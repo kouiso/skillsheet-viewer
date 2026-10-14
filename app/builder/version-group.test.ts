@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VersionSummary } from '@/db/document-history';
-import { groupVersions, type VersionRow } from './version-group';
+import { groupVersions, MAX_SPAN_MS, type VersionRow } from './version-group';
 
 const base = Date.parse('2026-10-11T03:00:00Z');
 // 引数は古い順に書き、一覧と同じ新しい順に並べ替えて渡す。
@@ -53,6 +53,48 @@ describe('自動保存の版を一覧でたたむ', () => {
     // どの版も必ずどれか1行に1回だけ入る（脱落・重複なし）
     const flat = rows2.flat();
     expect(flat).toEqual(all.map((v) => v.revision));
+  });
+
+  it('まとまりの最新からちょうど10分あいた保存は同じまとまりに入れない', () => {
+    // 新しい側(10分)から見て、0分の版は差がちょうど10分。他は2分未満の間隔でつながっている。
+    const input = versions([0], [1.9], [3.8], [5.7], [7.6], [9.5], [10]);
+    expect(shape(groupVersions(input))).toEqual([['7', '6', '5', '4', '3', '2'], '1']);
+    // 9.9分なら同じまとまりに入る。
+    expect(shape(groupVersions(versions([0.1], [1.9], [3.8], [5.7], [7.6], [9.5], [10])))).toEqual([
+      ['7', '6', '5', '4', '3', '2', '1'],
+    ]);
+  });
+
+  it('時刻が版番号の順と逆（並行した保存）でも、版は脱落・重複せずまとまる', () => {
+    // 版 2 のほうが版 3 より後の時刻になっている（recordedAt は DB の now() で、並行すると逆転しうる）。
+    const input = versions([0], [1.0], [0.5]);
+    const rows = groupVersions(input);
+    expect(
+      rows.flatMap((row) => (row.kind === 'single' ? [row.version.revision] : row.versions.map((v) => v.revision))),
+    ).toEqual(['3', '2', '1']);
+    expect(shape(rows)).toEqual([['3', '2', '1']]);
+    // 逆転が2分以上なら並行した保存ではない（時計のずれ・後からの投入）ので、別のまとまりにする。
+    // 符号付きの差で見ると、数時間逆転した版も同じまとまりに入り、「10:00〜翌 09:00 の編集」になってしまう。
+    expect(shape(groupVersions(versions([0], [5], [1])))).toEqual(['3', '2', '1']);
+    expect(shape(groupVersions(versions([0], [600], [1])))).toEqual(['3', '2', '1']);
+    // 時刻が逆向きに並び続けても、まとまりの最新から10分で区切る（符号付きの差では永遠につながってしまう）。
+    const reversedChain = versions([12], [10.5], [9], [7.5], [6], [4.5], [3], [1.5], [0]);
+    expect(shape(groupVersions(reversedChain))).toEqual([
+      ['9', '8', '7', '6', '5', '4', '3'],
+      ['2', '1'],
+    ]);
+    // 時刻がジグザグに並んでも、まとまりの時刻の幅（最小〜最大）は10分を超えない。
+    const zigzag = versions([0], [1.9], [3.8], [5.7], [7.6], [9.5], [7.7], [5.8], [3.9], [2.0], [0.1], [-1.8], [-3.7]);
+    for (const row of groupVersions(zigzag)) {
+      if (row.kind === 'single') continue;
+      const times = row.versions.map((v) => Date.parse(v.recordedAt));
+      expect(Math.max(...times) - Math.min(...times)).toBeLessThan(MAX_SPAN_MS);
+    }
+    // 幅は最小の時刻からも測る：新しい側から 5分 → 0分 と下がったあと 10.2分まで戻ると、最小(0)から 10.2 分で別のまとまり。
+    const dip = versions([10.2], [9], [7.5], [6], [4.5], [3], [1.5], [0], [1], [2], [3], [4], [5]);
+    expect(shape(groupVersions(dip))).toEqual([['13', '12', '11', '10', '9', '8', '7', '6', '5', '4', '3', '2'], '1']);
+    // 逆転が2分未満（並行した保存）なら同じまとまりに入る。
+    expect(shape(groupVersions(versions([0], [1.5], [1])))).toEqual([['3', '2', '1']]);
   });
 
   it('保存以外の版は常に1行で、前後のまとまりを分ける', () => {

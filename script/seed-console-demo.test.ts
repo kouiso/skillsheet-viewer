@@ -9,7 +9,7 @@ describe('console fixtureの作成再試行', () => {
   it('再読込した原稿でも同じjournalとsheet UUIDを使える', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'console-operation-'));
     try {
-      const first = await import('../src/db/fixture/console-demo');
+      const first = await import('../src/db/fixture/fictional-demo');
       const operation = prepareCreateOperation(
         join(directory, 'operation.json'),
         'owner',
@@ -17,7 +17,7 @@ describe('console fixtureの作成再試行', () => {
         first.buildConsoleDemoBlocks(),
       );
       vi.resetModules();
-      const second = await import('../src/db/fixture/console-demo');
+      const second = await import('../src/db/fixture/fictional-demo');
       const retry = prepareCreateOperation(
         join(directory, 'operation.json'),
         'owner',
