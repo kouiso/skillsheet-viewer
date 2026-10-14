@@ -66,6 +66,8 @@ for (const theme of ['light', 'dark'] as const) {
         expect(normal.unsupported).toEqual([]);
         expect(normal.measured).toBe(expected?.measured);
         expect(violations(normal)).toBe(expected?.baselineViolations);
+        // 記録値の撮り直しで合格条件が崩れないよう、通常表示は常に0件であること。
+        expect(violations(normal)).toBe(0);
         if (out) await page.screenshot({ path: `${out}/${theme}-${width}-normal.png` });
 
         await page
@@ -78,6 +80,8 @@ for (const theme of ['light', 'dark'] as const) {
           });
         const mutated = await page.evaluate(readContrastColors, undefined);
         expect(violations(mutated)).toBe(expected?.mutationDetected);
+        // 見出しを背景色にした変更は必ず検出されること。
+        expect(violations(mutated)).toBeGreaterThan(0);
         if (out) await page.screenshot({ path: `${out}/${theme}-${width}-mutated.png` });
       } finally {
         await context.close();
