@@ -1,7 +1,7 @@
 # 閲覧文字コントラストの検証記録
 
 Issue #369。2026-10-14に架空データだけのシートで確認した。
-閲覧実装の基準は main `3302ca8d6f1f2c2ed01e60e018309b0979b63245`。
+閲覧実装の基準は main [`a47db96e`](https://github.com/kouiso/skillsheet-viewer/commit/a47db96e459f16a99ccda2952ae091dd7ca8c082)（履歴の書き換え後のmain。画像と数値はこの上で撮り直した）。
 検証用DBは手元の使い捨てPostgreSQL。本番DBには接続していない。
 
 ## 実装と合格条件
@@ -71,8 +71,11 @@ CIと同じNodeと依存関係を使って次を実行する。
 
 ```sh
 pnpm run build
-pnpm test:playwright e2e/text-contrast.spec.ts e2e/contrast-render.spec.ts
+pnpm test:playwright e2e/text-contrast.spec.ts e2e/contrast-render.spec.ts e2e/text-contrast-synthetic.spec.ts
 ```
+
+`e2e/text-contrast-synthetic.spec.ts` は上の架空シートを作り、見出しの変更まで同じ手順で再計測して
+`result.json` と一致することを確かめる。`CONTRAST_EVIDENCE_OUT=<dir>` を付けると同じ手順の画像8枚を書き出す。
 
 検査器自体の低コントラスト・透明層・未対応背景の負例は
 `e2e/contrast-render.spec.ts` にある。
