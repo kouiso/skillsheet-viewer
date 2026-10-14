@@ -166,6 +166,18 @@ beforeEach(() => {
   vi.stubEnv('SLACK_BOT_TOKEN', 'xoxb-test');
   vi.stubEnv('SLACK_CHANNEL_ID', 'C1');
   vi.stubEnv('DEVIN_USER_ID', 'U_DEVIN');
+  // 呼び出し側の環境に左右されないよう、リレーの設定変数はすべて空にして既定値を使わせる
+  for (const name of [
+    'DEVIN_MODE',
+    'TRIGGER_LABEL',
+    'QUEUE_LABEL',
+    'WAITING_LABEL',
+    'FAILED_LABEL',
+    'DEVIN_PROJECT_NUMBER',
+    'DEVIN_FIELD_NAME',
+  ]) {
+    vi.stubEnv(name, '');
+  }
   vi.stubGlobal('fetch', world.fetch);
   // sweep の Slack レート対策の 1 秒待ちを飛ばす
   vi.stubGlobal('setTimeout', (fn: () => void) => {
