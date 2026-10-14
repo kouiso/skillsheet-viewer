@@ -15,7 +15,7 @@ pg_ctl -D "$run_dir/data" -l "$run_dir/server.log" -o "-c listen_addresses='' -k
 args=(-X -v ON_ERROR_STOP=1 -h "$run_dir" -p 55449 -U history_admin -d postgres)
 printf '私用証跡: %s\n' "$run_dir"
 for migration in "$repo_dir"/drizzle/migration/*.sql; do psql "${args[@]}" -f "$migration" >>"$run_dir/migration.log" 2>&1; done
-for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary install-document-history test-skillsheet-read-boundary test-skillsheet-write-boundary test-document-history; do
+for stage in install-skillsheet-read-boundary install-skillsheet-write-boundary install-document-history install-document-history-retention test-skillsheet-read-boundary test-skillsheet-write-boundary test-document-history test-document-history-retention; do
  psql "${args[@]}" -f "$repo_dir/script/sql/$stage.sql" >"$run_dir/$stage.log" 2>&1
  printf '%s: PASS\n' "$stage"
 done
