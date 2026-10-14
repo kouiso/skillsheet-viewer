@@ -121,7 +121,11 @@ test('本番経路のブラウザ toBlob PDF に日本語グリフが描画さ�
   const japanese = distinctJapaneseCodePoints(extracted);
 
   expect(japanese.size, 'PDF テキスト層にひらがな・カタカナ・漢字が含まれること').toBeGreaterThan(0);
-  // プロフィールの役割タイトル「フルスタックエンジニア」が含まれることを確認（単に日本語の
+  // プロフィールの役割タイトル（fixture の先頭の語）が含まれることを確認（単に日本語の
   // 文字があるだけではなく、実コンテンツのグリフが描画されていることを担保する）。
-  expect(extracted).toContain('フルスタック');
+  // 文字列を直書きすると fixture の差し替えで黙って乖離するため、fixture から読む。
+  const profile = blocks.find((block) => block.type === 'profile');
+  const roleTitle = profile?.type === 'profile' ? profile.data.title.split(' / ')[0] : '';
+  expect(roleTitle, 'fixture にプロフィールの役割タイトルがあること').not.toBe('');
+  expect(extracted).toContain(roleTitle);
 });
