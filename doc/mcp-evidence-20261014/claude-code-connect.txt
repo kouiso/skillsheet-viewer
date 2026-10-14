@@ -1,0 +1,17 @@
+claude 2.1.291 (Claude Code) / HEAD b45efe7d9e499655171e0b7b2c827f76b5f63f5d / 2026-10-14T13:50:25Z
+$ claude mcp add --scope local --transport http skillsheet https://skill-sheet-snowy.vercel.app/api/mcp
+Added HTTP MCP server skillsheet with URL: https://skill-sheet-snowy.vercel.app/api/mcp to local config
+File modified: /home/kouiso/.claude/.claude.json [project: /tmp/ss331]
+$ claude mcp get skillsheet
+skillsheet:
+  Scope: Local config (private to you in this project)
+  Status: ! Needs authentication
+  Type: http
+  URL: https://skill-sheet-snowy.vercel.app/api/mcp
+
+To remove this server, run: claude mcp remove skillsheet -s local
+$ claude mcp list
+Checking MCP server health…
+
+code-review-graph: uvx code-review-graph serve - ✔ Connected
+skillsheet: https://skill-sheet-snowy.vercel.app/api/mcp (HTTP) - ! Needs authentication
