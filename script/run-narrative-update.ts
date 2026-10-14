@@ -10,7 +10,6 @@
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
-import { z } from 'zod';
 import { createDb, type Database } from '../src/db/client';
 import { canonicalJson } from '../src/db/document-contract';
 import { createDocumentService, type DocumentSnapshot } from '../src/db/document-service';
@@ -23,6 +22,7 @@ import {
   type NarrativeJournalEntry,
   narrativeChangeId,
   readNarrativeJournal,
+  validateNarrativeJournalEntry,
 } from './narrative-journal';
 import { type NarrativeProposal, proposeNarrativeUpdate, verifyNarrativeProposal } from './narrative-proposal';
 import { persistPrivateRepairRecord, readPrivateRepairRecord } from './repair-proposal-file';
@@ -150,22 +150,8 @@ async function approveNarrative(
   return approval;
 }
 
-const journalEntrySchema = z
-  .object({
-    version: z.literal(1),
-    state: z.enum(['approved', 'db-applied', 'sync-pending', 'synced', 'reverted']),
-    owner: z.string().min(1),
-    sheetId: z.string().min(1),
-    expectedRevision: z.string().regex(/^\d+$/),
-    beforeHash: z.string().min(1),
-    afterHash: z.string().min(1),
-    changeIds: z.array(z.string().min(1)),
-    at: z.iso.datetime(),
-  })
-  .strict();
-
 /**
- * journal の全行をスキーマで検証してから、この操作（owner・sheetId・revision・hash・change一覧）と
+ * journal の全行を保存契約（validateNarrativeJournalEntry）で検証してから、この操作（owner・sheetId・revision・hash・change一覧）と
  * 同一の行だけを記録済みとして扱う。不正行は重複抑止に使わず拒否する。
  */
 function recordedJournalStates(
@@ -174,9 +160,8 @@ function recordedJournalStates(
   proposal: NarrativeProposal,
 ): Set<NarrativeJournalEntry['state']> {
   const entries = journal.map((raw) => {
-    const parsed = journalEntrySchema.safeParse(raw);
-    if (!parsed.success) throw new Error('INVALID_JOURNAL_ENTRY');
-    return parsed.data;
+    validateNarrativeJournalEntry(raw);
+    return raw;
   });
   const identity = journalEntry('approved', owner, proposal);
   const changeIds = canonicalJson(identity.changeIds);

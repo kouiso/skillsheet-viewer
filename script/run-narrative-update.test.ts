@@ -46,7 +46,8 @@ vi.mock('./narrative-journal', async (importOriginal) => {
       if (state.partialJournal) throw new Error('INVALID_JOURNAL_ENTRY');
       return structuredClone(state.journal);
     },
-    narrativeChangeId: () => 'synthetic-change',
+    narrativeChangeId: actual.narrativeChangeId,
+    validateNarrativeJournalEntry: actual.validateNarrativeJournalEntry,
     appendNarrativeJournal: (_path: string, entry: { state: string; beforeHash: string; afterHash: string }) => {
       if (state.failJournal) {
         state.failJournal = false;
