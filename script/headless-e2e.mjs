@@ -4,6 +4,11 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import process from 'node:process';
+import { assertIsolatedE2eEnv } from './require-isolated-db.mjs';
+
+// 本番・共有の DB を指したまま起動して画面を踏む事故（#346）を防ぐ。.env.local に本番の URL があっても、
+// ここで止まる。
+assertIsolatedE2eEnv(process.env);
 
 const appPort = 3210;
 const debuggingPort = 9222;
@@ -181,7 +186,7 @@ const server = start('pnpm', ['start'], {
   env: {
     ...process.env,
     PORT: String(appPort),
-    DATABASE_URL: process.env.DATABASE_URL ?? 'postgres://e2e.invalid/e2e',
+    DATABASE_URL: process.env.DATABASE_URL,
     SESSION_SECRET: process.env.SESSION_SECRET ?? 'e2e-session-secret-at-least-32-characters',
     VIEWER_CODE: process.env.VIEWER_CODE ?? 'e2e-viewer-code',
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? 'e2e-better-auth-secret-at-least-32-characters',

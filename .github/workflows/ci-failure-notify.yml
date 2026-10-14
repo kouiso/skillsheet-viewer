@@ -1,11 +1,12 @@
 name: CI Failure Slack Notify
 
-# 監視対象の workflow が main / develop で落ちたら Slack へ通知し、続けて Devin を呼ぶ。
-# 夜間の実データ検査（PDF / XLSX）は DB 本文の変化だけでも落ちるため、コードの差分を待たずに
-# Devin へ調査を渡す。ただし同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
+# 監視対象の workflow が main / develop で落ちたら Slack へ通知する。Devin を呼ぶのは CI / Security Scan の
+# push 失敗だけ（下の DEVIN_TARGET）。同じ失敗が毎朝続くたびに呼ぶと Devin の同時セッション上限を
 # 食い潰す（09-20 / 09-22 に実際に起動失敗した）ので、未解決の失敗を workflow×ブランチ×起動契機
-# ごとに open issue 1 本で持ち、issue が無い時だけ Devin を呼ぶ。同じ契機で次に成功したら issue を
-# 閉じ、次の失敗で再び呼べる状態へ戻す。
+# ごとに open issue 1 本で持つ。Devin を呼ぶ workflow は、issue が無い時だけ呼び、起動を確認できたら
+# issue を切る。呼ばない workflow（定期の PDF / XLSX 検査、Semgrep など）も、追跡先が無いと毎朝 Slack に
+# 流れるだけなので、issue が無ければ切る（手動実行 workflow_dispatch は復旧の契機が無いので切らない）。
+# 同じ契機で次に成功したら issue を閉じ、次の失敗で再び通知・呼び出しができる状態へ戻す。
 on:
   workflow_run:
     workflows:
@@ -14,6 +15,7 @@ on:
       - "PR Labeler"
       - "PDF Layout Check"
       - "XLSX Format Check"
+      - "Real Data Check (main)"
       - "Security Audit"
       - "Security Scan"
       - "Semgrep"
@@ -51,9 +53,10 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository &&
       !startsWith(github.event.workflow_run.event, 'pull_request')
     env:
-      # Devin（有料・同時セッション上限あり）を呼ぶのは CI / Security Scan の push 失敗だけ。
+      # Devin（有料・同時セッション上限あり）を呼ぶのは CI / Security Scan / Real Data Check (main) の
+      # push 失敗だけ。どれも「直前に merge した変更」が原因の候補になる失敗。
       # 定期チェックや Deploy Smoke の失敗は Slack 通知までで止め、Devin セッションを消費しない。
-      DEVIN_TARGET: ${{ contains(fromJSON('["CI","Security Scan"]'), github.event.workflow_run.name) && github.event.workflow_run.event == 'push' }}
+      DEVIN_TARGET: ${{ contains(fromJSON('["CI","Security Scan","Real Data Check (main)"]'), github.event.workflow_run.name) && github.event.workflow_run.event == 'push' }}
       WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
       HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
       RUN_EVENT: ${{ github.event.workflow_run.event }}
@@ -137,9 +140,10 @@ jobs:
           echo "ts=$(echo "$RESPONSE" | jq -r '.ts')" >> "$GITHUB_OUTPUT"
 
       # 検索に失敗しても number は空になり、Devin を呼ぶ側へ倒れる（黙って呼ばないより重複の方がまし）。
+      # Devin を呼ばない workflow も、追跡 issue の有無を見る（title を下の起票でも使うため、常に実行する）。
       - name: Find open failure issue
         id: tracking
-        if: env.DEVIN_TARGET == 'true'
+        if: ${{ !cancelled() }}
         continue-on-error: true
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         with:
@@ -267,11 +271,20 @@ jobs:
             exit 1
           fi
 
+      # Devin を呼ばない workflow（DEVIN_TARGET が false）も、失敗の追跡先が無いと毎朝 Slack に流れる
+      # だけになるため、追跡 issue はここで切る。Devin を呼んだ場合だけは、起動を確認できた時に限る
+      # （起動に失敗したら issue を作らず、次の失敗で呼び直すため）。
       - name: Open failure issue
-        if: steps.started.outputs.status == 'started'
+        # workflow_dispatch の失敗は、同じ契機で次に成功するのが手動実行だけで自動では閉じないので切らない。
+        if: >-
+          ${{ !cancelled() &&
+          github.event.workflow_run.event != 'workflow_dispatch' &&
+          steps.tracking.outputs.number == '' &&
+          (env.DEVIN_TARGET != 'true' || steps.started.outputs.status == 'started') }}
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           TITLE: ${{ steps.tracking.outputs.title }}
+          DEVIN_INVOKED: ${{ steps.started.outputs.status }}
         with:
           script: |
             const label = process.env.TRACKING_LABEL;
@@ -287,19 +300,30 @@ jobs:
                 description: 'main / develop の workflow 失敗を追跡する（ci-failure-notify.yml が開閉する）',
               });
             }
+            // 検索ステップが起動前に失敗すると title が空になる。close-on-recovery と同じ形で組み直す。
+            const title =
+              process.env.TITLE || `[CI失敗] ${process.env.WORKFLOW_NAME} (${process.env.HEAD_BRANCH}, ${process.env.RUN_EVENT})`;
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: process.env.TITLE,
+              title,
               labels: [label],
               body: [
-                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗し、Slack で Devin に調査を依頼した（起動を確認済み）。`,
+                `${process.env.WORKFLOW_NAME} が ${process.env.HEAD_BRANCH} ブランチ（${process.env.RUN_EVENT}）で失敗。${
+                  process.env.DEVIN_INVOKED === 'started'
+                    ? 'Slack で Devin に調査を依頼した（起動を確認済み）。'
+                    : 'Devin 呼び出し対象外の workflow のため Slack 通知のみ（追跡用にこの issue を起票）。'
+                }`,
                 '',
                 `- run: ${process.env.RUN_URL}`,
                 `- commit: ${process.env.COMMIT_SHA}`,
                 '',
-                'この issue が open の間は、同じ workflow が同じ契機で再び失敗しても Devin を呼ばない（同時セッション上限を守るため）。',
-                '同じ契機で次に成功すると自動で close される。Devin が動いていない時は、この issue を手で close すると次の失敗で再び呼ばれる。',
+                process.env.DEVIN_INVOKED === 'started'
+                  ? 'この issue が open の間は、同じ workflow が同じ契機で再び失敗しても Devin を呼ばない（同時セッション上限を守るため）。'
+                  : 'この issue が open の間は、同じ失敗が続いても新しい issue は増えない（失敗は Slack に通知される）。',
+                process.env.DEVIN_INVOKED === 'started'
+                  ? '同じ契機で次に成功すると自動で close される。Devin が動いていない時は、この issue を手で close すると次の失敗で再び呼ばれる。'
+                  : '同じ契機で次に成功すると自動で close される。',
                 '',
                 // 成功で閉じる時に「この失敗より後に始まった実行か」を比べるための記録。
                 `<!-- last-failed-run-started-at: ${process.env.RUN_STARTED_AT} -->`,
@@ -307,7 +331,7 @@ jobs:
             });
 
       - name: Record recurrence
-        if: steps.tracking.outputs.number != ''
+        if: ${{ !cancelled() && steps.tracking.outputs.number != '' }}
         uses: actions/github-script@373c709c69115d41ff229c7e5df9f8788daa9553 # v9
         env:
           ISSUE_NUMBER: ${{ steps.tracking.outputs.number }}
@@ -333,12 +357,17 @@ jobs:
       # Devin を呼ばなかった理由を通知スレッドに残す。黙って呼ばないと、人間には依頼が漏れたのか
       # 対応中なのか区別がつかない。
       - name: Point thread at open issue
-        if: steps.tracking.outputs.number != ''
+        # 再発の記録（API）が失敗しても、通知スレッドへの案内は出す。スレッドの ts は Slack 通知が成功した時だけある。
+        if: ${{ !cancelled() && steps.slack.outcome == 'success' && steps.tracking.outputs.number != '' }}
         env:
           THREAD_TS: ${{ steps.slack.outputs.ts }}
           ISSUE_URL: ${{ steps.tracking.outputs.url }}
         run: |
-          TEXT="前回からの未解決の失敗なので Devin は呼び直していません（対応状況: <${ISSUE_URL}|issue>）。Devin が動いていない場合は issue を close すると、次の失敗で再び呼びます。"
+          if [ "$DEVIN_TARGET" = true ]; then
+            TEXT="前回からの未解決の失敗なので Devin は呼び直していません（対応状況: <${ISSUE_URL}|issue>）。Devin が動いていない場合は issue を close すると、次の失敗で再び呼びます。"
+          else
+            TEXT="前回からの未解決の失敗です。追跡中の issue はこちら: <${ISSUE_URL}|issue>（Devin は呼ばない workflow です）。"
+          fi
           PAYLOAD=$(jq -n --arg channel "$SLACK_CHANNEL_ID" --arg thread_ts "$THREAD_TS" --arg text "$TEXT" \
             '{channel: $channel, thread_ts: $thread_ts, text: $text}')
           RESPONSE=$(curl -sf -X POST "https://slack.com/api/chat.postMessage" \

@@ -106,7 +106,7 @@ function groupStart(recordedAt: string) {
     minute: '2-digit',
   });
 }
-// まとまりは最長10分だが日付をまたぐことはあるので、そのときだけ終わりにも日付を出す。
+// まとまりは時刻の幅が最長10分未満だが、日付をまたぐことはあるので、そのときだけ終わりにも日付を出す。
 // 同じ分のうちに収まったときは「07:06〜07:06」と並べず、終わりを出さない（null）。
 function groupEnd(startAt: string, endAt: string) {
   const start = new Date(startAt);
@@ -114,6 +114,15 @@ function groupEnd(startAt: string, endAt: string) {
   const time = (date: Date) => date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
   if (start.toDateString() !== end.toDateString()) return groupStart(endAt);
   return time(start) === time(end) ? null : time(end);
+}
+// まとまりの時刻の範囲。recordedAt は DB の now() で、並行した保存では版番号の順と逆になりうるため、
+// 位置（最古・最新の版）ではなく時刻の最小・最大で取る。groupVersions が作るまとまりは、
+// 全員が読める時刻を持つ（読めない版は単独の行になる）。
+function groupSpan(versions: readonly VersionSummary[]) {
+  const time = (version: VersionSummary) => Date.parse(version.recordedAt);
+  const first = versions.reduce((a, b) => (time(b) < time(a) ? b : a));
+  const last = versions.reduce((a, b) => (time(b) > time(a) ? b : a));
+  return { first: first.recordedAt, last: last.recordedAt };
 }
 const control =
   'min-h-11 rounded border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
@@ -479,22 +488,23 @@ export function VersionHistory({
               const open = expanded.has(newest.revision);
               const listId = `version-group-${newest.revision}`;
               const selected = group.versions.some((version) => version.revision === to);
-              const end = groupEnd(oldest.recordedAt, newest.recordedAt);
+              const span = groupSpan(group.versions);
+              const end = groupEnd(span.first, span.last);
               return (
                 <li key={`group-${newest.revision}`}>
                   <div className="flex min-w-0 gap-1">
                     <button
                       type="button"
-                      className={`${control} min-w-0 flex-1 text-left ${selected ? 'border-primary bg-accent text-accent-foreground' : ''}`}
-                      aria-current={selected ? 'true' : undefined}
+                      className={`${control} min-w-0 flex-1 text-left ${selected && !open ? 'border-primary bg-accent text-accent-foreground' : ''}`}
+                      aria-current={selected && !open ? 'true' : undefined}
                       disabled={busy}
                       onClick={() => selectVersion(newest.revision)}
                     >
                       <span className="block font-semibold">
-                        <time dateTime={oldest.recordedAt}>{groupStart(oldest.recordedAt)}</time>
+                        <time dateTime={span.first}>{groupStart(span.first)}</time>
                         {end !== null && (
                           <>
-                            〜<time dateTime={newest.recordedAt}>{end}</time>
+                            〜<time dateTime={span.last}>{end}</time>
                           </>
                         )}
                         の編集
@@ -508,7 +518,7 @@ export function VersionHistory({
                       type="button"
                       className={`${control} shrink-0`}
                       aria-expanded={open}
-                      aria-controls={listId}
+                      aria-controls={open ? listId : undefined}
                       aria-label={`版 ${oldest.revision}〜${newest.revision} の${open ? '内訳を閉じる' : '内訳を開く'}`}
                       onClick={() =>
                         setExpanded((previous) => {
