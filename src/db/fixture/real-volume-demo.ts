@@ -2,7 +2,7 @@
  * 実データ相当のボリューム（19社 / 32案件）を持つ検証用シートデータ・作成関数。
  *
  * 背景（#143 / #153 X-2）:
- * 全画面デザイン監査（design-audit.spec.ts）は console-demo.ts の合成デモシート
+ * 全画面デザイン監査（design-audit.spec.ts）は fictional-demo.ts の架空デモシート
  * （11案件・8社）を対象にしていたため、実データ（19社/32案件）でのみ発生する
  * 320px 幅での横スクロール（#143）を検出できなかった。#143 の実測では
  * 「Q 社（自社サービス事業会社） · 13 名 · 継続中」＋長い役割名
@@ -16,7 +16,7 @@
  * 役割「サンプルエンジニア / サンプルエンジニアリングマネージャー」/ 会社
  * 「Q社（自社サービス事業会社）」/ チーム13名 / 継続中）はそのまま再現している。
  *
- * profile / stats / skills ブロックは console-demo.ts のものを流用し、project
+ * profile / stats / skills ブロックは fictional-demo.ts（架空）のものを流用し、project
  * ブロックのみをこのボリュームで差し替える。
  */
 
@@ -27,7 +27,7 @@ import { getDb } from '../client';
 import { createDocumentService, DocumentError } from '../document-service';
 import { realVolumeDemoFixtures } from '../schema';
 import { getOwnerId } from '../skillsheet';
-import { buildConsoleDemoBlocks } from './console-demo';
+import { buildConsoleDemoBlocks } from './fictional-demo';
 
 const newId = () => crypto.randomUUID();
 
@@ -231,7 +231,7 @@ export function buildRealVolumeDemoBlocks(): BlockInput[] {
   const nonProjectBlocks = buildConsoleDemoBlocks().filter((b) => b.type !== 'project');
   // スキルマトリクスの語中折れ（#393 項目2）を再現するため、空白を含まない
   // 'TypeScript/JavaScript' を合成スキルとして先頭カテゴリへ追加する
-  // （console-demo の 'TypeScript / JavaScript' は空白があり別物）。
+  // （fictional-demo の 'TypeScript / JavaScript' は空白があり別物）。
   const firstSkillsIndex = nonProjectBlocks.findIndex((b) => b.type === 'skills');
   return [
     ...nonProjectBlocks.map((block, i) =>
