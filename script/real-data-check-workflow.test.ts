@@ -58,6 +58,8 @@ function fixtureJq(): string {
 function runStep(name: string, cwd: string, env: Record<string, string>) {
   const executable = fixtureJq();
   mkdirSync(join(cwd, 'bin'), { recursive: true });
+  // 同じ cwd で step を複数回呼ぶと前回の link が残る。貼り直して冪等にする。
+  rmSync(join(cwd, 'bin', 'jq'), { force: true });
   symlinkSync(executable, join(cwd, 'bin', 'jq'));
   return spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript(name)], {
     cwd,

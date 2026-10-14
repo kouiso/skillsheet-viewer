@@ -71,30 +71,21 @@ describe.skipIf(!url)('Neon branch save path (M10_NEON_BRANCH_URL)', () => {
       // 切断が狙いの接続は error イベントを非同期で emit する。listener が無いと
       // EventEmitter の未処理 error としてテスト自体が落ちるため、期待値として捕捉する。
       const victimErrors: { code?: string }[] = [];
-      (victim as unknown as NodeJS.EventEmitter).on('error', (e: { code?: string }) =>
-        victimErrors.push(e),
-      );
+      (victim as unknown as NodeJS.EventEmitter).on('error', (e: { code?: string }) => victimErrors.push(e));
       try {
         await victim.query('BEGIN');
         await victim.query(
           "INSERT INTO skillsheet_private.principals (login_name, owner_id) VALUES ($1, 'm10-probe-owner')",
           [marker],
         );
-        const { rows: pidRows } = await victim.query<{ pg_backend_pid: number }>(
-          'SELECT pg_backend_pid()',
-        );
+        const { rows: pidRows } = await victim.query<{ pg_backend_pid: number }>('SELECT pg_backend_pid()');
         const pid = pidRows[0].pg_backend_pid;
-        const { rows: term } = await pool.query<{ ok: boolean }>(
-          'SELECT pg_terminate_backend($1) AS ok',
-          [pid],
-        );
+        const { rows: term } = await pool.query<{ ok: boolean }>('SELECT pg_terminate_backend($1) AS ok', [pid]);
         expect(term[0].ok).toBe(true);
         // backend が殺れた接続では COMMIT も次の問い合わせも失敗する
         await expect(victim.query('COMMIT')).rejects.toThrow();
         // 切断通知(57P01)は COMMIT 失敗と前後しうるため、短い猶予で到着を待つ
-        await expect
-          .poll(() => victimErrors.some((e) => e.code === '57P01'), { timeout: 10_000 })
-          .toBe(true);
+        await expect.poll(() => victimErrors.some((e) => e.code === '57P01'), { timeout: 10_000 }).toBe(true);
       } finally {
         victim.release();
       }
