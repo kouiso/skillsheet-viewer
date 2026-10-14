@@ -50,7 +50,7 @@ describe('resolveDisplayedStats', () => {
   });
 
   it('末尾に「数」が無い見出し「参画プロジェクト」も実枚数へ置き換える', () => {
-    // fixture の数字カードが使う表記（console-demo.ts）。「数」付き一覧だけでは
+    // fixture の数字カードが使う表記（fictional-demo.ts）。「数」付き一覧だけでは
     // 一致せず手入力値が残っていた（issue #395）。
     const projects = [project('p1', '2020.01 — 2020.12'), project('p2', '2021.01 — 2021.12')];
     expect(resolveDisplayedStats([{ value: '30', unit: '件', label: '参画プロジェクト' }], projects)).toEqual([

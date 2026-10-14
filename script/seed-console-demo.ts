@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getDb } from '../src/db/client';
 import { createDocumentService } from '../src/db/document-service';
-import { buildConsoleDemoBlocks, CONSOLE_DEMO_TITLE } from '../src/db/fixture/console-demo';
+import { buildConsoleDemoBlocks, CONSOLE_DEMO_TITLE } from '../src/db/fixture/fictional-demo';
 import { getOwnerId } from '../src/db/skillsheet';
 import { prepareCreateOperation } from './create-operation';
 import { loadScriptEnv } from './env';

@@ -3,5 +3,5 @@
  * 載せていた頃は、閲覧画面のバンドルに検証専用のデータ生成コードが混ざる余地があった。
  * 利用側は `@/db/fixture` から読む（seed スクリプトと E2E だけ）。
  */
-export * from './console-demo';
+export * from './fictional-demo';
 export * from './real-volume-demo';
