@@ -3,6 +3,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, wr
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
+import { canonicalJson } from '../src/db/document-contract';
 import type { PeriodRepairProposal } from './period-repair-proposal';
 import { persistRepairProposal, readPrivateRepairRecord } from './repair-proposal-file';
 
@@ -57,6 +58,17 @@ describe('未承認修復案の非公開保存', () => {
     persistRepairProposal(path, proposal);
     expect(() => persistRepairProposal(path, { ...proposal, owner: 'owner-b' })).toThrow('PROPOSAL_FILE_CONFLICT');
     expect(readFileSync(path, 'utf8')).toBe(before);
+  });
+  itLinux('不正UTF-8の不変記録を読まず再保存も拒否する', () => {
+    const path = setup();
+    const value = { ...proposal, owner: '�' };
+    const [prefix, suffix] = canonicalJson(value).split('�');
+    const raw = Buffer.concat([Buffer.from(prefix), Buffer.from([0xff]), Buffer.from(suffix)]);
+    writeFileSync(path, raw, { mode: 0o600 });
+    expect(() => readPrivateRepairRecord(path)).toThrow('INVALID_REPAIR_RECORD');
+    // 置換後の文字列が同じでも元bytesが異なれば同一記録ではない。
+    expect(() => persistRepairProposal(path, value)).toThrow('PROPOSAL_FILE_CONFLICT');
+    expect(readFileSync(path)).toEqual(raw);
   });
   itLinux('既存FIFOは書き手を待たず拒否する', () => {
     const path = setup();

@@ -1,3 +1,4 @@
+import { isUtf8 } from 'node:buffer';
 import { closeSync, constants, fstatSync, fsyncSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { canonicalJson } from '../src/db/document-contract';
@@ -31,7 +32,8 @@ export function persistPrivateRepairRecord(path: string, record: unknown): void 
         if (!file.isFile() || (file.mode & 0o077) !== 0 || (process.getuid && file.uid !== process.getuid())) {
           throw new Error('PRIVATE_FILE_REQUIRED');
         }
-        if (readFileSync(existing, 'utf8') !== body) throw new Error('PROPOSAL_FILE_CONFLICT');
+        const raw = readFileSync(existing);
+        if (!isUtf8(raw) || raw.toString('utf8') !== body) throw new Error('PROPOSAL_FILE_CONFLICT');
         // 前回が書込み後・同期前に中断していても、成功を返す前に記録を永続化する。
         fsyncSync(existing);
         fsyncSync(dir);
@@ -53,7 +55,7 @@ export function persistPrivateRepairRecord(path: string, record: unknown): void 
 }
 
 /** 私有記録をJSONとして読む。戻り値の種別・承認内容は呼出元で検証する。 */
-export function readPrivateRepairRecord(path: string): unknown {
+export function readPrivateRepairText(path: string): string {
   const dir = openSync(dirname(path), constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try {
     const directory = fstatSync(dir);
@@ -69,15 +71,21 @@ export function readPrivateRepairRecord(path: string): unknown {
       if (!file.isFile() || (file.mode & 0o077) !== 0 || (process.getuid && file.uid !== process.getuid())) {
         throw new Error('PRIVATE_FILE_REQUIRED');
       }
-      const body = readFileSync(fd, 'utf8');
-      const record: unknown = JSON.parse(body);
-      // 重複キーや非canonical表現を受け入れず、保存関数が固定したbyte列だけを読む。
-      if (canonicalJson(record) !== body) throw new Error('INVALID_REPAIR_RECORD');
-      return record;
+      const raw = readFileSync(fd);
+      if (!isUtf8(raw)) throw new Error('INVALID_REPAIR_RECORD');
+      return raw.toString('utf8');
     } finally {
       closeSync(fd);
     }
   } finally {
     closeSync(dir);
   }
+}
+
+/** 私有JSON記録のbyte列と意味を照合する。 */
+export function readPrivateRepairRecord(path: string): unknown {
+  const body = readPrivateRepairText(path);
+  const record: unknown = JSON.parse(body);
+  if (canonicalJson(record) !== body) throw new Error('INVALID_REPAIR_RECORD');
+  return record;
 }
