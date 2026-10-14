@@ -29,6 +29,16 @@ describe.skipIf(!url)('Neon branch save path (M10_NEON_BRANCH_URL)', () => {
   beforeAll(async () => {
     db = createDb(url as string);
     pool = new Pool({ connectionString: url, max: 4 });
+    // 接続 principal は boundary role の ADMIN だけを持ち権限は継承しないため、
+    // 既定では runtime 経路の EXECUTE が無い。隔離 branch 上で自分へ runtime の SET を
+    // 付与して有効化する（ADMIN 保有者の自己 GRANT）。同一 GRANT は membership 行が
+    // 既にあると 42501 で落ちるため、EXECUTE が無い時だけ実行する。
+    const { rows: execPriv } = await pool.query<{ ok: boolean }>(
+      "SELECT has_function_privilege(current_user, 'skillsheet_private.create_sheet(uuid,text,jsonb,text)', 'EXECUTE') AS ok",
+    );
+    if (!execPriv[0]?.ok) {
+      await pool.query('GRANT skillsheet_runtime TO CURRENT_USER WITH SET TRUE');
+    }
     // 実行 principal（URL の role）の owner をブランチ側から引く。owner_id はハードコードしない。
     const { rows } = await pool.query<{ owner_id: string }>(
       'SELECT owner_id FROM skillsheet_private.principals WHERE login_name = current_user',
@@ -58,6 +68,12 @@ describe.skipIf(!url)('Neon branch save path (M10_NEON_BRANCH_URL)', () => {
     async () => {
       const marker = `m10-disconnect-probe-${randomUUID()}`;
       const victim = await pool.connect();
+      // 切断が狙いの接続は error イベントを非同期で emit する。listener が無いと
+      // EventEmitter の未処理 error としてテスト自体が落ちるため、期待値として捕捉する。
+      const victimErrors: { code?: string }[] = [];
+      (victim as unknown as NodeJS.EventEmitter).on('error', (e: { code?: string }) =>
+        victimErrors.push(e),
+      );
       try {
         await victim.query('BEGIN');
         await victim.query(
@@ -75,6 +91,10 @@ describe.skipIf(!url)('Neon branch save path (M10_NEON_BRANCH_URL)', () => {
         expect(term[0].ok).toBe(true);
         // backend が殺れた接続では COMMIT も次の問い合わせも失敗する
         await expect(victim.query('COMMIT')).rejects.toThrow();
+        // 切断通知(57P01)は COMMIT 失敗と前後しうるため、短い猶予で到着を待つ
+        await expect
+          .poll(() => victimErrors.some((e) => e.code === '57P01'), { timeout: 10_000 })
+          .toBe(true);
       } finally {
         victim.release();
       }
