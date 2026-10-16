@@ -56,7 +56,7 @@ jobs:
       # 供給網対策でタグではなく commit へ固定する（タグは上流で付け替えられる）。v4 の実体。
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Check file and directory naming
-        run: ./script/check-naming.sh
+        run: bash .github/ci/run.sh naming
 
   node:
     name: Node (${{ matrix.check-type }})
@@ -101,21 +101,25 @@ jobs:
         # 断片等）を検出するために使う（poppler-utils の pdftoppm は使わない設計）。
         run: sudo apt-get update && sudo apt-get install -y poppler-utils ghostscript imagemagick
 
+      - name: Shared CI entry contracts
+        if: matrix.check-type == 'lint'
+        run: python3 .github/ci/test_entry.py
+
       - name: Lint
         if: matrix.check-type == 'lint'
-        run: pnpm run lint
+        run: bash .github/ci/run.sh lint
 
       - name: Typecheck
         if: matrix.check-type == 'typecheck'
-        run: pnpm run type-check
+        run: bash .github/ci/run.sh typecheck
 
       - name: Test
         if: matrix.check-type == 'test'
-        run: pnpm run test
+        run: bash .github/ci/run.sh test
 
       - name: Build
         if: matrix.check-type == 'build'
-        run: pnpm run build
+        run: bash .github/ci/run.sh build
 
       # e2e は実行ごとに自分専用の使い捨て DB を持つ（正本の共有 DB には接続しない #346）。
       # 以前は共有 DB を実行冒頭で drop + create していたため、別の実行と同時に走ると互いの DB を消し合い、
@@ -171,7 +175,7 @@ jobs:
           REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
         # playwright は起動時に test-results/ 全体を消去する。headless-e2e の証跡
         # （test-results/e2e）が先に書かれていると消されるため、playwright を先に流す。
-        run: pnpm run test:e2e:playwright
+        run: bash .github/ci/run.sh playwright
 
       # Playwright が失敗しても headless E2E まで止めない（証跡 artifact を残すため）。
       - name: Headless browser E2E
@@ -182,7 +186,7 @@ jobs:
           SESSION_SECRET: ${{ secrets.SESSION_SECRET }}
           VIEWER_CODE: ${{ secrets.VIEWER_CODE }}
           REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
-        run: pnpm run test:e2e
+        run: bash .github/ci/run.sh headless
 
       - name: Upload E2E evidence
         if: matrix.check-type == 'e2e' && needs.changes.outputs.docs_only != 'true' && always()

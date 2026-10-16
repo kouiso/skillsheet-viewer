@@ -30,8 +30,16 @@ tasks:
   healthcheck:
     desc: "動作確認（命名規約・型チェック・テスト・ビルド）"
     cmds:
-      - ./script/check-naming.sh
-      - pnpm type-check
-      - pnpm test
-      - pnpm build
-      - echo "✅ Health check passed"
+      - task: ci:fast
+
+  ci:fast:
+    desc: "クラウドと同じ命名・lint・型・全単体テスト・ビルド"
+    cmds:
+      - python3 .github/ci/test_entry.py
+      - bash .github/ci/run.sh fast
+
+  ci:
+    desc: "共通CIと既存の隔離DBを使うPlaywright・headless E2E"
+    cmds:
+      - python3 .github/ci/test_entry.py
+      - bash .github/ci/run.sh full
