@@ -26,7 +26,7 @@
     "test:playwright": "NODE_OPTIONS=\"--conditions=react-server ${NODE_OPTIONS:-}\" playwright test",
     "test:e2e": "pnpm build && node script/headless-e2e.mjs",
     "test:e2e:playwright": "pnpm build && pnpm test:playwright",
-    "test:e2e:local": "./script/e2e-isolated-db.sh run sh -c \"pnpm test:e2e:playwright && pnpm test:e2e\"",
+    "test:e2e:local": "./script/e2e-isolated-db.sh run bash .github/ci/run.sh e2e-prepared",
     "verify:deployed-css": "node script/verify-deployed-css.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
