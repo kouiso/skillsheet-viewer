@@ -208,7 +208,5 @@ JWT は `/api/auth/jwks` で生成されたローカル DB の署名鍵を使い
 
 ## 未検証事項（SBI4 の残作業）
 
-- ブラウザ経由の OAuth 認可フロー（`/login` → `/consent` → code → token）の実測
-- claude.ai Custom Connector の実接続（オーナーの claude.ai ログインが必要）
-- 書き込みツールで実際に保存する経路の本番実測と、トークン失効の実測
-- Vercel 上での Fluid compute の設定確認
+残りと確認済みの範囲は [07 の「現状」](07-mcp-connection-runbook.md#現状2026-10-20) に一本化した。
+Fluid compute は 2026-10-20 に有効を確認済み。
