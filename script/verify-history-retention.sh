@@ -224,7 +224,8 @@ node -e 'const fs=require("node:fs");const [src,dst]=process.argv.slice(1);const
 "${monitor[@]}" --sample "$run_dir/sample-1.json" --sample "$run_dir/sample-2.json" >"$run_dir/monitor-normal.json"
 grep -q '"status": "normal"' "$run_dir/monitor-normal.json" || { printf '監視が normal を返さない\n' >&2; exit 1; }
 monitor_status=0
-"${monitor[@]}" --sample "$run_dir/sample-2.json" --warn-mib 1 --limit-mib 1 >"$run_dir/monitor-exceeded.json" || monitor_status=$?
+# 合成の履歴は 1MiB に満たないので、DB 全体（新規 cluster でも数 MiB ある）の上限を 1MiB にして超過させる。
+"${monitor[@]}" --sample "$run_dir/sample-2.json" --database-limit-mib 1 >"$run_dir/monitor-exceeded.json" || monitor_status=$?
 (( monitor_status == 3 )) && grep -q '"automaticAction": "none"' "$run_dir/monitor-exceeded.json" || { printf '上限超過が exit 3 にならない\n' >&2; exit 1; }
 # 書込み可能な transaction で取った観測は、監視が失敗として扱う。
 "${admin[@]}" -At -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-writable.json"
