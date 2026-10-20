@@ -18,7 +18,7 @@ Claude Code / claude.ai Custom Connector から、OAuth 2.1 で認証・認可�
 MCP クライアント（Claude Code / claude.ai / MCP Inspector）
   │  POST /api/mcp（JSON-RPC, Bearer token）
   ▼
-app/api/mcp/route.ts ── MCP_ENABLED が無い環境では 404
+app/api/mcp/route.ts ── MCP が無効な環境では 404（MCP_ENABLED=false、または本番以外で未設定）
   ▼
 requireMcpAuth（@better-auth/mcp）
   │  JWT 署名検証（/api/auth/jwks）・iss・aud・exp
@@ -147,9 +147,12 @@ Authentication の OAuth フローを通して全ツールを呼ぶ。
 
 ### ロールバック
 
-`MCP_ENABLED` を外す（または `'true'` 以外にする）だけで、`/api/mcp` と
-`.well-known` 経路は 404 に戻る。通常画面・tRPC・閲覧ゲートへの影響は無い。
-発行済みトークンは検証経路ごと塞がれるため追加作業は不要。
+本番では `MCP_ENABLED=false` を**明示して**再デプロイする。`/api/mcp` と `.well-known` 経路は 404 に戻る。
+通常画面・tRPC・閲覧ゲートへの影響は無い。発行済みトークンは検証経路ごと塞がれるため追加作業は不要。
+
+変数を消すだけ、または `'false'` 以外の値にするだけでは止まらない。`isMcpEnabled()`（`src/lib/mcp-config.ts`）は
+`'true'` と `'false'` 以外を未設定と同じに扱い、Vercel 本番（`VERCEL_ENV=production`）では有効と判定する。
+Vercel の環境変数は再デプロイするまで動いている関数に反映されない。
 
 ## 設計上の注意
 
@@ -207,7 +210,7 @@ JWT は `/api/auth/jwks` で生成されたローカル DB の署名鍵を使い
 - Vercel の実行ログ（production、直近 1 時間）で `/api/mcp` の 200・202・401・403・405 が記録され、
   error・warning・fatal は 0 件だった
 
-## 未検証事項（SBI4 の残作業）
+## 確認状況
 
 残りと確認済みの範囲は [07 の「現状」](07-mcp-connection-runbook.md#現状2026-10-21) に一本化した。
 Fluid compute は 2026-10-20 に有効を確認済み。

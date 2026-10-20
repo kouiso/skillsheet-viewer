@@ -2,7 +2,8 @@
 
 [06 Remote MCP](06-remote-mcp.md) の設計を前提に、Claude から本番の skillsheet-viewer へ MCP で接続し、
 動作を確かめるための手順をまとめる。**認証設定（Better Auth / OAuth / 環境変数）は変更しない。**
-手順はクライアント側の操作と読み取りの確認が中心で、書き込みは中身を変えない 1 回だけにする（2-2）。
+手順はクライアント側の操作と読み取りの確認が中心。書き込みは 2-2 だけで、保存される呼び出しは中身を変えない 1 回、
+続けて保存されない競合確認を 1 回行う。
 
 - 本番 URL: `https://skill-sheet-snowy.vercel.app/api/mcp`
 - 証跡: [mcp-evidence-20261014/](mcp-evidence-20261014/)（main `b45efe7d9` 時点）、
@@ -114,7 +115,8 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 - 失効の要求（`POST /api/auth/oauth2/revoke`）は JWT を受け付けない。400 `unsupported_token_type` が返り、
   同じトークンはそのまま通る（[tool-call-prod.txt](mcp-evidence-20261021/tool-call-prod.txt) の C）
 - refresh_token は発行されない。1 時間たつとクライアントは `claude mcp login` からやり直しになる
-- 今すぐ全部のトークンを止めたいときは [06 の「ロールバック」](06-remote-mcp.md#ロールバック)（`MCP_ENABLED` を外す）。
+- 今すぐ全部のトークンを止めたいときは [06 の「ロールバック」](06-remote-mcp.md#ロールバック)（`MCP_ENABLED=false` を明示して再デプロイ）。
+  変数を消すだけでは本番は有効のまま。
   **本番の環境変数の変更になるので、オーナーの承認を得てから行う。**
 
 ## 6. 証跡の残し方
@@ -134,6 +136,6 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 | 全 8 ツールの呼び出し（読み取りは値を返す、書き込みは競合・対象なし・入力不正で止まる） | 確認済み（tool-call-prod.txt。本番の中身は前後で同じ） |
 | 無効スコープ（閲覧だけのトークンで書き込み → 403） | 確認済み（tool-call-prod.txt の A） |
 | 競合（古い revision → CONFLICT） | 確認済み（tool-call-prod.txt の B） |
-| 失効 | 確認済み: JWT はサーバー側で失効できない（400）。止めるのはロールバックだけ（tool-call-prod.txt の C） |
+| 失効 | 確認済み: JWT はサーバー側で失効できない（400）。期限前に止める手段はロールバック（`MCP_ENABLED=false` で再デプロイ）だけ（tool-call-prod.txt の C） |
 | claude.ai Custom Connector | サーバー側は確認済み（claude-ai-oauth.txt）。claude.ai の画面での追加は**未実施**: オーナーの claude.ai アカウントの操作（手順 3） |
 | 2-2 の中身を変えない書き込み（成功して版だけ進む） | **未実施**: 本番の版番号が進むため、オーナーの承認が先 |
