@@ -509,3 +509,41 @@ describe('自動保存のまとまり', () => {
     expect(options.map((option) => option.getAttribute('value'))).toEqual(['4', '3', '2', '1']);
   });
 });
+
+// #577: 将来の保持処理で版が無くなった場合、サーバーは NOT_FOUND を返す。画面が成功や「戻せる」と誤って見せないこと。
+describe('履歴に無い版（NOT_FOUND）', () => {
+  it('差分の読込が NOT_FOUND なら差分を出さずに読み込み失敗を示す', async () => {
+    setup({
+      read: vi.fn().mockImplementation(async (revision) => {
+        if (revision === '1') throw new Error('NOT_FOUND');
+        return snapshot(revision);
+      }),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /版 1/ }));
+    expect(await screen.findByText('差分を読み込めませんでした。')).toBeInTheDocument();
+    expect(screen.queryByText(/差分 1項目/)).not.toBeInTheDocument();
+  });
+
+  it('復元の確認が NOT_FOUND なら確認画面を開かず、内容は変えていないと示す', async () => {
+    const { api, onRestored } = setup({ previewRestore: vi.fn().mockRejectedValue(new Error('NOT_FOUND')) });
+    await selectOld();
+    fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
+    expect(
+      await screen.findByText('復元の確認を取得できませんでした。内容は変更していません。もう一度お試しください。'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(api.restore).not.toHaveBeenCalled();
+    expect(onRestored).not.toHaveBeenCalled();
+  });
+
+  it('復元の実行が NOT_FOUND なら成功の通知を出さず、親へ復元済みと伝えない', async () => {
+    const { onRestored } = setup({ restore: vi.fn().mockRejectedValue(new Error('NOT_FOUND')) });
+    const dialog = await confirmOld();
+    fireEvent.click(within(dialog).getByRole('button', { name: '戻す' }));
+    expect(
+      await within(dialog).findByText('復元の完了を確認できませんでした。再試行するか、やめるを選んでください。'),
+    ).toBeVisible();
+    expect(screen.queryByText('選択した版の状態に戻しました。')).not.toBeInTheDocument();
+    expect(onRestored).not.toHaveBeenCalled();
+  });
+});

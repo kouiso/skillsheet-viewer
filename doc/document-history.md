@@ -71,6 +71,19 @@
 合成データでの計測手順・結果・月間モデルは [document-history-capacity.md](document-history-capacity.md)。
 1 版は約 95KB の本文で詰めた後 104.0KB、保存直後は dead tuple 込みでその約 2 倍になる（合成・ローカル PostgreSQL の実測）。本番の実測ではない。
 
+## 容量と保持の状態（#564）
+
+| 段階 | 状態 | 正本 |
+| --- | --- | --- |
+| 計測 | 合成データで計測済み。本番の実測ではない | [document-history-capacity.md](document-history-capacity.md)（#574） |
+| 案 | 推奨は「全版保持＋監視」。提案・未承認 | [document-history-retention.md](document-history-retention.md)（#575） |
+| 試算 | 保持案の dry-run あり。削除の経路は無い | `script/history-retention-dry-run.ts`（#576） |
+| 監視・運用 | 監視・回帰検証・runbook あり。本番では未実行 | [document-history-operation.md](document-history-operation.md)（#577） |
+| 承認済みの決定 | なし（本人の判断待ち） | #564 |
+| 導入済み | なし。本番は履歴表そのものが未導入 | 下の「適用ゲート」 |
+
+方針が承認されるまで、今の動き（全版保持・自動削除なし）を変えない。保持方針の承認は、下の「導入前レビュー」末尾の導入条件（必要負荷/保持方針）の1つとして残る。
+
 ## 適用ゲート（本番未適用）
 
 1. 管理者が対象を同定しバックアップを取得する。移行検証には隔離DBを使う。

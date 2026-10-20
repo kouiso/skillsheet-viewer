@@ -5,9 +5,15 @@
 #   - dry-run の前後で、版・削除・生存シート・台帳の件数と内容 hash が変わらない。
 #   - 書込みを含む READ ONLY transaction は管理接続でも拒否される。apply 系の指定は CLI が拒否する。
 #   - 案ごとの候補・保留、復元/Undo の参照保護、削除シート全削除との衝突が集計に出る。
-# 使い方: ./script/verify-history-retention.sh   （PostgreSQL 16 以上の bin を PATH に置く。node_modules が要る）
+# regression を付けると続けて #577 の回帰検証をする（doc/document-history-operation.md「回帰検証」）:
+#   - READ ONLY の観測から監視が normal / exceeded / measurement-failed を返す。
+#   - 段階的間引き案の候補を、この使い捨て cluster の中だけで外した後、一覧・読取・復元・Undo・削除復元・
+#     owner 分離・runtime 直読拒否・未知 raw 保持がどうなるか。外した版を成功として返さないこと。
+# 使い方: ./script/verify-history-retention.sh [regression]   （PostgreSQL 16 以上の bin を PATH に置く。node_modules が要る）
 set -euo pipefail
 umask 077
+mode="${1:-dry-run}"
+[[ "$mode" == dry-run || "$mode" == regression ]] || { printf '使い方: %s [regression]\n' "$0" >&2; exit 64; }
 
 repo_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 for pg_variable in ${!PG@}; do unset "$pg_variable"; done
@@ -51,7 +57,17 @@ GRANT EXECUTE ON FUNCTION skillsheet_private.create_sheet(uuid,text,jsonb,text),
   skillsheet_private.replace_sheet(uuid,text,text,jsonb,text),
   skillsheet_private.delete_sheet(uuid,text,text),
   skillsheet_private.history_restore(uuid,text,text,text),
-  skillsheet_private.restore_deleted_document(uuid,text,text) TO retention_runtime;
+  skillsheet_private.restore_deleted_document(uuid,text,text),
+  skillsheet_private.history_list(uuid,text,integer,text),
+  skillsheet_private.history_read(uuid,text,text),
+  skillsheet_private.history_count_after(uuid,text,text,text),
+  skillsheet_private.deleted_document_list(text) TO retention_runtime;
+CREATE ROLE retention_other LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+INSERT INTO skillsheet_private.principals VALUES ('retention_other', 'retention-other');
+GRANT USAGE ON SCHEMA skillsheet_private TO retention_other;
+GRANT EXECUTE ON FUNCTION skillsheet_private.history_list(uuid,text,integer,text),
+  skillsheet_private.history_read(uuid,text,text),
+  skillsheet_private.history_restore(uuid,text,text,text) TO retention_other;
 -- dry-run 用の読取 role。SELECT だけで、既定の transaction も READ ONLY にする。
 CREATE ROLE retention_reader LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 GRANT SELECT ON public.document_versions, public.deleted_documents, public.skill_sheets, public.skillsheet_state TO retention_reader;
@@ -105,9 +121,12 @@ BEGIN
 END $$;
 SQL
 
-# 合成データだけ、記録時刻を過去へずらす（A は約420日前から15日前、B は約200日前に削除）。
+# 合成データだけ、記録時刻を過去へずらす（A は約400日前から5日前、B は約200日前に削除）。
 "${admin[@]}" >"$run_dir/backdate.log" 2>&1 <<'SQL'
-UPDATE public.document_versions SET recorded_at = now() - make_interval(days => 420 - revision::integer * 15) - make_interval(mins => (revision % 3)::integer)
+-- 版22までは2版ずつ同じ日（段階的間引きで片方が候補になる）、版23以降は直近65日以内に置く。
+UPDATE public.document_versions SET recorded_at = now()
+  - make_interval(days => CASE WHEN revision <= 22 THEN 400 - (revision::integer / 2) * 15 ELSE (27 - revision::integer) * 15 + 5 END)
+  - make_interval(mins => (revision % 3)::integer)
 WHERE sheet_id = 'aaaaaaaa-0000-4000-8000-00000000000a';
 UPDATE public.document_versions SET recorded_at = now() - make_interval(days => 210 - revision::integer)
 WHERE sheet_id = 'aaaaaaaa-0000-4000-8000-00000000000b';
@@ -189,4 +208,105 @@ printf '案ごとの集計・参照保護・衝突報告・決定性: PASS\n'
 after="$(fingerprint)"
 [[ "$before" == "$after" ]] || { printf 'dry-run の前後で DB が変わった\n before=%s\n after=%s\n' "$before" "$after" >&2; exit 1; }
 printf 'dry-run 前後の件数・内容 hash 不変: PASS (%s)\n' "$after"
+
+if [[ "$mode" != regression ]]; then
+  printf '私用ログ: %s\n' "$run_dir"
+  exit 0
+fi
+
+# ---- #577 回帰検証 ----
+# 監視: READ ONLY の観測（読取 role）を2点取り、正常・上限超過・計測失敗を確かめる。
+monitor=("$tsx" "$repo_dir/script/history-capacity-monitor.ts")
+"${reader[@]}" -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-1.json"
+# 2点目は1日後として扱えるよう、観測時刻だけを書き換える（増え方の計算の通し確認用）。
+"${reader[@]}" -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-2-raw.json"
+node -e 'const fs=require("node:fs");const [src,dst]=process.argv.slice(1);const s=JSON.parse(fs.readFileSync(src,"utf8"));s.measuredAt=new Date(Date.parse(s.measuredAt)+86400000).toISOString();fs.writeFileSync(dst,JSON.stringify(s));' "$run_dir/sample-2-raw.json" "$run_dir/sample-2.json"
+"${monitor[@]}" --sample "$run_dir/sample-1.json" --sample "$run_dir/sample-2.json" >"$run_dir/monitor-normal.json"
+grep -q '"status": "normal"' "$run_dir/monitor-normal.json" || { printf '監視が normal を返さない\n' >&2; exit 1; }
+monitor_status=0
+# 合成の履歴は 1MiB に満たないので、DB 全体（新規 cluster でも数 MiB ある）の上限を 1MiB にして超過させる。
+"${monitor[@]}" --sample "$run_dir/sample-2.json" --database-limit-mib 1 >"$run_dir/monitor-exceeded.json" || monitor_status=$?
+(( monitor_status == 3 )) && grep -q '"automaticAction": "none"' "$run_dir/monitor-exceeded.json" || { printf '上限超過が exit 3 にならない\n' >&2; exit 1; }
+# 書込み可能な transaction で取った観測は、監視が失敗として扱う。
+"${admin[@]}" -At -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-writable.json"
+monitor_status=0
+"${monitor[@]}" --sample "$run_dir/sample-writable.json" >"$run_dir/monitor-failed.json" || monitor_status=$?
+(( monitor_status == 4 )) || { printf 'READ ONLY でない観測が計測失敗にならない\n' >&2; exit 1; }
+before_versions="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).versionCount)' "$run_dir/sample-1.json")"
+printf '監視（normal / exceeded=3 / measurement-failed=4、自動処理なし）: PASS（観測時の版数 %s）\n' "$before_versions"
+
+# 段階的間引き案の候補を求める。CLI は集計しか出さないので、同じ評価関数を検証用に直接呼ぶ。
+cat >"$run_dir/candidates.ts" <<TS
+import { readFileSync } from 'node:fs';
+import { evaluateRetention, parseHistorySnapshot } from '$repo_dir/src/db/history-retention';
+const snapshot = parseHistorySnapshot(JSON.parse(readFileSync('$run_dir/snapshot.json', 'utf8')));
+const plan = evaluateRetention(snapshot, { policy: { kind: 'tiered', fullDays: 30, dailyUntilDays: 365 }, deletedSheetPurgeDays: null, timeZone: 'Asia/Tokyo' }, snapshot.takenAt);
+for (const item of plan.decisions) if (item.decision === 'candidate') console.log(item.sheetId + ',' + item.revision);
+TS
+"$tsx" "$run_dir/candidates.ts" >"$run_dir/candidates.csv"
+[[ -s "$run_dir/candidates.csv" ]] || { printf '候補が無く、回帰検証にならない\n' >&2; exit 1; }
+removed_target="$(sed -nE 's/^aaaaaaaa-0000-4000-8000-00000000000a,([0-9]+)$/\1/p' "$run_dir/candidates.csv" | head -n 1)"
+[[ -n "$removed_target" ]] || { printf 'A に候補が無い\n' >&2; exit 1; }
+(( $(grep -c '^aaaaaaaa-0000-4000-8000-00000000000a,' "$run_dir/candidates.csv") >= 3 )) || { printf 'A の候補が少なすぎる\n' >&2; exit 1; }
+if grep -qE '^aaaaaaaa-0000-4000-8000-00000000000a,(0|3|20|21|22|27)$' "$run_dir/candidates.csv"; then
+  printf '常に残す版か参照先が候補に入った\n' >&2; exit 1
+fi
+
+# 候補を外すのは、このスクリプトが作った合成 cluster の中だけ。目印の無い DB では実行しない。
+"${admin[@]}" >"$run_dir/remove.log" 2>&1 <<SQL
+DO \$\$ BEGIN
+  IF (SELECT count(*) FROM public.document_versions WHERE sheet_id NOT IN ('aaaaaaaa-0000-4000-8000-00000000000a','aaaaaaaa-0000-4000-8000-00000000000b','aaaaaaaa-0000-4000-8000-00000000000c')) <> 0
+  THEN RAISE EXCEPTION 'synthetic fixture only'; END IF;
+END \$\$;
+CREATE TEMP TABLE removed(sheet_id uuid, revision bigint);
+\copy removed FROM '$run_dir/candidates.csv' WITH (FORMAT csv)
+DELETE FROM public.document_versions v USING removed r WHERE v.sheet_id = r.sheet_id AND v.revision = r.revision;
+SQL
+removed_count="$(wc -l <"$run_dir/candidates.csv" | tr -d ' ')"
+
+runtime=(psql -X -q -v ON_ERROR_STOP=1 -h "$run_dir" -p "$port" -U retention_runtime -d postgres)
+"${runtime[@]}" -v removed="$removed_target" >"$run_dir/regression.log" 2>&1 <<'SQL'
+SELECT set_config('regression.removed', :'removed', false);
+DO $$
+DECLARE
+  a uuid := 'aaaaaaaa-0000-4000-8000-00000000000a';
+  b uuid := 'aaaaaaaa-0000-4000-8000-00000000000b';
+  listed jsonb;
+  r jsonb;
+  current text;
+  removed text;
+BEGIN
+  removed := current_setting('regression.removed');
+  -- 外した版のすぐ上から1件だけ読み、外した版が一覧に出ないことを確かめる。
+  listed := skillsheet_private.history_list(a, (removed::bigint + 1)::text, 1, 'retention-owner');
+  IF listed->0->>'revision' = removed THEN RAISE EXCEPTION 'removed version still listed'; END IF;
+  IF skillsheet_private.history_read(a, removed, 'retention-owner')->>'status' <> 'NOT_FOUND' THEN RAISE EXCEPTION 'removed version readable'; END IF;
+  current := skillsheet_private.history_list(a, NULL, 1, 'retention-owner')->0->>'revision';
+  -- 外した版への復元は NOT_FOUND で、シートを変えない。
+  IF skillsheet_private.history_restore(a, removed, current, 'retention-owner')->>'status' <> 'NOT_FOUND' THEN RAISE EXCEPTION 'restore to removed version did not fail'; END IF;
+  IF (skillsheet_private.history_list(a, NULL, 1, 'retention-owner')->0->>'revision') <> current THEN RAISE EXCEPTION 'failed restore changed the sheet'; END IF;
+  -- 参照で残した復元元（版3）と Undo 先（版20）は読めて、戻せる。
+  IF skillsheet_private.history_read(a, '3', 'retention-owner')->>'status' <> 'OK' THEN RAISE EXCEPTION 'restore source lost'; END IF;
+  IF skillsheet_private.history_read(a, '20', 'retention-owner')->>'status' <> 'OK' THEN RAISE EXCEPTION 'undo target lost'; END IF;
+  r := skillsheet_private.history_restore(a, '20', current, 'retention-owner');
+  IF r->>'status' <> 'OK' OR r#>>'{snapshot,revision}' <> (current::bigint + 1)::text THEN RAISE EXCEPTION 'restore to kept version failed'; END IF;
+  -- 作成版（未知型ブロック入り）への復元で raw が欠けない。
+  r := skillsheet_private.history_restore(a, '0', (current::bigint + 1)::text, 'retention-owner');
+  IF r->>'status' <> 'OK' OR NOT (r#>'{snapshot,blocks}') @> '[{"type":"unknown-kind","data":{"raw":[1,null,"保存"]}}]' THEN RAISE EXCEPTION 'unknown raw lost'; END IF;
+  -- 後続件数は実際に残っている版の数で、版番号の差ではない。
+  IF (skillsheet_private.history_count_after(a, '1', '27', 'retention-owner')#>>'{}')::bigint >= 26 THEN RAISE EXCEPTION 'count ignores removed versions'; END IF;
+  -- 削除シートは deleted_documents の指す版が残り、復元できる。
+  r := skillsheet_private.restore_deleted_document(b, '6', 'retention-owner');
+  IF r#>>'{snapshot,revision}' IS DISTINCT FROM '7' THEN RAISE EXCEPTION 'deleted sheet restore failed: %', r; END IF;
+  -- runtime から履歴表を直接読めない。
+  BEGIN PERFORM * FROM public.document_versions; RAISE EXCEPTION 'direct table read permitted'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SQL
+psql -X -q -v ON_ERROR_STOP=1 -h "$run_dir" -p "$port" -U retention_other -d postgres >"$run_dir/regression-other.log" 2>&1 <<'SQL'
+DO $$ BEGIN
+  IF skillsheet_private.history_list('aaaaaaaa-0000-4000-8000-00000000000a', NULL, 20, 'retention-other') <> '[]'::jsonb THEN RAISE EXCEPTION 'cross owner list'; END IF;
+  BEGIN PERFORM skillsheet_private.history_read('aaaaaaaa-0000-4000-8000-00000000000a', '3', 'retention-owner'); RAISE EXCEPTION 'owner spoof'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SQL
+printf '候補 %s 版を外した後の一覧・読取・復元(NOT_FOUND)・参照先の復元・Undo・未知raw・削除復元・owner分離・直読拒否: PASS\n' "$removed_count"
 printf '私用ログ: %s\n' "$run_dir"
