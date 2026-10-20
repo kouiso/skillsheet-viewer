@@ -29,11 +29,10 @@ describe('監視の状態', () => {
     expect(result.status).toBe('normal');
     expect(result.automaticAction).toBe('none');
     expect(result.thresholds.approval).toBe('unapproved-candidate');
-    expect(result.historyGrowthBytesPerDay).toBeCloseTo(MIB);
-    // 20MiB から 1MiB/日 で 256MiB まで 236 日。
-    expect(result.projectedHistoryLimitAt).toBe(
-      new Date(Date.parse('2026-10-11T00:00:00Z') + 236 * 86_400_000).toISOString(),
-    );
+    expect(Math.abs((result.historyGrowthBytesPerDay ?? 0) - MIB)).toBeLessThan(1);
+    // 20MiB から 1MiB/日 で 256MiB まで 236 日。浮動小数の誤差は1秒未満まで許す。
+    const expected = Date.parse('2026-10-11T00:00:00Z') + 236 * 86_400_000;
+    expect(Math.abs(Date.parse(result.projectedHistoryLimitAt ?? '') - expected)).toBeLessThan(1000);
   });
   it('警告・超過を閾値で分け、超過しても削除や短縮をしない', () => {
     expect(evaluateMonitor([sample('2026-10-11T00:00:00Z', 200)]).status).toBe('warning');
