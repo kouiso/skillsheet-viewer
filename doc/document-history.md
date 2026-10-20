@@ -50,6 +50,11 @@
 
 テストは `app/builder/version-group.test.ts`（規則）、`version-history.test.tsx`（画面。ページを足しても開いたまま残ること）、`e2e/document-history.spec.ts`（実ブラウザ）。
 
+## 容量と保存負荷の計測（#574）
+
+合成データでの計測手順・結果・月間モデルは [document-history-capacity.md](document-history-capacity.md)。
+1 版は約 95KB の本文で詰めた後 104.0KB、保存直後は dead tuple 込みでその約 2 倍になる（合成・ローカル PostgreSQL の実測）。本番の実測ではない。
+
 ## 適用ゲート（本番未適用）
 
 1. 管理者が対象を同定しバックアップを取得する。移行検証には隔離DBを使う。
