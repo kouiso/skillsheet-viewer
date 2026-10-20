@@ -139,10 +139,11 @@ Authentication の OAuth フローを通して全ツールを呼ぶ。
 
 ### トークン失効
 
-Better Auth の OAuth テーブル（`oauth_access_token` / `oauth_refresh_token`）の該当行を
-削除または `revoked` を設定すれば、以後の検証は失敗し 401 になる。
-（revoked 判定はトークン確認時に DB を参照する経路で有効。JWT のみの検証経路では
-署名・iss・aud・exp が見られるため、即時失効させたい場合は行削除が確実。）
+アクセストークンは JWT で、`/api/mcp` は署名・iss・aud・exp だけを見る（DB は引かない）。
+そのため DB の行を消しても、`POST /api/auth/oauth2/revoke` を呼んでも、発行済みのトークンは期限の 1 時間まで通る。
+本番で revoke は 400 `unsupported_token_type`（JWT は失効できない）を返し、同じトークンで `tools/list` が 200 のままだった
+（[07 の証跡](mcp-evidence-20261021/tool-call-prod.txt) の C、2026-10-21）。refresh_token は発行していない。
+期限より前に止めたいときは、下の「ロールバック」で `/api/mcp` ごと閉じる。
 
 ### ロールバック
 
@@ -208,7 +209,5 @@ JWT は `/api/auth/jwks` で生成されたローカル DB の署名鍵を使い
 
 ## 未検証事項（SBI4 の残作業）
 
-- ブラウザ経由の OAuth 認可フロー（`/login` → `/consent` → code → token）の実測
-- claude.ai Custom Connector の実接続（オーナーの claude.ai ログインが必要）
-- 書き込みツールで実際に保存する経路の本番実測と、トークン失効の実測
-- Vercel 上での Fluid compute の設定確認
+残りと確認済みの範囲は [07 の「現状」](07-mcp-connection-runbook.md#現状2026-10-21) に一本化した。
+Fluid compute は 2026-10-20 に有効を確認済み。

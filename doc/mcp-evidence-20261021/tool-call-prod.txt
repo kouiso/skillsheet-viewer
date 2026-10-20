@@ -1,0 +1,39 @@
+# main 274ec65 のデプロイ / 2026-10-20T18:3x〜18:4xZ
+# Claude Code と同じ client_id（https://claude.ai/oauth/claude-code-client-metadata）で
+# オーナーとしてログイン → 同意 → token 交換し、そのアクセストークンで /api/mcp の JSON-RPC を直に呼んだ。
+# 経歴の中身は載せない（件数・型・hash だけ）。トークンはファイルにも画面にも出していない。
+# 書き込みツールはすべて「保存されない入力」（1 つ古い revision・存在しない ID）で呼んだ。
+# 前後で revision と blocks の hash が同じこと＝本番の中身が変わっていないことを最後に確かめた。
+
+## A. 閲覧だけのトークン（scope=skillsheet:read）
+$ token（scope=skillsheet:read）-> 200 keys=['access_token', 'expires_at', 'expires_in', 'scope', 'token_type'] token_type=Bearer expires_in=3600 scope=skillsheet:read
+$ initialize -> 200 server={'name': 'skillsheet-viewer', 'version': '1.0.0'}
+$ tools/list -> 200 8 件: list_sheets, get_sheet, search_projects, update_project_item, update_company, update_stats, add_project_item, reorder_project_items
+$ list_sheets -> 200 isError=False シート 1 件
+$ get_sheet(default) -> 200 isError=False blocks=12 型別={'profile': 1, 'skills': 9, 'stats': 1, 'project': 1} revision=14 blocks_hash=15726b46ac93
+$ get_sheet(存在しない sheetId) -> 200 isError=True NOT_FOUND: シートが見つかりません: <random uuid>
+$ update_stats（閲覧だけのトークン） -> 403 {"code": -32000, "message": "access token is missing required scope: skillsheet:write"}
+$ get_sheet（直後） -> revision=14 blocks_hash=15726b46ac93（変化なし）
+$ POST /api/auth/sign-out -> 200
+
+## B. 閲覧＋編集のトークン（scope=skillsheet:read skillsheet:write）
+$ token（scope=skillsheet:read skillsheet:write）-> 200 keys=['access_token', 'expires_at', 'expires_in', 'scope', 'token_type'] token_type=Bearer expires_in=3600 scope=skillsheet:read skillsheet:write
+$ tools/list -> 200 8 件（A と同じ）
+$ list_sheets -> 200 isError=False シート 1 件
+$ get_sheet(default) -> 200 isError=False blocks=12 revision=14 blocks_hash=15726b46ac93
+$ search_projects（一致しない語） -> 200 isError=False {'result': []}
+$ update_stats（expectedRevision=13、現在より 1 つ古い） -> 200 isError=True CONFLICT: シートが他で更新されています。最新を取得してから再試行してください
+$ update_stats（expectedLabel が違う） -> 200 isError=True NOT_FOUND: index 0 に expectedLabel "<label>x" の項目が見つかりません
+$ update_stats（存在しない sheetId） -> 200 isError=True NOT_FOUND: シートが見つかりません: <random uuid>
+$ update_stats（revision が数字でない） -> 200 isError=True Input validation error: Invalid arguments for tool update_stats: expectedRevision: Invalid string: must match pattern ...
+$ update_project_item（無い projectId・古い revision） -> 200 isError=True NOT_FOUND: 指定された案件が見つかりません: probe-no-such-project
+$ update_company（無い companyId・古い revision） -> 200 isError=True NOT_FOUND: 指定された会社が見つかりません: probe-no-such-company
+$ add_project_item（古い revision） -> 200 isError=True CONFLICT: シートが他で更新されています。最新を取得してから再試行してください
+$ reorder_project_items（空の並び・古い revision） -> 200 isError=True BAD_REQUEST: projectIds に既存の案件 ID が欠落しています: <既存 ID の一覧>
+$ get_sheet（後） -> revision=14 blocks_hash=15726b46ac93 変化なし=True
+
+## C. 失効
+$ POST /api/auth/oauth2/revoke（B のアクセストークン） -> 400 {"error_description":"JWT access tokens are self-contained and cannot be revoked server-side","error":"unsupported_token_type"}
+$ 失効要求のあとに同じトークンで tools/list -> 200
+$ POST /api/auth/sign-out -> 200
+# token 応答に refresh_token は無い（keys を参照）。期限の 1 時間が過ぎたらクライアントは再ログインになる。
