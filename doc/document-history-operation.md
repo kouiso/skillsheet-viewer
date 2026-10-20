@@ -92,7 +92,20 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 4. 対象シートの保存・復元・削除復元と同時に動かない。シート単位の行ロック（skill_sheets の FOR UPDATE、削除シートは deleted_documents の FOR UPDATE）を取り、取れなければ待たずに中断する。
 5. 1 transaction で、件数上限（承認した件数を超えたら全体を rollback）、`lock_timeout`・`statement_timeout` を付ける。失敗・切断・timeout は成功扱いせず、別接続で COMMIT 済みかを確かめてから再試行する。再試行は dry-run からやり直す。
 6. 実行前に、対象行の限定バックアップ（本文を含むため私用の場所、0600、Git 対象外）を取り、新規ローカル cluster への復元で中身が一致することを確かめる。
-7. 画面の文言を方針に合わせる。今の「いまの内容も履歴に残ります」（`app/builder/version-history.tsx`）、「（履歴には残ります）」、「保存済みの内容は版の履歴に残ります。」（`app/builder/builder-client.tsx`）は全版保持の前提で、保持期間を入れるならその期間を書く。
+7. 画面の文言を方針に合わせる。次の文言はどれも全版保持の前提で、保持期間を入れるなら期間を書くか、消えた版は戻せないと書く。行番号は 2026-10-21 時点。
+   - `app/builder/version-history.tsx:659`「いまの内容も履歴に残ります。」
+   - `app/builder/version-history.tsx:709`「いまの内容も履歴に残るので、あとから戻せます。」（あとで戻せると約束する一番強い文言）
+   - `app/builder/version-history.tsx:710`「復元前の内容は履歴に残りますが、現在の入力ルールでは戻せません。」
+   - `app/builder/version-history.tsx:715`「それらの変更も今の内容から消えます（履歴には残ります）。」
+   - `app/builder/builder-client.tsx:881`「保存済みの内容は版の履歴に残ります。」
+   - `app/builder/project-editor.tsx:398` `:414` と `app/builder/project-nav.tsx:282`「保存済みの内容は版の履歴で確認できます。」
+   - 試験の期待値（`app/builder/version-history.test.tsx` の 139・206・208 行）も合わせて直す。
+
+   直す前に次で数え直し、増えた文言も直す。2026-10-21 時点の出力は上の 8 か所と、コードのコメント（`builder-client.tsx:723`）の 9 行。`history-drawer.tsx:82`「最新 N 件まで残ります」はブラウザ内の入力履歴で、版の履歴ではないので対象外。
+
+   ```sh
+   grep -rnE '履歴に残|履歴には残|版の履歴で確認|あとから戻せ' app src --include='*.tsx' --include='*.ts' | grep -v '\.test\.'
+   ```
 8. 実行後に監視の観測を取り、件数と容量を記録する。削除しても物理容量は VACUUM まで減らず、Neon の論理容量がいつ減るかは保証しない。
 
 ## 戻し方（コード・transaction・バックアップは別物）
