@@ -16,6 +16,7 @@ pnpm exec tsx script/history-capacity-report.ts --measurement /tmp/skillsheet-hi
 - 新規ローカル cluster を作り、TCP を閉じて Unix socket だけで動かす。`PG*` 環境変数と `DATABASE_URL` は捨てる。本番・共有 DB へは接続しない。
 - 正本の migration、read/write 境界、`script/sql/install-document-history.sql` を入れた DB に、アプリと同じ `replace_sheet`（CAS）で保存する。
 - 合成本文は md5 の連結で、ほぼ圧縮できない最悪側。1 保存で 1 ブロックだけ本文を変える。
+- 同じシートを 2 つの writer が同時に保存する競合（`same-sheet-contention`）も毎回測る。各 writer の保存数は通常日と同じ。
 - サンプル数は `HISTORY_MEASURE_BURST_SAVES`（既定 200）・`HISTORY_MEASURE_NORMAL_SAVES`（既定 15）・`HISTORY_MEASURE_SMALL_BYTES`（既定 33,000）・`HISTORY_MEASURE_LARGE_BYTES`（既定 95,000）で変えられる。
 - 終了時に合成 DB の data directory は消し、`report.json` とログだけ残す。止めたいときは中断すれば終わる（既存データには触れない）。
 - 容量の照会は `script/sql/history-size-report.sql`（READ ONLY で実行。本文・title は読まない）。#577 の監視でも同じ照会を使う。
@@ -24,13 +25,14 @@ pnpm exec tsx script/history-capacity-report.ts --measurement /tmp/skillsheet-hi
 
 | 項目 | 測り方 |
 |---|---|
-| 版数 | `document_versions` の件数。合成 DB 試験として「版数 = 作成 1 ＋ 成功した保存数」を毎回確かめる |
+| 版数 | `document_versions` の件数。合成 DB 試験として、シートごとに「版数 = 作成 1 ＋ 結果が OK だった保存の数」「最新 revision = OK の数」を毎回確かめる。保存数の設定値ではなく結果で数えるので、拒否された保存があっても計測は最後まで走る |
 | 本文列 | `pg_column_size(blocks)`（圧縮後）と `octet_length(blocks::text)`（元の JSON） |
 | 総容量 | `pg_total_relation_size` を heap・TOAST・索引に分けて出す（heap＋TOAST＋索引＝総容量。二重に数えない） |
 | 保存直後と詰めた後 | 保存直後（autovacuum 停止、dead tuple 込み）と `VACUUM FULL` 後の両方 |
 | WAL | 計測の前後の `pg_current_wal_lsn()` の差 |
 | 保存遅延 | psql `\timing` の往復時間。p50 / p95 は nearest-rank |
-| ロック待ち・失敗率 | `log_lock_waits` の待ち行数と、OK 以外の結果・ERROR の割合 |
+| ロック待ち・失敗率 | ロック待ちは `log_lock_waits` の待ち行数（`deadlock_timeout=1ms` なので 1ms 以上の待ち）。失敗率は OK 以外の結果（CONFLICT・ERROR）の割合 |
+| 保存の手順 | writer ごとに、直前に受け取った revision で `replace_sheet` の CAS をかける。CONFLICT や ERROR の後は最新の revision を読み直して続ける（別タブの保存に負けたタブが再読込する動き）。1 回の失敗が後の保存に連鎖しない |
 
 ## 結果（2026-10-20、SHA 47e4301）
 
@@ -218,4 +220,6 @@ WAL は保持窓のあいだ残る。1版の WAL 334.4 KB（合成の実測）×
 - この project の Neon プランと PITR の保持窓。窓はプランで決まるので、候補を並べた。
 - 実データの圧縮率。合成本文はほぼ圧縮できない最悪側で、実データはこれより小さくなり得る。
 - 本番の継続的な保存頻度と時刻分布。
+- アプリ経由の 2 タブ同時編集。合成計測は DB の CAS で衝突とロック待ちを数えるだけで、衝突後の画面表示や利用者のやり直しは含まない。
+- 3 つ以上の writer が同じシートを保存する競合。
 - autovacuum が動く状態で、保存直後の膨らみがどこまで戻るか（ここでは止めた状態と `VACUUM FULL` 後の両端だけを測った）。

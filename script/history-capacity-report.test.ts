@@ -119,6 +119,107 @@ describe('容量レポート', () => {
     (broken.scenarios[0] as { sizeAfterCompact: unknown }).sizeAfterCompact = { relations: {} };
     expect(() => parseMeasurementReport(broken)).toThrow('MEASUREMENT_REPORT_INVALID');
   });
+  it.each([
+    [
+      'payloadTargetBytes なし',
+      (s: Record<string, unknown>) => {
+        delete s.payloadTargetBytes;
+      },
+    ],
+    [
+      'payloadTargetBytes が空',
+      (s: Record<string, unknown>) => {
+        s.payloadTargetBytes = [];
+      },
+    ],
+    [
+      'accepted なし',
+      (s: Record<string, unknown>) => {
+        delete s.accepted;
+      },
+    ],
+    [
+      'attempts なし',
+      (s: Record<string, unknown>) => {
+        delete s.attempts;
+      },
+    ],
+    [
+      'errors なし',
+      (s: Record<string, unknown>) => {
+        delete s.errors;
+      },
+    ],
+    [
+      'lockWaits なし',
+      (s: Record<string, unknown>) => {
+        delete s.lockWaits;
+      },
+    ],
+    [
+      'latencyMs.p50 なし',
+      (s: Record<string, unknown>) => {
+        delete (s.latencyMs as Record<string, unknown>).p50;
+      },
+    ],
+    [
+      'latencyMs.p95 なし',
+      (s: Record<string, unknown>) => {
+        delete (s.latencyMs as Record<string, unknown>).p95;
+      },
+    ],
+    [
+      'sizeAfterWrite.blocksStoredBytes なし',
+      (s: Record<string, unknown>) => {
+        delete (s.sizeAfterWrite as Record<string, unknown>).blocksStoredBytes;
+      },
+    ],
+    [
+      'sizeBefore.blocksLogicalBytes なし',
+      (s: Record<string, unknown>) => {
+        delete (s.sizeBefore as Record<string, unknown>).blocksLogicalBytes;
+      },
+    ],
+    [
+      'accepted が attempts より多い',
+      (s: Record<string, unknown>) => {
+        s.accepted = 999;
+      },
+    ],
+    [
+      'failureRate が試行と成功に合わない',
+      (s: Record<string, unknown>) => {
+        s.failureRate = 0.5;
+      },
+    ],
+    [
+      'failureRate が文字列',
+      (s: Record<string, unknown>) => {
+        s.failureRate = '0';
+      },
+    ],
+  ])('計測 report（%s）を推測で埋めず拒否する', (_, mutate) => {
+    const fixture: { scenarios: Record<string, unknown>[] } = JSON.parse(
+      readFileSync(new URL('./fixture/history-measure-report.json', import.meta.url), 'utf8'),
+    );
+    const target = fixture.scenarios[1];
+    if (!target) throw new Error('fixture scenarios missing');
+    mutate(target);
+    expect(() => parseMeasurementReport(fixture)).toThrow('MEASUREMENT_REPORT_INVALID');
+  });
+  it('CONFLICT を含む report も読み、失敗率をそのまま出す', () => {
+    const contended = {
+      ...scenario('same-sheet-contention', [33_000], 6, 40_000),
+      attempts: 10,
+      accepted: 6,
+      errors: 0,
+      failureRate: 0.4,
+      lockWaits: 3,
+    };
+    const parsed = parseMeasurementReport({ ...report, scenarios: [...report.scenarios, contended] });
+    expect(parsed.scenarios[3]).toMatchObject({ attempts: 10, accepted: 6, failureRate: 0.4, lockWaits: 3 });
+    expect(renderCapacityReport(parsed, 36)).toContain('| same-sheet-contention | 6/10 |');
+  });
   it('引数は明示したものだけ受ける', () => {
     expect(parseArgs(['--measurement', 'r.json'])).toEqual({ measurement: 'r.json', months: 36, policy: 'keep-all' });
     expect(parseArgs(['--measurement', 'r.json', '--policy', 'tiered-7-365']).policy).toBe('tiered-7-365');

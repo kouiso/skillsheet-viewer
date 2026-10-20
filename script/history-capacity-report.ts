@@ -157,6 +157,9 @@ export function renderCapacityReport(
   );
   lines.push('- 実データの圧縮率。合成本文はほぼ圧縮できない最悪側で、実データはこれより小さくなり得る。');
   lines.push('- 本番の継続的な保存頻度。revision は単点で、保存の時刻分布は記録されていない。');
+  lines.push(
+    '- アプリ経由の2タブ同時編集。合成計測は DB の CAS で衝突とロック待ちを数えるだけで、衝突後の画面とやり直しは含まない。',
+  );
   lines.push('- この project の Neon プラン（PITR の保持窓はプランで決まるので、窓の長さは候補を並べた）。');
   return lines.join('\n');
 }

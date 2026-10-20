@@ -37,36 +37,113 @@ export interface MeasurementReport {
   scenarios: MeasurementScenario[];
 }
 
-function object(value: unknown): value is Record<string, unknown> {
+const MEASUREMENT_TOOL = 'measure-document-history';
+
+function invalid(): never {
+  throw new Error('MEASUREMENT_REPORT_INVALID');
+}
+function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-function finite(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+function object(value: unknown): Record<string, unknown> {
+  if (!isObject(value)) invalid();
+  return value;
+}
+function finite(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) invalid();
+  return value;
+}
+function count(value: unknown): number {
+  const number = finite(value);
+  if (!Number.isInteger(number) || number < 0) invalid();
+  return number;
+}
+function text(value: unknown): string {
+  if (typeof value !== 'string') invalid();
+  return value;
+}
+
+function parseSize(value: unknown): SizeReport {
+  const size = object(value);
+  const relations: SizeReport['relations'] = {};
+  for (const [name, entry] of Object.entries(object(size.relations))) {
+    const relation = object(entry);
+    relations[name] = {
+      heapBytes: count(relation.heapBytes),
+      toastBytes: count(relation.toastBytes),
+      indexBytes: count(relation.indexBytes),
+      totalBytes: count(relation.totalBytes),
+    };
+  }
+  // 1 版の容量は document_versions の総容量の差で出すので、無い report は使えない。
+  if (!relations.document_versions) invalid();
+  return {
+    versionCount: count(size.versionCount),
+    blocksStoredBytes: count(size.blocksStoredBytes),
+    blocksLogicalBytes: count(size.blocksLogicalBytes),
+    relations,
+  };
+}
+
+function parseScenario(value: unknown): MeasurementScenario {
+  const scenario = object(value);
+  if (!Array.isArray(scenario.payloadTargetBytes) || scenario.payloadTargetBytes.length === 0) invalid();
+  const attempts = count(scenario.attempts);
+  const accepted = count(scenario.accepted);
+  const errors = count(scenario.errors);
+  if (accepted > attempts || errors > attempts - accepted) invalid();
+  const failureRate = scenario.failureRate === null ? null : finite(scenario.failureRate);
+  // 失敗率は試行と成功から決まる値なので、食い違う report は数え方が壊れている。
+  if (failureRate === null ? attempts !== 0 : Math.abs(failureRate - (attempts - accepted) / attempts) > 1e-6)
+    invalid();
+  const latency = object(scenario.latencyMs);
+  return {
+    name: text(scenario.name),
+    payloadTargetBytes: scenario.payloadTargetBytes.map(count),
+    attempts,
+    accepted,
+    errors,
+    failureRate,
+    lockWaits: count(scenario.lockWaits),
+    walBytes: count(scenario.walBytes),
+    versionsAdded: count(scenario.versionsAdded),
+    latencyMs: {
+      samples: count(latency.samples),
+      min: finite(latency.min),
+      p50: finite(latency.p50),
+      p95: finite(latency.p95),
+      max: finite(latency.max),
+    },
+    sizeBefore: parseSize(scenario.sizeBefore),
+    sizeAfterWrite: parseSize(scenario.sizeAfterWrite),
+    sizeAfterCompact: parseSize(scenario.sizeAfterCompact),
+  };
 }
 
 /** report の形を確かめる。足りない項目は推測で埋めず、読めない report として拒否する。 */
 export function parseMeasurementReport(value: unknown): MeasurementReport {
-  if (!object(value) || value.tool !== 'measure-document-history' || !Array.isArray(value.scenarios))
-    throw new Error('MEASUREMENT_REPORT_INVALID');
-  for (const scenario of value.scenarios) {
-    if (
-      !object(scenario) ||
-      typeof scenario.name !== 'string' ||
-      !finite(scenario.versionsAdded) ||
-      !finite(scenario.walBytes) ||
-      !object(scenario.latencyMs) ||
-      !object(scenario.sizeBefore) ||
-      !object(scenario.sizeAfterWrite) ||
-      !object(scenario.sizeAfterCompact)
-    )
-      throw new Error('MEASUREMENT_REPORT_INVALID');
-    for (const size of [scenario.sizeBefore, scenario.sizeAfterWrite, scenario.sizeAfterCompact]) {
-      const relations = (size as Record<string, unknown>).relations;
-      if (!object(relations) || !object(relations.document_versions) || !finite(relations.document_versions.totalBytes))
-        throw new Error('MEASUREMENT_REPORT_INVALID');
-    }
-  }
-  return value as unknown as MeasurementReport;
+  const report = object(value);
+  const { gitDirty, scenarios } = report;
+  if (report.tool !== MEASUREMENT_TOOL || !Array.isArray(scenarios) || typeof gitDirty !== 'boolean') invalid();
+  const environment = object(report.environment);
+  const samples: Record<string, number> = {};
+  for (const [key, sample] of Object.entries(object(report.samples))) samples[key] = finite(sample);
+  return {
+    tool: MEASUREMENT_TOOL,
+    kind: text(report.kind),
+    gitSha: text(report.gitSha),
+    gitDirty,
+    command: text(report.command),
+    startedAt: text(report.startedAt),
+    finishedAt: text(report.finishedAt),
+    environment: {
+      os: text(environment.os),
+      postgres: text(environment.postgres),
+      autovacuum: text(environment.autovacuum),
+    },
+    samples,
+    scenarios: scenarios.map(parseScenario),
+  };
 }
 
 function historyTotal(size: SizeReport) {
