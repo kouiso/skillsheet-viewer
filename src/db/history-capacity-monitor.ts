@@ -47,6 +47,7 @@ export interface MonitorResult {
 }
 
 const DAY_MS = 86_400_000;
+const MAX_DATE_MS = 8.64e15;
 
 function finiteNonNegative(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
@@ -109,7 +110,10 @@ function slopePerDay(points: { t: number; y: number }[]) {
 function projectDate(fromMs: number, current: number, limit: number, perDay: number | null) {
   if (current >= limit) return new Date(fromMs).toISOString();
   if (perDay === null || perDay <= 0) return null;
-  return new Date(fromMs + ((limit - current) / perDay) * DAY_MS).toISOString();
+  const at = fromMs + ((limit - current) / perDay) * DAY_MS;
+  // ほぼ横ばいの増え方では日付が Date の表せる範囲（±8.64e15 ms）を超える。例外で監視全体を止めず「見込みなし」とする。
+  if (!Number.isFinite(at) || Math.abs(at) > MAX_DATE_MS) return null;
+  return new Date(at).toISOString();
 }
 
 /**

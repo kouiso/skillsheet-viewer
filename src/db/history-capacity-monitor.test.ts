@@ -91,6 +91,23 @@ describe('計測失敗', () => {
     expect(result.problems.some((problem) => problem.startsWith('観測2を'))).toBe(true);
     expect(result.problems).toContain('増え方は未測定（1日以上離れた観測が2点以上要る）');
   });
+  it('ほぼ横ばいで見込み日が Date の範囲を超えても、例外にせず見込みなしにする', () => {
+    const at = (measuredAt: string, totalBytes: number) => ({
+      measuredAt,
+      transactionReadOnly: 'on',
+      databaseBytes: 10 * MIB,
+      versionCount: 10,
+      relations: { document_versions: { heapBytes: totalBytes, toastBytes: 0, indexBytes: 0, totalBytes } },
+    });
+    const result = evaluateMonitor([
+      at('2026-10-01T00:00:00Z', 81_920),
+      at('2026-10-02T00:00:01Z', 90_112),
+      at('2026-10-03T00:00:00Z', 81_920),
+    ]);
+    expect(result.status).toBe('normal');
+    expect(result.historyGrowthBytesPerDay).toBeGreaterThan(0);
+    expect(result.projectedHistoryLimitAt).toBeNull();
+  });
   it('減っている・横ばいなら届く日を出さない', () => {
     const result = evaluateMonitor([sample('2026-10-01T00:00:00Z', 20), sample('2026-10-11T00:00:00Z', 20)]);
     expect(result.historyGrowthBytesPerDay).toBe(0);
