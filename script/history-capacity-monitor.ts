@@ -5,8 +5,13 @@
 // 終了コード: 0 = normal / warning、3 = exceeded、4 = measurement-failed、2 = 引数の誤り。
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import { CANDIDATE_THRESHOLDS, evaluateMonitor, type MonitorResult, type MonitorThresholds } from '../src/db/history-capacity-monitor';
 import { MIB } from '../src/db/history-capacity-model';
+import {
+  CANDIDATE_THRESHOLDS,
+  evaluateMonitor,
+  type MonitorResult,
+  type MonitorThresholds,
+} from '../src/db/history-capacity-monitor';
 
 export function parseArgs(argv: string[]) {
   const samples: string[] = [];
@@ -37,7 +42,10 @@ export function exitCode(result: MonitorResult) {
 }
 
 /** 読めないファイルも1点の失敗した観測として扱い、監視全体を例外で落とさない。 */
-export function readSample(path: string, read: (path: string) => string = (file) => readFileSync(file, 'utf8')): unknown {
+export function readSample(
+  path: string,
+  read: (path: string) => string = (file) => readFileSync(file, 'utf8'),
+): unknown {
   try {
     return JSON.parse(read(path));
   } catch (error) {
@@ -47,7 +55,10 @@ export function readSample(path: string, read: (path: string) => string = (file)
 
 function main() {
   const { samples, thresholds } = parseArgs(process.argv.slice(2));
-  const result = evaluateMonitor(samples.map((path) => readSample(path)), thresholds);
+  const result = evaluateMonitor(
+    samples.map((path) => readSample(path)),
+    thresholds,
+  );
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = exitCode(result);
 }
