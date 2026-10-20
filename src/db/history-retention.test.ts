@@ -243,6 +243,23 @@ describe('復元・Undo の参照を壊さない', () => {
     expect(decisionOf(plan, '3')).toMatchObject({ decision: 'keep', reason: 'REFERENCED' });
     expect(decisionOf(plan, '2')).toMatchObject({ decision: 'candidate' });
   });
+  it('参照先の版は日の代表に数えず、同じ日の別の save を代表にする', () => {
+    // 版1と版2は同じ古い日。後の restore（版3）が版2を指す。版2は参照で残り、代表は版1になる。
+    const day = '2026-03-01T01:00:00Z';
+    const plan = evaluateRetention(
+      snapshot([
+        version(1, day),
+        version(2, at(day, 60_000)),
+        version(3, at(NOW, -2 * DAY), { action: 'restore', restoredFrom: '2', restoredBefore: '2' }),
+        version(4, at(NOW, -DAY)),
+      ]),
+      tiered(30, 365),
+      NOW,
+    );
+    expect(decisionOf(plan, '2')).toMatchObject({ decision: 'keep', reason: 'REFERENCED' });
+    expect(decisionOf(plan, '1')).toMatchObject({ decision: 'keep', reason: 'DAILY_REPRESENTATIVE' });
+    expect(plan.totals.candidate).toBe(0);
+  });
   it('参照先が欠けた restore は保留し、未知 action も保留する', () => {
     const plan = evaluateRetention(
       snapshot([
@@ -397,10 +414,23 @@ describe('決定性と再評価', () => {
       'PLAN_STALE',
     );
   });
+  it('同じ DB 状態を取り直しただけ（takenAt だけ違う）なら計画を使い回せる', () => {
+    const plan = evaluateRetention(snapshot(rows), tiered(30, 365), NOW);
+    const recaptured = snapshot(rows, { takenAt: '2026-10-21T05:00:00Z' });
+    expect(assertPlanReusable(plan, recaptured).planHash).toBe(plan.planHash);
+  });
   it('保持案が違えば policy hash も違う', () => {
     expect(evaluateRetention(snapshot(rows), window(30), NOW).policyHash).not.toBe(
       evaluateRetention(snapshot(rows), window(31), NOW).policyHash,
     );
+  });
+  it('1シート数万版でも版数に比例する時間で終わる', () => {
+    const many = Array.from({ length: 40_000 }, (_, index) =>
+      version(index + 1, at('2025-01-01T00:00:00Z', index * 60_000)),
+    );
+    const plan = evaluateRetention(snapshot(many), window(30), NOW);
+    expect(plan.totals.versions).toBe(40_000);
+    expect(plan.totals.candidate).toBe(39_999);
   });
 });
 

@@ -195,8 +195,8 @@ function normalizeSnapshot(snapshot: HistorySnapshot) {
             : a.revision > b.revision
               ? 1
               : 0;
+  // 取得時刻（takenAt）は含めない。同じ DB 状態を取り直しただけで計画が古いと判定されないようにする。
   return {
-    takenAt: snapshot.takenAt,
     versions: [...snapshot.versions].sort(byKey),
     deleted: [...snapshot.deleted].sort(byKey),
     liveSheets: [...snapshot.liveSheets].sort(byKey),
@@ -205,6 +205,13 @@ function normalizeSnapshot(snapshot: HistorySnapshot) {
       .sort((a, b) => (a.ownerId < b.ownerId ? -1 : a.ownerId > b.ownerId ? 1 : 0)),
     contentFingerprint: snapshot.contentFingerprint,
   };
+}
+
+// 配列を毎回作り直すと版数の2乗に比例して遅くなるので、その場で足す。
+function appendTo<T>(map: Map<string, T[]>, key: string, row: T) {
+  const rows = map.get(key);
+  if (rows) rows.push(row);
+  else map.set(key, [row]);
 }
 
 export function snapshotHash(snapshot: HistorySnapshot) {
@@ -282,9 +289,9 @@ export function evaluateRetention(snapshot: HistorySnapshot, simulation: Retenti
     decisions.set(key(row.sheetId, row.revision), { sheetId: row.sheetId, revision: row.revision, decision, reason });
 
   const live = new Map<string, LiveSheetRow[]>();
-  for (const row of normalized.liveSheets) live.set(row.sheetId, [...(live.get(row.sheetId) ?? []), row]);
+  for (const row of normalized.liveSheets) appendTo(live, row.sheetId, row);
   const deleted = new Map<string, DeletedRow[]>();
-  for (const row of normalized.deleted) deleted.set(row.sheetId, [...(deleted.get(row.sheetId) ?? []), row]);
+  for (const row of normalized.deleted) appendTo(deleted, row.sheetId, row);
   const ledger = new Map<string, Set<string>>();
   for (const row of normalized.ledger) {
     const ids = ledger.get(row.ownerId) ?? new Set<string>();
@@ -292,7 +299,7 @@ export function evaluateRetention(snapshot: HistorySnapshot, simulation: Retenti
     ledger.set(row.ownerId, ids);
   }
   const sheets = new Map<string, VersionRow[]>();
-  for (const row of normalized.versions) sheets.set(row.sheetId, [...(sheets.get(row.sheetId) ?? []), row]);
+  for (const row of normalized.versions) appendTo(sheets, row.sheetId, row);
 
   for (const [sheetId, rows] of sheets) {
     const liveRows = live.get(sheetId) ?? [];
@@ -323,15 +330,28 @@ export function evaluateRetention(snapshot: HistorySnapshot, simulation: Retenti
     const protect = (row: VersionRow, reason: Reason) => {
       if (!decisions.has(key(row.sheetId, row.revision))) set(row, 'keep', reason);
     };
+    const byRevision = new Map(rows.map((row) => [row.revision, row]));
     protect(latest, 'LATEST');
     for (const liveRow of liveRows) {
-      const current = rows.find((row) => row.revision === liveRow.revision);
+      const current = byRevision.get(liveRow.revision);
       if (current) protect(current, 'CURRENT_REVISION');
     }
     for (const row of rows) if (PROTECTED.has(row.action)) protect(row, 'PROTECTED_ACTION');
     if (deletedRow) {
-      const target = rows.find((row) => row.revision === deletedRow.revision);
+      const target = byRevision.get(deletedRow.revision);
       if (target) protect(target, 'DELETED_TARGET');
+    }
+    // 2b) 残す・保留する版の参照先（restored_from / restored_before）も常に残す。連鎖をたどる。
+    // 日・月の代表（4）より先に決め、参照先の版を代表に数えて同じ日の別の版を候補にしないようにする。
+    const queue = rows.filter((row) => decisions.has(key(sheetId, row.revision)));
+    for (let row = queue.pop(); row; row = queue.pop()) {
+      for (const ref of [row.restoredFrom, row.restoredBefore]) {
+        const target = ref === null ? undefined : byRevision.get(ref);
+        if (target && !decisions.has(key(sheetId, target.revision))) {
+          set(target, 'keep', 'REFERENCED');
+          queue.push(target);
+        }
+      }
     }
     // 3) 削除シートの期限切れ: 常に残す版と全削除は両立しない。どちらかを黙って選ばず、衝突として保留する。
     const deletedAt = deletedRow ? parseInstantMicros(deletedRow.deletedAt) : null;
@@ -350,7 +370,8 @@ export function evaluateRetention(snapshot: HistorySnapshot, simulation: Retenti
     // 4) 残る save に保持案を当てる。
     const pending = rows.filter((row) => !decisions.has(key(sheetId, row.revision)));
     applyPolicy(pending, times, simulation, now, set);
-    // 5) 残す・保留する版の参照先は候補にしない（Undo・復元の比較先が消えないように）。連鎖を最後までたどる。
+    // 5) 念のため、残す・保留する版の参照先が候補になっていないかを最後にもう一度たどる（削除シートの期限切れで
+    //    候補にした版を参照している場合は、全削除と衝突するので保留にする）。
     let changed = true;
     while (changed) {
       changed = false;
@@ -361,7 +382,7 @@ export function evaluateRetention(snapshot: HistorySnapshot, simulation: Retenti
           if (ref === null) continue;
           const target = decisions.get(key(sheetId, ref));
           if (target?.decision === 'candidate') {
-            const targetRow = rows.find((item) => item.revision === ref);
+            const targetRow = byRevision.get(ref);
             if (!targetRow) continue;
             // 期限切れの削除シートでは、参照先を残すと全削除と衝突する。
             set(
