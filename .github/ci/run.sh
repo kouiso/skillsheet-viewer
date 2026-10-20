@@ -41,13 +41,14 @@ PY
     pnpm run test:e2e:local
     ;;
   history-db)
-    # なぜ: 履歴の容量計測は使い捨てのローカル cluster だけで動く。CI と手元で同じ手順を通す。
+    # なぜ: 履歴の容量計測と保持 dry-run は使い捨てのローカル cluster だけで動く。CI と手元で同じ手順を通す。
     if ! command -v initdb >/dev/null 2>&1; then
       pg_bin=$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -n 1 || true)
       if [ -z "$pg_bin" ]; then echo 'PostgreSQL 16+ の bin が見つからない' >&2; exit 2; fi
       PATH="$pg_bin:$PATH"
     fi
     HISTORY_MEASURE_BURST_SAVES=20 HISTORY_MEASURE_NORMAL_SAVES=5 ./script/measure-document-history.sh
+    ./script/verify-history-retention.sh
     ;;
   playwright)
     require_isolated_bridge
