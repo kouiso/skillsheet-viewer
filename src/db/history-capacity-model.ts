@@ -60,7 +60,8 @@ function validateLoad(load: LoadProfile) {
 export function validatePolicy(policy: RetentionPolicy) {
   // JSON から来た入力は型どおりとは限らない。未知の案を keep-all 扱いにしない。
   const kind: unknown = (policy as { kind?: unknown }).kind;
-  if (kind !== 'keep-all' && kind !== 'window' && kind !== 'tiered') throw new RangeError('unknown retention policy kind');
+  if (kind !== 'keep-all' && kind !== 'window' && kind !== 'tiered')
+    throw new RangeError('unknown retention policy kind');
   if (policy.kind === 'window') {
     if (!Number.isInteger(policy.keepDays) || policy.keepDays < 1) throw new RangeError('keepDays must be >= 1');
   }

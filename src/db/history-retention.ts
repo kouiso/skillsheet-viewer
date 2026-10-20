@@ -1,8 +1,8 @@
 // 履歴保持案の影響を、1件も消さずに試算する（#576）。純粋関数だけで、DB には触れない。
 // 承認前の保持案はシミュレーションの入力であって、有効な運用方針ではない。削除を実行する経路はここに置かない。
 import { createHash } from 'node:crypto';
-import { type RetentionPolicy, validatePolicy } from './history-capacity-model';
 import { canonicalJson, isRevision } from './document-contract';
+import { type RetentionPolicy, validatePolicy } from './history-capacity-model';
 
 /** この版は必ず残す（最新版と並ぶ「常に残す版」）。 */
 export const PROTECTED_ACTIONS = ['baseline', 'create', 'restore', 'delete', 'restore-deleted'] as const;
@@ -116,8 +116,7 @@ function sha256(value: unknown) {
   return createHash('sha256').update(canonicalJson(value)).digest('hex');
 }
 
-const INSTANT =
-  /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)$/;
+const INSTANT = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)$/;
 
 /**
  * ISO 8601 の時刻をマイクロ秒で読む。PostgreSQL の timestamptz はマイクロ秒まで持つので、
@@ -365,7 +364,11 @@ export function evaluateRetention(snapshot: HistorySnapshot, simulation: Retenti
             const targetRow = rows.find((item) => item.revision === ref);
             if (!targetRow) continue;
             // 期限切れの削除シートでは、参照先を残すと全削除と衝突する。
-            set(targetRow, target.reason === 'DELETED_SHEET_EXPIRED' ? 'hold' : 'keep', target.reason === 'DELETED_SHEET_EXPIRED' ? 'PURGE_CONFLICTS_WITH_PROTECTION' : 'REFERENCED');
+            set(
+              targetRow,
+              target.reason === 'DELETED_SHEET_EXPIRED' ? 'hold' : 'keep',
+              target.reason === 'DELETED_SHEET_EXPIRED' ? 'PURGE_CONFLICTS_WITH_PROTECTION' : 'REFERENCED',
+            );
             changed = true;
           }
         }
@@ -468,7 +471,11 @@ function applyPolicy(
   }
   const buckets = new Map<string, VersionRow>();
   const tierOf = (row: VersionRow) =>
-    age(row) <= policy.fullDays * MICROS_PER_DAY ? 'full' : age(row) <= policy.dailyUntilDays * MICROS_PER_DAY ? 'daily' : 'monthly';
+    age(row) <= policy.fullDays * MICROS_PER_DAY
+      ? 'full'
+      : age(row) <= policy.dailyUntilDays * MICROS_PER_DAY
+        ? 'daily'
+        : 'monthly';
   const bucketOf = (row: VersionRow) => {
     const day = calendarDay(timeOf(row), timeZone);
     return tierOf(row) === 'daily' ? `daily:${day}` : `monthly:${day.slice(0, 7)}`;
@@ -486,7 +493,8 @@ function applyPolicy(
       continue;
     }
     const representative = buckets.get(bucketOf(row)) === row;
-    if (tier === 'daily') set(row, representative ? 'keep' : 'candidate', representative ? 'DAILY_REPRESENTATIVE' : 'THINNED_DAILY');
+    if (tier === 'daily')
+      set(row, representative ? 'keep' : 'candidate', representative ? 'DAILY_REPRESENTATIVE' : 'THINNED_DAILY');
     else set(row, representative ? 'keep' : 'candidate', representative ? 'MONTHLY_REPRESENTATIVE' : 'THINNED_MONTHLY');
   }
 }
@@ -502,7 +510,8 @@ function assertReferencesKept(rows: { row: VersionRow; decision: VersionDecision
   for (const { row, decision } of rows) {
     if (decision.decision === 'candidate') continue;
     for (const ref of [row.restoredFrom, row.restoredBefore]) {
-      if (ref !== null && bySheet.get(row.sheetId)?.get(ref) === 'candidate') throw new Error('RETENTION_REFERENCE_BROKEN');
+      if (ref !== null && bySheet.get(row.sheetId)?.get(ref) === 'candidate')
+        throw new Error('RETENTION_REFERENCE_BROKEN');
     }
   }
 }

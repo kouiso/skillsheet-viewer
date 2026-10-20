@@ -46,7 +46,11 @@ function snapshot(versions: VersionRow[], extra: Partial<HistorySnapshot> = {}):
     ...extra,
   };
 }
-const KEEP_ALL: RetentionSimulation = { policy: { kind: 'keep-all' }, deletedSheetPurgeDays: null, timeZone: 'Asia/Tokyo' };
+const KEEP_ALL: RetentionSimulation = {
+  policy: { kind: 'keep-all' },
+  deletedSheetPurgeDays: null,
+  timeZone: 'Asia/Tokyo',
+};
 const window = (keepDays: number): RetentionSimulation => ({ ...KEEP_ALL, policy: { kind: 'window', keepDays } });
 const tiered = (fullDays: number, dailyUntilDays: number, timeZone: 'Asia/Tokyo' | 'UTC' = 'Asia/Tokyo') => ({
   policy: { kind: 'tiered', fullDays, dailyUntilDays } as const,
@@ -81,7 +85,11 @@ describe('時刻の読み取り', () => {
 describe('既定は無変更', () => {
   it('全版保持では候補が出ない', () => {
     const plan = evaluateRetention(
-      snapshot([version(0, at(NOW, -400 * DAY), { action: 'create' }), version(1, at(NOW, -300 * DAY)), version(2, at(NOW, -DAY))]),
+      snapshot([
+        version(0, at(NOW, -400 * DAY), { action: 'create' }),
+        version(1, at(NOW, -300 * DAY)),
+        version(2, at(NOW, -DAY)),
+      ]),
       KEEP_ALL,
       NOW,
     );
@@ -91,7 +99,11 @@ describe('既定は無変更', () => {
     const base = snapshot([version(0, at(NOW, -DAY))]);
     expect(() => evaluateRetention(base, window(0), NOW)).toThrow(RangeError);
     expect(() =>
-      evaluateRetention(base, { ...KEEP_ALL, policy: { kind: 'delete-all' } as unknown as RetentionSimulation['policy'] }, NOW),
+      evaluateRetention(
+        base,
+        { ...KEEP_ALL, policy: { kind: 'delete-all' } as unknown as RetentionSimulation['policy'] },
+        NOW,
+      ),
     ).toThrow(RangeError);
     expect(() => evaluateRetention(base, { ...KEEP_ALL, deletedSheetPurgeDays: 0 }, NOW)).toThrow(RangeError);
     expect(() => evaluateRetention(base, KEEP_ALL, '2026-10-21')).toThrow(RangeError);
@@ -103,7 +115,12 @@ describe('期間で区切る案', () => {
     const boundary = '2026-09-21T00:00:00.000000Z';
     const older = '2026-09-20T23:59:59.999999Z';
     const plan = evaluateRetention(
-      snapshot([version(0, older, { action: 'create' }), version(1, older), version(2, boundary), version(3, at(NOW, -DAY))]),
+      snapshot([
+        version(0, older, { action: 'create' }),
+        version(1, older),
+        version(2, boundary),
+        version(3, at(NOW, -DAY)),
+      ]),
       window(30),
       NOW,
     );
@@ -113,7 +130,11 @@ describe('期間で区切る案', () => {
     expect(plan.storedBytes.candidate).toBe(100);
   });
   it('期間外でも最新版と現在の revision は残す', () => {
-    const plan = evaluateRetention(snapshot([version(0, at(NOW, -90 * DAY)), version(1, at(NOW, -60 * DAY))]), window(7), NOW);
+    const plan = evaluateRetention(
+      snapshot([version(0, at(NOW, -90 * DAY)), version(1, at(NOW, -60 * DAY))]),
+      window(7),
+      NOW,
+    );
     expect(decisionOf(plan, '1')).toMatchObject({ decision: 'keep', reason: 'LATEST' });
     expect(decisionOf(plan, '0')).toMatchObject({ decision: 'candidate' });
   });
@@ -141,12 +162,20 @@ describe('段階的間引き', () => {
   });
   it('同時刻の版も revision で代表を1つに決める', () => {
     const same = '2026-08-01T01:00:00.123456Z';
-    const plan = evaluateRetention(snapshot([version(1, same), version(2, same), version(3, at(NOW, -DAY))]), tiered(30, 365), NOW);
+    const plan = evaluateRetention(
+      snapshot([version(1, same), version(2, same), version(3, at(NOW, -DAY))]),
+      tiered(30, 365),
+      NOW,
+    );
     expect(decisionOf(plan, '2')).toMatchObject({ reason: 'DAILY_REPRESENTATIVE' });
     expect(decisionOf(plan, '1')).toMatchObject({ reason: 'THINNED_DAILY' });
   });
   it('暦日の区切りは指定した暦で決まる（UTC 15時台は JST では翌日）', () => {
-    const versions = [version(1, '2026-08-01T14:30:00Z'), version(2, '2026-08-01T15:30:00Z'), version(3, at(NOW, -DAY))];
+    const versions = [
+      version(1, '2026-08-01T14:30:00Z'),
+      version(2, '2026-08-01T15:30:00Z'),
+      version(3, at(NOW, -DAY)),
+    ];
     const jst = evaluateRetention(snapshot(versions), tiered(30, 365, 'Asia/Tokyo'), NOW);
     const utc = evaluateRetention(snapshot(versions), tiered(30, 365, 'UTC'), NOW);
     // JST では 8/1 23:30 と 8/2 00:30 で別の日、UTC では同じ 8/1。
@@ -260,22 +289,39 @@ describe('削除シート', () => {
   });
   it('期限切れの全削除と「常に残す版」の衝突を報告し、衝突した版は保留にする', () => {
     const plan = evaluateRetention(withDeleted(), { ...KEEP_ALL, deletedSheetPurgeDays: 90 }, NOW);
-    expect(decisionOf(plan, '1', DELETED_SHEET)).toMatchObject({ decision: 'candidate', reason: 'DELETED_SHEET_EXPIRED' });
-    expect(decisionOf(plan, '3', DELETED_SHEET)).toMatchObject({ decision: 'hold', reason: 'PURGE_CONFLICTS_WITH_PROTECTION' });
-    expect(decisionOf(plan, '0', DELETED_SHEET)).toMatchObject({ decision: 'hold', reason: 'PURGE_CONFLICTS_WITH_PROTECTION' });
+    expect(decisionOf(plan, '1', DELETED_SHEET)).toMatchObject({
+      decision: 'candidate',
+      reason: 'DELETED_SHEET_EXPIRED',
+    });
+    expect(decisionOf(plan, '3', DELETED_SHEET)).toMatchObject({
+      decision: 'hold',
+      reason: 'PURGE_CONFLICTS_WITH_PROTECTION',
+    });
+    expect(decisionOf(plan, '0', DELETED_SHEET)).toMatchObject({
+      decision: 'hold',
+      reason: 'PURGE_CONFLICTS_WITH_PROTECTION',
+    });
     expect(plan.conflicts.map((item) => item.revision).sort()).toEqual(['0', '3']);
     // 生きているシートには影響しない。
     expect(decisionOf(plan, '0')).toMatchObject({ decision: 'keep' });
   });
   it('再送防止の台帳から消えている削除シートは、何も候補にしない', () => {
     const plan = evaluateRetention(withDeleted({ ledger: [{ ownerId: OWNER, deletedSheetIds: [] }] }), window(30), NOW);
-    expect(plan.decisions.filter((item) => item.sheetId === DELETED_SHEET).every((item) => item.reason === 'LEDGER_MISSING')).toBe(true);
+    expect(
+      plan.decisions.filter((item) => item.sheetId === DELETED_SHEET).every((item) => item.reason === 'LEDGER_MISSING'),
+    ).toBe(true);
     expect(plan.totals.candidate).toBe(0);
   });
   it('deleted_documents の指す版が無い・owner が食い違う・生存と削除の両方にある・どちらにも無いシートは保留する', () => {
     const cases: [Partial<HistorySnapshot>, string][] = [
-      [{ deleted: [{ sheetId: DELETED_SHEET, ownerId: OWNER, revision: '9', deletedAt: '2025-01-04T00:00:00Z' }] }, 'DELETED_TARGET_MISSING'],
-      [{ deleted: [{ sheetId: DELETED_SHEET, ownerId: 'other', revision: '3', deletedAt: '2025-01-04T00:00:00Z' }] }, 'OWNER_MISMATCH'],
+      [
+        { deleted: [{ sheetId: DELETED_SHEET, ownerId: OWNER, revision: '9', deletedAt: '2025-01-04T00:00:00Z' }] },
+        'DELETED_TARGET_MISSING',
+      ],
+      [
+        { deleted: [{ sheetId: DELETED_SHEET, ownerId: 'other', revision: '3', deletedAt: '2025-01-04T00:00:00Z' }] },
+        'OWNER_MISMATCH',
+      ],
       [
         {
           liveSheets: [
@@ -305,13 +351,23 @@ describe('削除シート', () => {
 
 describe('シート単位の不整合', () => {
   it('同じ revision の重複・不正な revision・現在の revision の版が無いシートは全部保留する', () => {
-    const duplicate = evaluateRetention(snapshot([version(1, '2025-01-01T00:00:00Z'), version(1, '2025-01-02T00:00:00Z')]), window(30), NOW);
+    const duplicate = evaluateRetention(
+      snapshot([version(1, '2025-01-01T00:00:00Z'), version(1, '2025-01-02T00:00:00Z')]),
+      window(30),
+      NOW,
+    );
     expect(duplicate.totals).toMatchObject({ versions: 2, hold: 2 });
     expect(duplicate.reasons.DUPLICATE_REVISION).toBe(2);
-    const invalid = evaluateRetention(snapshot([version('01', '2025-01-01T00:00:00Z'), version(2, at(NOW, -DAY))]), window(30), NOW);
+    const invalid = evaluateRetention(
+      snapshot([version('01', '2025-01-01T00:00:00Z'), version(2, at(NOW, -DAY))]),
+      window(30),
+      NOW,
+    );
     expect(invalid.reasons.INVALID_REVISION).toBe(2);
     const missing = evaluateRetention(
-      snapshot([version(1, '2025-01-01T00:00:00Z')], { liveSheets: [{ sheetId: SHEET, ownerId: OWNER, revision: '7' }] }),
+      snapshot([version(1, '2025-01-01T00:00:00Z')], {
+        liveSheets: [{ sheetId: SHEET, ownerId: OWNER, revision: '7' }],
+      }),
       window(30),
       NOW,
     );
@@ -337,7 +393,9 @@ describe('決定性と再評価', () => {
     const plan = evaluateRetention(snapshot(rows), tiered(30, 365), NOW);
     expect(assertPlanReusable(plan, snapshot(rows)).planHash).toBe(plan.planHash);
     expect(() => assertPlanReusable(plan, snapshot([...rows, version(4, at(NOW, -1000))]))).toThrow('PLAN_STALE');
-    expect(() => assertPlanReusable(plan, snapshot(rows, { contentFingerprint: 'fingerprint-2' }))).toThrow('PLAN_STALE');
+    expect(() => assertPlanReusable(plan, snapshot(rows, { contentFingerprint: 'fingerprint-2' }))).toThrow(
+      'PLAN_STALE',
+    );
   });
   it('保持案が違えば policy hash も違う', () => {
     expect(evaluateRetention(snapshot(rows), window(30), NOW).policyHash).not.toBe(
@@ -348,7 +406,11 @@ describe('決定性と再評価', () => {
 
 describe('出力と入力の形', () => {
   it('集計には owner・title・本文を含めない', () => {
-    const plan = evaluateRetention(snapshot([version(1, '2025-01-01T00:00:00Z'), version(2, at(NOW, -DAY))]), window(30), NOW);
+    const plan = evaluateRetention(
+      snapshot([version(1, '2025-01-01T00:00:00Z'), version(2, at(NOW, -DAY))]),
+      window(30),
+      NOW,
+    );
     const text = JSON.stringify(summarizePlan(plan));
     expect(text).not.toContain(OWNER);
     expect(text).not.toContain('decisions');
@@ -356,8 +418,12 @@ describe('出力と入力の形', () => {
   it('形の合わない snapshot を推測で埋めず拒否する', () => {
     const good = snapshot([version(1, '2025-01-01T00:00:00Z')]);
     expect(parseHistorySnapshot(JSON.parse(JSON.stringify(good)))).toEqual(good);
-    expect(() => parseHistorySnapshot({ ...good, versions: [{ ...good.versions[0], storedBytes: -1 }] })).toThrow('SNAPSHOT_INVALID');
-    expect(() => parseHistorySnapshot({ ...good, ledger: [{ ownerId: OWNER, deletedSheetIds: [1] }] })).toThrow('SNAPSHOT_INVALID');
+    expect(() => parseHistorySnapshot({ ...good, versions: [{ ...good.versions[0], storedBytes: -1 }] })).toThrow(
+      'SNAPSHOT_INVALID',
+    );
+    expect(() => parseHistorySnapshot({ ...good, ledger: [{ ownerId: OWNER, deletedSheetIds: [1] }] })).toThrow(
+      'SNAPSHOT_INVALID',
+    );
     expect(() => parseHistorySnapshot({ ...good, deleted: undefined })).toThrow('SNAPSHOT_INVALID');
   });
 });

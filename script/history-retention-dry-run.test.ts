@@ -56,7 +56,16 @@ describe('dry-run CLI', () => {
     expect(result.plans[0]?.asOf).toBe(snapshot.takenAt);
   });
   it('複数の案を同じ snapshot で並べ、owner を出さない', () => {
-    const args = parseArgs(['--snapshot', 's.json', '--policy', 'keep-all', '--policy', 'window:30', '--policy', 'tiered:30:365']);
+    const args = parseArgs([
+      '--snapshot',
+      's.json',
+      '--policy',
+      'keep-all',
+      '--policy',
+      'window:30',
+      '--policy',
+      'tiered:30:365',
+    ]);
     const result = runDryRun(snapshot, args);
     expect(result.plans.map((plan) => plan.totals.candidate)).toEqual([0, 1, 0]);
     expect(result.plans[1]?.storedBytes.candidate).toBe(20);
