@@ -151,26 +151,71 @@ export function monthsUntilLimit(
   return hit ? hit.month : null;
 }
 
+/** atMonth か月目の月末に残る履歴の容量。 */
+export function historyBytesAt(load: LoadProfile, storage: StorageProfile, policy: RetentionPolicy, atMonth: number) {
+  const point = projectCapacity(load, storage, policy, atMonth)[atMonth - 1];
+  if (!point) throw new RangeError('atMonth must be >= 1');
+  return point.historyBytes;
+}
+
+/**
+ * windowDays 日の窓に入る版の最大数（活動日の並びで最も混む窓）。
+ * 1 日未満の窓（例: 6 時間）は、その日の save が全部窓に入る側で数える。save 以外の版は月内に均等とする。
+ */
+export function maxVersionsInWindow(load: LoadProfile, windowDays: number) {
+  validateLoad(load);
+  if (!Number.isFinite(windowDays) || windowDays <= 0) throw new RangeError('windowDays must be > 0');
+  const wholeDays = Math.max(1, Math.ceil(windowDays));
+  let busiest = 0;
+  for (let start = 0; start < DAYS_PER_MONTH; start++) {
+    let activeDays = 0;
+    for (let offset = 0; offset < wholeDays; offset++)
+      if (isActiveDay(start + offset, load.activeDaysPerMonth)) activeDays++;
+    busiest = Math.max(busiest, activeDays);
+  }
+  const saves = busiest * load.savesPerActiveDay;
+  const nonSave = load.nonSaveVersionsPerSheetPerMonth * (windowDays / DAYS_PER_MONTH);
+  return load.sheets * (saves + nonSave);
+}
+
+/** PITR の保持窓（Neon の history window）に残る WAL の量。1 版あたりの WAL × 窓に入る版の最大数。 */
+export function retainedWalBytes(load: LoadProfile, walBytesPerVersion: number, windowDays: number) {
+  assertNonNegativeFinite('walBytesPerVersion', walBytesPerVersion);
+  return maxVersionsInWindow(load, windowDays) * walBytesPerVersion;
+}
+
 export interface SensitivityRow {
   label: string;
   monthlyNewBytes: number;
+  /** atMonth か月目の月末に残る履歴。保持案で間引いた後の量で、月次版の累積を含む。 */
+  historyBytesAtMonth: number;
   monthsUntilLimit: number | null;
 }
 
-/** 前提を1つずつ倍率で動かし、月間増分と上限到達月がどれだけ変わるかを並べる。 */
+export interface SensitivityVariant {
+  label: string;
+  load?: Partial<LoadProfile>;
+  storage?: Partial<StorageProfile>;
+  policy?: RetentionPolicy;
+}
+
+/** 前提を1つずつ動かし、月間増分・残る履歴・上限到達月がどれだけ変わるかを並べる。 */
 export function sensitivity(
   load: LoadProfile,
   storage: StorageProfile,
   policy: RetentionPolicy,
-  variants: { label: string; load?: Partial<LoadProfile>; storage?: Partial<StorageProfile> }[],
+  variants: SensitivityVariant[],
+  atMonth = 36,
 ): SensitivityRow[] {
   return variants.map((variant) => {
     const variedLoad = { ...load, ...variant.load };
     const variedStorage = { ...storage, ...variant.storage };
+    const variedPolicy = variant.policy ?? policy;
     return {
       label: variant.label,
       monthlyNewBytes: monthlyNewVersions(variedLoad) * variedStorage.bytesPerVersion,
-      monthsUntilLimit: monthsUntilLimit(variedLoad, variedStorage, policy),
+      historyBytesAtMonth: historyBytesAt(variedLoad, variedStorage, variedPolicy, atMonth),
+      monthsUntilLimit: monthsUntilLimit(variedLoad, variedStorage, variedPolicy),
     };
   });
 }

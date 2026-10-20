@@ -1,0 +1,477 @@
+{
+  "kind": "synthetic-local-postgres",
+  "note": "新規ローカルPostgreSQLの合成データ。Neon本番の実測ではない。保存遅延はUnix socket経由のpsql往復で、ネットワーク・アプリ処理を含まない。",
+  "tool": "measure-document-history",
+  "final": {
+    "relations": {
+      "blocks": {
+        "heapBytes": 303104,
+        "deadTuples": 9030,
+        "indexBytes": 32768,
+        "toastBytes": 37797888,
+        "totalBytes": 38133760
+      },
+      "skill_sheets": {
+        "heapBytes": 8192,
+        "deadTuples": 19,
+        "indexBytes": 49152,
+        "toastBytes": 8192,
+        "totalBytes": 65536
+      },
+      "deleted_documents": {
+        "heapBytes": 0,
+        "deadTuples": 0,
+        "indexBytes": 16384,
+        "toastBytes": 8192,
+        "totalBytes": 24576
+      },
+      "document_versions": {
+        "heapBytes": 65536,
+        "deadTuples": 46,
+        "indexBytes": 90112,
+        "toastBytes": 30629888,
+        "totalBytes": 30785536
+      }
+    },
+    "measuredAt": "2026-10-20T22:57:52.131104+09:00",
+    "versionCount": 434,
+    "databaseBytes": 108608535,
+    "blocksStoredBytes": 28940856,
+    "blocksLogicalBytes": 28743386,
+    "transactionReadOnly": "on",
+    "deletedDocumentCount": 0
+  },
+  "gitSha": "47e430198136d8cc493c9bb0e07ef6a4dde3bade",
+  "command": "./script/measure-document-history.sh",
+  "samples": {
+    "burstSaves": 200,
+    "normalSaves": 15,
+    "largeTargetBytes": 95000,
+    "smallTargetBytes": 33000
+  },
+  "gitDirty": false,
+  "scenarios": [
+    {
+      "name": "burst-small",
+      "errors": 0,
+      "sheets": ["burst-small"],
+      "accepted": 200,
+      "attempts": 200,
+      "walBytes": 23454880,
+      "elapsedMs": 1406,
+      "latencyMs": {
+        "max": 102.661,
+        "min": 2.043,
+        "p50": 4.179,
+        "p95": 13.309,
+        "samples": 200
+      },
+      "lockWaits": 0,
+      "sizeBefore": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 40960,
+            "deadTuples": 0,
+            "indexBytes": 32768,
+            "toastBytes": 385024,
+            "totalBytes": 458752
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 0,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 8192,
+            "deadTuples": 4,
+            "indexBytes": 32768,
+            "toastBytes": 319488,
+            "totalBytes": 360448
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:28.126074+09:00",
+        "versionCount": 4,
+        "databaseBytes": 40475671,
+        "blocksStoredBytes": 266736,
+        "blocksLogicalBytes": 264916,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "concurrency": 1,
+      "failureRate": 0,
+      "versionsAdded": 200,
+      "sizeAfterWrite": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 98304,
+            "deadTuples": 2200,
+            "indexBytes": 32768,
+            "toastBytes": 9502720,
+            "totalBytes": 9633792
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 23,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 57344,
+            "deadTuples": 23,
+            "indexBytes": 49152,
+            "toastBytes": 15237120,
+            "totalBytes": 15343616
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:29.598922+09:00",
+        "versionCount": 204,
+        "databaseBytes": 64633879,
+        "blocksStoredBytes": 7149136,
+        "blocksLogicalBytes": 7098316,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "sizeAfterCompact": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 98304,
+            "deadTuples": 2200,
+            "indexBytes": 32768,
+            "toastBytes": 9502720,
+            "totalBytes": 9633792
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 23,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 32768,
+            "deadTuples": 23,
+            "indexBytes": 49152,
+            "toastBytes": 7782400,
+            "totalBytes": 7864320
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:33.986743+09:00",
+        "versionCount": 204,
+        "databaseBytes": 57170967,
+        "blocksStoredBytes": 7149136,
+        "blocksLogicalBytes": 7098316,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "payloadTargetBytes": [33000]
+    },
+    {
+      "name": "burst-large",
+      "errors": 0,
+      "sheets": ["burst-large"],
+      "accepted": 200,
+      "attempts": 200,
+      "walBytes": 66883416,
+      "elapsedMs": 7309,
+      "latencyMs": {
+        "max": 691.867,
+        "min": 5.933,
+        "p50": 15.862,
+        "p95": 122.773,
+        "samples": 200
+      },
+      "lockWaits": 0,
+      "sizeBefore": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 98304,
+            "deadTuples": 2200,
+            "indexBytes": 32768,
+            "toastBytes": 9502720,
+            "totalBytes": 9633792
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 23,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 32768,
+            "deadTuples": 23,
+            "indexBytes": 49152,
+            "toastBytes": 7782400,
+            "totalBytes": 7864320
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:34.072742+09:00",
+        "versionCount": 204,
+        "databaseBytes": 57187351,
+        "blocksStoredBytes": 7149136,
+        "blocksLogicalBytes": 7098316,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "concurrency": 1,
+      "failureRate": 0,
+      "versionsAdded": 200,
+      "sizeAfterWrite": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 278528,
+            "deadTuples": 8400,
+            "indexBytes": 32768,
+            "toastBytes": 35184640,
+            "totalBytes": 35495936
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 46,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 81920,
+            "deadTuples": 30,
+            "indexBytes": 73728,
+            "toastBytes": 49242112,
+            "totalBytes": 49397760
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:41.481689+09:00",
+        "versionCount": 404,
+        "databaseBytes": 124582935,
+        "blocksStoredBytes": 26940336,
+        "blocksLogicalBytes": 26756516,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "sizeAfterCompact": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 278528,
+            "deadTuples": 8400,
+            "indexBytes": 32768,
+            "toastBytes": 35184640,
+            "totalBytes": 35495936
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 46,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 57344,
+            "deadTuples": 30,
+            "indexBytes": 73728,
+            "toastBytes": 28524544,
+            "totalBytes": 28655616
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:44.194591+09:00",
+        "versionCount": 404,
+        "databaseBytes": 103840791,
+        "blocksStoredBytes": 26940336,
+        "blocksLogicalBytes": 26756516,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "payloadTargetBytes": [95000]
+    },
+    {
+      "name": "normal-parallel",
+      "errors": 0,
+      "sheets": ["normal-small", "normal-large"],
+      "accepted": 30,
+      "attempts": 30,
+      "walBytes": 6774776,
+      "elapsedMs": 496,
+      "latencyMs": {
+        "max": 244.923,
+        "min": 2.347,
+        "p50": 7.3,
+        "p95": 240.499,
+        "samples": 30
+      },
+      "lockWaits": 0,
+      "sizeBefore": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 278528,
+            "deadTuples": 8400,
+            "indexBytes": 32768,
+            "toastBytes": 35184640,
+            "totalBytes": 35495936
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 46,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 57344,
+            "deadTuples": 30,
+            "indexBytes": 73728,
+            "toastBytes": 28524544,
+            "totalBytes": 28655616
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:44.326746+09:00",
+        "versionCount": 404,
+        "databaseBytes": 103840791,
+        "blocksStoredBytes": 26940336,
+        "blocksLogicalBytes": 26756516,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "concurrency": 2,
+      "failureRate": 0,
+      "versionsAdded": 30,
+      "sizeAfterWrite": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 303104,
+            "deadTuples": 9030,
+            "indexBytes": 32768,
+            "toastBytes": 37797888,
+            "totalBytes": 38133760
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 19,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 98304,
+            "deadTuples": 46,
+            "indexBytes": 81920,
+            "toastBytes": 32776192,
+            "totalBytes": 32956416
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:44.908846+09:00",
+        "versionCount": 434,
+        "databaseBytes": 110779415,
+        "blocksStoredBytes": 28940856,
+        "blocksLogicalBytes": 28743386,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "sizeAfterCompact": {
+        "relations": {
+          "blocks": {
+            "heapBytes": 303104,
+            "deadTuples": 9030,
+            "indexBytes": 32768,
+            "toastBytes": 37797888,
+            "totalBytes": 38133760
+          },
+          "skill_sheets": {
+            "heapBytes": 8192,
+            "deadTuples": 19,
+            "indexBytes": 49152,
+            "toastBytes": 8192,
+            "totalBytes": 65536
+          },
+          "deleted_documents": {
+            "heapBytes": 0,
+            "deadTuples": 0,
+            "indexBytes": 16384,
+            "toastBytes": 8192,
+            "totalBytes": 24576
+          },
+          "document_versions": {
+            "heapBytes": 65536,
+            "deadTuples": 46,
+            "indexBytes": 90112,
+            "toastBytes": 30629888,
+            "totalBytes": 30785536
+          }
+        },
+        "measuredAt": "2026-10-20T22:57:52.131104+09:00",
+        "versionCount": 434,
+        "databaseBytes": 108608535,
+        "blocksStoredBytes": 28940856,
+        "blocksLogicalBytes": 28743386,
+        "transactionReadOnly": "on",
+        "deletedDocumentCount": 0
+      },
+      "payloadTargetBytes": [95000, 33000]
+    }
+  ],
+  "startedAt": "2026-10-20T13:57:21Z",
+  "finishedAt": "2026-10-20T13:57:52Z",
+  "environment": {
+    "os": "Darwin 25.1.0",
+    "postgres": "16.15 (Homebrew)",
+    "autovacuum": "off"
+  },
+  "fixtureBytes": 30826496
+}

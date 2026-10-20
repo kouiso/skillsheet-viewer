@@ -1,23 +1,33 @@
 // 計測 report から容量モデルの表（Markdown）を出す（#574）。DB には接続しない。
-// 使い方: pnpm exec tsx script/history-capacity-report.ts --measurement <report.json> [--months 36]
+// 使い方: pnpm exec tsx script/history-capacity-report.ts --measurement <report.json> [--months 36] [--policy keep-all]
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
-  KEEP_ALL,
   LOAD_PRESETS,
+  type LoadPreset,
   type MeasuredPerVersion,
   type MeasurementReport,
+  NEON_HISTORY_SOURCE,
+  PITR_WINDOWS,
   parseMeasurementReport,
   perVersionFromScenario,
   REPORTED_20261014,
+  REPORTED_BYTES_PER_VERSION_444,
+  REPORTED_HISTORY_CAP_BYTES,
+  RETENTION_OPTIONS,
+  type RetentionOption,
   storageFromMeasurement,
 } from '../src/db/history-capacity-input';
 import {
+  historyBytesAt,
   type LoadProfile,
+  maxVersionsInWindow,
   monthlyNewVersions,
   monthsUntilLimit,
   projectCapacity,
-  type RetentionPolicy,
+  retainedWalBytes,
+  type SensitivityVariant,
+  type SourceKind,
   type StorageProfile,
   sensitivity,
   toMB,
@@ -25,19 +35,30 @@ import {
 } from '../src/db/history-capacity-model';
 
 const KIND_LABEL = { measured: '実測', reported: '既存報告', assumed: '仮定', extrapolated: '外挿' } as const;
+/** 感度分析の上限到達を探す期間。表の月数（既定 36）より長く取り、間引いた案でも届くかを見る。 */
+const SENSITIVITY_HORIZON_MONTHS = 120;
+/** 文書に貼る生成結果の境界。文書の表を手で直すと単体テストが落ちる。 */
+export const DOC_BLOCK_BEGIN = '<!-- history-capacity-report:begin -->';
+export const DOC_BLOCK_END = '<!-- history-capacity-report:end -->';
 
 export function parseArgs(argv: string[]) {
   let measurement: string | undefined;
   let months = 36;
+  let policy: RetentionOption['name'] = 'keep-all';
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     if (arg === '--measurement') measurement = argv[++index];
     else if (arg === '--months') months = Number(argv[++index]);
-    else throw new Error(`UNKNOWN_ARGUMENT: ${arg}`);
+    else if (arg === '--policy') {
+      const name = argv[++index];
+      const option = RETENTION_OPTIONS.find((item) => item.name === name);
+      if (!option) throw new Error('INVALID_POLICY');
+      policy = option.name;
+    } else throw new Error(`UNKNOWN_ARGUMENT: ${arg}`);
   }
   if (!measurement) throw new Error('MEASUREMENT_REQUIRED');
-  if (!Number.isInteger(months) || months < 1 || months > 240) throw new Error('INVALID_MONTHS');
-  return { measurement, months };
+  if (!Number.isInteger(months) || months < 12 || months > 240) throw new Error('INVALID_MONTHS');
+  return { measurement, months, policy };
 }
 
 const mib = (bytes: number) => `${toMiB(bytes).toFixed(1)} MiB`;
@@ -45,17 +66,37 @@ const both = (bytes: number) => `${toMiB(bytes).toFixed(1)} MiB（${toMB(bytes).
 const kb = (bytes: number) => `${(bytes / 1000).toFixed(1)} KB`;
 const limitText = (months: number | null, horizon: number) =>
   months === null ? `${horizon}か月内に届かない` : `${months}か月目`;
+const kindCell = (kind: SourceKind) => `入力は${KIND_LABEL[kind]}、結果は外挿`;
+
+function optionByName(name: RetentionOption['name']) {
+  const option = RETENTION_OPTIONS.find((item) => item.name === name);
+  if (!option) throw new Error('INVALID_POLICY');
+  return option;
+}
+
+function presetByName(name: LoadPreset['name']) {
+  const preset = LOAD_PRESETS.find((item) => item.name === name);
+  if (!preset) throw new Error(`UNKNOWN_PRESET: ${name}`);
+  return preset;
+}
 
 function pickLarger(perVersions: MeasuredPerVersion[]) {
   return [...perVersions].sort((a, b) => b.payloadTargetBytes - a.payloadTargetBytes)[0];
 }
 
-export function renderCapacityReport(report: MeasurementReport, months: number, policy: RetentionPolicy = KEEP_ALL) {
+function measuredInputs(report: MeasurementReport) {
   const perVersions = report.scenarios.map(perVersionFromScenario).filter((value) => value !== null);
   const base = pickLarger(perVersions);
   if (!base) throw new Error('MEASUREMENT_HAS_NO_SINGLE_SIZE_SCENARIO');
   const small = [...perVersions].sort((a, b) => a.payloadTargetBytes - b.payloadTargetBytes)[0] ?? base;
-  const storage = storageFromMeasurement(base, report.gitSha);
+  return { base, small, storage: storageFromMeasurement(base, report.gitSha) };
+}
+
+export function renderCapacityReport(
+  report: MeasurementReport,
+  months: number,
+  policyName: RetentionOption['name'] = 'keep-all',
+) {
   const lines: string[] = [];
   lines.push('## 計測条件');
   lines.push('');
@@ -107,7 +148,29 @@ export function renderCapacityReport(report: MeasurementReport, months: number, 
   );
   lines.push(`| 本文 | 約${kb(REPORTED_20261014.bodyBytes)} | 既存報告 |`);
   lines.push('');
-  lines.push(`## 月間モデル（保持案: ${policy.kind}、1版 ${kb(base.compactBytesPerVersion)}）`);
+  lines.push(renderModelSections(report, months, policyName));
+  lines.push('');
+  lines.push('## 未測定');
+  lines.push('');
+  lines.push(
+    '- Neon 本番での保存遅延・WAL の量。本番には履歴表が未導入で、月間履歴の実測は取得できない（WAL は合成計測の値で外挿した）。',
+  );
+  lines.push('- 実データの圧縮率。合成本文はほぼ圧縮できない最悪側で、実データはこれより小さくなり得る。');
+  lines.push('- 本番の継続的な保存頻度。revision は単点で、保存の時刻分布は記録されていない。');
+  lines.push('- この project の Neon プラン（PITR の保持窓はプランで決まるので、窓の長さは候補を並べた）。');
+  return lines.join('\n');
+}
+
+/** 月間モデル・保持案の比較・WAL・感度分析。文書にはこの出力をそのまま貼る。 */
+export function renderModelSections(
+  report: MeasurementReport,
+  months: number,
+  policyName: RetentionOption['name'] = 'keep-all',
+) {
+  const { base, small, storage } = measuredInputs(report);
+  const option = optionByName(policyName);
+  const lines: string[] = [];
+  lines.push(`## 月間モデル（保持案: ${option.label}、1版 ${kb(base.compactBytesPerVersion)}）`);
   lines.push('');
   lines.push('月間版数 = シート数 × 活動日 × 1活動日あたりの保存数 ＋ save 以外の版。初回 baseline は1シート1版。');
   lines.push('');
@@ -115,10 +178,10 @@ export function renderCapacityReport(report: MeasurementReport, months: number, 
   lines.push('|---|---|---|---:|---:|---:|---|');
   for (const preset of LOAD_PRESETS) {
     const load = preset.load.value;
-    const points = projectCapacity(load, storage.value, policy, Math.max(12, months));
+    const points = projectCapacity(load, storage.value, option.policy, months);
     const twelve = points[11];
     lines.push(
-      `| ${preset.name} | ${describeLoad(load)} | 入力は${KIND_LABEL[preset.load.kind]}、結果は外挿 | ${monthlyNewVersions(load)} | ${both(monthlyNewVersions(load) * storage.value.bytesPerVersion)} | ${twelve ? both(twelve.historyBytes) : '—'} | ${limitText(monthsUntilLimit(load, storage.value, policy, months), months)} |`,
+      `| ${preset.name} | ${describeLoad(load)} | ${kindCell(preset.load.kind)} | ${monthlyNewVersions(load)} | ${both(monthlyNewVersions(load) * storage.value.bytesPerVersion)} | ${twelve ? both(twelve.historyBytes) : '—'} | ${limitText(monthsUntilLimit(load, storage.value, option.policy, months), months)} |`,
     );
   }
   lines.push('');
@@ -126,65 +189,162 @@ export function renderCapacityReport(report: MeasurementReport, months: number, 
     `上限 = ${mib(storage.value.limitBytes)}（既存報告）、履歴以外 = ${mib(storage.value.nonHistoryBytes)}（既存報告）。`,
   );
   lines.push('');
+  lines.push(...renderPolicyComparison(storage.value, base, months));
+  lines.push(...renderWal(base));
   lines.push('## 感度分析');
+  lines.push('');
+  lines.push(
+    `保持案は ${option.label}。上限到達は ${SENSITIVITY_HORIZON_MONTHS} か月先まで探す。どの行も前提を1つだけ変えた外挿。`,
+  );
   lines.push('');
   for (const preset of LOAD_PRESETS.filter((item) => item.name === 'normal' || item.name === 'high')) {
     lines.push(`### ${preset.name}`);
     lines.push('');
-    lines.push('| 変えた前提 | 月間増分 | 上限到達 |');
-    lines.push('|---|---:|---|');
-    for (const row of sensitivity(
-      preset.load.value,
-      storage.value,
-      policy,
-      sensitivityVariants(preset.load.value, base, small),
-    )) {
-      lines.push(`| ${row.label} | ${both(row.monthlyNewBytes)} | ${limitText(row.monthsUntilLimit, 120)} |`);
-    }
+    lines.push(`| 変えた前提 | 区分 | 月間増分 | ${months}か月後の履歴 | 上限到達 |`);
+    lines.push('|---|---|---:|---:|---|');
+    const variants = sensitivityVariants(preset.load.value, storage.value, base, small, preset.load.kind);
+    const rows = sensitivity(preset.load.value, storage.value, option.policy, variants, months);
+    rows.forEach((row, index) => {
+      const kind = variants[index]?.kind ?? preset.load.kind;
+      lines.push(
+        `| ${row.label} | ${kindCell(kind)} | ${both(row.monthlyNewBytes)} | ${both(row.historyBytesAtMonth)} | ${limitText(row.monthsUntilLimit, SENSITIVITY_HORIZON_MONTHS)} |`,
+      );
+    });
     lines.push('');
   }
-  lines.push('## 未測定');
+  return lines.join('\n').trimEnd();
+}
+
+function renderPolicyComparison(storage: StorageProfile, base: MeasuredPerVersion, months: number) {
+  const historyCap = { ...storage, nonHistoryBytes: 0, limitBytes: REPORTED_HISTORY_CAP_BYTES };
+  const lines: string[] = [];
+  lines.push('## 保持案ごとの比較（月次版の累積を含む）');
   lines.push('');
   lines.push(
-    '- Neon 本番での保存遅延・WAL・バックアップ（履歴保持期間）分の容量。本番には履歴表が未導入で、月間履歴の実測は取得できない。',
+    `間引いた案でも、365日より古い save は1か月1版ずつ、save 以外の版は全部が残り続ける。履歴上限 ${mib(REPORTED_HISTORY_CAP_BYTES)} は 10/14 コメントの案にある履歴だけの上限（既存報告）。`,
   );
-  lines.push('- 実データの圧縮率。合成本文はほぼ圧縮できない最悪側で、実データはこれより小さくなり得る。');
-  lines.push('- 本番の継続的な保存頻度。revision は単点で、保存の時刻分布は記録されていない。');
-  return lines.join('\n');
+  lines.push('');
+  lines.push(
+    `| 負荷 | 保持案 | 区分 | 12か月後の履歴 | ${months}か月後の履歴 | 履歴 ${mib(REPORTED_HISTORY_CAP_BYTES)} 到達 | 上限到達 |`,
+  );
+  lines.push('|---|---|---|---:|---:|---|---|');
+  for (const preset of LOAD_PRESETS) {
+    for (const option of RETENTION_OPTIONS) {
+      const load = preset.load.value;
+      lines.push(
+        `| ${preset.name} | ${option.name} | ${kindCell(preset.load.kind)} | ${both(historyBytesAt(load, storage, option.policy, 12))} | ${both(historyBytesAt(load, storage, option.policy, months))} | ${limitText(monthsUntilLimit(load, historyCap, option.policy, months), months)} | ${limitText(monthsUntilLimit(load, storage, option.policy, months), months)} |`,
+      );
+    }
+  }
+  lines.push('');
+  for (const option of RETENTION_OPTIONS) lines.push(`- ${option.name}: ${option.label}。出典: ${option.source}`);
+  lines.push('');
+  lines.push('### 10/14 の重い月を1版の大きさ別に再計算');
+  lines.push('');
+  lines.push(
+    `負荷は reported-heavy（${describeLoad(presetByName('reported-heavy').load.value)}）。10/14 コメントの「約115MB」は 1版 47.5KB と 30日全版の案での値。`,
+  );
+  lines.push('');
+  lines.push(
+    `| 1版 | 1版の区分 | 保持案 | 区分 | 12か月後の履歴 | ${months}か月後の履歴 | 履歴 ${mib(REPORTED_HISTORY_CAP_BYTES)} 到達 |`,
+  );
+  lines.push('|---|---|---|---|---:|---:|---|');
+  const heavy = presetByName('reported-heavy');
+  const sizes: { label: string; kind: SourceKind; bytes: number }[] = [
+    { label: '47.5 KB（PR #444、本文列だけ）', kind: 'reported', bytes: REPORTED_BYTES_PER_VERSION_444 },
+    { label: `${kb(base.compactBytesPerVersion)}（詰めた後）`, kind: 'measured', bytes: base.compactBytesPerVersion },
+    { label: `${kb(base.writtenBytesPerVersion)}（保存直後）`, kind: 'measured', bytes: base.writtenBytesPerVersion },
+  ];
+  for (const size of sizes) {
+    for (const option of RETENTION_OPTIONS.filter((item) => item.name !== 'keep-all')) {
+      const sized = { ...historyCap, bytesPerVersion: size.bytes };
+      const load = heavy.load.value;
+      lines.push(
+        `| ${size.label} | ${KIND_LABEL[size.kind]} | ${option.name} | ${kindCell(heavy.load.kind)} | ${both(historyBytesAt(load, sized, option.policy, 12))} | ${both(historyBytesAt(load, sized, option.policy, months))} | ${limitText(monthsUntilLimit(load, sized, option.policy, months), months)} |`,
+      );
+    }
+  }
+  lines.push('');
+  return lines;
+}
+
+function renderWal(base: MeasuredPerVersion) {
+  const lines: string[] = [];
+  lines.push('## WAL と PITR の保持');
+  lines.push('');
+  lines.push(
+    '容量上限（`branch_logical_size_limit`）が数えるのは論理データ量（表・索引など DB の大きさ）。PITR のための WAL（Neon の History）とスナップショットは別の計量で、この上限には入らない。だから上の上限到達には WAL を足していない。',
+  );
+  lines.push(`出典: ${NEON_HISTORY_SOURCE}`);
+  lines.push('');
+  lines.push(
+    `WAL は保持窓のあいだ残る。1版の WAL ${kb(base.walBytesPerVersion)}（合成の実測）× 窓に入る版の最大数で数える。窓の長さはプランで決まり、この project のプランは確認していないので候補を並べる。Free の History は 1GB が上限。`,
+  );
+  lines.push('');
+  lines.push('| 負荷 | 保持窓 | 区分 | 窓に入る版（最大） | 残る WAL |');
+  lines.push('|---|---|---|---:|---:|');
+  for (const preset of LOAD_PRESETS) {
+    for (const window of PITR_WINDOWS) {
+      const load = preset.load.value;
+      lines.push(
+        `| ${preset.name} | ${window.label} | ${kindCell(preset.load.kind)} | ${maxVersionsInWindow(load, window.days).toFixed(1)} | ${both(retainedWalBytes(load, base.walBytesPerVersion, window.days))} |`,
+      );
+    }
+  }
+  lines.push('');
+  return lines;
 }
 
 function describeLoad(load: LoadProfile) {
   return `${load.sheets}シート×月${load.activeDaysPerMonth}日×${load.savesPerActiveDay}保存＋非save ${load.nonSaveVersionsPerSheetPerMonth}/月`;
 }
 
-export function sensitivityVariants(load: LoadProfile, base: MeasuredPerVersion, small: MeasuredPerVersion) {
-  const variants: { label: string; load?: Partial<LoadProfile>; storage?: Partial<StorageProfile> }[] = [
-    { label: '基準' },
-    { label: '保存数 ×0.5', load: { savesPerActiveDay: load.savesPerActiveDay * 0.5 } },
-    { label: '保存数 ×2', load: { savesPerActiveDay: load.savesPerActiveDay * 2 } },
-    { label: '保存数 ×4', load: { savesPerActiveDay: load.savesPerActiveDay * 4 } },
+export function sensitivityVariants(
+  load: LoadProfile,
+  storage: StorageProfile,
+  base: MeasuredPerVersion,
+  small: MeasuredPerVersion,
+  baseKind: SourceKind,
+) {
+  const walIncluded = (days: number) => storage.nonHistoryBytes + retainedWalBytes(load, base.walBytesPerVersion, days);
+  const variants: (SensitivityVariant & { kind: SourceKind })[] = [
+    { label: '基準', kind: baseKind },
+    { label: '保存数 ×0.5', kind: 'assumed', load: { savesPerActiveDay: load.savesPerActiveDay * 0.5 } },
+    { label: '保存数 ×2', kind: 'assumed', load: { savesPerActiveDay: load.savesPerActiveDay * 2 } },
+    { label: '保存数 ×4', kind: 'assumed', load: { savesPerActiveDay: load.savesPerActiveDay * 4 } },
     {
       label: `1版 ${kb(small.compactBytesPerVersion)}（小さい本文の実測）`,
+      kind: 'measured',
       storage: { bytesPerVersion: small.compactBytesPerVersion },
     },
     {
       label: `1版 ${kb(base.writtenBytesPerVersion)}（保存直後・dead tuple 込み）`,
+      kind: 'measured',
       storage: { bytesPerVersion: base.writtenBytesPerVersion },
     },
     {
       label: 'save 以外の版 ×10',
+      kind: 'assumed',
       load: { nonSaveVersionsPerSheetPerMonth: load.nonSaveVersionsPerSheetPerMonth * 10 },
     },
-    { label: 'シート数 ×3', load: { sheets: load.sheets * 3 } },
-    { label: '上限を MB で数えた場合（1,024 MB）', storage: { limitBytes: 1024 * 1000 * 1000 } },
+    { label: 'シート数 ×3', kind: 'assumed', load: { sheets: load.sheets * 3 } },
+    { label: '上限を MB で数えた場合（1,024 MB）', kind: 'reported', storage: { limitBytes: 1024 * 1000 * 1000 } },
   ];
+  for (const option of RETENTION_OPTIONS.filter((item) => item.name !== 'keep-all'))
+    variants.push({ label: `保持案 ${option.name}（月次版の累積込み）`, kind: 'reported', policy: option.policy });
+  for (const days of [1, 7])
+    variants.push({
+      label: `WAL（PITR ${days}日分）も上限に数えた場合`,
+      kind: 'measured',
+      storage: { nonHistoryBytes: walIncluded(days) },
+    });
   return variants;
 }
 
 function main() {
-  const { measurement, months } = parseArgs(process.argv.slice(2));
+  const { measurement, months, policy } = parseArgs(process.argv.slice(2));
   const report = parseMeasurementReport(JSON.parse(readFileSync(measurement, 'utf8')));
-  process.stdout.write(`${renderCapacityReport(report, months)}\n`);
+  process.stdout.write(`${renderCapacityReport(report, months, policy)}\n`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();

@@ -116,7 +116,7 @@ export const REPORTED_20261014 = {
 } as const;
 
 export interface LoadPreset {
-  name: 'low' | 'normal' | 'high' | 'reported-pace';
+  name: 'low' | 'normal' | 'high' | 'reported-pace' | 'reported-heavy';
   load: Sourced<LoadProfile>;
 }
 
@@ -157,7 +157,62 @@ export const LOAD_PRESETS: LoadPreset[] = [
       source: '仮定: 3シートを月20日、1日200保存（10/14 の重い月の1日200版を上回る側）',
     },
   },
+  {
+    name: 'reported-heavy',
+    load: {
+      value: { sheets: 1, activeDaysPerMonth: 10, savesPerActiveDay: 200, nonSaveVersionsPerSheetPerMonth: 0 },
+      kind: 'reported',
+      source:
+        '#564 10/14 コメントの「いちばん重い月」（1日200版×月10日、シート1枚）。save 以外の版は同コメントに無いので0',
+    },
+  },
 ];
+
+export interface RetentionOption {
+  name: 'keep-all' | 'tiered-30-365' | 'tiered-7-365';
+  label: string;
+  policy: RetentionPolicy;
+  source: string;
+}
+
+export const KEEP_ALL: RetentionPolicy = { kind: 'keep-all' };
+
+/** 比べる保持案。どれも本人承認済みではなく、比較のための入力。 */
+export const RETENTION_OPTIONS: RetentionOption[] = [
+  { name: 'keep-all', label: '全版', policy: KEEP_ALL, source: '現行仕様（自動削除なし）' },
+  {
+    name: 'tiered-30-365',
+    label: '30日全版→365日まで1日1版→以降1か月1版',
+    policy: { kind: 'tiered', fullDays: 30, dailyUntilDays: 365 },
+    source: '#564 10/14 コメントの案（承認済みとは扱わない）',
+  },
+  {
+    name: 'tiered-7-365',
+    label: '7日全版→365日まで1日1版→以降1か月1版',
+    policy: { kind: 'tiered', fullDays: 7, dailyUntilDays: 365 },
+    source: '同コメントの「履歴が 256MiB を超えたら全版の期間を7日に縮める」',
+  },
+];
+
+/** 10/14 コメントの案にある履歴だけの上限。DB 全体の上限（1,024MiB）とは別。 */
+export const REPORTED_HISTORY_CAP_BYTES = 256 * MIB;
+
+/** 1 版の大きさの既存報告。PR #444 の合成データの本文列だけの物理容量で、索引・TOAST の外側は含まない。 */
+export const REPORTED_BYTES_PER_VERSION_444 = 47.5 * 1000;
+
+/**
+ * Neon の history window（PITR で戻れる期間）の既定値と上限。プランで決まり、この project のプランは確認していない。
+ * 出典は NEON_HISTORY_SOURCE。
+ */
+export const PITR_WINDOWS: { label: string; days: number }[] = [
+  { label: '6時間（Free の上限）', days: 0.25 },
+  { label: '1日（Launch・Scale の既定）', days: 1 },
+  { label: '7日（Launch の上限）', days: 7 },
+  { label: '30日（Scale の上限）', days: 30 },
+];
+
+export const NEON_HISTORY_SOURCE =
+  'Neon docs（2026-10-21 閲覧）: https://neon.com/docs/postgres/backup-restore/history-window 、https://neon.com/docs/introduction/usage-metrics 、https://neon.com/docs/reference/glossary';
 
 export function storageFromMeasurement(perVersion: MeasuredPerVersion, sha: string): Sourced<StorageProfile> {
   return {
@@ -170,5 +225,3 @@ export function storageFromMeasurement(perVersion: MeasuredPerVersion, sha: stri
     source: `1版の容量は計測 ${sha.slice(0, 7)} の ${perVersion.scenario}（合成・VACUUM FULL 後）。非履歴容量と上限は ${REPORTED_20261014.source}`,
   };
 }
-
-export const KEEP_ALL: RetentionPolicy = { kind: 'keep-all' };
