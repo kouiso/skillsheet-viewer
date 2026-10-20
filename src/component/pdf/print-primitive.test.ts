@@ -11,7 +11,7 @@
  * 案件セクションは measure-then-place（print-leaf-list.tsx）で葉ごとに置くので `BulletLine` を使う。
  *
  * 描画（renderToBuffer）はしない — jsdom 側では @react-pdf の実描画を禁じているため
- * （CLAUDE.md）。見たいのは要素ツリーの形だけで、それは戻り値を歩けば確認できる。
+ * （AGENTS.md）。見たいのは要素ツリーの形だけで、それは戻り値を歩けば確認できる。
  */
 import { Children, Fragment, isValidElement, type ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';

@@ -11,7 +11,7 @@
  * 句読点の直前にハイフンが混入した。
  *
  * @react-pdf/renderer の Font/renderToBuffer と pdfjs-dist への直接依存があるため、
- * CLAUDE.md の取り決めどおり *.node.test.tsx（vitest.config.pdf.ts / node 環境）に置く。
+ * AGENTS.md の取り決めどおり *.node.test.tsx（vitest.config.pdf.ts / node 環境）に置く。
  */
 import { existsSync } from 'node:fs';
 import path from 'node:path';

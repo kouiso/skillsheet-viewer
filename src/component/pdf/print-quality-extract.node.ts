@@ -3,7 +3,7 @@
  *
  * `pdfjs-dist` を import するため **Node 環境専用**（`*.node.test.tsx` からのみ使う）。
  * jsdom では @react-pdf の描画も pdfjs も別 realm の Uint8Array 判定で壊れる
- * （CLAUDE.md の取り決め）。ファイル名の `.node.` はその境界を人が読める形で示すもの。
+ * （AGENTS.md の取り決め）。ファイル名の `.node.` はその境界を人が読める形で示すもの。
  */
 
 import type { QualityPage } from './print-quality';
