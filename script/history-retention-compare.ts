@@ -22,8 +22,16 @@ export const POLICY_OPTIONS: PolicyOption[] = [
   { id: 'A', label: '全版保持（今の動き）', policy: { kind: 'keep-all' } },
   { id: 'B', label: '90日より古い save を消す', policy: { kind: 'window', keepDays: 90 } },
   { id: 'C', label: '30日より古い save を消す', policy: { kind: 'window', keepDays: 30 } },
-  { id: 'D', label: '30日全版・365日まで日1版・以降は月1版（10/14 案）', policy: { kind: 'tiered', fullDays: 30, dailyUntilDays: 365 } },
-  { id: 'E', label: '7日全版・365日まで日1版・以降は月1版（10/14 案の超過時）', policy: { kind: 'tiered', fullDays: 7, dailyUntilDays: 365 } },
+  {
+    id: 'D',
+    label: '30日全版・365日まで日1版・以降は月1版（10/14 案）',
+    policy: { kind: 'tiered', fullDays: 30, dailyUntilDays: 365 },
+  },
+  {
+    id: 'E',
+    label: '7日全版・365日まで日1版・以降は月1版（10/14 案の超過時）',
+    policy: { kind: 'tiered', fullDays: 7, dailyUntilDays: 365 },
+  },
 ];
 
 const mib = (bytes: number) => `${toMiB(bytes).toFixed(1)}`;
@@ -54,7 +62,8 @@ export function renderComparison(report: MeasurementReport, horizon = 120) {
 
 function main() {
   const argv = process.argv.slice(2);
-  if (argv[0] !== '--measurement' || !argv[1] || argv.length !== 2) throw new Error('USAGE: --measurement <report.json>');
+  if (argv[0] !== '--measurement' || !argv[1] || argv.length !== 2)
+    throw new Error('USAGE: --measurement <report.json>');
   process.stdout.write(`${renderComparison(parseMeasurementReport(JSON.parse(readFileSync(argv[1], 'utf8'))))}\n`);
 }
 
