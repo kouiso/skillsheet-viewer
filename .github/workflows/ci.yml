@@ -117,6 +117,15 @@ jobs:
         if: matrix.check-type == 'test'
         run: bash .github/ci/run.sh test
 
+      # 履歴の容量計測など、使い捨てのローカル PostgreSQL で動く DB 試験。共有 DB・secrets は使わない。
+      - name: History DB checks (isolated local PostgreSQL)
+        if: matrix.check-type == 'test'
+        run: |
+          if ! ls /usr/lib/postgresql/*/bin/initdb > /dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql
+          fi
+          bash .github/ci/run.sh history-db
+
       - name: Build
         if: matrix.check-type == 'build'
         run: bash .github/ci/run.sh build
