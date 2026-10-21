@@ -1,5 +1,6 @@
 import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
+import { REAL_VOLUME_PROJECT_COUNT } from '@/db/fixture';
 import { authFile } from './auth';
 import { createRealVolumeDemoSheet, deleteSheet } from './document-fixture';
 
@@ -84,6 +85,63 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
       );
     });
   }
+
+  for (const width of [390, 1280] as const) {
+    // #377: 概要と担当業務が別の欄で、全案件に本文つきで出る。jsdom（project-section.test.tsx）だけでなく実ブラウザでも数える。
+    test(`全案件カードに「概要」と「担当業務」が別の欄で本文つきで出る — ${width}px`, async ({ page }) => {
+      await openViewer(page, width);
+      const counts = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll('article')].filter((a) =>
+          [...a.querySelectorAll('span')].some((s) => s.children.length === 0 && s.textContent?.trim() === '概要'),
+        );
+        const labelled = (label: string) =>
+          cards.filter((card) => {
+            const labelEl = [...card.querySelectorAll('span')].find(
+              (s) => s.children.length === 0 && s.textContent?.trim() === label,
+            );
+            return (labelEl?.nextElementSibling?.textContent?.trim().length ?? 0) > 0;
+          }).length;
+        return {
+          cards: cards.length,
+          summary: labelled('概要'),
+          duties: labelled('担当業務'),
+          // real-volume-demo の duties だけが持つ行。担当業務の欄に概要の文が入っていないことを数える。
+          dutiesBody: cards.filter((card) => card.textContent?.includes('関連システムとの連携調整')).length,
+        };
+      });
+      expect(counts).toEqual({
+        cards: REAL_VOLUME_PROJECT_COUNT,
+        summary: REAL_VOLUME_PROJECT_COUNT,
+        duties: REAL_VOLUME_PROJECT_COUNT,
+        dutiesBody: REAL_VOLUME_PROJECT_COUNT,
+      });
+    });
+  }
+
+  // #377: スマホ幅でヘッダーが画面を食わず、会社へ飛んだ時に見出しがヘッダーの下へ隠れない。
+  test('ヘッダーの高さが 120px 以下で、会社見出しがヘッダーに隠れない — 390px', async ({ page }) => {
+    await openViewer(page, 390);
+    const header = page.locator('header.console-topbar');
+    const box = await header.boundingBox();
+    expect(box, 'ヘッダーが見つからない').not.toBeNull();
+    expect(box?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(120);
+
+    const hidden = await page.evaluate(() => {
+      const topbar = document.querySelector<HTMLElement>('header.console-topbar');
+      const headings = [...document.querySelectorAll<HTMLElement>('[id^="company-"][id$="-heading"]')];
+      if (!topbar || headings.length < 2) return null;
+      // 先頭以外の会社へ飛ぶ。目次からの移動と同じく、会社の節を scrollIntoView で先頭へ寄せる。
+      return headings.slice(1, 4).map((heading) => {
+        const section = document.getElementById(heading.id.replace(/-heading$/, '')) ?? heading;
+        section.scrollIntoView({ block: 'start', behavior: 'instant' });
+        return Math.max(0, topbar.getBoundingClientRect().bottom - heading.getBoundingClientRect().top);
+      });
+    });
+    expect(hidden, '会社見出しが2件以上ない').not.toBeNull();
+    for (const [index, px] of (hidden ?? []).entries()) {
+      expect(px, `会社 ${index + 2} 件目の見出しがヘッダーに隠れた量（px）`).toBeLessThanOrEqual(0.5);
+    }
+  });
 
   test('タイムラインの全タイトルの左端が揃い、日付列が最長ラベル幅に収まる — 1280px', async ({ page }) => {
     await openViewer(page, 1280);

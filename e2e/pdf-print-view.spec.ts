@@ -7,6 +7,7 @@ import {
   COMPANY_NAMES,
   REAL_VOLUME_COMPANY_COUNT,
   REAL_VOLUME_FLAGSHIP_PROJECT_TITLE,
+  REAL_VOLUME_PROJECT_COUNT,
   TECH_POOLS,
 } from '@/db/fixture';
 import { createRealVolumeDemoSheet, createSheet, deleteSheet, listSheets } from './document-fixture';
@@ -439,3 +440,20 @@ test('15. every continuation marker is attached to a real company name, never ba
 // ここでは新規に書かず、その既存テストが green であることを別途手元で再実行して確認する
 // （report 参照）。
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// 17. PDF の全案件に「概要」と「担当業務」が別の欄で出る（#377。画面側は viewer-reader-detail.spec.ts）
+// Mutation: src/component/pdf/print-view-model.ts の duties を `markdownText(item.summary) || markdownText(item.duties)`
+// の代用ルールへ戻す（担当業務の本文が消え、概要の文だけになる）。
+// ---------------------------------------------------------------------------
+test('17. every project prints both 概要 and 担当業務 with the duties body', async ({ page }) => {
+  await openSheet(page, richSheetId);
+  const pdfPath = await waitAndSaveDownload(page, () => exportButton(page).click(), 'summary-duties');
+  const text = await extractPdfText(pdfPath);
+  const count = (needle: string) => text.split(needle).length - 1;
+
+  // real-volume-demo の duties だけが持つ行。概要の文には無いので、担当業務の本文が出た案件の数になる。
+  expect(count('関連システムとの連携調整')).toBe(REAL_VOLUME_PROJECT_COUNT);
+  expect(count('担当業務')).toBeGreaterThanOrEqual(REAL_VOLUME_PROJECT_COUNT);
+  expect(count('概要')).toBeGreaterThanOrEqual(REAL_VOLUME_PROJECT_COUNT);
+});
