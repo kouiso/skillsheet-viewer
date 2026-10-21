@@ -91,7 +91,10 @@ describe('容量レポート', () => {
     expect(text).toContain('https://neon.com/docs/postgres/backup-restore/history-window');
     expect(text).toContain('WAL（PITR 1日分）も上限に数えた場合');
     // 感度分析の表は区分を独立した列に持つ。
-    expect(text).toContain('| 変えた前提 | 区分 | 月間増分 | 36か月後の履歴 | 上限到達 |');
+    expect(text).toContain('| 変えた前提 | 変えた前提の区分 | 負荷の区分 | 月間増分 | 36か月後の履歴 | 上限到達 |');
+    // 仮定の負荷に実測の1版を当てた行は、負荷の区分が仮定のまま出る。
+    expect(text).toMatch(/\| 1版 [0-9.]+ KB（小さい本文の実測） \| 実測 \| 入力は仮定、結果は外挿 \|/);
+    expect(text).toMatch(/\| 基準 \| — \| 入力は仮定、結果は外挿 \|/);
   });
   it('--policy で月間モデルと感度分析の保持案を切り替える', () => {
     const text = renderCapacityReport(parseMeasurementReport(report), 36, 'tiered-30-365');
@@ -189,6 +192,15 @@ describe('容量レポート', () => {
     [
       'failureRate が試行と成功に合わない',
       (s: Record<string, unknown>) => {
+        s.failureRate = 0.5;
+      },
+    ],
+    [
+      '試行 0 件なのに failureRate が数値',
+      (s: Record<string, unknown>) => {
+        s.attempts = 0;
+        s.accepted = 0;
+        s.errors = 0;
         s.failureRate = 0.5;
       },
     ],
