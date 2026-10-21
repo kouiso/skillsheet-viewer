@@ -62,7 +62,10 @@ claude mcp list        # 認可前は「! Needs authentication」
      （[claude-code-login.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/claude-code-login.txt)）。同意画面はスコープを選び分けられない
 4. 端末に戻り、`claude mcp list` が `✔ Connected` になる
 
-2026-10-21 の実測: [claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)（ログイン → 同意 → Connected → 切断まで）。
+2026-10-21 の実測: [claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)（`claude mcp login` → Connected → 切断まで）。
+ただし手順 1〜3 の画面は通していない。ログインは `POST /api/auth/sign-in/email`、同意は `POST /api/auth/oauth2/consent`（accept=true）を
+HTTP で直接送った。`/login` のフォームと `/consent` の画面（`authClient.oauth2.consent` の呼び出しと、返った URL への移動）は未確認で、
+自動テストも `/consent` には無い。最初に通るのは、オーナーが「3. claude.ai Custom Connector から接続する」の手順 3 を行うとき。
 
 ### 2-1. 接続後の読み取り
 
@@ -94,9 +97,9 @@ claude mcp list        # 認可前は「! Needs authentication」
 3. OAuth 同意画面でオーナーとしてログインし、許可する
 4. 新しい会話で「list_sheets を呼んで」と頼み、一覧が返ることを確かめる
 
-サーバー側（claude.ai の client_id でログイン・同意すると、code が claude.ai の callback へ返る）は
+サーバー側（claude.ai の client_id でログイン・同意すると、code が claude.ai の callback へ返る）は、ログインと同意を HTTP で送って
 2026-10-21 に確認した: [claude-ai-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-ai-oauth.txt)。
-残りはオーナーの claude.ai アカウントでの 1〜4 だけ。
+残りはオーナーの claude.ai アカウントでの 1〜4 だけ。手順 3 が `/login` と `/consent` の画面を通す最初の確認になる。
 
 ## 4. MCP Inspector で全ツールを確かめる
 
@@ -134,10 +137,11 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 | 公開 endpoint（401 / PRM / AS metadata） | 確認済み（probe-unauth.txt、[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
 | 認可の入口（Claude Code・claude.ai のクライアント登録、無効スコープ・redirect・client の拒否） | 確認済み（[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
 | Fluid compute と実行ログ | 確認済み: Fluid 有効、既定の上限 300 秒、iad1。確認中の要求はすべて info で error 0 件（[vercel-runtime.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/vercel-runtime.txt)） |
-| Claude Code の OAuth 認可 → Connected → 切断 | 確認済み（[claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)） |
+| Claude Code の OAuth 認可 → Connected → 切断 | 確認済み。ただしログインと同意は画面を使わず HTTP で送った（[claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)） |
+| `/login` → `/consent` の画面での認可（フォーム入力、同意画面の許可ボタン、callback への移動） | **未実施**: 画面はまだ一度も通していない。オーナーが 3 章の手順 3 を行うと通る |
 | 全 8 ツールの呼び出し（読み取りは値を返す、書き込みは競合・対象なし・入力不正で止まる） | 確認済み。Claude Code と同じ client_id のトークンで JSON-RPC を直接呼んだ（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt)。本番の中身は前後で同じ） |
 | 無効スコープ（閲覧だけのトークンで書き込み → 403） | 確認済み（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の A） |
 | 競合（古い revision → CONFLICT） | 確認済み（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の B） |
 | 失効 | 確認済み: JWT はサーバー側で失効できない（400）。期限前に止める手段はロールバック（`MCP_ENABLED=false` で再デプロイ）だけ（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の C） |
-| claude.ai Custom Connector | サーバー側は確認済み（[claude-ai-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-ai-oauth.txt)）。claude.ai の画面での追加は**未実施**: オーナーの claude.ai アカウントの操作（手順 3） |
+| claude.ai Custom Connector | サーバー側は確認済み。ログインと同意は HTTP で送った（[claude-ai-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-ai-oauth.txt)）。claude.ai の画面での追加は**未実施**: オーナーの claude.ai アカウントの操作（手順 3） |
 | 2-2 の中身を変えない書き込み（成功して版だけ進む） | **未実施**: 本番の版番号が進むため、オーナーの承認が先 |
