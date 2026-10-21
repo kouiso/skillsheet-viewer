@@ -91,3 +91,54 @@ DO $$DECLARE before_history jsonb;before_deleted jsonb;BEGIN
  IF skillsheet_private.read_snapshot('dddddddd-dddd-4ddd-8ddd-dddddddddd10','history-a')#>>'{snapshot,blocks,0,data,markdown}' IS DISTINCT FROM '別の合成本文' THEN RAISE EXCEPTION 'failed restore changed other block';END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
+
+-- 既定シートが不正なとき、作成も削除も INVALID_STATE で拒否し、文書・版・削除履歴を1行も変えない（#596）。
+-- どのシートを既定にするかを推測で選ぶと別の版を既定に見せてしまうため、拒否して運営に直させる契約を固定する。
+-- 壊れ方は既定0件と既定2件の2通り。既定2件は部分一意索引（0007）が防ぐので transaction 内だけ索引を外して作り、
+-- どちらも ROLLBACK で索引と全データを戻す。比較は管理接続で、全行の全列（updated_at を含む）を見る。
+CREATE FUNCTION pg_temp.history_contents_hash() RETURNS text LANGUAGE sql AS $$
+ SELECT md5(concat_ws('#',
+  (SELECT string_agg(t::text,'|' ORDER BY t::text) FROM public.skill_sheets t),
+  (SELECT string_agg(t::text,'|' ORDER BY t::text) FROM public.blocks t),
+  (SELECT string_agg(t::text,'|' ORDER BY t::text) FROM public.document_versions t),
+  (SELECT string_agg(t::text,'|' ORDER BY t::text) FROM public.deleted_documents t),
+  (SELECT string_agg(t::text,'|' ORDER BY t::text) FROM public.skillsheet_state t)))
+$$;
+BEGIN;
+UPDATE public.skill_sheets SET is_default=false WHERE owner_id='history-a';
+CREATE TEMP TABLE invalid_default_before ON COMMIT DROP AS SELECT pg_temp.history_contents_hash() AS h;
+SET SESSION AUTHORIZATION history_runtime;
+DO $$DECLARE v_revision text;BEGIN
+ IF skillsheet_private.read_snapshot(NULL,'history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'no default: read as valid';END IF;
+ IF skillsheet_private.create_sheet('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee10','既定不正時の作成','[{"id":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01","type":"markdown","data":{"markdown":"合成"}}]','history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'no default: create accepted';END IF;
+ v_revision:=skillsheet_private.read_snapshot('dddddddd-dddd-4ddd-8ddd-dddddddddd10','history-a')#>>'{snapshot,revision}';
+ IF v_revision IS NULL THEN RAISE EXCEPTION 'no default: delete target unreadable';END IF;
+ -- 正しい revision を渡し、楽観ロックではなく既定の検査で止まることを確かめる。
+ IF skillsheet_private.delete_sheet('dddddddd-dddd-4ddd-8ddd-dddddddddd10',v_revision,'history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'no default: delete accepted';END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$BEGIN
+ IF (SELECT h FROM invalid_default_before) IS DISTINCT FROM pg_temp.history_contents_hash() THEN RAISE EXCEPTION 'no default: rejected write changed documents, versions or deletion history';END IF;
+END $$;
+ROLLBACK;
+BEGIN;
+DROP INDEX public.skill_sheets_owner_default_unique;
+UPDATE public.skill_sheets SET is_default=true WHERE owner_id='history-a';
+CREATE TEMP TABLE invalid_default_before ON COMMIT DROP AS SELECT pg_temp.history_contents_hash() AS h;
+SET SESSION AUTHORIZATION history_runtime;
+DO $$DECLARE v_revision text;BEGIN
+ IF skillsheet_private.read_snapshot(NULL,'history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'two defaults: read as valid';END IF;
+ IF skillsheet_private.create_sheet('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee10','既定不正時の作成','[{"id":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01","type":"markdown","data":{"markdown":"合成"}}]','history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'two defaults: create accepted';END IF;
+ v_revision:=skillsheet_private.read_snapshot('dddddddd-dddd-4ddd-8ddd-dddddddddd10','history-a')#>>'{snapshot,revision}';
+ IF v_revision IS NULL THEN RAISE EXCEPTION 'two defaults: delete target unreadable';END IF;
+ IF skillsheet_private.delete_sheet('dddddddd-dddd-4ddd-8ddd-dddddddddd10',v_revision,'history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'two defaults: delete accepted';END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$BEGIN
+ IF (SELECT h FROM invalid_default_before) IS DISTINCT FROM pg_temp.history_contents_hash() THEN RAISE EXCEPTION 'two defaults: rejected write changed documents, versions or deletion history';END IF;
+END $$;
+ROLLBACK;
+DO $$BEGIN
+ IF NOT EXISTS(SELECT FROM pg_index WHERE indexrelid='public.skill_sheets_owner_default_unique'::regclass AND indisunique AND indpred IS NOT NULL) THEN RAISE EXCEPTION 'default unique index was not restored';END IF;
+ IF (SELECT count(*) FROM public.skill_sheets WHERE owner_id='history-a' AND is_default) IS DISTINCT FROM 1::bigint THEN RAISE EXCEPTION 'default state was not restored';END IF;
+END $$;
