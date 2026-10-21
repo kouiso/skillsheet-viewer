@@ -1,16 +1,16 @@
 # 版履歴の容量監視と運用手順
 
 版履歴（[document-history.md](document-history.md)）の容量を見張り、復元を壊さずに運用するための手順（#577）。
-ここにある監視と試験は読み取りだけで、どの版も消さない。保持期間や永久削除の方針は本人の承認待ちで、承認前の値は「候補」と書く。
+ここにある監視と試験は読み取りだけで、どの版も消さない。保持方針は全版保持＋監視に決めた（[document-history.md](document-history.md)「保持方針」）。閾値はまだ本番で確かめていない値なので「候補」と書く。
 
 ## いまの状態
 
 | 項目 | 状態 | 根拠 |
 | --- | --- | --- |
 | 容量の計測 | 合成データで計測済み。本番の実測ではない | [document-history-capacity.md](document-history-capacity.md)（#574） |
-| 保持案 | 提案のみ・未承認 | [document-history-retention.md](document-history-retention.md)（#575） |
+| 保持案 | 全版保持＋監視に決定（2026-10-21） | [document-history-retention.md](document-history-retention.md)（#575） |
 | 保持案の試算 | dry-run あり。削除の経路は無い | `script/history-retention-dry-run.ts`（#576） |
-| 承認済みの方針 | なし | #564 で本人の判断待ち |
+| 決めた方針 | 全版保持＋監視。本人の委任による AI の決定 | [#564](https://github.com/kouiso/skillsheet-viewer/issues/564#issuecomment-6308784241) |
 | 本番への導入 | 履歴表そのものが未導入（2026-10-21 13:23 JST の本番読取で `document_versions` / `deleted_documents` は 0 件、#574）。監視・保持処理とも未導入 | [document-history.md](document-history.md)「適用ゲート」 |
 
 ## 監視
