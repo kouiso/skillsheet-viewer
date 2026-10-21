@@ -1,0 +1,27 @@
+# after: #591 merge commit
+$ git rev-parse HEAD
+8fd77f976079480c6d3a0f112da363b19dd7bb96
+$ git ls-files script | grep -i retention
+script/history-retention-dry-run.test.ts
+script/history-retention-dry-run.ts
+script/sql/history-retention-snapshot.sql
+script/verify-history-retention.sh
+$ initdb --version
+initdb (PostgreSQL) 17.11 (Homebrew)
+$ ./script/verify-history-retention.harness.sh   (実体との差分は diff-real-vs-harness.txt)
+手順書どおりの psql（psql -X -q -v ON_ERROR_STOP=1 -At -f script/sql/history-retention-snapshot.sql）: PASS
+-q 抜けのタグ混じり snapshot は SNAPSHOT_NOT_JSON で停止: PASS
+READ ONLY snapshot（SELECT だけの role、本文・title なし）: PASS
+書込み拒否（読取 role の DELETE、管理接続の READ ONLY 内 DELETE）: PASS
+apply 指定の拒否: PASS
+keep-all: keep=41 candidate=0 hold=0
+window30: keep=15 candidate=26 hold=0
+window90: keep=18 candidate=23 hold=0
+tiered: keep=32 candidate=9 hold=0
+tiered+削除90日: candidate=14 conflicts=2
+案ごとの集計・参照保護・衝突報告・決定性: PASS
+dry-run 前後の件数・内容 hash 不変: PASS ({"hash": "4f84bdf33ae7e81a14054eeb2ca916e9", "blocks": 2, "sheets": 2, "deleted": 1, "versions": 41})
+私用ログ: ~/worktrees/asano-out/ssv591/runs/after.zRSnxs
+exit=0
+$ grep -n retention .github/ci/run.sh
+55:    ./script/verify-history-retention.sh

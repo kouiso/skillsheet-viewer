@@ -1,0 +1,16 @@
+--- script/verify-history-retention.sh	2026-10-21 17:15:13.620395986 +0900
++++ script/verify-history-retention.harness.sh	2026-10-21 17:16:00.373262361 +0900
+@@ -21,11 +21,11 @@
+ tsx="$repo_dir/node_modules/.bin/tsx"
+ [[ -x "$tsx" ]] || { printf 'node_modules が無い（pnpm install --frozen-lockfile を先に実行する）\n' >&2; exit 1; }
+ 
+-run_dir="$(mktemp -d /tmp/skillsheet-retention.XXXXXX)"
++run_dir="$(mktemp -d ~/worktrees/asano-out/ssv591/runs/after.XXXXXX)"
+ port=55451
+ cleanup() {
+   if [[ -f "$run_dir/data/postmaster.pid" ]]; then pg_ctl -D "$run_dir/data" -m fast -w stop >>"$run_dir/server-stop.log" 2>&1 || true; fi
+-  rm -rf -- "$run_dir/data"
++  : # harness: data を消さない（元は rm -rf -- "$run_dir/data"）
+ }
+ finish() {
+   local result=$?

@@ -1,0 +1,10 @@
+# before: merge parent of #591
+$ git rev-parse HEAD
+5838956fd49eb72ad67c572ae7075e243e7358f1
+$ ls script/ | grep -i retention
+(なし)
+$ ./script/verify-history-retention.sh
+/mnt/c/Users/suker/ssv591-t6.sh: line 13: ./script/verify-history-retention.sh: No such file or directory
+exit=127
+$ grep -n retention .github/ci/run.sh
+(なし)
