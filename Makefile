@@ -9,6 +9,7 @@ zip-export:
 		-x ".github/*" \
 		-x ".claude/*" \
 		-x "CLAUDE.md" \
+		-x ".agents/*" \
 		-x ".devcontainer/*" \
 		-x ".tool-versions" \
 		-x "renovate.json" \

@@ -11,7 +11,7 @@
  * （追加の確認であり、CI 必須の経路ではない。print-quality.node.test.tsx と同じ運用）。
  *
  * @react-pdf/renderer の Font/renderToBuffer と pdfjs-dist への直接依存があるため、
- * CLAUDE.md の取り決めどおり *.node.test.tsx（vitest.config.pdf.ts / node 環境）に置く。
+ * AGENTS.md の取り決めどおり *.node.test.tsx（vitest.config.pdf.ts / node 環境）に置く。
  */
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';

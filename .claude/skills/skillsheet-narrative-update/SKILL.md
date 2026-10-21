@@ -2,6 +2,7 @@
 name: skillsheet-narrative-update
 description: Use when rewriting skill-sheet narrative fields or preparing their Neon and private Markdown synchronization. Preserve original claims separately from independent evidence, bind owner approval to exact field hashes, and use the v12 document CAS boundary. Triggers on script/apply-project-narrative.ts, block-write.ts, project blocks, skills blocks, and requests to rewrite project narratives.
 ---
+<!-- generated-by: script/sync-agent-config.mjs from .agents/skills/skillsheet-narrative-update/SKILL.md. Edit the source, then run the script. -->
 
 # 案件本文の書き換えと DB 反映
 
