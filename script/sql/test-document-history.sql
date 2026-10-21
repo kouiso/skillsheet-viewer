@@ -91,3 +91,34 @@ DO $$DECLARE before_history jsonb;before_deleted jsonb;BEGIN
  IF skillsheet_private.read_snapshot('dddddddd-dddd-4ddd-8ddd-dddddddddd10','history-a')#>>'{snapshot,blocks,0,data,markdown}' IS DISTINCT FROM '別の合成本文' THEN RAISE EXCEPTION 'failed restore changed other block';END IF;
 END $$;
 RESET SESSION AUTHORIZATION;
+
+-- 既定シートが不正なとき、作成も削除も INVALID_STATE で拒否し、文書・版・削除履歴を1行も変えない（#596）。
+-- 既定2件は部分一意索引（0007）で作れないので、壊れ方は既定0件だけを作る。どのシートを既定にするかを
+-- 推測で選ぶと別の版を既定に見せてしまうため、拒否して運営に直させる契約を固定する。
+UPDATE public.skill_sheets SET is_default=false WHERE owner_id='history-a';
+CREATE TEMP TABLE invalid_default_before AS SELECT
+ (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.skill_sheets t) AS sheets,
+ (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.blocks t) AS blocks,
+ (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.document_versions t) AS versions,
+ (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.deleted_documents t) AS deleted,
+ (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.skillsheet_state t) AS state;
+SET SESSION AUTHORIZATION history_runtime;
+DO $$DECLARE v_revision text;BEGIN
+ IF skillsheet_private.read_snapshot(NULL,'history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'invalid default read as valid';END IF;
+ IF skillsheet_private.create_sheet('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee10','既定不正時の作成','[{"id":"eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01","type":"markdown","data":{"markdown":"合成"}}]','history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'create accepted with invalid default';END IF;
+ v_revision:=skillsheet_private.read_snapshot('dddddddd-dddd-4ddd-8ddd-dddddddddd10','history-a')#>>'{snapshot,revision}';
+ IF v_revision IS NULL THEN RAISE EXCEPTION 'delete target unreadable';END IF;
+ -- 正しい revision を渡し、楽観ロックではなく既定の検査で止まることを確かめる。
+ IF skillsheet_private.delete_sheet('dddddddd-dddd-4ddd-8ddd-dddddddddd10',v_revision,'history-a')->>'status' IS DISTINCT FROM 'INVALID_STATE' THEN RAISE EXCEPTION 'delete accepted with invalid default';END IF;
+END $$;
+RESET SESSION AUTHORIZATION;
+DO $$DECLARE b record;BEGIN
+ SELECT * INTO b FROM invalid_default_before;
+ IF b.sheets IS DISTINCT FROM (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.skill_sheets t) THEN RAISE EXCEPTION 'rejected write changed skill_sheets';END IF;
+ IF b.blocks IS DISTINCT FROM (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.blocks t) THEN RAISE EXCEPTION 'rejected write changed blocks';END IF;
+ IF b.versions IS DISTINCT FROM (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.document_versions t) THEN RAISE EXCEPTION 'rejected write changed document_versions';END IF;
+ IF b.deleted IS DISTINCT FROM (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.deleted_documents t) THEN RAISE EXCEPTION 'rejected write changed deleted_documents';END IF;
+ IF b.state IS DISTINCT FROM (SELECT md5(coalesce(string_agg(t::text,'|' ORDER BY t::text),'')) FROM public.skillsheet_state t) THEN RAISE EXCEPTION 'rejected write changed skillsheet_state';END IF;
+END $$;
+UPDATE public.skill_sheets SET is_default=true WHERE id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb10';
+DROP TABLE invalid_default_before;
