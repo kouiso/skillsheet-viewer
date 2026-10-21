@@ -29,11 +29,28 @@
 
 削除の版は現版+1、削除復元もその版+1となる。復元時に別のシートのblock IDと衝突すれば全体をrollbackし、他のシートから奪わない。既定シートが残っている場合は既定を変更しない。全削除後の復元なら復元シートを既定にする。復元シートのcreatedAtは復元時点となる。
 
-自動削除はない。保存期間や利用者の明示的な永久削除は別の仕様判断が必要。履歴には非表示の個人情報も含まれるため、テーブル直読権限・viewer API・公開CI成果物・通常ログには出さない。DBバックアップにも履歴と削除ledgerを含める。
+自動削除はない。版は全版保持とし、削除したシートの履歴も残す（下の「保持方針」）。利用者向けの永久削除の UI は無い。履歴には非表示の個人情報も含まれるため、テーブル直読権限・viewer API・公開CI成果物・通常ログには出さない。DBバックアップにも履歴と削除ledgerを含める。
+
+### 保持方針
+
+2026-10-21 に全版保持＋監視と決めた。比較と理由は [document-history-retention.md](document-history-retention.md)（#575）。履歴の容量は #591 の dry-run と [document-history-capacity.md](document-history-capacity.md) の見積もりで見る。消す・縮める提案が要るときは、その時点の数字を付けて、消す・縮める提案を磯貝さんの承認に回す（承認は近藤か芹沢を通して取る）。自動では何も消さない。
+
+| 欄 | 内容 |
+| --- | --- |
+| 状態 | 決定（山南敬助（副長）の決定。権限は芹沢鴨の 2026-10-14 の決定による） |
+| 提案 | 全版保持＋監視（[document-history-retention.md](document-history-retention.md)「推奨」） |
+| 決定者 | 山南敬助（skillsheet-viewer 副長）。決める権限は芹沢鴨の決定（2026-10-14 21:35 JST、原文「skillsheet: #564 保存期限・容量案は山南が自分で決める」。GitHub には無く、出どころのコメントに引用されている）による。磯貝さんの個別の承認ではない |
+| 日付 | 2026-10-21 |
+| 対象 | 本番 Neon project の版履歴すべて（削除したシートの履歴を含む） |
+| 出どころ | [#564 の山南敬助（副長）の決定コメント（2026-10-21 17:13 JST 投稿）](https://github.com/kouiso/skillsheet-viewer/issues/564#issuecomment-6311303506) |
+| 採った案 | A 全版保持＋監視 |
+| 戻し方 | 今の動き（自動削除なし）を変えない決定なので、取り消しても既存の版には何も起きない。別の案へ替えるときは #576 の dry-run（#591）で影響を出してから、この表を書き換える。本人が別の方針を言えば、それを優先する |
+
+この決定は削除や期間短縮を一切含まない。版を消す・復元期間を縮める方針に替えるときは、[document-history-operation.md](document-history-operation.md)「保持処理を将来入れるときの適用ゲート」のとおり磯貝さんの承認を取る（近藤か芹沢を通す）。
 
 ## 一覧の表示（保存のまとまり）
 
-版の履歴の一覧では、続けた保存を1行にたたんで表示する（#383 / #547）。**表示だけの処理**で、`document_versions` と `sheet.history` の API・返す版は変わらない。たたんでも版は消えないので、内訳を開けばどの保存時点も比較・復元できる。容量も減らない（下の「保存負荷」「retention」の課題は残る）。
+版の履歴の一覧では、続けた保存を1行にたたんで表示する（#383 / #547）。**表示だけの処理**で、`document_versions` と `sheet.history` の API・返す版は変わらない。たたんでも版は消えないので、内訳を開けばどの保存時点も比較・復元できる。容量も減らない（保持方針は「保持方針」の節、容量の監視は #577）。
 
 - 実装は `app/builder/version-group.ts` の `groupVersions()`（純粋関数）。`version-history.tsx` が読み込み済みの全ページを渡して、表示用の行を作る。
 - 新しい順に走査し、`action === 'save'` の版を次の条件で1つのまとまりにする。
@@ -56,6 +73,19 @@
 1 版は約 95KB の本文で詰めた後 103.9KB、保存直後は dead tuple 込みでその約 2 倍になる（合成・ローカル PostgreSQL の実測。`script/fixture/history-measure-report.json`、SHA 9cc416c）。この 1 版の値は本番の実測ではない。
 上限到達の計算に使う履歴以外の容量 48.4MiB とプラン・PITR 保持窓だけは、2026-10-21 に本番を読み取りだけで測った値（同じ文書の「本番の実測」）。
 
+## 容量と保持の状態（#564）
+
+| 段階 | 状態 | 正本 |
+| --- | --- | --- |
+| 計測 | 合成データで計測済み。本番の実測ではない | [document-history-capacity.md](document-history-capacity.md)（#574） |
+| 案 | 全版保持＋監視に決定（2026-10-21） | [document-history-retention.md](document-history-retention.md)（#575） |
+| 試算 | 保持案の dry-run あり。削除の経路は無い | `script/history-retention-dry-run.ts`（#576、#591） |
+| 監視・運用 | 監視・回帰検証・runbook あり。本番の定期実行と届け先は未整備（#590） | [document-history-operation.md](document-history-operation.md)（#577） |
+| 決めた方針 | 全版保持＋監視（山南敬助（副長）の決定、[#564 の山南敬助（副長）の決定コメント（2026-10-21 17:13 JST 投稿）](https://github.com/kouiso/skillsheet-viewer/issues/564#issuecomment-6311303506)） | 上の「保持方針」 |
+| 導入済み | なし。本番は履歴表そのものが未導入 | 下の「適用ゲート」 |
+
+方針は今の動き（全版保持・自動削除なし）と同じなので、決定で変わる動きは無い。導入の条件は下の「適用ゲート」の保留理由に置く。
+
 ## 適用ゲート（本番未適用）
 
 1. 管理者が対象を同定しバックアップを取得する。移行検証には隔離DBを使う。
@@ -75,6 +105,16 @@ TO approved_runtime_role;
 ```
 
 内部capture関数群は付与しない。role名は例示であり、同定済み実名へ置換して管理者が実行する。アプリの画面を有効にする前に、実runtimeで一覧/読取/合成復元を検証する。コードだけ先に出して未導入DBを履歴対応済みと扱わない。
+
+保留理由（監視）: 全版保持の安全策は「履歴が 200MiB を超えたら、数字を付けて消す・縮める提案を承認に回す」ことだけで、それには監視が定期的に走り、警告が人に届き続ける必要がある。監視は `document_versions` を読むので、表を作る手順 2 より前には動かせない。そこでゲートを 2 つに分ける。追跡は #590。
+
+- 手順 1〜3（バックアップ・表の作成・trigger の導入）: 保持方針は決まったので、この理由では止めない。ほかの導入条件（下の「限定backupを起点にした一連の導入dry-run」の最後の段落）は残る。
+- 手順 4（runtime への EXECUTE 付与＝画面からの一覧・復元の有効化）: 次の 4 つが揃うまで行わない。手で 1 回動かしただけでは、この保留理由を消さない。
+  1. 読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と、監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）がある。
+  2. 監視（観測の取得、Neon の `branch.logical_size` の付加、判定）が 1 日 1 回以上の定期実行になっている。
+  3. 届け先（誰に・どの経路で）が [document-history-operation.md](document-history-operation.md) に書いてある。終了コード 5（warning）・3（exceeded）・4（measurement-failed）と、定期実行そのものが止まったことの全部が届く。
+  4. `--database-limit-mib 1` で exceeded を本番の定期実行の経路から起こし、届いたことを確かめた。日付と通知へのリンクをここに書く。
+- 手順 4 の後: 全版保持を続ける間は定期実行を止めない。止まった・届かなくなったと分かったら、その日のうちに直すか、保持方針を決め直す（#575。消す・縮める方針にするなら磯貝さんの承認を近藤か芹沢を通して取る）。届き先が無いまま全版保持を続けない。
 
 ## ローカル検証
 
@@ -145,7 +185,7 @@ installerはCREATE FUNCTION/CREATE TRIGGERを使うため、成功後の丸ご�
 
 修正後の合成管理role試験はclean・preservedとも成功し、故意の途中失敗と成功後の再実行失敗でもmembershipが残らないことを確認した。私用証跡は /tmp/skillsheet-history-managed.WZ33JM（clean）、/tmp/skillsheet-history-managed.3ss9EO（preserved）、/tmp/skillsheet-history-managed.hmwOi4（inherited拒否・rollback）、既存runtime・実2接続CASの再検証は /tmp/skillsheet-history.YsHwss。停止済みの一時clusterでの結果であり、本番の権限・台帳・負荷を代用しない。
 
-600ms自動保存ごとに全文版が増え、自動retentionは無い（一覧では表示上たたむが、DBの版数と容量は減らない）。statement単位triggerは行数回の集計を減らすが、親更新・子delete/insertで同版を複数回集計するため負荷/WALはゼロではない。実規模の保存頻度とサイズで容量・遅延を測り、保持期間を判断する。bigint上限近くのrevision+1はDBが拒否してrollbackするので、上限余裕も確認する。
+600ms自動保存ごとに全文版が増え、自動retentionは無い（一覧では表示上たたむが、DBの版数と容量は減らない）。statement単位triggerは行数回の集計を減らすが、親更新・子delete/insertで同版を複数回集計するため負荷/WALはゼロではない。保持期間は全版保持と決めた（「保持方針」の節）。容量は #577 の監視を本番で定期実行して見て（#590）、200MiB を超えたら、数字を付けて消す・縮める提案を承認に回す。bigint上限近くのrevision+1はDBが拒否してrollbackするので、上限余裕も確認する。
 
 これらが解消するまで、本番適用準備完了・無停止互換・完全復旧可能とは扱わない。
 
@@ -177,4 +217,4 @@ installerはCREATE FUNCTION/CREATE TRIGGERを使うため、成功後の丸ご�
 
 runtimeの追加権限は前掲6関数のEXECUTEだけで、旧5境界・認証権限・table直読・role membershipは変更しない。旧CASコードは同じ関数署名を使えるため、コードrollback時には履歴table/triggerを保持する。trigger障害時の5trigger除去は全writer停止と障害時点backup後の管理操作とし、履歴の空白期間を記録する。新しい編集があれば古い15行を一括上書きして戻さない。
 
-本番PRの最終CI・preview、canonical/runtimeの直接照合、全writerの保守とlock後revision照合、default ACL、必要負荷/保持方針が揃うまで導入を実行しない。履歴機能のDDL導入は依頼済み実装の範囲内であり、追加の承認待ちを設けない。経歴文言の変更に必要な本人確認と、DDL導入前の検証ゲートは分けて扱う。
+本番PRの最終CI・preview、canonical/runtimeの直接照合、全writerの保守とlock後revision照合、default ACL、必要負荷が揃うまで導入を実行しない。監視の定期実行と届け先の確認（#590）は手順 4 の前に済ませる（上の「適用ゲート」の保留理由）。履歴機能のDDL導入は依頼済み実装の範囲内であり、追加の承認待ちを設けない。経歴文言の変更に必要な本人確認と、DDL導入前の検証ゲートは分けて扱う。
