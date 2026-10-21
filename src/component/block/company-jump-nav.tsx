@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import type { MouseEvent } from 'react';
 
 import type { CompanyInfo } from '@/db/block';
@@ -62,8 +62,12 @@ function jumpWithinPage(event: MouseEvent<HTMLAnchorElement>, hash: string) {
 }
 
 export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompanyInput[]; headingIdSuffix?: string }) {
-  // 新しいタブで開いた時も同じシートの会社へ着くよう、href は今のパス付きにする。
+  // 新しいタブで開いた時も同じシートを開くよう、href は今のパスとクエリ付きにする。
+  // 閲覧画面はシートをパスで選ぶ。ビルダー（版の履歴の全体プレビュー）は ?sheet= で選ぶので、クエリを落とすと既定のシートが開く。
+  // ビルダーの新しいタブは版の履歴を開き直さない。会社の見出しまで着くのは閲覧画面だけ。
   const pathname = usePathname();
+  const query = useSearchParams()?.toString() ?? '';
+  const pageHref = pathname ? `${pathname}${query ? `?${query}` : ''}` : '';
   const items = buildCompanyJumpItems(groups, headingIdSuffix ?? '');
   if (items.length === 0) return null;
   return (
@@ -77,7 +81,7 @@ export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompan
           {items.map((item) => (
             <a
               key={item.href}
-              href={pathname ? `${pathname}${item.href}` : item.href}
+              href={`${pageHref}${item.href}`}
               onClick={(event) => jumpWithinPage(event, item.href)}
               className="inline-flex min-h-11 max-w-full items-baseline gap-1.5 whitespace-nowrap rounded border border-border-strong bg-card px-2.5 py-2 text-[13px] leading-normal text-foreground hover:border-primary hover:text-accent-text"
               title={item.name}
