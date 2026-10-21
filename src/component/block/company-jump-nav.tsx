@@ -63,7 +63,7 @@ function jumpWithinPage(event: MouseEvent<HTMLAnchorElement>, hash: string) {
 
 export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompanyInput[]; headingIdSuffix?: string }) {
   // 新しいタブで開いた時も同じシートを開くよう、href は今のパスとクエリ付きにする。
-  // 閲覧画面はシートをパスで選ぶ。ビルダー（版の履歴の全体プレビュー）は ?sheet= で選ぶので、クエリを落とすと既定のシートが開く。
+  // 閲覧画面はシートをパスで選ぶ。ビルダー（版の履歴の全体プレビュー）は ?sheet= で選ぶ。クエリを落とすと既定のシートが開く。
   // ビルダーの新しいタブは版の履歴を開き直さない。会社の見出しまで着くのは閲覧画面だけ。
   const pathname = usePathname();
   const query = useSearchParams()?.toString() ?? '';

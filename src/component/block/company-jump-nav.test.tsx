@@ -4,8 +4,8 @@ import type { CompanyInfo } from '@/db/block';
 
 import { buildCompanyJumpItems, CompanyJumpNav } from './company-jump-nav';
 
-// jsdom には App Router の文脈が無く、usePathname() も useSearchParams() も null を返す。
-// それだと href を組み立てる枝を一度も通らないので、ページごとの値を差し込む。
+// jsdom には App Router の文脈が無い。usePathname() も useSearchParams() も null を返す。
+// それだと href を組み立てる枝を一度も通らない。ページごとの値を差し込む。
 const nav = vi.hoisted(() => ({
   pathname: null as string | null,
   search: null as URLSearchParams | null,
@@ -114,8 +114,8 @@ describe('ページ内ジャンプが閲覧画面を離れない', () => {
 });
 
 describe('新しいタブで開くリンク先が同じシートを指す', () => {
-  // 中クリックや Cmd+クリックでは、ブラウザが <base href="/"> の下で解決した a.href を開く。
-  // それが今見ているシートの会社見出しを指していることを、シートを選ぶ方法が違うページごとに見る。
+  // 中クリックや Cmd+クリックではブラウザが <base href="/"> の下で解決した a.href を開く。
+  // シートを選ぶ方法はページで違う。どのページでも a.href が今見ているシートの会社見出しを指すかを見る。
   const cases = [
     {
       page: '閲覧画面 /view/db/<id>（シートをパスで選ぶ）',

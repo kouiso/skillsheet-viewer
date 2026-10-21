@@ -155,8 +155,8 @@ test('history records immutable snapshots, restores and undoes through UI, and r
   }
 });
 
-// #377: 版の履歴の全体プレビューにも「会社から探す」が出る。ビルダーはシートを ?sheet= で選ぶので、
-// 新しいタブで開くリンクがクエリを落とすと、既定で開く別のシートの編集画面に着いてしまう。
+// #377: 版の履歴の全体プレビューにも「会社から探す」が出る。ビルダーはシートを ?sheet= で選ぶ。
+// 新しいタブで開くリンクがクエリを落とすと既定の別シートの編集画面に着いてしまう。
 test('版の履歴の「会社から探す」を新しいタブで開いても同じシートの編集画面が開く', async ({ page }) => {
   await login(page);
   const client = clientFor(page);
@@ -164,14 +164,16 @@ test('版の履歴の「会社から探す」を新しいタブで開いても�
   const decoyId = randomUUID();
   const blocks = buildRealVolumeDemoBlocks().map((block, order) => ({ ...block, id: randomUUID(), order }));
   const title = `Company jump history ${sheetId}`;
-  const created = await client.sheet.create.mutate({ sheetId, title, blocks });
-  const cleanup = [sheetId];
+  // クエリの無い /builder は既定のシートを開く。所有者の最初のシートが既定になる。
+  // 別のシートを先に作って試すシートが既定にならないようにする。
+  await client.sheet.create.mutate({ sheetId: decoyId, title: `Company jump decoy ${decoyId}`, blocks: [] });
+  // 既定のシートを先に消すと既定が付け替わる。後片付けは試すシートから消す。
+  const cleanup = [decoyId];
   try {
+    const created = await client.sheet.create.mutate({ sheetId, title, blocks });
+    cleanup.unshift(sheetId);
     // 版を2つにして、比較画面から全体プレビューへ切り替えられるようにする。
     await client.sheet.save.mutate({ sheetId, expectedRevision: created.revision, title: `${title} v2`, blocks });
-    // 後から別のシートを作り、クエリの無い /builder がこのシートを開かない状態にする。
-    await client.sheet.create.mutate({ sheetId: decoyId, title: `Company jump decoy ${decoyId}`, blocks: [] });
-    cleanup.push(decoyId);
     const expectedSwitcher = `シートを切り替える: ${title} v2`;
 
     // 前提: クエリの無い /builder は別のシートを開く。これが崩れると下の確認は何も見分けない。
