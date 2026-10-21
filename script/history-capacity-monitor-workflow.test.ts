@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -98,6 +98,34 @@ describe('定期実行の workflow', () => {
     expect(stepBody('Collect sample')).toContain('secrets.HISTORY_MONITOR_NEON_API_KEY');
     expect(stepBody('Judge capacity')).not.toContain('secrets.');
     expect(stepBody('Collect sample')).toContain('rm -f -- "$service_file"');
+  });
+
+  it('collector が起動すらできなくても、失敗の観測を最新として残す', () => {
+    const cwd = tempDir();
+    const script = stepBody('Collect sample')
+      .split('        run: |\n')[1]
+      ?.split('\n')
+      .map((line) => line.replace(/^ {10}/, ''))
+      .join('\n');
+    if (!script) throw new Error('missing script in Collect sample');
+    // cwd に script/ が無いので collector は 127 で落ちる（権限落ちの 126 と同じ「標本なし」の経路）。
+    const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
+      cwd,
+      env: {
+        PATH: `${dirname(jqPath)}:/usr/bin:/bin`,
+        NODE_ENV: 'test',
+        RUNNER_TEMP: cwd,
+        PG_SERVICE_CONF: '[history-monitor]',
+      },
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(0);
+    const files = readdirSync(join(cwd, 'history-samples'));
+    expect(files).toHaveLength(1);
+    const sample = JSON.parse(readFileSync(join(cwd, 'history-samples', files[0] ?? ''), 'utf8'));
+    expect(sample.collectionError).toBe('collector exited 127 without a sample');
+    expect(evaluateMonitor([sample]).status).toBe('measurement-failed');
+    expect(readdirSync(cwd)).not.toContain('pg_service.conf');
   });
 
   it('容量の判定が落ちても停止間近の確認は流れる', () => {

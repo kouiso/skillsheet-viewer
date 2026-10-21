@@ -64,10 +64,15 @@ jobs:
           mkdir -p history-samples
           service_file="$RUNNER_TEMP/pg_service.conf"
           printf '%s\n' "$PG_SERVICE_CONF" > "$service_file"
+          sample="history-samples/$(date -u +%Y%m%dT%H%M%SZ).json"
           status=0
-          PGSERVICEFILE="$service_file" ./script/collect-history-capacity-sample.sh \
-            "history-samples/$(date -u +%Y%m%dT%H%M%SZ).json" || status=$?
+          PGSERVICEFILE="$service_file" ./script/collect-history-capacity-sample.sh "$sample" || status=$?
           rm -f -- "$service_file"
+          # collector 自体が起動できなかった時（権限・構文など）も、失敗の観測を最新として残す。
+          if [[ ! -s "$sample" ]]; then
+            jq -cn --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg reason "collector exited $status without a sample" \
+              '{measuredAt: $at, collectionError: $reason}' > "$sample"
+          fi
           echo "collect finished (exit $status)"
 
       # 直近 60 点（約 2 か月）だけ残す。名前は UTC の時刻なので、名前順が古い順になる。
