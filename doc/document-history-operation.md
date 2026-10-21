@@ -26,10 +26,13 @@ PGOPTIONS='-c default_transaction_read_only=on' \
 ```
 
 Neon の容量上限が数える branch の論理容量は SQL では読めないので、Neon API の `branch.logical_size` を同じ観測に足す。API キーは環境変数で渡し、引数やファイルに書かない。
+`curl -H "Authorization: Bearer $NEON_API_KEY"` と書くと、shell が展開したキーが curl の引数に載り、同じ機械で `ps` を打てる人と `set -x` のログから読める。`printf ... "$NEON_API_KEY" | curl` も `set -x` には出る。キーはヒアドキュメントで標準入力へ流し、`curl --config -` で読ませる。ヒアドキュメントの中身は、どのコマンドの引数にも `set -x` の出力にも出ない。
 
 ```sh
-logical=$(curl -fsS -H "Authorization: Bearer $NEON_API_KEY" \
-  "https://console.neon.tech/api/v2/projects/<project_id>/branches/<branch_id>" | jq -e '.branch.logical_size')
+logical=$(curl -fsS --config - "https://console.neon.tech/api/v2/projects/<project_id>/branches/<branch_id>" <<EOF | jq -e '.branch.logical_size'
+header = "Authorization: Bearer $NEON_API_KEY"
+EOF
+)
 jq -c --argjson logical "$logical" '. + {branchLogicalBytes: $logical}' sample-<日時>.raw.json > sample-<日時>.json
 ```
 
