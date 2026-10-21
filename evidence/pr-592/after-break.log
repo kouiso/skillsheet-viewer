@@ -1,0 +1,4 @@
+$ HARNESS_BREAK=1 HISTORY_MEASURE_BURST_SAVES=20 HISTORY_MEASURE_NORMAL_SAVES=5 ./script/measure-document-history.sh   # after (5838956), 2026-10-21 16:47:45 JST
+burst-small writer 1: psql が終了コード 3 で止まった（/home/kouiso/worktrees/asano-out/ssv584/runs/after.woCNQG/burst-small-1.err）
+計測失敗。私用ログ: /home/kouiso/worktrees/asano-out/ssv584/runs/after.woCNQG
+exit code: 1

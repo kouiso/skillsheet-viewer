@@ -1,0 +1,10 @@
+
+> skillsheet-viewer@1.0.0 lint /home/kouiso/worktrees/asano-out/ssv584/repo
+> biome check . --error-on-warnings && node script/check-jsdom-pdf-assertion.mjs && node script/check-telemetry-import.mjs && node script/sync-agent-config.mjs --check && ./script/check-naming.sh
+
+Checked 560 files in 187ms. No fixes applied.
+jsdom テストに PDF フォント・グリフ・描画の主張は見つかりませんでした。
+カバレッジ外のテストファイルは見つかりませんでした。
+telemetry import ゲート: 違反なし。
+✅ 共通 Skill の生成物は正本と一致し、CLAUDE.md は AGENTS.md を import している
+✅ 命名規約OK（英語・小文字・単数形・ケバブケース）

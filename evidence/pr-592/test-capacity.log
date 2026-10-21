@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /home/kouiso/worktrees/asano-out/ssv584/repo
+
+ ✓ script/history-capacity-report.test.ts (22 tests) 229ms
+
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+   Start at  16:49:23
+   Duration  696ms (transform 75ms, setup 0ms, collect 92ms, tests 229ms, environment 0ms, prepare 203ms)
+

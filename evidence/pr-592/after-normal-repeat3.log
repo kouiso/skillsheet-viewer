@@ -1,0 +1,8 @@
+$ HARNESS_BREAK=0 HISTORY_MEASURE_BURST_SAVES=20 HISTORY_MEASURE_NORMAL_SAVES=5 ./script/measure-document-history.sh   # after (5838956), 2026-10-21 16:48:23 JST
+burst-small: 保存 20 件中 20 件成功、CONFLICT 0 件、エラー 0 件、ロック待ち 0 回
+burst-large: 保存 20 件中 20 件成功、CONFLICT 0 件、エラー 0 件、ロック待ち 0 回
+normal-parallel: 保存 10 件中 10 件成功、CONFLICT 0 件、エラー 0 件、ロック待ち 0 回
+same-sheet-contention: 保存 10 件中 5 件成功、CONFLICT 5 件、エラー 0 件、ロック待ち 5 回
+合成DB試験（版数 = 作成 + OK の保存）: PASS
+計測結果（集計のみ）: /home/kouiso/worktrees/asano-out/ssv584/runs/after.QqKPh4/report.json
+exit code: 0
