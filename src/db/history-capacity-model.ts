@@ -56,7 +56,12 @@ function validateLoad(load: LoadProfile) {
     throw new RangeError(`activeDaysPerMonth must be an integer between 0 and ${DAYS_PER_MONTH}`);
 }
 
-function validatePolicy(policy: RetentionPolicy) {
+/** 保持案の形を検査する。dry-run（#576）とモデルで同じ規則を使う。 */
+export function validatePolicy(policy: RetentionPolicy) {
+  // JSON から来た入力は型どおりとは限らない。未知の案を keep-all 扱いにしない。
+  const kind: unknown = (policy as { kind?: unknown }).kind;
+  if (kind !== 'keep-all' && kind !== 'window' && kind !== 'tiered')
+    throw new RangeError('unknown retention policy kind');
   if (policy.kind === 'window') {
     if (!Number.isInteger(policy.keepDays) || policy.keepDays < 1) throw new RangeError('keepDays must be >= 1');
   }
