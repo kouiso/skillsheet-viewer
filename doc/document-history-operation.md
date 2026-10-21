@@ -100,7 +100,7 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 | measurement-failed（照会・Neon API・secret の不備も含む） | 4 | 同上。観測に失敗した日は失敗の観測を最新として書くので、前日の正常な値で「正常」とは言わない |
 | warning | 5 | 同上 |
 | 定期実行が止まりかけている（最後のコミットから 45 日） | 6 | 同上。公開リポジトリは 60 日動きが無いと schedule が止まる（GitHub Docs「Disabling and enabling a workflow」）。止まる 15 日前から毎日落ちるので、その間に main へ何か入れるか、止まる前提で方針を決め直す |
-| 定期実行が止まった（workflow の削除、画面や API での無効化、variable を外したことによる skip、cancelled や timed_out での終了、schedule の取りこぼし） | 7（見張りの job） | 翌朝 JST 06:00 の `PDF Layout Check` にある `History monitor liveness` job が落ちて、同じ経路で Slack と追跡 issue に届く。通知に出る workflow 名は `PDF Layout Check` なので、ログの job 名とエラー文（`History Capacity Monitor が止まっている`）で見分ける |
+| 定期実行が止まった（workflow の削除、画面や API での無効化、variable を外したことによる skip、cancelled や timed_out での終了、schedule の取りこぼし） | 7（見張りの job） | `PDF Layout Check` にある `History monitor liveness` job が落ちて、同じ経路で Slack と追跡 issue に届く。落ちるのは、skip・cancelled・timed_out・取りこぼしになった JST 07:30 の実行の翌朝 JST 06:00。workflow の削除と無効化は、その後の最初の JST 06:00。通知に出る workflow 名は `PDF Layout Check` なので、ログの job 名とエラー文（`History Capacity Monitor が止まっている`）で見分ける |
 
 観測は actions/cache に直近 60 点を残し、増え方と届く見込み日の計算に使う。公開ログ（Step Summary）に出すのは状態と容量の数字だけで、接続先・本文・title は出さない。手動実行（workflow_dispatch）は置かない。選んだブランチの workflow を動かせるので、ブランチ側で steps を差し替えて本番の secret を読めてしまうため（`real-data-main-check.yml` と同じ理由）。
 
@@ -111,7 +111,7 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 - workflow の state が `active` で、最新の完了した schedule 実行が success か failure で、作られてから 30 時間以内なら動いているとみなす。failure は `CI Failure Slack Notify` がその日のうちに届けているので、ここでは通す。
 - ふだんの間隔は 22.5 時間（監視の JST 07:30 から翌朝の JST 06:00 まで）。schedule の遅れは 7.5 時間まで許す。1 日落とされると 46.5 時間になるので、翌朝に落ちる。GitHub Docs（Events that trigger workflows の schedule 節、2026-10-22 に確認）には、混雑時に「some queued jobs may be dropped」とある。
 - workflow を読めない時（消された時の 404、API の失敗）も落とす。黙って通すより誤報の方がましという判断。
-- skip 以外で終わった実行が一度も無い間（本番の secret と variable を入れる前）は「まだ有効にしていない」として通す。一度動いた後に variable を外すと、次の朝から毎日落ちる。監視を本当にやめる時は、見張りの job を外す PR を出して、同じ PR で保持方針を決め直す。
+- skip 以外で終わった実行が一度も無い間（本番の secret と variable を入れる前）は「まだ有効にしていない」として通す。一度動いた後に variable を外すと、外した後の最初の JST 07:30 の実行が skip になり、その翌朝の JST 06:00 から毎日落ちる。その skip より前に来る JST 06:00 は、前日 JST 07:30 の成功（22.5 時間前）を見て通る。監視を本当にやめる時は、見張りの job を外す PR を出して、同じ PR で保持方針を決め直す。
 - 見張り自身の実行が混雑で落とされた日は、次の朝の実行で見る。
 
 この経路でも届かないもの:
@@ -131,7 +131,7 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 
 試しの警告は、variable `HISTORY_MONITOR_DATABASE_LIMIT_MIB` を `1` にして次の定期実行を待つ。exceeded（3）で落ちて Slack と追跡 issue に届いたら、その日付と通知・issue へのリンクを [document-history.md](document-history.md)「適用ゲート」に書き、variable を消す。手動実行の口が無いので、試しも本番と同じ schedule の経路を通る。
 
-見張りの試しも同じ窓で行う。監視が一度動いた後に `HISTORY_MONITOR_ENABLED` を外し、翌朝 JST 06:00 の `PDF Layout Check` が落ちて Slack と追跡 issue に届いたら、日付とリンクを同じ「適用ゲート」に書き、variable を戻す。
+見張りの試しも同じ窓で行う。監視が一度動いた後、JST 06:00 から 07:30 の間に `HISTORY_MONITOR_ENABLED` を外す。その日の JST 07:30 の実行が skip になり、翌朝 JST 06:00 の `PDF Layout Check` が落ちる。ほかの時間に外した時は、外した後の最初の JST 07:30 が skip になった翌朝まで落ちない（JST 07:30 より後に外すと翌々朝になる）。Slack と追跡 issue に届いたら、日付とリンクを同じ「適用ゲート」に書き、variable を戻す。
 
 届け先: 磯貝さん（Slack と ci-failure の追跡 issue）。試しの警告と見張りの試しを送った日と証拠: 未実施（本番の窓で行う）。
 
