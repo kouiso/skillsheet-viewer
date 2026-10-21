@@ -2,40 +2,9 @@
 alwaysApply: true
 ---
 
-- 常に日本語で会話する
-- 常に[prompt](prompt/prompt.md) に従うこと
-- **指示を受けたら、着手前に「スキルシート（個人の経歴データ）への要望」か「このアプリへの機能要求」かを分類し、どちらとして扱うかを一言で示してから動く。** このリポジトリは「経歴データの入れ物」と「それを管理するアプリ」を同時に抱えており、混ぜると、アプリの機能にすべき話をデータ直書きで済ませたり、逆に今回の提出物の都合をアプリの仕様として固定してしまう。両方に該当するときは「両方」と示し、アプリ側の変更とシート側のデータ変更を別々の成果物（別 SBI）に分け、質問も混ぜない。判断がつかない要望は、分類だけを先に確認する。
-- 常にプロジェクトの`doc`ディレクトリのドキュメントを前提に作業する
-- テストは環境ごとに3本の設定に分かれている。`vitest.config.ts`（jsdom / 画面）、`vitest.config.node.ts`（node / `src/db` と `script`）、`vitest.config.pdf.ts`（node / `*.node.test.tsx`）。共通設定は `vitest.shared.ts`。
-- PDF のフォント・グリフ・描画の検証は `*.node.test.tsx`（vitest.config.pdf.ts / node 環境）側で行う。jsdom 側の `*.test.tsx` では `@react-pdf/renderer` の `Font`/`renderToBuffer`/`pdf`、`pdfjs-dist` への直接 import、あるいは `renderToBuffer`/`Font.register` の直接呼び出しを禁止する。
-- コメントはインラインの「なぜそうしたか」を重視し、JSDoc/docstring を全関数に付けることは求めない。パッケージ境界を越える公開 API には必要に応じて docstring を書く。
+@AGENTS.md
 
-## PDF 出力・閲覧・本番データ更新の在処
-
-本番 URL・閲覧コード・編集者ログイン・本番 DB の在処は [doc/onboarding.md](doc/onboarding.md) の
-「本番環境と接続先」にまとめてある。PDF の最短経路と本番 DB のブロックを直す手順は
-[doc/pdf-export-and-data-update.md](doc/pdf-export-and-data-update.md) にある。
-
-## プロジェクト技術スタック
-
-このプロジェクトは以下の技術スタックを使用しています:
-- **構成**: リポジトリルート1本の Next.js アプリ（DB 層は `src/db`）
-- **言語**: TypeScript
-- **フレームワーク**: Next.js 16（App Router / React Server Components）
-- **データ層**: tRPC v11 + @trpc/react-query + @tanstack/react-query（`src/server/trpc/`）
-- **UIライブラリ**: Tailwind CSS v4 + shadcn/ui（Radix UI）
-- **Markdownレンダリング**: react-markdown
-- **DB/ORM**: Drizzle ORM + Neon serverless Postgres（正本データ源）
-- **PDF**: @react-pdf/renderer（クライアント動的 import）
-- **バージョン管理**: mise（Node 22.x）/ パッケージマネージャ: pnpm
-
-### 主要コマンド（リポジトリルートで実行）
-- `pnpm dev` — 開発サーバー起動
-- `pnpm build` — 本番ビルド
-- `pnpm type-check` — 型チェック
-- `pnpm test` — テスト（vitest 3本: jsdom / node[DB・スクリプト] / node[PDF]）
-- `pnpm db:generate` / `pnpm db:migrate` — Drizzle マイグレーション
-
+<!-- 共通ルールは AGENTS.md が正本。ここには Claude Code だけが使う設定の説明を置く（doc/ai-agent-config.md）。 -->
 
 <!-- code-review-graph MCP tools -->
 ## MCP Tools: code-review-graph
