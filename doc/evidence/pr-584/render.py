@@ -175,7 +175,10 @@ def wrap_text(font: ImageFont.FreeTypeFont, text: str, max_width: int) -> list[s
 def column_widths(
     rows_a: list[list[str]], rows_b: list[list[str]], font: ImageFont.FreeTypeFont
 ) -> list[int]:
+    """列数が同じ表だけ、両方の文字幅の最大を取る。"""
     count = len(rows_a[0])
+    if any(len(row) != count for row in (*rows_a, *rows_b)):
+        raise SystemExit("列数が同じ表だけを揃えて幅を取る")
     widths: list[int] = []
     for column in range(count):
         widest = MIN_COL
@@ -184,6 +187,14 @@ def column_widths(
                 widest = max(widest, text_width(font, row[column]) + CELL_PAD_X * 2)
         widths.append(min(widest, MAX_COL))
     return widths
+
+
+def column_widths_one(rows: list[list[str]], font: ImageFont.FreeTypeFont) -> list[int]:
+    return column_widths(rows, rows, font)
+
+
+def same_headers(rows_a: list[list[str]], rows_b: list[list[str]]) -> bool:
+    return rows_a[0] == rows_b[0]
 
 
 def row_heights(
@@ -199,6 +210,25 @@ def row_heights(
             used = max(used, len(wrap_text(font, cell, widths[column] - CELL_PAD_X * 2)))
         heights.append(used * line_height + CELL_PAD_Y * 2)
     return heights
+
+
+def counterpart_cell(rows: list[list[str]], other: list[list[str]], row_index: int, column: int) -> str | None:
+    """相手の表で同じ見出しのセルを返す。見出しが無い列は None（その列が差分）。
+
+    感度分析は 29dc45e6 で「区分」が「変えた前提の区分」と「負荷の区分」に分かれた。
+    列番号で比べると、値の列がずれて全部黄色になる。見出しで揃える。
+    """
+    if row_index >= len(other):
+        return None
+    header = rows[0][column]
+    try:
+        other_column = other[0].index(header)
+    except ValueError:
+        return None
+    other_row = other[row_index]
+    if other_column >= len(other_row):
+        return None
+    return other_row[other_column]
 
 
 def draw_table(
@@ -217,10 +247,13 @@ def draw_table(
     for row_index, row in enumerate(rows):
         x = origin_x
         height = heights[row_index]
+        if len(row) != len(widths) or len(row) != len(aligns):
+            raise SystemExit(f"描画の列数が揃っていない: {len(row)} / {len(widths)} / {len(aligns)}")
         for column, cell in enumerate(row):
             width = widths[column]
-            other_cell = other[row_index][column] if row_index < len(other) and column < len(other[row_index]) else None
-            differs = other_cell is not None and cell != other_cell
+            other_cell = counterpart_cell(rows, other, row_index, column)
+            # 相手に同じ見出しが無い列は、列構成の変更として黄色にする。
+            differs = other_cell is None or cell != other_cell
             if row_index == 0 and not differs:
                 fill = HEADER_BG
             elif differs:
@@ -250,8 +283,11 @@ def differing_cells(title: str, rows: list[list[str]], other: list[list[str]]) -
     notes: list[str] = []
     for row_index, row in enumerate(rows):
         for column, cell in enumerate(row):
-            other_cell = other[row_index][column]
-            if cell != other_cell:
+            other_cell = counterpart_cell(rows, other, row_index, column)
+            if other_cell is None:
+                header = rows[0][column]
+                notes.append(f"  {title} r{row_index} c{column} {header!r}: {cell!r} != (相手にこの列は無い)")
+            elif cell != other_cell:
                 notes.append(f"  {title} r{row_index} c{column}: {cell!r} != {other_cell!r}")
     return notes
 
@@ -340,64 +376,98 @@ def main() -> None:
     after_sha, after_at = read_header(HERE / "generate-after.log")
     before_monthly_title, before_monthly, monthly_aligns = monthly_table(before_md)
     after_monthly_title, after_monthly, _after_monthly_aligns = monthly_table(after_md)
-    before_sens_title, before_sens, sens_aligns = normal_sensitivity_table(before_md)
-    after_sens_title, after_sens, _after_sens_aligns = normal_sensitivity_table(after_md)
+    before_sens_title, before_sens, before_sens_aligns = normal_sensitivity_table(before_md)
+    after_sens_title, after_sens, after_sens_aligns = normal_sensitivity_table(after_md)
     cell_font = load_font(CELL_FONT_SIZE)
+    if not same_headers(before_monthly, after_monthly):
+        raise SystemExit(f"月間モデルの列が揃っていない: {before_monthly[0]} / {after_monthly[0]}")
     monthly_widths = column_widths(before_monthly, after_monthly, cell_font)
-    sens_widths = column_widths(before_sens, after_sens, cell_font)
+    # 感度分析は列構成が変わることがある。同じ見出しのときだけ幅を揃える。
+    if same_headers(before_sens, after_sens):
+        before_sens_widths = column_widths(before_sens, after_sens, cell_font)
+        after_sens_widths = before_sens_widths
+    else:
+        before_sens_widths = column_widths_one(before_sens, cell_font)
+        after_sens_widths = column_widths_one(after_sens, cell_font)
     before_monthly_heights = row_heights(before_monthly, monthly_widths, cell_font)
     after_monthly_heights = row_heights(after_monthly, monthly_widths, cell_font)
     monthly_heights = [max(a, b) for a, b in zip(before_monthly_heights, after_monthly_heights, strict=True)]
-    before_sens_heights = row_heights(before_sens, sens_widths, cell_font)
-    after_sens_heights = row_heights(after_sens, sens_widths, cell_font)
-    sens_heights = [max(a, b) for a, b in zip(before_sens_heights, after_sens_heights, strict=True)]
+    before_sens_heights = row_heights(before_sens, before_sens_widths, cell_font)
+    after_sens_heights = row_heights(after_sens, after_sens_widths, cell_font)
+    if same_headers(before_sens, after_sens):
+        before_sens_heights = [
+            max(a, b) for a, b in zip(before_sens_heights, after_sens_heights, strict=True)
+        ]
+        after_sens_heights = before_sens_heights
 
+    only = parse_only(sys.argv[1:])
     before_png = HERE / "projection-before.png"
     after_png = HERE / "projection-after.png"
-    render_one(
-        before_sha,
-        before_at,
-        before_monthly_title,
-        before_monthly,
-        monthly_aligns,
-        monthly_widths,
-        monthly_heights,
-        after_monthly,
-        before_sens_title,
-        before_sens,
-        sens_aligns,
-        sens_widths,
-        sens_heights,
-        after_sens,
-        before_png,
-    )
-    render_one(
-        after_sha,
-        after_at,
-        after_monthly_title,
-        after_monthly,
-        monthly_aligns,
-        monthly_widths,
-        monthly_heights,
-        before_monthly,
-        after_sens_title,
-        after_sens,
-        sens_aligns,
-        sens_widths,
-        sens_heights,
-        before_sens,
-        after_png,
-    )
+    if only != "after":
+        render_one(
+            before_sha,
+            before_at,
+            before_monthly_title,
+            before_monthly,
+            monthly_aligns,
+            monthly_widths,
+            monthly_heights,
+            after_monthly,
+            before_sens_title,
+            before_sens,
+            before_sens_aligns,
+            before_sens_widths,
+            before_sens_heights,
+            after_sens,
+            before_png,
+        )
+    if only != "before":
+        render_one(
+            after_sha,
+            after_at,
+            after_monthly_title,
+            after_monthly,
+            monthly_aligns,
+            monthly_widths,
+            monthly_heights,
+            before_monthly,
+            after_sens_title,
+            after_sens,
+            after_sens_aligns,
+            after_sens_widths,
+            after_sens_heights,
+            before_sens,
+            after_png,
+        )
+    # 月間モデルは列が同じなので before 側の差分で足りる。
+    # 感度分析は列が分かれたので、after にしか無い列も黄色として数える。
     notes = differing_cells("月間モデル", before_monthly, after_monthly)
-    notes += differing_cells("感度分析 normal", before_sens, after_sens)
+    notes += differing_cells("感度分析 normal after", after_sens, before_sens)
+    print(f"before sensitivity headers: {before_sens[0]}")
+    print(f"after sensitivity headers: {after_sens[0]}")
     print(f"before rev-parse: {before_sha}")
     print(f"before date -u: {before_at}")
     print(f"after rev-parse: {after_sha}")
     print(f"after date -u: {after_at}")
-    print(f"wrote {before_png.name} bytes={before_png.stat().st_size}")
-    print(f"wrote {after_png.name} bytes={after_png.stat().st_size}")
+    if only == "after":
+        print(f"kept {before_png.name} bytes={before_png.stat().st_size}")
+    else:
+        print(f"wrote {before_png.name} bytes={before_png.stat().st_size}")
+    if only == "before":
+        print(f"kept {after_png.name} bytes={after_png.stat().st_size}")
+    else:
+        print(f"wrote {after_png.name} bytes={after_png.stat().st_size}")
     print(f"yellow cells: {len(notes)}")
     print("\n".join(notes))
+
+
+def parse_only(argv: list[str]) -> str | None:
+    """before の png を残すときだけ --only after を使う。"""
+    if not argv:
+        return None
+    if argv == ["--only", "before"] or argv == ["--only", "after"]:
+        return argv[1]
+    raise SystemExit("usage: render.py [--only before|after]")
 
 
 if __name__ == "__main__":
