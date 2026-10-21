@@ -122,15 +122,19 @@ END $$;
 SQL
 
 # 合成データだけ、記録時刻を過去へずらす（A は約400日前から5日前、B は約200日前に削除）。
+# 起点は実行日の正午（日本時間）に固定する。now() 起点だと、実行した時刻や日付で
+# 同じ日に置いたつもりの2版が日・月の境をまたぎ、段階的間引きの候補数が変わる。
 "${admin[@]}" >"$run_dir/backdate.log" 2>&1 <<'SQL'
+CREATE TEMP TABLE anchor AS
+SELECT (date_trunc('day', now() AT TIME ZONE 'Asia/Tokyo') + interval '12 hours') AT TIME ZONE 'Asia/Tokyo' AS at;
 -- 版22までは2版ずつ同じ日（段階的間引きで片方が候補になる）、版23以降は直近65日以内に置く。
-UPDATE public.document_versions SET recorded_at = now()
+UPDATE public.document_versions SET recorded_at = (SELECT at FROM anchor)
   - make_interval(days => CASE WHEN revision <= 22 THEN 400 - (revision::integer / 2) * 15 ELSE (27 - revision::integer) * 15 + 5 END)
   - make_interval(mins => (revision % 3)::integer)
 WHERE sheet_id = 'aaaaaaaa-0000-4000-8000-00000000000a';
-UPDATE public.document_versions SET recorded_at = now() - make_interval(days => 210 - revision::integer)
+UPDATE public.document_versions SET recorded_at = (SELECT at FROM anchor) - make_interval(days => 210 - revision::integer)
 WHERE sheet_id = 'aaaaaaaa-0000-4000-8000-00000000000b';
-UPDATE public.deleted_documents SET deleted_at = now() - interval '200 days'
+UPDATE public.deleted_documents SET deleted_at = (SELECT at FROM anchor) - interval '200 days'
 WHERE sheet_id = 'aaaaaaaa-0000-4000-8000-00000000000b';
 SQL
 
