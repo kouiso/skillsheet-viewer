@@ -80,9 +80,24 @@ export function runDryRun(snapshotJson: unknown, args: ReturnType<typeof parseAr
   };
 }
 
+// snapshot は JSON 1行だけを受ける。psql の -q 抜けで混ざる BEGIN・DO・COMMIT などを読み飛ばすと、
+// 別の出力が紛れても気付けんので、JSON でなければ取り直しの手掛かりを付けて止める。
+export function parseSnapshotText(text: string): unknown {
+  const body = text.trim();
+  try {
+    return JSON.parse(body);
+  } catch (error) {
+    const firstLine = body.split('\n', 1)[0]?.slice(0, 40) ?? '';
+    throw new Error(
+      `SNAPSHOT_NOT_JSON: 先頭行=${JSON.stringify(firstLine)}。psql は -X -q -v ON_ERROR_STOP=1 -At で取り直す（script/sql/history-retention-snapshot.sql の「実行:」行）`,
+      { cause: error },
+    );
+  }
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const result = runDryRun(JSON.parse(readFileSync(args.snapshot, 'utf8')), args);
+  const result = runDryRun(parseSnapshotText(readFileSync(args.snapshot, 'utf8')), args);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 

@@ -141,7 +141,25 @@ SQL
 before="$(fingerprint)"
 
 reader=(psql -X -q -At -v ON_ERROR_STOP=1 -h "$run_dir" -p "$port" -U retention_reader -d postgres)
-"${reader[@]}" -f "$repo_dir/script/sql/history-retention-snapshot.sql" >"$run_dir/snapshot.json"
+# SQL 冒頭の「実行:」行を書いてあるとおりに走らせる。手順書と検証で別の psql 引数を使うと、手順書だけ壊れても緑になる。
+documented="$(sed -n 's/^-- 実行: //p' "$repo_dir/script/sql/history-retention-snapshot.sql")"
+read -r -a documented_command <<<"$documented"
+[[ "${documented_command[0]:-}" == psql && "$(grep -c '^-- 実行: ' "$repo_dir/script/sql/history-retention-snapshot.sql")" == 1 ]] \
+  || { printf 'snapshot SQL の「実行:」行が1つの psql コマンドになっていない: %s\n' "$documented" >&2; exit 1; }
+reader_env=(env PGHOST="$run_dir" PGPORT="$port" PGUSER=retention_reader PGDATABASE=postgres)
+(cd -- "$repo_dir" && "${reader_env[@]}" "${documented_command[@]}") >"$run_dir/snapshot.json"
+[[ "$(wc -l <"$run_dir/snapshot.json")" -eq 1 ]] || { printf '手順書の psql 出力が1行でない\n' >&2; exit 1; }
+printf '手順書どおりの psql（%s）: PASS\n' "$documented"
+# -q を抜いた取り方はコマンドタグが混ざる。dry-run が黙って読まず、理由付きで止まることを確かめる。
+untagged=()
+for word in "${documented_command[@]}"; do [[ "$word" == -q ]] || untagged+=("$word"); done
+(cd -- "$repo_dir" && "${reader_env[@]}" "${untagged[@]}") >"$run_dir/snapshot-tagged.json"
+grep -qx 'BEGIN' "$run_dir/snapshot-tagged.json" || { printf -- '-q 無しでコマンドタグが出なかった\n' >&2; exit 1; }
+if "$tsx" "$repo_dir/script/history-retention-dry-run.ts" --snapshot "$run_dir/snapshot-tagged.json" >"$run_dir/tagged.out" 2>"$run_dir/tagged.err"; then
+  printf 'コマンドタグ混じりの snapshot が通った\n' >&2; exit 1
+fi
+grep -q 'SNAPSHOT_NOT_JSON' "$run_dir/tagged.err" || { printf 'タグ混じり snapshot の拒否理由が違う\n' >&2; exit 1; }
+printf -- '-q 抜けのタグ混じり snapshot は SNAPSHOT_NOT_JSON で停止: PASS\n'
 if grep -q 'RETENTION_BODY_MARKER\|合成A' "$run_dir/snapshot.json"; then printf 'snapshot に本文または title が入った\n' >&2; exit 1; fi
 printf 'READ ONLY snapshot（SELECT だけの role、本文・title なし）: PASS\n'
 

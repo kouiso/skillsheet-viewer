@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseArgs, parsePolicy, runDryRun } from './history-retention-dry-run';
+import { parseArgs, parsePolicy, parseSnapshotText, runDryRun } from './history-retention-dry-run';
 
 const snapshot = {
   takenAt: '2026-10-21T00:00:00Z',
@@ -70,6 +70,14 @@ describe('dry-run CLI', () => {
     expect(result.plans.map((plan) => plan.totals.candidate)).toEqual([0, 1, 0]);
     expect(result.plans[1]?.storedBytes.candidate).toBe(20);
     expect(JSON.stringify(result)).not.toContain('synthetic-owner');
+  });
+  it('psql の -q 抜けで混ざるコマンドタグは読み飛ばさず、取り直しを促して止める', () => {
+    const json = JSON.stringify(snapshot);
+    expect(parseSnapshotText(`${json}\n`)).toEqual(snapshot);
+    expect(() => parseSnapshotText(`BEGIN\nDO\n${json}\nCOMMIT\n`)).toThrow(
+      'SNAPSHOT_NOT_JSON: 先頭行="BEGIN"。psql は -X -q -v ON_ERROR_STOP=1 -At で取り直す',
+    );
+    expect(() => parseSnapshotText('')).toThrow('SNAPSHOT_NOT_JSON');
   });
   it('案と値の形を検査する', () => {
     expect(parsePolicy('tiered:7:30')).toEqual({ kind: 'tiered', fullDays: 7, dailyUntilDays: 30 });
