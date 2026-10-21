@@ -1,7 +1,7 @@
 # PR #584 証跡：本番の実測（2026-10-21）で容量の土台を置き換えた前後
 
 - PR #584 head（before）: `c0a003d971c21d2e872a9a12cbadd148f9997eb6`
-- 変更後（after、ローカル commit・未 push）: `b0a23aa1b07ffe04d6bd10d84bea58a451cc5aee`（push 時に rebase されたら SHA は変わる）
+- 変更後（after、push 済み head）: `415166624e0716b9cb129c295ba01481a6aa6839`
 - この branch（evidence/pr-584）は before の head から切り、この README と同じ階層のファイルだけを足している。コードは変えていない。
 
 | ファイル | 中身 |
