@@ -36,7 +36,7 @@ Claude Code は `CLAUDE.md` があると `AGENTS.md` を読まない。そのた
 
 | AI（版） | ルールの入口 | Skill の入口 | 確認 |
 | --- | --- | --- | --- |
-| Claude Code 2.1.291 | `CLAUDE.md` → `@AGENTS.md` | `.claude/skills/`（生成物＋専用） | 公式文書で確認。実起動での確認は未実施 |
+| Claude Code 2.1.291 | `CLAUDE.md` → `@AGENTS.md` | `.claude/skills/`（生成物＋専用） | 実起動で確認（下の注記） |
 | Codex CLI 0.155.1 | `AGENTS.md` | `.agents/skills/` | 実測（`codex debug prompt-input`） |
 | Devin CLI 3000.10.31 | `AGENTS.md` と `CLAUDE.md` | `.agents/skills/` と `.claude/skills/` | 実測（`devin rules list` / `devin skills list`） |
 | OpenCode 1.18.15 | `AGENTS.md` | `.agents/skills/` と `.claude/skills/`（同名は1つにまとめる） | 実測（`opencode debug skill`） |
@@ -71,7 +71,10 @@ HOME=$H XDG_CONFIG_HOME=$H/.config opencode debug skill
 - **Devin CLI では共通 Skill が2つずつ並ぶ。** Devin は `.agents/skills` と `.claude/skills` の両方を読み、同名の実体が別ファイルだと `/agents:<name>` と `/claude:<name>` に分けて出す。中身は同じ。
   - シンボリックリンクなら Devin は1つにまとめるが、Windows の既定の clone ではリンクがテキストになり Claude Code が読めなくなるため使わない。
   - `.devin/config.json` に `{"read_config_from": {"claude": false}}` を置けば重複は消える。ただし Devin から `CLAUDE.md` の code-review-graph の説明・専用 Skill・`.mcp.json` も見えなくなるため入れていない。
-- **Claude Code と Antigravity は実起動で確かめていない。** Claude Code は対話起動して `/context` の Memory files に `AGENTS.md` が出ることを見れば確かめられる。
+- **Antigravity は実起動で確かめていない。**
+- **Claude Code はグローバル設定を外さずに確かめた。** ログイン情報が `HOME` にあり、外すと起動できないため。
+  - 対話起動して `/memory` に `CLAUDE.md` と `L AGENTS.md @-imported` が並ぶこと、`InstructionsLoaded` フックに `AGENTS.md`（`load_reason: include`）が届くことを見た。import 行を消すと `AGENTS.md` は届かなくなった。
+  - 同じ名前の Skill が `~/.claude/skills/` にあると、Claude Code はそちらを優先する（[公式](https://code.claude.com/docs/en/skills)）。その場合はこのリポジトリの共通 Skill が使われない。
 - **Copilot の `.github/copilot-instructions.md` 系は共通ルールと別に残している。** Copilot は `AGENTS.md` も読むため共通ルールは届く。専用ファイルの中身の整理はこの取り決めの範囲外。
 
 ## 更新の手順

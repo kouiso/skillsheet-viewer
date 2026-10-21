@@ -65,6 +65,24 @@ if os.environ.get('HEADLESS_FAIL') and args==['run','test:e2e']:sys.exit(42)
         self.assertEqual(self.calls()[0][:2], ['check-naming.sh', []])
         self.assertEqual(len(self.calls()), 5)
 
+    def test_lint_chain_with_added_step_still_counts_naming_as_included(self):
+        package = json.loads(self.package.read_text())
+        package['scripts']['lint'] = 'biome check . && node script/new-check.mjs && ./script/check-naming.sh && node script/later.mjs'
+        self.package.write_text(json.dumps(package))
+        self.assertEqual(self.run_entry('fast').returncode, 0)
+        self.assertEqual([x[:2] for x in self.calls()], [['pnpm', ['run', name]] for name in ['lint', 'type-check', 'test', 'build']])
+
+    def test_lint_that_can_skip_naming_retains_explicit_naming(self):
+        for lint in ['biome check . || ./script/check-naming.sh', 'biome check . ; ./script/check-naming.sh',
+                     'biome check . && ./script/check-naming.sh --staged', 'biome check .']:
+            self.log.unlink(missing_ok=True)
+            package = json.loads(self.package.read_text())
+            package['scripts']['lint'] = lint
+            self.package.write_text(json.dumps(package))
+            self.assertEqual(self.run_entry('fast').returncode, 0)
+            self.assertEqual(self.calls()[0][:2], ['check-naming.sh', []], lint)
+            self.assertEqual(len(self.calls()), 5, lint)
+
     def test_every_static_failure_stops_remaining_checks_and_returns_exact_status(self):
         for count, name in enumerate(['lint', 'type-check', 'test', 'build'], 1):
             self.log.unlink(missing_ok=True)
