@@ -239,23 +239,41 @@ fi
 # ---- #577 回帰検証 ----
 # 監視: READ ONLY の観測（読取 role）を2点取り、正常・上限超過・計測失敗を確かめる。
 monitor=("$tsx" "$repo_dir/script/history-capacity-monitor.ts")
-"${reader[@]}" -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-1.json"
+# 本番では Neon API の branch.logical_size を branchLogicalBytes として足す。ローカルの cluster に Neon は無いので、
+# 代わりの値を引数で入れる（未指定なら全 DB の和）。shift_days で観測時刻を後ろへずらす。
+with_logical() {
+  node -e 'const fs=require("node:fs");const [src,dst,logical,shiftDays]=process.argv.slice(1);const s=JSON.parse(fs.readFileSync(src,"utf8"));s.branchLogicalBytes=logical===""?s.allDatabasesBytes:Number(logical);s.measuredAt=new Date(Date.parse(s.measuredAt)+Number(shiftDays)*86400000).toISOString();fs.writeFileSync(dst,JSON.stringify(s));' "$@"
+}
+"${reader[@]}" -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-1-raw.json"
+with_logical "$run_dir/sample-1-raw.json" "$run_dir/sample-1.json" "" 0
 # 2点目は1日後として扱えるよう、観測時刻だけを書き換える（増え方の計算の通し確認用）。
 "${reader[@]}" -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-2-raw.json"
-node -e 'const fs=require("node:fs");const [src,dst]=process.argv.slice(1);const s=JSON.parse(fs.readFileSync(src,"utf8"));s.measuredAt=new Date(Date.parse(s.measuredAt)+86400000).toISOString();fs.writeFileSync(dst,JSON.stringify(s));' "$run_dir/sample-2-raw.json" "$run_dir/sample-2.json"
+with_logical "$run_dir/sample-2-raw.json" "$run_dir/sample-2.json" "" 1
+node -e 'const s=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));if(!(s.allDatabasesBytes>=s.databaseBytes&&s.databaseBytes>0))process.exit(1);' "$run_dir/sample-1-raw.json" \
+  || { printf '全 DB の和（allDatabasesBytes）が接続先 DB より小さい\n' >&2; exit 1; }
 "${monitor[@]}" --sample "$run_dir/sample-1.json" --sample "$run_dir/sample-2.json" >"$run_dir/monitor-normal.json"
 grep -q '"status": "normal"' "$run_dir/monitor-normal.json" || { printf '監視が normal を返さない\n' >&2; exit 1; }
 monitor_status=0
-# 合成の履歴は 1MiB に満たないので、DB 全体（新規 cluster でも数 MiB ある）の上限を 1MiB にして超過させる。
+# 合成の履歴は 1MiB に満たないので、branch の論理容量（ここでは全 DB の和、新規 cluster でも数 MiB ある）の上限を 1MiB にして超過させる。
 "${monitor[@]}" --sample "$run_dir/sample-2.json" --database-limit-mib 1 >"$run_dir/monitor-exceeded.json" || monitor_status=$?
 (( monitor_status == 3 )) && grep -q '"automaticAction": "none"' "$run_dir/monitor-exceeded.json" || { printf '上限超過が exit 3 にならない\n' >&2; exit 1; }
-# 書込み可能な transaction で取った観測は、監視が失敗として扱う。
-"${admin[@]}" -At -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-writable.json"
+# 上限の判定は branchLogicalBytes だけで行う。pg_database_size（接続先・全 DB の和）が上限を超えていても、論理容量が下なら超過にしない。
+with_logical "$run_dir/sample-2-raw.json" "$run_dir/sample-small-logical.json" 2097152 1
+"${monitor[@]}" --sample "$run_dir/sample-small-logical.json" --database-limit-mib 3 >"$run_dir/monitor-small-logical.json"
+node -e 'const r=JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8"));if(r.status!=="normal"||!(r.allDatabasesBytes>=3*1048576))process.exit(1);' "$run_dir/monitor-small-logical.json" \
+  || { printf '上限の判定が branchLogicalBytes 以外を見ている\n' >&2; exit 1; }
+# branchLogicalBytes の無い観測は、pg_database_size で代わりに判定せず計測失敗にする。
+monitor_status=0
+"${monitor[@]}" --sample "$run_dir/sample-2-raw.json" >"$run_dir/monitor-no-logical.json" || monitor_status=$?
+(( monitor_status == 4 )) && grep -q 'branchLogicalBytes' "$run_dir/monitor-no-logical.json" || { printf '論理容量の無い観測が計測失敗にならない\n' >&2; exit 1; }
+# 書込み可能な transaction で取った観測は、監視が失敗として扱う（論理容量は足して、READ ONLY だけで落ちることを見る）。
+"${admin[@]}" -At -f "$repo_dir/script/sql/history-size-report.sql" >"$run_dir/sample-writable-raw.json"
+with_logical "$run_dir/sample-writable-raw.json" "$run_dir/sample-writable.json" "" 0
 monitor_status=0
 "${monitor[@]}" --sample "$run_dir/sample-writable.json" >"$run_dir/monitor-failed.json" || monitor_status=$?
-(( monitor_status == 4 )) || { printf 'READ ONLY でない観測が計測失敗にならない\n' >&2; exit 1; }
+(( monitor_status == 4 )) && grep -q 'READ ONLY' "$run_dir/monitor-failed.json" || { printf 'READ ONLY でない観測が計測失敗にならない\n' >&2; exit 1; }
 before_versions="$(node -e 'console.log(JSON.parse(require("node:fs").readFileSync(process.argv[1],"utf8")).versionCount)' "$run_dir/sample-1.json")"
-printf '監視（normal / exceeded=3 / measurement-failed=4、自動処理なし）: PASS（観測時の版数 %s）\n' "$before_versions"
+printf '監視（normal / exceeded=3 / 上限は branch の論理容量だけで判定 / 論理容量なし・READ ONLY でない=4、自動処理なし）: PASS（観測時の版数 %s）\n' "$before_versions"
 
 # 段階的間引き案の候補を求める。CLI は集計しか出さないので、同じ評価関数を検証用に直接呼ぶ。
 cat >"$run_dir/candidates.ts" <<TS

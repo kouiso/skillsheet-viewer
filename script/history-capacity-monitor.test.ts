@@ -24,4 +24,21 @@ describe('監視 CLI', () => {
     expect(exitCode(result)).toBe(4);
     expect(readSample('x.json', () => '{"a":1}')).toEqual({ a: 1 });
   });
+  it('warning は 0 以外で返し、終了コードで知らせる定期実行でも警告が届く', () => {
+    const at = (historyMiB: number) => {
+      const total = historyMiB * MIB;
+      return {
+        measuredAt: '2026-10-11T00:00:00Z',
+        transactionReadOnly: 'on',
+        databaseBytes: total,
+        allDatabasesBytes: total,
+        branchLogicalBytes: total + MIB,
+        versionCount: 1,
+        relations: { document_versions: { heapBytes: total, toastBytes: 0, indexBytes: 0, totalBytes: total } },
+      };
+    };
+    expect(exitCode(evaluateMonitor([at(10)]))).toBe(0);
+    expect(exitCode(evaluateMonitor([at(200)]))).toBe(5);
+    expect(exitCode(evaluateMonitor([at(256)]))).toBe(3);
+  });
 });

@@ -4,6 +4,9 @@ SELECT jsonb_build_object(
   'measuredAt', now(),
   'transactionReadOnly', current_setting('transaction_read_only'),
   'databaseBytes', pg_database_size(current_database()),
+  -- 参考値。Neon の容量上限は branch の論理容量を数え、この和より大きい（2026-10-21 本番: 和 35,176,448 B、論理容量 50,782,208 B）。
+  -- 上限の判定に使う branchLogicalBytes は Neon API から別に足す（doc/document-history-operation.md「観測を取る」）。
+  'allDatabasesBytes', (SELECT sum(pg_database_size(d.oid))::bigint FROM pg_database d WHERE NOT d.datistemplate),
   'relations', (
     SELECT jsonb_object_agg(c.relname, jsonb_build_object(
       -- heap は main/fsm/vm。toast は TOAST 本体＋TOAST 索引。heap+toast+indexes = total。

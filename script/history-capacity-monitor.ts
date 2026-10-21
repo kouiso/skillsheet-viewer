@@ -2,7 +2,8 @@
 // 古い順に並べて渡す。DB には接続せず、閾値を超えても削除・保持期間の短縮はしない。
 // 使い方: pnpm exec tsx script/history-capacity-monitor.ts --sample <古い.json> --sample <新しい.json> \
 //   [--warn-mib 200] [--limit-mib 256] [--database-limit-mib 1024]
-// 終了コード: 0 = normal / warning、3 = exceeded、4 = measurement-failed、2 = 引数の誤り。
+// 終了コード: 0 = normal、5 = warning、3 = exceeded、4 = measurement-failed、2 = 引数の誤り。
+// warning を 0 にすると、終了コードで知らせる定期実行では警告が誰にも届かない。全版保持の安全策は警告で決め直すことなので、0 以外にする。
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { MIB } from '../src/db/history-capacity-model';
@@ -38,6 +39,7 @@ export function parseArgs(argv: string[]) {
 export function exitCode(result: MonitorResult) {
   if (result.status === 'exceeded') return 3;
   if (result.status === 'measurement-failed') return 4;
+  if (result.status === 'warning') return 5;
   return 0;
 }
 

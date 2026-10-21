@@ -6,7 +6,12 @@ import { MIB } from './history-capacity-model';
 export interface SizeSample {
   measuredAt: string;
   transactionReadOnly: string;
+  /** 接続先 DB だけの pg_database_size。参考値で、上限の判定には使わない。 */
   databaseBytes: number;
+  /** branch 内の全 DB（template 以外）の pg_database_size の和。参考値。2026-10-21 の本番で論理容量の 69% しか数えなかった。 */
+  allDatabasesBytes: number;
+  /** Neon API の branch.logical_size。Neon の容量上限が数える量で、上限の判定と見込み日はこれだけで出す。 */
+  branchLogicalBytes: number;
   versionCount: number;
   relations: Record<string, { heapBytes: number; toastBytes: number; indexBytes: number; totalBytes: number }>;
 }
@@ -36,6 +41,8 @@ export interface MonitorResult {
   historyBytes: number | null;
   historyBreakdown: { heapBytes: number; toastBytes: number; indexBytes: number } | null;
   databaseBytes: number | null;
+  allDatabasesBytes: number | null;
+  branchLogicalBytes: number | null;
   versionCount: number | null;
   /** 1日あたりの履歴の増え方。2点未満か1日に満たない観測では null（0 と言わない）。 */
   historyGrowthBytesPerDay: number | null;
@@ -64,6 +71,12 @@ export function validateSample(value: unknown): { sample: SizeSample | null; pro
   // READ ONLY で取った観測だけを使う。書込み可能な接続での観測は、監視が DB を変えていない証拠にならない。
   if (record.transactionReadOnly !== 'on') problems.push('READ ONLY の transaction で取った観測ではない');
   if (!finiteNonNegative(record.databaseBytes)) problems.push('databaseBytes が読めない');
+  if (!finiteNonNegative(record.allDatabasesBytes)) problems.push('allDatabasesBytes が読めない');
+  // pg_database_size は接続先 DB だけ、全 DB の和でも Neon の論理容量より小さく出る。上限を低く見積もらんよう、論理容量の無い観測は使わない。
+  if (!finiteNonNegative(record.branchLogicalBytes))
+    problems.push(
+      'branchLogicalBytes（Neon API の branch.logical_size）が無い。pg_database_size では上限の判定をしない',
+    );
   if (!finiteNonNegative(record.versionCount)) problems.push('versionCount が読めない');
   const relations = record.relations;
   const history =
@@ -132,6 +145,8 @@ export function evaluateMonitor(
     historyBytes: null,
     historyBreakdown: null,
     databaseBytes: null,
+    allDatabasesBytes: null,
+    branchLogicalBytes: null,
     versionCount: null,
     historyGrowthBytesPerDay: null,
     projectedHistoryLimitAt: null,
@@ -162,10 +177,10 @@ export function evaluateMonitor(
   const growth = slopePerDay(
     points.map(({ sample: item, t }) => ({ t, y: item.relations.document_versions?.totalBytes ?? 0 })),
   );
-  const dbGrowth = slopePerDay(points.map(({ sample: item, t }) => ({ t, y: item.databaseBytes })));
+  const dbGrowth = slopePerDay(points.map(({ sample: item, t }) => ({ t, y: item.branchLogicalBytes })));
   if (growth === null) problems.push('増え方は未測定（1日以上離れた観測が2点以上要る）');
   const exceeded =
-    history.totalBytes >= thresholds.historyLimitBytes || sample.databaseBytes >= thresholds.databaseLimitBytes;
+    history.totalBytes >= thresholds.historyLimitBytes || sample.branchLogicalBytes >= thresholds.databaseLimitBytes;
   const warning = history.totalBytes >= thresholds.historyWarnBytes;
   return {
     status: exceeded ? 'exceeded' : warning ? 'warning' : 'normal',
@@ -174,10 +189,12 @@ export function evaluateMonitor(
     historyBytes: history.totalBytes,
     historyBreakdown: { heapBytes: history.heapBytes, toastBytes: history.toastBytes, indexBytes: history.indexBytes },
     databaseBytes: sample.databaseBytes,
+    allDatabasesBytes: sample.allDatabasesBytes,
+    branchLogicalBytes: sample.branchLogicalBytes,
     versionCount: sample.versionCount,
     historyGrowthBytesPerDay: growth,
     projectedHistoryLimitAt: projectDate(latestMs, history.totalBytes, thresholds.historyLimitBytes, growth),
-    projectedDatabaseLimitAt: projectDate(latestMs, sample.databaseBytes, thresholds.databaseLimitBytes, dbGrowth),
+    projectedDatabaseLimitAt: projectDate(latestMs, sample.branchLogicalBytes, thresholds.databaseLimitBytes, dbGrowth),
     problems,
     automaticAction: 'none',
   };

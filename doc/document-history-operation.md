@@ -22,11 +22,19 @@
 
 ```sh
 PGOPTIONS='-c default_transaction_read_only=on' \
-  psql -X -q -At -v ON_ERROR_STOP=1 "service=<接続名>" -f script/sql/history-size-report.sql > sample-<日時>.json
+  psql -X -q -At -v ON_ERROR_STOP=1 "service=<接続名>" -f script/sql/history-size-report.sql > sample-<日時>.raw.json
 ```
 
-照会は `pg_database_size` と、`document_versions` などの heap・TOAST・索引を `pg_total_relation_size` の内訳として出す（二重に数えない）。
-`transactionReadOnly` が `on` でない観測は、監視側で失敗として扱う。
+Neon の容量上限が数える branch の論理容量は SQL では読めないので、Neon API の `branch.logical_size` を同じ観測に足す。API キーは環境変数で渡し、引数やファイルに書かない。
+
+```sh
+logical=$(curl -fsS -H "Authorization: Bearer $NEON_API_KEY" \
+  "https://console.neon.tech/api/v2/projects/<project_id>/branches/<branch_id>" | jq -e '.branch.logical_size')
+jq -c --argjson logical "$logical" '. + {branchLogicalBytes: $logical}' sample-<日時>.raw.json > sample-<日時>.json
+```
+
+照会は接続先 DB の `pg_database_size`（`databaseBytes`）、template 以外の全 DB の和（`allDatabasesBytes`）と、`document_versions` などの heap・TOAST・索引を `pg_total_relation_size` の内訳として出す（二重に数えない）。
+`transactionReadOnly` が `on` でない観測と、`branchLogicalBytes` の無い観測は、監視側で失敗として扱う。
 
 ### 判定する
 
@@ -39,14 +47,17 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 | 状態 | 意味 | 終了コード |
 | --- | --- | --- |
 | normal | 候補の警告値より下 | 0 |
-| warning | 履歴が警告値（候補 200MiB）以上 | 0 |
-| exceeded | 履歴が上限値（候補 256MiB）以上、または DB 全体が 1,024MiB 以上 | 3 |
-| measurement-failed | 最新の観測が読めない、READ ONLY でない、履歴表が無い、内訳の和が総量と合わない、時刻が逆順 | 4 |
+| warning | 履歴が警告値（候補 200MiB）以上 | 5 |
+| exceeded | 履歴が上限値（候補 256MiB）以上、または branch の論理容量が 1,024MiB 以上 | 3 |
+| measurement-failed | 最新の観測が読めない、READ ONLY でない、履歴表が無い、branch の論理容量が無い、内訳の和が総量と合わない、時刻が逆順 | 4 |
+
+0 以外はすべて人に知らせる。warning を 0 にすると、終了コードで知らせる定期実行では警告が届かない。
 
 - 増え方は最小二乗で出す。1日以上離れた観測が2点以上無ければ「未測定」とし、0 とは書かない。
 - 履歴表がまだ無い本番に向けると measurement-failed になる。これは正しい結果で、0MiB と読まない。
 - 200/256MiB は #564 10/14 コメントの比較案で、承認された値ではない。`--warn-mib` `--limit-mib` `--database-limit-mib` で差し替えられる。
-- 1,024MiB は Neon project の `branch_logical_size_limit`（2026-10-21 に project 設定を読んで確認）。`pg_database_size` と Neon の論理容量が一致するかは確認していない。
+- 1,024MiB は Neon project の `branch_logical_size_limit`（2026-10-21 に project 設定を読んで確認）。上限の判定と届く見込み日は `branchLogicalBytes`（Neon API の `logical_size`）だけで出す。
+- `pg_database_size` では上限の判定をしない。2026-10-21 15:37 JST の本番読取で、neondb は 9,609,216 B、template 以外の 4 DB の和は 35,176,448 B、branch の論理容量は 50,782,208 B だった。全 DB の和でも 15,605,760 B（論理容量の 31%）足りない。`databaseBytes` と `allDatabasesBytes` は参考として出力に残す。
 - `pg_total_relation_size` は削除済みで未回収の行（dead tuple）も含む。保存直後は詰めた後の約2倍になり得る（#574 の計測）。
 
 ### 超えたとき
@@ -60,7 +71,11 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 ### 始める・止める
 
 監視は読み取りだけの単発コマンドで、常駐しない。止めるときは実行をやめるだけで、保存・履歴・権限には何も残らない。
-本番で定期実行する場合は、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）を本人の承認のうえで用意する。この role の作成と定期実行の有効化はまだしていない。
+本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と Neon API の読取用キーを本人の承認のうえで用意する。role・キー・定期実行・届け先はまだ無い（#590）。
+
+全版保持に決めたので、本番の定期実行は画面を有効にする前（[document-history.md](document-history.md)「適用ゲート」の手順 4 の前）に始め、全版保持を続ける間は止めない。止まった・届かなくなったと分かったら、その日のうちに直すか、保持方針を決め直す（#575）。
+
+届け先: （#590 で決めて書く。誰に・どの経路で・終了コード 3/4/5 と定期実行の停止がどう届くか・試しの警告を送った日と証拠）
 
 ## 回帰検証（隔離環境）
 

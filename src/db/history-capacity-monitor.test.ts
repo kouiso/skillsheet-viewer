@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { MIB } from './history-capacity-model';
 import { CANDIDATE_THRESHOLDS, evaluateMonitor, validateSample } from './history-capacity-monitor';
 
+/** branchMiB は Neon の branch の論理容量。pg_database_size 側はそれより小さい値を入れ、上限の判定に使わんことを試す。 */
 function sample(
   measuredAt: string,
   historyMiB: number,
-  databaseMiB = historyMiB + 10,
+  branchMiB = historyMiB + 10,
   extra: Record<string, unknown> = {},
 ) {
   const total = Math.round(historyMiB * MIB);
@@ -14,7 +15,9 @@ function sample(
   return {
     measuredAt,
     transactionReadOnly: 'on',
-    databaseBytes: Math.round(databaseMiB * MIB),
+    databaseBytes: Math.round(branchMiB * 0.2 * MIB),
+    allDatabasesBytes: Math.round(branchMiB * 0.7 * MIB),
+    branchLogicalBytes: Math.round(branchMiB * MIB),
     versionCount: 100,
     relations: {
       document_versions: { heapBytes: total - index - toast, toastBytes: toast, indexBytes: index, totalBytes: total },
@@ -40,8 +43,30 @@ describe('監視の状態', () => {
     expect(exceeded.status).toBe('exceeded');
     expect(exceeded.automaticAction).toBe('none');
     expect(exceeded.projectedHistoryLimitAt).toBe('2026-10-11T00:00:00.000Z');
-    // DB 全体が上限に届いても exceeded。
-    expect(evaluateMonitor([sample('2026-10-11T00:00:00Z', 10, 1024)]).status).toBe('exceeded');
+    // branch の論理容量が上限に届いたら exceeded。pg_database_size（接続先・全 DB の和）がずっと小さくても見逃さない。
+    const branchFull = evaluateMonitor([sample('2026-10-11T00:00:00Z', 10, 1024)]);
+    expect(branchFull.status).toBe('exceeded');
+    expect(branchFull.databaseBytes).toBeLessThan(CANDIDATE_THRESHOLDS.databaseLimitBytes);
+    expect(branchFull.allDatabasesBytes).toBeLessThan(CANDIDATE_THRESHOLDS.databaseLimitBytes);
+    expect(branchFull.projectedDatabaseLimitAt).toBe('2026-10-11T00:00:00.000Z');
+  });
+  it('上限の判定と見込み日は branch の論理容量で出し、pg_database_size では出さない', () => {
+    // 2026-10-21 本番の比: neondb 9,609,216 B・全 DB の和 35,176,448 B・論理容量 50,782,208 B。
+    const measured = (measuredAt: string, branchBytes: number) => ({
+      ...sample(measuredAt, 0),
+      databaseBytes: 9_609_216,
+      allDatabasesBytes: 35_176_448,
+      branchLogicalBytes: branchBytes,
+    });
+    const result = evaluateMonitor([
+      measured('2026-10-01T00:00:00Z', 50_782_208),
+      measured('2026-10-11T00:00:00Z', 50_782_208 + 10 * MIB),
+    ]);
+    expect(result.branchLogicalBytes).toBe(50_782_208 + 10 * MIB);
+    // 論理容量が 1MiB/日 で増える。pg_database_size は横ばいなので、それで見ていたら見込み日は出ない。
+    const remainingDays = (1024 * MIB - (50_782_208 + 10 * MIB)) / MIB;
+    const expected = Date.parse('2026-10-11T00:00:00Z') + remainingDays * 86_400_000;
+    expect(Math.abs(Date.parse(result.projectedDatabaseLimitAt ?? '') - expected)).toBeLessThan(1000);
   });
   it('閾値は差し替えられる', () => {
     const result = evaluateMonitor([sample('2026-10-11T00:00:00Z', 60)], {
@@ -74,6 +99,14 @@ describe('計測失敗', () => {
     broken.relations.document_versions.totalBytes += 1;
     expect(evaluateMonitor([broken]).problems).toContain('document_versions の内訳の和が総量と合わない');
   });
+  it('Neon の論理容量が無い観測は、pg_database_size で代わりに判定せず失敗にする', () => {
+    const { branchLogicalBytes: _omitted, ...withoutBranch } = sample('2026-10-01T00:00:00Z', 10);
+    const result = evaluateMonitor([withoutBranch]);
+    expect(result.status).toBe('measurement-failed');
+    expect(result.problems).toContain(
+      'branchLogicalBytes（Neon API の branch.logical_size）が無い。pg_database_size では上限の判定をしない',
+    );
+  });
   it('時刻が逆順の観測は失敗にする', () => {
     expect(evaluateMonitor([sample('2026-10-11T00:00:00Z', 20), sample('2026-10-01T00:00:00Z', 10)]).status).toBe(
       'measurement-failed',
@@ -96,6 +129,8 @@ describe('計測失敗', () => {
       measuredAt,
       transactionReadOnly: 'on',
       databaseBytes: 10 * MIB,
+      allDatabasesBytes: 10 * MIB,
+      branchLogicalBytes: 10 * MIB,
       versionCount: 10,
       relations: { document_versions: { heapBytes: totalBytes, toastBytes: 0, indexBytes: 0, totalBytes } },
     });
