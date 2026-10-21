@@ -37,36 +37,113 @@ export interface MeasurementReport {
   scenarios: MeasurementScenario[];
 }
 
-function object(value: unknown): value is Record<string, unknown> {
+const MEASUREMENT_TOOL = 'measure-document-history';
+
+function invalid(): never {
+  throw new Error('MEASUREMENT_REPORT_INVALID');
+}
+function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
-function finite(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
+function object(value: unknown): Record<string, unknown> {
+  if (!isObject(value)) invalid();
+  return value;
+}
+function finite(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) invalid();
+  return value;
+}
+function count(value: unknown): number {
+  const number = finite(value);
+  if (!Number.isInteger(number) || number < 0) invalid();
+  return number;
+}
+function text(value: unknown): string {
+  if (typeof value !== 'string') invalid();
+  return value;
+}
+
+function parseSize(value: unknown): SizeReport {
+  const size = object(value);
+  const relations: SizeReport['relations'] = {};
+  for (const [name, entry] of Object.entries(object(size.relations))) {
+    const relation = object(entry);
+    relations[name] = {
+      heapBytes: count(relation.heapBytes),
+      toastBytes: count(relation.toastBytes),
+      indexBytes: count(relation.indexBytes),
+      totalBytes: count(relation.totalBytes),
+    };
+  }
+  // 1 版の容量は document_versions の総容量の差で出すので、無い report は使えない。
+  if (!relations.document_versions) invalid();
+  return {
+    versionCount: count(size.versionCount),
+    blocksStoredBytes: count(size.blocksStoredBytes),
+    blocksLogicalBytes: count(size.blocksLogicalBytes),
+    relations,
+  };
+}
+
+function parseScenario(value: unknown): MeasurementScenario {
+  const scenario = object(value);
+  if (!Array.isArray(scenario.payloadTargetBytes) || scenario.payloadTargetBytes.length === 0) invalid();
+  const attempts = count(scenario.attempts);
+  const accepted = count(scenario.accepted);
+  const errors = count(scenario.errors);
+  if (accepted > attempts || errors > attempts - accepted) invalid();
+  const failureRate = scenario.failureRate === null ? null : finite(scenario.failureRate);
+  // 失敗率は試行と成功から決まる値なので、食い違う report は数え方が壊れている。
+  if (failureRate === null ? attempts !== 0 : Math.abs(failureRate - (attempts - accepted) / attempts) > 1e-6)
+    invalid();
+  const latency = object(scenario.latencyMs);
+  return {
+    name: text(scenario.name),
+    payloadTargetBytes: scenario.payloadTargetBytes.map(count),
+    attempts,
+    accepted,
+    errors,
+    failureRate,
+    lockWaits: count(scenario.lockWaits),
+    walBytes: count(scenario.walBytes),
+    versionsAdded: count(scenario.versionsAdded),
+    latencyMs: {
+      samples: count(latency.samples),
+      min: finite(latency.min),
+      p50: finite(latency.p50),
+      p95: finite(latency.p95),
+      max: finite(latency.max),
+    },
+    sizeBefore: parseSize(scenario.sizeBefore),
+    sizeAfterWrite: parseSize(scenario.sizeAfterWrite),
+    sizeAfterCompact: parseSize(scenario.sizeAfterCompact),
+  };
 }
 
 /** report の形を確かめる。足りない項目は推測で埋めず、読めない report として拒否する。 */
 export function parseMeasurementReport(value: unknown): MeasurementReport {
-  if (!object(value) || value.tool !== 'measure-document-history' || !Array.isArray(value.scenarios))
-    throw new Error('MEASUREMENT_REPORT_INVALID');
-  for (const scenario of value.scenarios) {
-    if (
-      !object(scenario) ||
-      typeof scenario.name !== 'string' ||
-      !finite(scenario.versionsAdded) ||
-      !finite(scenario.walBytes) ||
-      !object(scenario.latencyMs) ||
-      !object(scenario.sizeBefore) ||
-      !object(scenario.sizeAfterWrite) ||
-      !object(scenario.sizeAfterCompact)
-    )
-      throw new Error('MEASUREMENT_REPORT_INVALID');
-    for (const size of [scenario.sizeBefore, scenario.sizeAfterWrite, scenario.sizeAfterCompact]) {
-      const relations = (size as Record<string, unknown>).relations;
-      if (!object(relations) || !object(relations.document_versions) || !finite(relations.document_versions.totalBytes))
-        throw new Error('MEASUREMENT_REPORT_INVALID');
-    }
-  }
-  return value as unknown as MeasurementReport;
+  const report = object(value);
+  const { gitDirty, scenarios } = report;
+  if (report.tool !== MEASUREMENT_TOOL || !Array.isArray(scenarios) || typeof gitDirty !== 'boolean') invalid();
+  const environment = object(report.environment);
+  const samples: Record<string, number> = {};
+  for (const [key, sample] of Object.entries(object(report.samples))) samples[key] = finite(sample);
+  return {
+    tool: MEASUREMENT_TOOL,
+    kind: text(report.kind),
+    gitSha: text(report.gitSha),
+    gitDirty,
+    command: text(report.command),
+    startedAt: text(report.startedAt),
+    finishedAt: text(report.finishedAt),
+    environment: {
+      os: text(environment.os),
+      postgres: text(environment.postgres),
+      autovacuum: text(environment.autovacuum),
+    },
+    samples,
+    scenarios: scenarios.map(parseScenario),
+  };
 }
 
 function historyTotal(size: SizeReport) {
@@ -116,7 +193,7 @@ export const REPORTED_20261014 = {
 } as const;
 
 export interface LoadPreset {
-  name: 'low' | 'normal' | 'high' | 'reported-pace';
+  name: 'low' | 'normal' | 'high' | 'reported-pace' | 'reported-heavy';
   load: Sourced<LoadProfile>;
 }
 
@@ -157,7 +234,62 @@ export const LOAD_PRESETS: LoadPreset[] = [
       source: '仮定: 3シートを月20日、1日200保存（10/14 の重い月の1日200版を上回る側）',
     },
   },
+  {
+    name: 'reported-heavy',
+    load: {
+      value: { sheets: 1, activeDaysPerMonth: 10, savesPerActiveDay: 200, nonSaveVersionsPerSheetPerMonth: 0 },
+      kind: 'reported',
+      source:
+        '#564 10/14 コメントの「いちばん重い月」（1日200版×月10日、シート1枚）。save 以外の版は同コメントに無いので0',
+    },
+  },
 ];
+
+export interface RetentionOption {
+  name: 'keep-all' | 'tiered-30-365' | 'tiered-7-365';
+  label: string;
+  policy: RetentionPolicy;
+  source: string;
+}
+
+export const KEEP_ALL: RetentionPolicy = { kind: 'keep-all' };
+
+/** 比べる保持案。どれも本人承認済みではなく、比較のための入力。 */
+export const RETENTION_OPTIONS: RetentionOption[] = [
+  { name: 'keep-all', label: '全版', policy: KEEP_ALL, source: '現行仕様（自動削除なし）' },
+  {
+    name: 'tiered-30-365',
+    label: '30日全版→365日まで1日1版→以降1か月1版',
+    policy: { kind: 'tiered', fullDays: 30, dailyUntilDays: 365 },
+    source: '#564 10/14 コメントの案（承認済みとは扱わない）',
+  },
+  {
+    name: 'tiered-7-365',
+    label: '7日全版→365日まで1日1版→以降1か月1版',
+    policy: { kind: 'tiered', fullDays: 7, dailyUntilDays: 365 },
+    source: '同コメントの「履歴が 256MiB を超えたら全版の期間を7日に縮める」',
+  },
+];
+
+/** 10/14 コメントの案にある履歴だけの上限。DB 全体の上限（1,024MiB）とは別。 */
+export const REPORTED_HISTORY_CAP_BYTES = 256 * MIB;
+
+/** 1 版の大きさの既存報告。PR #444 の合成データの本文列だけの物理容量で、索引・TOAST の外側は含まない。 */
+export const REPORTED_BYTES_PER_VERSION_444 = 47.5 * 1000;
+
+/**
+ * Neon の history window（PITR で戻れる期間）の既定値と上限。プランで決まり、この project のプランは確認していない。
+ * 出典は NEON_HISTORY_SOURCE。
+ */
+export const PITR_WINDOWS: { label: string; days: number }[] = [
+  { label: '6時間（Free の上限）', days: 0.25 },
+  { label: '1日（Launch・Scale の既定）', days: 1 },
+  { label: '7日（Launch の上限）', days: 7 },
+  { label: '30日（Scale の上限）', days: 30 },
+];
+
+export const NEON_HISTORY_SOURCE =
+  'Neon docs（2026-10-21 閲覧）: https://neon.com/docs/postgres/backup-restore/history-window 、https://neon.com/docs/introduction/usage-metrics 、https://neon.com/docs/reference/glossary';
 
 export function storageFromMeasurement(perVersion: MeasuredPerVersion, sha: string): Sourced<StorageProfile> {
   return {
@@ -170,5 +302,3 @@ export function storageFromMeasurement(perVersion: MeasuredPerVersion, sha: stri
     source: `1版の容量は計測 ${sha.slice(0, 7)} の ${perVersion.scenario}（合成・VACUUM FULL 後）。非履歴容量と上限は ${REPORTED_20261014.source}`,
   };
 }
-
-export const KEEP_ALL: RetentionPolicy = { kind: 'keep-all' };

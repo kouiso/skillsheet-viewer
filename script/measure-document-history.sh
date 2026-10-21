@@ -3,7 +3,7 @@
 # 本番・共有DB・DATABASE_URL には接続しない。結果は Neon 本番の実測ではなく、合成環境での計測値として扱う。
 #
 # 使い方: ./script/measure-document-history.sh
-#   サンプル数は環境変数で変えられる（既定は 1 日 200 保存の重い日と、15 保存の通常日）。
+#   サンプル数は環境変数で変えられる（既定は 1 日 200 保存の重い日と、15 保存の通常日。同じシートの 2 writer 競合も通常日の保存数で測る）。
 #   HISTORY_MEASURE_BURST_SAVES / HISTORY_MEASURE_NORMAL_SAVES / HISTORY_MEASURE_SMALL_BYTES / HISTORY_MEASURE_LARGE_BYTES
 # 出力: <私用dir>/report.json（集計だけ。合成本文は含めない）。DB の data directory は終了時に消す。
 set -euo pipefail
@@ -56,8 +56,9 @@ trap finish EXIT
 initdb -D "$run_dir/data" -U measure_admin --auth=trust --no-locale -E UTF8 >"$run_dir/init.log" 2>&1
 # TCP を閉じ、0700 の socket directory だけで待ち受ける。
 # autovacuum は止め、保存直後の「書いたままの大きさ（dead tuple 込み）」を最悪側として測る。詰めた大きさは VACUUM FULL 後に別に測る。
+# 1 保存は数 ms で終わるので、log_lock_waits が書く閾値（deadlock_timeout）を最小の 1ms にして短い待ちも数える。
 pg_ctl -D "$run_dir/data" -l "$run_dir/server.log" \
-  -o "-c listen_addresses='' -k '$run_dir' -p $port -c autovacuum=off -c log_lock_waits=on -c deadlock_timeout=20ms" \
+  -o "-c listen_addresses='' -k '$run_dir' -p $port -c autovacuum=off -c log_lock_waits=on -c deadlock_timeout=1ms" \
   -w start >/dev/null
 admin=(psql -X -v ON_ERROR_STOP=1 -h "$run_dir" -p "$port" -U measure_admin -d postgres)
 runtime=(psql -X -h "$run_dir" -p "$port" -U measure_runtime -d postgres)
@@ -73,7 +74,8 @@ CREATE ROLE measure_runtime LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT 
 INSERT INTO skillsheet_private.principals VALUES ('measure_runtime', 'measure-owner');
 GRANT USAGE ON SCHEMA skillsheet_private TO measure_runtime;
 GRANT EXECUTE ON FUNCTION skillsheet_private.create_sheet(uuid,text,jsonb,text),
-  skillsheet_private.replace_sheet(uuid,text,text,jsonb,text) TO measure_runtime;
+  skillsheet_private.replace_sheet(uuid,text,text,jsonb,text),
+  skillsheet_private.read_snapshot(uuid,text) TO measure_runtime;
 CREATE SCHEMA measure_fixture;
 GRANT USAGE ON SCHEMA measure_fixture TO measure_runtime;
 CREATE TABLE measure_fixture.sheet(name text PRIMARY KEY, sheet_id uuid NOT NULL, target_bytes integer NOT NULL, saves integer NOT NULL);
@@ -81,7 +83,9 @@ INSERT INTO measure_fixture.sheet VALUES
   ('burst-small', 'aaaaaaaa-0000-4000-8000-000000000001', :small, :burst),
   ('burst-large', 'aaaaaaaa-0000-4000-8000-000000000002', :large, :burst),
   ('normal-small', 'aaaaaaaa-0000-4000-8000-000000000003', :small, :normal),
-  ('normal-large', 'aaaaaaaa-0000-4000-8000-000000000004', :large, :normal);
+  ('normal-large', 'aaaaaaaa-0000-4000-8000-000000000004', :large, :normal),
+  -- 2 つのタブが同じシートを保存し合う競合。writer ごとに別の本文を使うので、本文は 2 writer 分を用意する。
+  ('contended', 'aaaaaaaa-0000-4000-8000-000000000005', :small, :normal * 2);
 -- 1ブロック約3,000文字。保存ごとに1ブロックだけ本文を変える（自動保存は一部の編集で全文版を作るため）。
 -- 本文は md5 の連結で、pglz がほぼ圧縮できない最悪側。実データの圧縮率は report の stored/logical で別に見る。
 CREATE TABLE measure_fixture.payload(sheet_id uuid, iteration integer, blocks jsonb NOT NULL, PRIMARY KEY (sheet_id, iteration));
@@ -99,10 +103,12 @@ CROSS JOIN LATERAL generate_series(0, s.saves) i;
 GRANT SELECT ON measure_fixture.payload, measure_fixture.sheet TO measure_runtime;
 CREATE TABLE measure_fixture.latency(scenario text, ms numeric);
 CREATE TABLE measure_fixture.scenario(name text PRIMARY KEY, ord integer, detail jsonb);
+-- 版数の照合に使う、シートごとの「結果が OK だった保存」の数。設定した保存数ではなく結果から数える。
+CREATE TABLE measure_fixture.accepted(sheet text NOT NULL, scenario text NOT NULL, writer integer NOT NULL, accepted integer NOT NULL);
 SQL
 
-# 作成（revision 0）は計測対象外。保存 i は expected revision i-1 で CAS する（アプリの自動保存と同じ経路）。
-for name in burst-small burst-large normal-small normal-large; do
+# 作成（revision 0）は計測対象外。
+for name in burst-small burst-large normal-small normal-large contended; do
   "${runtime[@]}" -v ON_ERROR_STOP=1 -At -v name="$name" >>"$run_dir/create.log" 2>&1 <<'SQL'
 SELECT skillsheet_private.create_sheet(s.sheet_id, '合成計測', p.blocks, 'measure-owner')->>'status'
 FROM measure_fixture.sheet s JOIN measure_fixture.payload p ON p.sheet_id = s.sheet_id AND p.iteration = 0
@@ -110,30 +116,43 @@ WHERE s.name = :'name';
 SQL
 done
 
-save_script() { # <sheet name> <saves>
-  local name=$1 saves=$2 i
-  printf '\\timing on\n'
-  for ((i = 1; i <= saves; i++)); do
-    printf "SELECT skillsheet_private.replace_sheet(s.sheet_id, '%d', '合成計測', p.blocks, 'measure-owner')->>'status' FROM measure_fixture.sheet s JOIN measure_fixture.payload p ON p.sheet_id = s.sheet_id AND p.iteration = %d WHERE s.name = '%s';\n" "$((i - 1))" "$i" "$name"
+# writer 1 本分の psql script。アプリの自動保存と同じく、直前に受け取った revision で CAS する。
+# CONFLICT や ERROR の後は最新の revision を読み直して続ける（別タブの保存に負けたタブが再読込する動き）。
+# 1 回の失敗で以後の保存が全部 CONFLICT に連鎖しないよう、revision は固定値にしない。
+# 読み直しは \timing を切って行い、保存遅延の標本に混ぜない。試行は status 行で数える。
+save_script() { # <sheet name> <first payload iteration> <saves>
+  local name=$1 first=$2 saves=$3 i
+  local snapshot_revision="SELECT skillsheet_private.read_snapshot(s.sheet_id)#>>'{snapshot,revision}' AS rev FROM measure_fixture.sheet s WHERE s.name = '$name' \\gset"
+  printf '%s\n\\timing on\n' "$snapshot_revision"
+  for ((i = first; i < first + saves; i++)); do
+    printf '\\set status ERROR\n\\set ok false\n\\set next_rev :rev\n'
+    printf "SELECT q.r->>'status' AS status, q.r->>'status' = 'OK' AS ok, coalesce(q.r#>>'{snapshot,revision}', :'rev') AS next_rev FROM (SELECT skillsheet_private.replace_sheet(s.sheet_id, :'rev', '合成計測', p.blocks, 'measure-owner') AS r FROM measure_fixture.sheet s JOIN measure_fixture.payload p ON p.sheet_id = s.sheet_id AND p.iteration = %d WHERE s.name = '%s') q \\\\gset\n" "$i" "$name"
+    printf '\\echo status=:status\n\\if :ok\n\\set rev :next_rev\n\\else\n\\timing off\n%s\n\\timing on\n\\endif\n' "$snapshot_revision"
   done
 }
 admin_value() { "${admin[@]}" -At -c "$1"; }
 size_report() { PGOPTIONS='-c default_transaction_read_only=on' "${admin[@]}" -At -f "$repo_dir/script/sql/history-size-report.sql"; }
 
-run_scenario() { # <scenario> <order> <sheet name>...
+run_scenario() { # <scenario> <order> <sheet name>:<first payload iteration>:<saves>...（1 つが writer 1 本）
   local scenario=$1 order=$2
   shift 2
-  local wal_before wal_after waits_before waits_after size_before size_after_write size_after_compact pids=() name saves
+  local wal_before wal_after waits_before waits_after size_before size_after_write size_after_compact pids=() spec name first saves writer
+  local sheets=()
   wal_before="$(admin_value 'SELECT pg_current_wal_lsn()')"
   waits_before="$(grep -c 'still waiting for' "$run_dir/server.log" || true)"
   size_before="$(size_report)"
+  writer=0
+  for spec in "$@"; do
+    IFS=: read -r name first saves <<<"$spec"
+    writer=$((writer + 1))
+    save_script "$name" "$first" "$saves" >"$run_dir/$scenario-$writer.sql"
+    [[ " ${sheets[*]-} " == *" $name "* ]] || sheets+=("$name")
+  done
   local start_ms end_ms
   start_ms="$(admin_value "SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)")"
-  for name in "$@"; do
-    saves="$(admin_value "SELECT saves FROM measure_fixture.sheet WHERE name = '$name'")"
-    save_script "$name" "$saves" >"$run_dir/$scenario-$name.sql"
-    # 失敗も数えるため ON_ERROR_STOP を付けない。ERROR は stderr の行数で数える。
-    "${runtime[@]}" -At -f "$run_dir/$scenario-$name.sql" >"$run_dir/$scenario-$name.out" 2>"$run_dir/$scenario-$name.err" &
+  for ((writer = 1; writer <= $#; writer++)); do
+    # 失敗も数えるため ON_ERROR_STOP を付けない。結果は status 行、SQL の ERROR は stderr の行数で数える。
+    "${runtime[@]}" -At -f "$run_dir/$scenario-$writer.sql" >"$run_dir/$scenario-$writer.out" 2>"$run_dir/$scenario-$writer.err" &
     pids+=("$!")
   done
   for pid in "${pids[@]}"; do wait "$pid"; done
@@ -143,23 +162,36 @@ run_scenario() { # <scenario> <order> <sheet name>...
   size_after_write="$(size_report)"
   "${admin[@]}" -q -c 'VACUUM FULL public.document_versions' >>"$run_dir/vacuum.log" 2>&1
   size_after_compact="$(size_report)"
-  local attempts=0 accepted=0 errors=0 out
-  for name in "$@"; do
-    out="$run_dir/$scenario-$name.out"
+  local attempts=0 accepted=0 conflicts=0 errors=0 out writer_attempts writer_accepted
+  writer=0
+  for spec in "$@"; do
+    IFS=: read -r name first saves <<<"$spec"
+    writer=$((writer + 1))
+    out="$run_dir/$scenario-$writer.out"
     sed -nE 's/^Time: ([0-9.]+) ms.*/\1/p' "$out" | while read -r ms; do printf '%s\t%s\n' "$scenario" "$ms"; done >>"$run_dir/latency.tsv"
-    attempts=$((attempts + $(grep -cE '^Time: ' "$out" || true)))
-    accepted=$((accepted + $(grep -cx 'OK' "$out" || true)))
-    errors=$((errors + $(grep -c 'ERROR:' "$run_dir/$scenario-$name.err" || true)))
+    writer_attempts="$(grep -c '^status=' "$out" || true)"
+    writer_accepted="$(grep -cx 'status=OK' "$out" || true)"
+    # 試行の数え漏れは失敗率を小さく見せるので、status 行が予定の保存数と揃わない run は止める。
+    if (( writer_attempts != saves )); then
+      printf '%s writer %s: 試行 %s 件で、予定の %s 件と合わない\n' "$scenario" "$writer" "$writer_attempts" "$saves" >&2
+      exit 1
+    fi
+    attempts=$((attempts + writer_attempts))
+    accepted=$((accepted + writer_accepted))
+    conflicts=$((conflicts + $(grep -cx 'status=CONFLICT' "$out" || true)))
+    errors=$((errors + $(grep -c 'ERROR:' "$run_dir/$scenario-$writer.err" || true)))
+    admin_value "INSERT INTO measure_fixture.accepted VALUES ('$name', '$scenario', $writer, $writer_accepted)" >/dev/null
   done
   "${admin[@]}" -q \
-    -v scenario="$scenario" -v ord="$order" -v sheets="$*" -v attempts="$attempts" -v accepted="$accepted" -v errors="$errors" \
+    -v scenario="$scenario" -v ord="$order" -v sheets="${sheets[*]}" -v writers="$#" \
+    -v attempts="$attempts" -v accepted="$accepted" -v conflicts="$conflicts" -v errors="$errors" \
     -v wal_before="$wal_before" -v wal_after="$wal_after" -v lock_waits="$((waits_after - waits_before))" \
     -v elapsed_ms="$((end_ms - start_ms))" -v before="$size_before" -v after_write="$size_after_write" -v after_compact="$size_after_compact" <<'SQL'
 INSERT INTO measure_fixture.scenario VALUES (:'scenario', :ord, jsonb_build_object(
   'sheets', string_to_array(:'sheets', ' '),
-  'concurrency', cardinality(string_to_array(:'sheets', ' ')),
+  'concurrency', :writers,
   'payloadTargetBytes', (SELECT jsonb_agg(target_bytes ORDER BY name) FROM measure_fixture.sheet WHERE name = ANY(string_to_array(:'sheets', ' '))),
-  'attempts', :attempts, 'accepted', :accepted, 'errors', :errors,
+  'attempts', :attempts, 'accepted', :accepted, 'conflicts', :conflicts, 'errors', :errors,
   'failureRate', CASE WHEN :attempts = 0 THEN NULL ELSE round((:attempts - :accepted)::numeric / :attempts, 6) END,
   'lockWaits', :lock_waits,
   'elapsedMs', :elapsed_ms,
@@ -168,22 +200,27 @@ INSERT INTO measure_fixture.scenario VALUES (:'scenario', :ord, jsonb_build_obje
   'sizeAfterWrite', :'after_write'::jsonb,
   'sizeAfterCompact', :'after_compact'::jsonb));
 SQL
-  printf '%s: 保存 %s 件中 %s 件成功、エラー %s 件\n' "$scenario" "$attempts" "$accepted" "$errors"
+  printf '%s: 保存 %s 件中 %s 件成功、CONFLICT %s 件、エラー %s 件、ロック待ち %s 回\n' "$scenario" "$attempts" "$accepted" "$conflicts" "$errors" "$((waits_after - waits_before))"
 }
 
-run_scenario burst-small 1 burst-small
-run_scenario burst-large 2 burst-large
-run_scenario normal-parallel 3 normal-small normal-large
+run_scenario burst-small 1 "burst-small:1:$burst_saves"
+run_scenario burst-large 2 "burst-large:1:$burst_saves"
+run_scenario normal-parallel 3 "normal-small:1:$normal_saves" "normal-large:1:$normal_saves"
+# 同じシートを 2 writer が同時に保存する。writer 2 は本文を後半の iteration から取る。
+run_scenario same-sheet-contention 4 "contended:1:$normal_saves" "contended:$((normal_saves + 1)):$normal_saves"
 "${admin[@]}" -q -c "\\copy measure_fixture.latency FROM '$run_dir/latency.tsv'"
 
-# 合成DB試験: 版数 = 作成1 + 成功した保存数。保存ごとに版が1つだけ増え、失敗で版が増えないこと。
+# 合成DB試験: シートごとに 版数 = 作成1 + 結果が OK だった保存数、最新 revision = OK の数。
+# 設定した保存数ではなく結果で照合するので、CONFLICT（SQL の ERROR にならない拒否）があっても report は出る。
+# 保存ごとに版が1つだけ増え、拒否された保存で版が増えないことを確かめる。
 "${admin[@]}" -q >"$run_dir/assert.log" 2>&1 <<'SQL'
 DO $$ DECLARE r record; BEGIN
-  FOR r IN SELECT s.name, s.saves, (SELECT count(*) FROM public.document_versions v WHERE v.sheet_id = s.sheet_id) AS versions,
+  FOR r IN SELECT s.name, coalesce((SELECT sum(a.accepted) FROM measure_fixture.accepted a WHERE a.sheet = s.name), 0) AS accepted,
+                  (SELECT count(*) FROM public.document_versions v WHERE v.sheet_id = s.sheet_id) AS versions,
                   (SELECT max(revision) FROM public.document_versions v WHERE v.sheet_id = s.sheet_id) AS latest
            FROM measure_fixture.sheet s LOOP
-    IF r.versions <> r.saves + 1 OR r.latest <> r.saves THEN
-      RAISE EXCEPTION 'version count mismatch for %: versions=% latest=% saves=%', r.name, r.versions, r.latest, r.saves;
+    IF r.versions <> r.accepted + 1 OR r.latest <> r.accepted THEN
+      RAISE EXCEPTION 'version count mismatch for %: versions=% latest=% accepted=%', r.name, r.versions, r.latest, r.accepted;
     END IF;
   END LOOP;
   IF EXISTS (SELECT FROM public.document_versions WHERE action NOT IN ('create', 'save')) THEN
@@ -191,7 +228,7 @@ DO $$ DECLARE r record; BEGIN
   END IF;
 END $$;
 SQL
-printf '合成DB試験（版数 = 作成 + 成功保存）: PASS\n'
+printf '合成DB試験（版数 = 作成 + OK の保存）: PASS\n'
 
 finished_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 "${admin[@]}" -At \

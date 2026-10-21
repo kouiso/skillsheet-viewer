@@ -1,6 +1,13 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { parseMeasurementReport, perVersionFromScenario } from '../src/db/history-capacity-input';
-import { parseArgs, renderCapacityReport } from './history-capacity-report';
+import {
+  DOC_BLOCK_BEGIN,
+  DOC_BLOCK_END,
+  parseArgs,
+  renderCapacityReport,
+  renderModelSections,
+} from './history-capacity-report';
 
 function size(versionCount: number, totalBytes: number, storedBytes: number, logicalBytes: number) {
   return {
@@ -71,6 +78,38 @@ describe('容量レポート', () => {
     expect(text).toContain('1版 100.0 KB');
     expect(text).toContain('上限を MB で数えた場合');
   });
+  it('感度分析に段階的間引き（30日・7日）の月次版の累積と、WAL・PITR の行を含める', () => {
+    const text = renderCapacityReport(parseMeasurementReport(report), 36);
+    expect(text).toContain('## 保持案ごとの比較（月次版の累積を含む）');
+    expect(text).toContain('| normal | tiered-30-365 |');
+    expect(text).toContain('| normal | tiered-7-365 |');
+    expect(text).toContain('保持案 tiered-30-365（月次版の累積込み）');
+    expect(text).toContain('保持案 tiered-7-365（月次版の累積込み）');
+    expect(text).toContain('### 10/14 の重い月を1版の大きさ別に再計算');
+    expect(text).toContain('## WAL と PITR の保持');
+    expect(text).toContain('branch_logical_size_limit');
+    expect(text).toContain('https://neon.com/docs/postgres/backup-restore/history-window');
+    expect(text).toContain('WAL（PITR 1日分）も上限に数えた場合');
+    // 感度分析の表は区分を独立した列に持つ。
+    expect(text).toContain('| 変えた前提 | 区分 | 月間増分 | 36か月後の履歴 | 上限到達 |');
+  });
+  it('--policy で月間モデルと感度分析の保持案を切り替える', () => {
+    const text = renderCapacityReport(parseMeasurementReport(report), 36, 'tiered-30-365');
+    expect(text).toContain('## 月間モデル（保持案: 30日全版→365日まで1日1版→以降1か月1版');
+    expect(text).toContain('保持案は 30日全版→365日まで1日1版→以降1か月1版。');
+  });
+  it('文書の容量表は生成結果そのもので、手で直した差分が無い', () => {
+    const doc = readFileSync(new URL('../doc/document-history-capacity.md', import.meta.url), 'utf8');
+    const begin = doc.indexOf(DOC_BLOCK_BEGIN);
+    const end = doc.indexOf(DOC_BLOCK_END);
+    expect(begin).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(begin);
+    const embedded = doc.slice(begin + DOC_BLOCK_BEGIN.length, end).trim();
+    const fixture = parseMeasurementReport(
+      JSON.parse(readFileSync(new URL('./fixture/history-measure-report.json', import.meta.url), 'utf8')),
+    );
+    expect(embedded).toBe(renderModelSections(fixture, 36));
+  });
   it('形の合わない report を推測で埋めず拒否する', () => {
     expect(() => parseMeasurementReport({ ...report, tool: 'other' })).toThrow('MEASUREMENT_REPORT_INVALID');
     expect(() => parseMeasurementReport({ ...report, scenarios: [{ name: 'x' }] })).toThrow(
@@ -80,10 +119,116 @@ describe('容量レポート', () => {
     (broken.scenarios[0] as { sizeAfterCompact: unknown }).sizeAfterCompact = { relations: {} };
     expect(() => parseMeasurementReport(broken)).toThrow('MEASUREMENT_REPORT_INVALID');
   });
+  it.each([
+    [
+      'payloadTargetBytes なし',
+      (s: Record<string, unknown>) => {
+        delete s.payloadTargetBytes;
+      },
+    ],
+    [
+      'payloadTargetBytes が空',
+      (s: Record<string, unknown>) => {
+        s.payloadTargetBytes = [];
+      },
+    ],
+    [
+      'accepted なし',
+      (s: Record<string, unknown>) => {
+        delete s.accepted;
+      },
+    ],
+    [
+      'attempts なし',
+      (s: Record<string, unknown>) => {
+        delete s.attempts;
+      },
+    ],
+    [
+      'errors なし',
+      (s: Record<string, unknown>) => {
+        delete s.errors;
+      },
+    ],
+    [
+      'lockWaits なし',
+      (s: Record<string, unknown>) => {
+        delete s.lockWaits;
+      },
+    ],
+    [
+      'latencyMs.p50 なし',
+      (s: Record<string, unknown>) => {
+        delete (s.latencyMs as Record<string, unknown>).p50;
+      },
+    ],
+    [
+      'latencyMs.p95 なし',
+      (s: Record<string, unknown>) => {
+        delete (s.latencyMs as Record<string, unknown>).p95;
+      },
+    ],
+    [
+      'sizeAfterWrite.blocksStoredBytes なし',
+      (s: Record<string, unknown>) => {
+        delete (s.sizeAfterWrite as Record<string, unknown>).blocksStoredBytes;
+      },
+    ],
+    [
+      'sizeBefore.blocksLogicalBytes なし',
+      (s: Record<string, unknown>) => {
+        delete (s.sizeBefore as Record<string, unknown>).blocksLogicalBytes;
+      },
+    ],
+    [
+      'accepted が attempts より多い',
+      (s: Record<string, unknown>) => {
+        s.accepted = 999;
+      },
+    ],
+    [
+      'failureRate が試行と成功に合わない',
+      (s: Record<string, unknown>) => {
+        s.failureRate = 0.5;
+      },
+    ],
+    [
+      'failureRate が文字列',
+      (s: Record<string, unknown>) => {
+        s.failureRate = '0';
+      },
+    ],
+  ])('計測 report（%s）を推測で埋めず拒否する', (_, mutate) => {
+    const fixture: { scenarios: Record<string, unknown>[] } = JSON.parse(
+      readFileSync(new URL('./fixture/history-measure-report.json', import.meta.url), 'utf8'),
+    );
+    const target = fixture.scenarios[1];
+    if (!target) throw new Error('fixture scenarios missing');
+    mutate(target);
+    expect(() => parseMeasurementReport(fixture)).toThrow('MEASUREMENT_REPORT_INVALID');
+  });
+  it('CONFLICT を含む report も読み、失敗率をそのまま出す', () => {
+    const contended = {
+      ...scenario('same-sheet-contention', [33_000], 6, 40_000),
+      attempts: 10,
+      accepted: 6,
+      errors: 0,
+      failureRate: 0.4,
+      lockWaits: 3,
+    };
+    const parsed = parseMeasurementReport({ ...report, scenarios: [...report.scenarios, contended] });
+    expect(parsed.scenarios[3]).toMatchObject({ attempts: 10, accepted: 6, failureRate: 0.4, lockWaits: 3 });
+    expect(renderCapacityReport(parsed, 36)).toContain('| same-sheet-contention | 6/10 |');
+  });
   it('引数は明示したものだけ受ける', () => {
-    expect(parseArgs(['--measurement', 'r.json'])).toEqual({ measurement: 'r.json', months: 36 });
+    expect(parseArgs(['--measurement', 'r.json'])).toEqual({ measurement: 'r.json', months: 36, policy: 'keep-all' });
+    expect(parseArgs(['--measurement', 'r.json', '--policy', 'tiered-7-365']).policy).toBe('tiered-7-365');
     expect(() => parseArgs([])).toThrow('MEASUREMENT_REQUIRED');
     expect(() => parseArgs(['--measurement', 'r.json', '--apply'])).toThrow('UNKNOWN_ARGUMENT');
     expect(() => parseArgs(['--measurement', 'r.json', '--months', '0'])).toThrow('INVALID_MONTHS');
+    // 12か月後の列を出すので、12か月未満は受けない。
+    expect(() => parseArgs(['--measurement', 'r.json', '--months', '11'])).toThrow('INVALID_MONTHS');
+    expect(() => parseArgs(['--measurement', 'r.json', '--policy', 'delete-all'])).toThrow('INVALID_POLICY');
+    expect(() => parseArgs(['--measurement', 'r.json', '--policy'])).toThrow('INVALID_POLICY');
   });
 });
