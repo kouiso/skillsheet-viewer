@@ -81,7 +81,7 @@ export function runDryRun(snapshotJson: unknown, args: ReturnType<typeof parseAr
 }
 
 // snapshot は JSON 1行だけを受ける。psql の -q 抜けで混ざる BEGIN・DO・COMMIT などを読み飛ばすと、
-// 別の出力が紛れても気付けんので、JSON でなければ取り直しの手掛かりを付けて止める。
+// 別の出力が紛れても気付けないので、JSON でなければ取り直しの手掛かりを付けて止める。
 export function parseSnapshotText(text: string): unknown {
   const body = text.trim();
   try {
