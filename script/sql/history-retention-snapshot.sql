@@ -1,5 +1,7 @@
 -- 履歴保持 dry-run（#576）の入力を READ ONLY で取り出す。本文・title は出さず、格納サイズと md5 の集約指紋だけを出す。
--- psql -X -v ON_ERROR_STOP=1 -At で実行し、出力1行を script/history-retention-dry-run.ts の --snapshot に渡す。
+-- 実行: psql -X -q -v ON_ERROR_STOP=1 -At -f script/sql/history-retention-snapshot.sql
+-- 接続先は PGHOST・PGPORT・PGUSER・PGDATABASE で渡し、標準出力の1行を保存して script/history-retention-dry-run.ts の --snapshot に渡す。
+-- -q を外すと BEGIN・DO・COMMIT の行が混ざり、dry-run は SNAPSHOT_NOT_JSON で止まる。上の行は verify-history-retention.sh がそのまま実行する。
 -- REPEATABLE READ で1つの snapshot に揃え、版・削除・生存シート・台帳の間で時点がずれないようにする。
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 DO $$ BEGIN
