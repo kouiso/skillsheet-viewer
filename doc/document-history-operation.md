@@ -74,11 +74,49 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 ### 始める・止める
 
 監視は読み取りだけの単発コマンドで、常駐しない。止めるときは実行をやめるだけで、保存・履歴・権限には何も残らない。
-本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と 監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）を本人の承認のうえで用意する。role・キー・定期実行・届け先はまだ無い（#590）。
+本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と 監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）を本人の承認のうえで用意する。role とキーはまだ無い。定期実行の workflow と届け先は下の「定期実行と届け先」にあり、variable で有効にするまで動かない（#590）。
 
 全版保持に決めたので、本番の定期実行は画面を有効にする前（[document-history.md](document-history.md)「適用ゲート」の手順 4 の前）に始め、全版保持を続ける間は止めない。止まった・届かなくなったと分かったら、その日のうちに直すか、保持方針を決め直す（#575。消す・縮める方針にするなら磯貝さんの承認を近藤か芹沢を通して取る）。
 
-届け先: （#590 で決めて書く。誰に・どの経路で・終了コード 3/4/5 と定期実行の停止がどう届くか・試しの警告を送った日と証拠）
+### 定期実行と届け先（#590）
+
+定期実行は `.github/workflows/history-capacity-monitor.yml`（毎日 JST 07:30、schedule だけ）。届け先は磯貝さんで、経路は既存の `CI Failure Slack Notify`（`.github/workflows/ci-failure-notify.yml`）に乗せる。新しい通知の仕組みは作らない。
+
+```text
+schedule（main の workflow だけが動く）
+  → 観測（script/collect-history-capacity-sample.sh）→ 判定（script/history-capacity-monitor.ts）→ 停止間近の確認
+  → 0 以外なら job が落ちる
+  → CI Failure Slack Notify が workflow_run で拾う
+  → Slack（vars.SLACK_CHANNEL_ID）へ通知 ＋ ci-failure ラベルの追跡 issue を1本切る
+  → 次に成功した日に issue が閉じる
+```
+
+| 何が起きたか | 終了コード | 届き方 |
+| --- | --- | --- |
+| exceeded | 3 | job が落ちて Slack と追跡 issue |
+| measurement-failed（照会・Neon API・secret の不備も含む） | 4 | 同上。観測に失敗した日は失敗の観測を最新として書くので、前日の正常な値で「正常」とは言わない |
+| warning | 5 | 同上 |
+| 定期実行が止まりかけている（最後のコミットから 45 日） | 6 | 同上。公開リポジトリは 60 日動きが無いと schedule が止まる（GitHub Docs「Disabling and enabling a workflow」）。止まる 15 日前から毎日落ちるので、その間に main へ何か入れるか、止まる前提で方針を決め直す |
+
+観測は actions/cache に直近 60 点を残し、増え方と届く見込み日の計算に使う。公開ログ（Step Summary）に出すのは状態と容量の数字だけで、接続先・本文・title は出さない。手動実行（workflow_dispatch）は置かない。選んだブランチの workflow を動かせるので、ブランチ側で steps を差し替えて本番の secret を読めてしまうため（`real-data-main-check.yml` と同じ理由）。
+
+この経路で届かないもの（定期実行が知らせられない止まり方）:
+
+- `HISTORY_MONITOR_ENABLED` を外した、workflow ファイルを消した。どちらも人が変えた時だけ起きるので、変える PR・設定変更の時に保持方針も決め直す。
+- GitHub Actions そのものの障害。Slack に何も来ないことと区別できないので、週に1回は Actions の実行履歴に緑が並んでいるかを見る。
+
+#### 有効にする（本番の窓で行う。どれも本人の承認が先）
+
+| 置き場所 | 名前 | 中身 |
+| --- | --- | --- |
+| secret | `HISTORY_MONITOR_PG_SERVICE_CONF` | `pg_service.conf` の中身。節の名前は `[history-monitor]`。読取専用 role（SELECT だけ、`default_transaction_read_only=on`）で `host` `port` `dbname` `user` `password` `sslmode=require` を書く |
+| secret | `HISTORY_MONITOR_NEON_API_KEY` | 監視専用の Neon API キー。branch の `logical_size` を読むだけに使う |
+| variable | `HISTORY_MONITOR_NEON_PROJECT_ID` / `HISTORY_MONITOR_NEON_BRANCH_ID` | 本番の project と branch の ID（秘密ではない） |
+| variable | `HISTORY_MONITOR_ENABLED` | `true` で動き出す。これが無いうちは job ごと skip され、何も読まない |
+
+試しの警告は、variable `HISTORY_MONITOR_DATABASE_LIMIT_MIB` を `1` にして次の定期実行を待つ。exceeded（3）で落ちて Slack と追跡 issue に届いたら、その日付と通知・issue へのリンクを [document-history.md](document-history.md)「適用ゲート」に書き、variable を消す。手動実行の口が無いので、試しも本番と同じ schedule の経路を通る。
+
+届け先: 磯貝さん（Slack と ci-failure の追跡 issue）。試しの警告を送った日と証拠: 未実施（本番の窓で行う）。
 
 ## 回帰検証（隔離環境）
 
