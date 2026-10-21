@@ -9,8 +9,8 @@
 | --- | --- | --- |
 | 容量の計測 | 合成データで計測済み。本番の実測ではない | [document-history-capacity.md](document-history-capacity.md)（#574） |
 | 保持案 | 全版保持＋監視に決定（2026-10-21） | [document-history-retention.md](document-history-retention.md)（#575） |
-| 保持案の試算 | dry-run あり。削除の経路は無い | `script/history-retention-dry-run.ts`（#576） |
-| 決めた方針 | 全版保持＋監視。本人の委任による AI の決定 | [#564](https://github.com/kouiso/skillsheet-viewer/issues/564#issuecomment-6308784241) |
+| 保持案の試算 | dry-run あり。削除の経路は無い | `script/history-retention-dry-run.ts`（#576、#591） |
+| 決めた方針 | 全版保持＋監視。山南敬助（副長）の決定 | [#564 の山南敬助（副長）の決定コメント（2026-10-21 17:13 JST 投稿）](https://github.com/kouiso/skillsheet-viewer/issues/564#issuecomment-6311303506) |
 | 本番への導入 | 履歴表そのものが未導入（2026-10-21 13:23 JST の本番読取で `document_versions` / `deleted_documents` は 0 件、#574）。監視・保持処理とも未導入 | [document-history.md](document-history.md)「適用ゲート」 |
 
 ## 監視
@@ -73,7 +73,7 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 監視は読み取りだけの単発コマンドで、常駐しない。止めるときは実行をやめるだけで、保存・履歴・権限には何も残らない。
 本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と 監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）を本人の承認のうえで用意する。role・キー・定期実行・届け先はまだ無い（#590）。
 
-全版保持に決めたので、本番の定期実行は画面を有効にする前（[document-history.md](document-history.md)「適用ゲート」の手順 4 の前）に始め、全版保持を続ける間は止めない。止まった・届かなくなったと分かったら、その日のうちに直すか、保持方針を決め直す（#575）。
+全版保持に決めたので、本番の定期実行は画面を有効にする前（[document-history.md](document-history.md)「適用ゲート」の手順 4 の前）に始め、全版保持を続ける間は止めない。止まった・届かなくなったと分かったら、その日のうちに直すか、保持方針を決め直す（#575。消す・縮める方針にするなら磯貝さんの承認を近藤か芹沢を通して取る）。
 
 届け先: （#590 で決めて書く。誰に・どの経路で・終了コード 3/4/5 と定期実行の停止がどう届くか・試しの警告を送った日と証拠）
 
@@ -99,7 +99,7 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 
 ## 保持処理を将来入れるときの適用ゲート（未実装・未承認）
 
-削除を実行する処理は今は無い。入れるなら別の作業として本人の承認を取り、次をすべて満たしてから実行する。
+削除を実行する処理は今は無い。入れるなら別の作業として磯貝さんの承認（近藤か芹沢を通す）を取り、次をすべて満たしてから実行する。
 
 1. 本人が承認した方針・対象（DB とシートの範囲）・有効期限・plan hash が記録されている（決定者・日付・証拠の欄を埋める）。
 2. 実行の直前に、同じ保持案で dry-run をやり直し、plan hash が承認時と一致する。違えば中断して再承認を取る（`assertPlanReusable` が `PLAN_STALE` を返す）。
