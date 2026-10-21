@@ -22,3 +22,14 @@ description = "旧認証テスト報告の、末尾を截断した Firebase 公�
 condition = "AND"
 paths = ['''^AUTHENTICATION_TEST_REPORT\.md$''']
 regexes = ['''^AIzaSyCcDeNiirm2MGXw\.\.\.$''']
+
+# 閉じた PR のブランチにも残る、壊れたトークンで 401 を確かめた記録。
+# 全履歴スキャンは --all で全ブランチを見るため、main に無くても許可が要る。
+[[rules]]
+id = "curl-auth-header"
+
+[[rules.allowlists]]
+description = "MCP 認可前の確認記録にある、わざと壊したトークン"
+condition = "AND"
+paths = ['''^doc/mcp-evidence-20261020/probe-authorize\.txt$''']
+regexes = ['''^abc\.def\.ghi$''']
