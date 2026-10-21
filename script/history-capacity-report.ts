@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import {
   LOAD_PRESETS,
   type LoadPreset,
+  MEASURED_20261021,
   type MeasuredPerVersion,
   type MeasurementReport,
   NEON_HISTORY_SOURCE,
@@ -148,19 +149,22 @@ export function renderCapacityReport(
   );
   lines.push(`| 本文 | 約${kb(REPORTED_20261014.bodyBytes)} | 既存報告 |`);
   lines.push('');
+  lines.push(...renderProductionMeasurement());
   lines.push(renderModelSections(report, months, policyName));
   lines.push('');
   lines.push('## 未測定');
   lines.push('');
   lines.push(
-    '- Neon 本番での保存遅延・WAL の量。本番には履歴表が未導入で、月間履歴の実測は取得できない（WAL は合成計測の値で外挿した）。',
+    '- 本番の月間の履歴増分（版数・容量）。2026-10-21 の読取でも本番に `document_versions` / `deleted_documents` は無く（0件）、月ごとの履歴は取得できない。',
+  );
+  lines.push(
+    '- Neon 本番での保存遅延・履歴の WAL の量（WAL は合成計測の値で外挿した。本番の pg_stat_wal は DB 全体の累計で、履歴だけの値ではない）。',
   );
   lines.push('- 実データの圧縮率。合成本文はほぼ圧縮できない最悪側で、実データはこれより小さくなり得る。');
   lines.push('- 本番の継続的な保存頻度。revision は単点で、保存の時刻分布は記録されていない。');
   lines.push(
     '- アプリ経由の2タブ同時編集。合成計測は DB の CAS で衝突とロック待ちを数えるだけで、衝突後の画面とやり直しは含まない。',
   );
-  lines.push('- この project の Neon プラン（PITR の保持窓はプランで決まるので、窓の長さは候補を並べた）。');
   return lines.join('\n');
 }
 
@@ -189,7 +193,7 @@ export function renderModelSections(
   }
   lines.push('');
   lines.push(
-    `上限 = ${mib(storage.value.limitBytes)}（既存報告）、履歴以外 = ${mib(storage.value.nonHistoryBytes)}（既存報告）。`,
+    `上限 = ${mib(storage.value.limitBytes)}（実測 ${MEASURED_20261021.measuredAtJst}。10/14 報告と同じ値）、履歴以外 = ${mib(storage.value.nonHistoryBytes)}（実測 ${MEASURED_20261021.measuredAtJst}、branch の論理容量。10/14 報告の ${mib(REPORTED_20261014.databaseBytes)} は neondb だけの値で、上限が数える量ではない）、空き = ${mib(storage.value.limitBytes - storage.value.nonHistoryBytes)}。`,
   );
   lines.push('');
   lines.push(...renderPolicyComparison(storage.value, base, months));
@@ -281,7 +285,7 @@ function renderWal(base: MeasuredPerVersion) {
   lines.push(`出典: ${NEON_HISTORY_SOURCE}`);
   lines.push('');
   lines.push(
-    `WAL は保持窓のあいだ残る。1版の WAL ${kb(base.walBytesPerVersion)}（合成の実測）× 窓に入る版の最大数で数える。窓の長さはプランで決まり、この project のプランは確認していないので候補を並べる。Free の History は 1GB が上限。`,
+    `WAL は保持窓のあいだ残る。1版の WAL ${kb(base.walBytesPerVersion)}（合成の実測）× 窓に入る版の最大数で数える。窓の長さはプランで決まる。この project は ${MEASURED_20261021.plan}・保持窓 ${MEASURED_20261021.pitrWindowSeconds / 3600}時間（${MEASURED_20261021.pitrWindowSeconds}秒）を実測した（${MEASURED_20261021.measuredAtJst}）ので、今の値は「6時間」の行。ほかの行はプランを上げた場合の候補。Free の History は 1GB が上限。`,
   );
   lines.push('');
   lines.push('| 負荷 | 保持窓 | 区分 | 窓に入る版（最大） | 残る WAL |');
@@ -294,6 +298,34 @@ function renderWal(base: MeasuredPerVersion) {
       );
     }
   }
+  lines.push('');
+  return lines;
+}
+
+/** 2026-10-21 の本番読取。10/14 の既存報告とは別の表に置く。 */
+function renderProductionMeasurement() {
+  const m = MEASURED_20261021;
+  const bytes = (value: number) => `${mib(value)}（${value.toLocaleString('en-US')} B）`;
+  const lines: string[] = [];
+  const row = (item: string, value: string, note: string) => lines.push(`| ${item} | ${value} | ${note} |`);
+  lines.push(`## 本番の実測（${m.measuredAtJst} ／ ${m.measuredAtPt}、10/14 の既存報告とは別）`);
+  lines.push('');
+  lines.push(`出典: ${m.source}`);
+  lines.push('');
+  lines.push('| 項目 | 値 | 区分 |');
+  lines.push('|---|---|---|');
+  row('branch の論理容量（上限が数える量）', bytes(m.branchLogicalBytes), '実測。neondb 以外の DB も含む');
+  row('neondb（pg_database_size）', bytes(m.neondbBytes), '実測');
+  row('容量上限（branch_logical_size_limit）', bytes(m.limitBytes), '実測');
+  row('空き（上限 − branch の論理容量）', mib(m.limitBytes - m.branchLogicalBytes), '実測から計算');
+  const pitr = `${m.pitrWindowSeconds / 3600}時間（${m.pitrWindowSeconds}秒）`;
+  row('プラン / PITR の保持窓', `${m.plan} / ${pitr}`, '実測');
+  row('シート数 / ブロック数', `${m.sheets} / ${m.blocks}`, '実測');
+  row('revision', `${m.revision}（${m.periodLabel}）`, '実測。単点で、継続観測の保存頻度ではない');
+  const body = `${kb(m.bodyLogicalBytes)} / ${kb(m.bodyStoredBytes)}`;
+  row('本文（元の JSON / 圧縮後）', body, '実測。現在の本文で、履歴行ではない');
+  row('履歴表（document_versions / deleted_documents）', `${m.historyTablesPresent}件（未導入）`, '実測');
+  row('月間の履歴増分', '未測定', '本番に履歴表が無いので取得できない');
   lines.push('');
   return lines;
 }
