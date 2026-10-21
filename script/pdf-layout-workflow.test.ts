@@ -22,7 +22,8 @@ function temp() {
   return dir;
 }
 function stepScript(name: string): string {
-  const step = workflow.split(`      - name: ${name}\n`)[1]?.split('\n      - name:')[0];
+  // 最後の step の後ろには別の job（容量監視の見張り）が続くので、次の step か次の job の手前で切る。
+  const step = workflow.split(`      - name: ${name}\n`)[1]?.split(/\n {6}- name:|\n\n {2}\S/)[0];
   const script = step?.split('        run: |\n')[1];
   if (!script) throw new Error(`missing step ${name}`);
   return script

@@ -3,6 +3,8 @@ name: PDF Layout Check
 # 公開定期 CI は完全な架空 fixture による回帰検査。実経歴の受入検査ではない。
 # 実経歴変更後の受入は、許可されたローカル環境で別途実施する。
 # 失敗の通知は ci-failure-notify.yml が workflow_run で拾う（名前は維持）。
+# 版履歴の容量監視（history-capacity-monitor.yml）が止まっていないかの見張りも、ここで毎日流す（#590）。
+# 監視は自分が動かない日に自分では知らせられないので、別の定期実行から見る。
 on:
   schedule:
     # JST 06:00。
@@ -96,3 +98,48 @@ jobs:
         if: always()
         run: |
           rm -f "$RUNNER_TEMP/blocks.json" "$RUNNER_TEMP/blocks.evidence" "$RUNNER_TEMP/pdf-fixture.log" "$RUNNER_TEMP/pdf-layout.log"
+
+  # 容量監視が消された・無効にされた・skip された・cancelled で終わった・schedule が落とされた日を、
+  # 翌朝のこの job で落として通知経路に乗せる（判定は script/history-monitor-liveness-check.ts）。
+  history-monitor-liveness:
+    name: History monitor liveness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # workflow と実行の一覧を読むだけ。job 単位の指定は workflow 全体の指定を置き換えるので contents も書く。
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.21.1'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check history monitor liveness
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          api="repos/$GITHUB_REPOSITORY/actions/workflows/history-capacity-monitor.yml"
+          # 消された時の 404 も API の失敗も「読めない」として止まった側へ倒す。黙って通すより誤報の方がまし。
+          state="$(gh api "$api" --jq '.state' 2>/dev/null)" || state=missing
+          args=(--workflow-state "${state:-missing}" --real-runs 0)
+          if [[ "$state" == active ]]; then
+            runs="$api/runs?event=schedule&per_page=1"
+            completed="$(gh api "$runs&status=completed" --jq '.total_count')"
+            skipped="$(gh api "$runs&status=skipped" --jq '.total_count')"
+            latest="$(gh api "$runs&status=completed" --jq '.workflow_runs[0] // empty | "\(.conclusion) \(.created_at)"')"
+            args=(--workflow-state active --real-runs "$((completed - skipped))")
+            if [[ -n "$latest" ]]; then args+=(--latest-conclusion "${latest%% *}" --latest-created-at "${latest#* }"); fi
+          fi
+          pnpm exec tsx script/history-monitor-liveness-check.ts "${args[@]}"

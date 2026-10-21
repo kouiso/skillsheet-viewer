@@ -1,0 +1,118 @@
+name: History Capacity Monitor
+
+# 版履歴の容量を毎日1回測り、0 以外（exceeded 3 / measurement-failed 4 / warning 5 / 停止間近 6）なら job を落とす（#590）。
+# 落ちた通知は ci-failure-notify.yml が workflow_run で拾い、Slack と追跡 issue（ci-failure ラベル）へ届ける。
+# この workflow が動かなかった日（削除・無効化・skip・cancelled・schedule の取りこぼし）は、自分では知らせられない。
+# pdf-layout-check.yml の History monitor liveness job が翌朝それを見て落ちる。
+# 本番 DB の secret を読むので、手動実行（workflow_dispatch）は置かない。手動実行は選んだブランチの workflow
+# ファイルを動かせるため、ブランチ側で steps を差し替えて secret を読めてしまう（real-data-main-check.yml と同じ理由）。
+# 読取専用 role と監視専用 Neon キーが本番に揃うまでは動かさない。repository variable の
+# HISTORY_MONITOR_ENABLED を 'true' にした時だけ走る（doc/document-history-operation.md「始める・止める」）。
+on:
+  schedule:
+    # JST 07:30。06:00 の PDF / XLSX 定期検査と重ねない。
+    - cron: '30 22 * * *'
+
+permissions:
+  contents: read
+
+# 観測の保存先（cache）を 1 本ずつ更新する。並ぶと古い実行が新しい観測を上書きする。
+concurrency:
+  group: history-capacity-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: History capacity monitor
+    if: vars.HISTORY_MONITOR_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.21.1'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 増え方と届く見込み日は 1 日以上離れた 2 点が要る。前回までの観測を cache から戻す。
+      # cache は key ごとに不変なので、実行ごとに新しい key で保存し、prefix で最新を戻す。
+      - name: Restore previous samples
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: history-samples
+          key: history-capacity-samples-${{ github.run_id }}
+          restore-keys: history-capacity-samples-
+
+      # 失敗しても step は落とさない。collect は失敗を示す観測を最新として書くので、判定が measurement-failed（4）で落ちる。
+      - name: Collect sample
+        env:
+          PG_SERVICE_CONF: ${{ secrets.HISTORY_MONITOR_PG_SERVICE_CONF }}
+          HISTORY_MONITOR_PG_SERVICE: history-monitor
+          NEON_API_KEY: ${{ secrets.HISTORY_MONITOR_NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.HISTORY_MONITOR_NEON_PROJECT_ID }}
+          NEON_BRANCH_ID: ${{ vars.HISTORY_MONITOR_NEON_BRANCH_ID }}
+        run: |
+          umask 077
+          mkdir -p history-samples
+          service_file="$RUNNER_TEMP/pg_service.conf"
+          printf '%s\n' "$PG_SERVICE_CONF" > "$service_file"
+          sample="history-samples/$(date -u +%Y%m%dT%H%M%SZ).json"
+          status=0
+          PGSERVICEFILE="$service_file" ./script/collect-history-capacity-sample.sh "$sample" || status=$?
+          rm -f -- "$service_file"
+          # collector 自体が起動できなかった時（権限・構文など）も、失敗の観測を最新として残す。
+          if [[ ! -s "$sample" ]]; then
+            jq -cn --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg reason "collector exited $status without a sample" \
+              '{measuredAt: $at, collectionError: $reason}' > "$sample"
+          fi
+          echo "collect finished (exit $status)"
+
+      # 直近 60 点（約 2 か月）だけ残す。名前は UTC の時刻なので、名前順が古い順になる。
+      - name: Keep recent samples
+        run: |
+          find history-samples -maxdepth 1 -name '*.json' -print | sort | head -n -60 | xargs -r rm -f --
+
+      - name: Save samples
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: history-samples
+          key: history-capacity-samples-${{ github.run_id }}
+
+      # 試しの警告（--database-limit-mib 1）も schedule の経路から起こすため、上限は variable で差し替える。
+      # 公開ログには状態と容量の数字だけを出す。
+      - name: Judge capacity
+        env:
+          DATABASE_LIMIT_MIB: ${{ vars.HISTORY_MONITOR_DATABASE_LIMIT_MIB }}
+        run: |
+          args=()
+          while IFS= read -r sample; do args+=(--sample "$sample"); done < <(find history-samples -maxdepth 1 -name '*.json' -print | sort)
+          if [[ -n "$DATABASE_LIMIT_MIB" ]]; then args+=(--database-limit-mib "$DATABASE_LIMIT_MIB"); fi
+          status=0
+          pnpm exec tsx script/history-capacity-monitor.ts "${args[@]}" > "$RUNNER_TEMP/monitor-result.json" || status=$?
+          {
+            echo "### History capacity monitor (exit $status)"
+            echo '```json'
+            jq '{status, measuredAt, historyBytes, branchLogicalBytes, versionCount, historyGrowthBytesPerDay, projectedHistoryLimitAt, projectedDatabaseLimitAt, problems}' "$RUNNER_TEMP/monitor-result.json" || echo '{"status": "unreadable"}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      # 容量の判定が落ちても、停止間近の確認は必ず流す。公開リポジトリは 60 日動きが無いと schedule が止まり、
+      # 止まった後は誰にも届かない。最後のコミットから 45 日で落として、止まる前に知らせる。
+      - name: Check schedule keepalive
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          last_activity="$(gh api "repos/$GITHUB_REPOSITORY/commits?per_page=1" --jq '.[0].commit.committer.date')"
+          pnpm exec tsx script/schedule-keepalive-check.ts --last-activity "$last_activity"

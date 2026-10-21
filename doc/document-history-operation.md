@@ -74,11 +74,66 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 ### 始める・止める
 
 監視は読み取りだけの単発コマンドで、常駐しない。止めるときは実行をやめるだけで、保存・履歴・権限には何も残らない。
-本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と 監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）を本人の承認のうえで用意する。role・キー・定期実行・届け先はまだ無い（#590）。
+本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と 監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）を本人の承認のうえで用意する。role とキーはまだ無い。定期実行の workflow と届け先は下の「定期実行と届け先」にあり、variable で有効にするまで動かない（#590）。
 
 全版保持に決めたので、本番の定期実行は画面を有効にする前（[document-history.md](document-history.md)「適用ゲート」の手順 4 の前）に始め、全版保持を続ける間は止めない。止まった・届かなくなったと分かったら、その日のうちに直すか、保持方針を決め直す（#575。消す・縮める方針にするなら磯貝さんの承認を近藤か芹沢を通して取る）。
 
-届け先: （#590 で決めて書く。誰に・どの経路で・終了コード 3/4/5 と定期実行の停止がどう届くか・試しの警告を送った日と証拠）
+### 定期実行と届け先（#590）
+
+定期実行は `.github/workflows/history-capacity-monitor.yml`（毎日 JST 07:30、schedule だけ）。届け先は磯貝さんで、経路は既存の `CI Failure Slack Notify`（`.github/workflows/ci-failure-notify.yml`）に乗せる。新しい通知の仕組みは作らない。
+
+```text
+監視: schedule（毎日 JST 07:30、main の workflow だけが動く）
+  → 観測（script/collect-history-capacity-sample.sh）→ 判定（script/history-capacity-monitor.ts）→ 停止間近の確認
+  → 0 以外なら job が落ちる
+見張り: 翌朝 JST 06:00 の PDF Layout Check（History monitor liveness job）
+  → 監視が止まっていたら job が落ちる（7）
+どちらも
+  → CI Failure Slack Notify が workflow_run で拾う
+  → Slack（vars.SLACK_CHANNEL_ID）へ通知 ＋ ci-failure ラベルの追跡 issue を1本切る
+  → 次に成功した日に issue が閉じる
+```
+
+| 何が起きたか | 終了コード | 届き方 |
+| --- | --- | --- |
+| exceeded | 3 | job が落ちて Slack と追跡 issue |
+| measurement-failed（照会・Neon API・secret の不備も含む） | 4 | 同上。観測に失敗した日は失敗の観測を最新として書くので、前日の正常な値で「正常」とは言わない |
+| warning | 5 | 同上 |
+| 定期実行が止まりかけている（最後のコミットから 45 日） | 6 | 同上。公開リポジトリは 60 日動きが無いと schedule が止まる（GitHub Docs「Disabling and enabling a workflow」）。止まる 15 日前から毎日落ちるので、その間に main へ何か入れるか、止まる前提で方針を決め直す |
+| 定期実行が止まった（workflow の削除、画面や API での無効化、variable を外したことによる skip、cancelled や timed_out での終了、schedule の取りこぼし） | 7（見張りの job） | `PDF Layout Check` にある `History monitor liveness` job が落ちて、同じ経路で Slack と追跡 issue に届く。落ちるのは、skip・cancelled・timed_out・取りこぼしになった JST 07:30 の実行の翌朝 JST 06:00。workflow の削除と無効化は、その後の最初の JST 06:00。通知に出る workflow 名は `PDF Layout Check` なので、ログの job 名とエラー文（`History Capacity Monitor が止まっている`）で見分ける |
+
+観測は actions/cache に直近 60 点を残し、増え方と届く見込み日の計算に使う。公開ログ（Step Summary）に出すのは状態と容量の数字だけで、接続先・本文・title は出さない。手動実行（workflow_dispatch）は置かない。選んだブランチの workflow を動かせるので、ブランチ側で steps を差し替えて本番の secret を読めてしまうため（`real-data-main-check.yml` と同じ理由）。
+
+#### 定期実行が止まったことの見張り
+
+監視は、自分が動かなかった日のことを自分では知らせられない。そこで別の定期実行（`.github/workflows/pdf-layout-check.yml` の `History monitor liveness` job、毎日 JST 06:00）から、監視の workflow と最新の実行を GitHub API で読む。判定は `script/history-monitor-liveness-check.ts`。
+
+- workflow の state が `active` で、最新の完了した schedule 実行が success か failure で、作られてから 30 時間以内なら動いているとみなす。failure は `CI Failure Slack Notify` がその日のうちに届けているので、ここでは通す。
+- ふだんの間隔は 22.5 時間（監視の JST 07:30 から翌朝の JST 06:00 まで）。schedule の遅れは 7.5 時間まで許す。1 日落とされると 46.5 時間になるので、翌朝に落ちる。GitHub Docs（Events that trigger workflows の schedule 節、2026-10-22 に確認）には、混雑時に「some queued jobs may be dropped」とある。
+- workflow を読めない時（消された時の 404、API の失敗）も落とす。黙って通すより誤報の方がましという判断。
+- skip 以外で終わった実行が一度も無い間（本番の secret と variable を入れる前）は「まだ有効にしていない」として通す。一度動いた後に variable を外すと、外した後の最初の JST 07:30 の実行が skip になり、その翌朝の JST 06:00 から毎日落ちる。その skip より前に来る JST 06:00 は、前日 JST 07:30 の成功（22.5 時間前）を見て通る。監視を本当にやめる時は、見張りの job を外す PR を出して、同じ PR で保持方針を決め直す。
+- 見張り自身の実行が混雑で落とされた日は、次の朝の実行で見る。
+
+この経路でも届かないもの:
+
+- GitHub Actions がリポジトリごと動かない時（GitHub 側の障害、またはリポジトリ設定で Actions を止めた時）。監視・見張り・通知が同時に止まるので、この仕組みの中からは知らせられない。
+- 通知の経路（`CI Failure Slack Notify`）そのものが止まった時。監視以外の CI の失敗も全部届かなくなるので、リポジトリ全体の問題として扱う。
+- 監視と見張り（`PDF Layout Check`）を両方とも人が止めた時。片方だけなら、もう片方が動いているので届く。
+
+#### 有効にする（本番の窓で行う。どれも本人の承認が先）
+
+| 置き場所 | 名前 | 中身 |
+| --- | --- | --- |
+| secret | `HISTORY_MONITOR_PG_SERVICE_CONF` | `pg_service.conf` の中身。節の名前は `[history-monitor]`。読取専用 role（SELECT だけ、`default_transaction_read_only=on`）で `host` `port` `dbname` `user` `password` `sslmode=require` を書く |
+| secret | `HISTORY_MONITOR_NEON_API_KEY` | 監視専用の Neon API キー。branch の `logical_size` を読むだけに使う |
+| variable | `HISTORY_MONITOR_NEON_PROJECT_ID` / `HISTORY_MONITOR_NEON_BRANCH_ID` | 本番の project と branch の ID（秘密ではない） |
+| variable | `HISTORY_MONITOR_ENABLED` | `true` で動き出す。これが無いうちは job ごと skip され、何も読まない |
+
+試しの警告は、variable `HISTORY_MONITOR_DATABASE_LIMIT_MIB` を `1` にして次の定期実行を待つ。exceeded（3）で落ちて Slack と追跡 issue に届いたら、その日付と通知・issue へのリンクを [document-history.md](document-history.md)「適用ゲート」に書き、variable を消す。手動実行の口が無いので、試しも本番と同じ schedule の経路を通る。
+
+見張りの試しも同じ窓で行う。監視が一度動いた後、JST 06:00 から 07:30 の間に `HISTORY_MONITOR_ENABLED` を外す。その日の JST 07:30 の実行が skip になり、翌朝 JST 06:00 の `PDF Layout Check` が落ちる。ほかの時間に外した時は、外した後の最初の JST 07:30 が skip になった翌朝まで落ちない（JST 07:30 より後に外すと翌々朝になる）。Slack と追跡 issue に届いたら、日付とリンクを同じ「適用ゲート」に書き、variable を戻す。
+
+届け先: 磯貝さん（Slack と ci-failure の追跡 issue）。試しの警告と見張りの試しを送った日と証拠: 未実施（本番の窓で行う）。
 
 ## 回帰検証（隔離環境）
 
