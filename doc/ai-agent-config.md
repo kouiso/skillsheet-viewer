@@ -40,8 +40,8 @@ Claude Code は `CLAUDE.md` があると `AGENTS.md` を読まない。そのた
 | Codex CLI 0.155.1 | `AGENTS.md` | `.agents/skills/` | 実測（`codex debug prompt-input`） |
 | Devin CLI 3000.10.31 | `AGENTS.md` と `CLAUDE.md` | `.agents/skills/` と `.claude/skills/` | 実測（`devin rules list` / `devin skills list`） |
 | OpenCode 1.18.15 | `AGENTS.md` | `.agents/skills/` と `.claude/skills/`（同名は1つにまとめる） | 実測（`opencode debug skill`） |
-| Antigravity（GUI） | `AGENTS.md` | `.agents/skills/` | 公式文書で確認。実起動での確認は未実施 |
-| GitHub Copilot CLI | `AGENTS.md`、`CLAUDE.md`、`.github/copilot-instructions.md` | `.github/skills/`、`.claude/skills/`、`.agents/skills/` | 未導入のため未検証 |
+| Antigravity 1.11.5（GUI） | `AGENTS.md` | `.agents/skills/` | 未検証（公式文書でだけ確認） |
+| GitHub Copilot CLI 1.0.101 | `AGENTS.md`、`CLAUDE.md`、`.github/copilot-instructions.md` | `.agents/skills/` と `.claude/skills/`（同名は1つにまとめる） | 実測（`copilot instruction list` / `copilot skill list`） |
 | Gemini CLI / Cursor | — | — | 未導入のため入口を作っていない |
 
 公式文書:
@@ -64,6 +64,8 @@ HOME=$H CODEX_HOME=$H/.codex codex debug prompt-input  # Codex に渡る指示�
 HOME=$H XDG_CONFIG_HOME=$H/.config devin rules list
 HOME=$H XDG_CONFIG_HOME=$H/.config devin skills list
 HOME=$H XDG_CONFIG_HOME=$H/.config opencode debug skill
+HOME=$H XDG_CONFIG_HOME=$H/.config copilot instruction list
+HOME=$H XDG_CONFIG_HOME=$H/.config copilot skill list
 ```
 
 ## 対応しきれていないこと
@@ -72,6 +74,7 @@ HOME=$H XDG_CONFIG_HOME=$H/.config opencode debug skill
   - シンボリックリンクなら Devin は1つにまとめるが、Windows の既定の clone ではリンクがテキストになり Claude Code が読めなくなるため使わない。
   - `.devin/config.json` に `{"read_config_from": {"claude": false}}` を置けば重複は消える。ただし Devin から `CLAUDE.md` の code-review-graph の説明・専用 Skill・`.mcp.json` も見えなくなるため入れていない。
 - **Antigravity は実起動で確かめていない。**
+- **Copilot CLI の Skill は7つ並ぶ。** 共通 Skill 3つは `.agents` と `.claude` の両方にあるが1つずつにまとまり、残り4つは Claude 専用 Skill。`.claude/skills/` を外しても共通 Skill 3つは `.agents/skills/` から読まれた。
 - **Claude Code はグローバル設定を外さずに確かめた。** ログイン情報が `HOME` にあり、外すと起動できないため。
   - 対話起動して `/memory` に `CLAUDE.md` と `L AGENTS.md @-imported` が並ぶこと、`InstructionsLoaded` フックに `AGENTS.md`（`load_reason: include`）が届くことを見た。import 行を消すと `AGENTS.md` は届かなくなった。
   - 同じ名前の Skill が `~/.claude/skills/` にあると、Claude Code はそちらを優先する（[公式](https://code.claude.com/docs/en/skills)）。その場合はこのリポジトリの共通 Skill が使われない。
