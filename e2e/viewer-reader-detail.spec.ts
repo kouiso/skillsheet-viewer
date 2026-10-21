@@ -26,6 +26,58 @@ async function openViewer(page: Page, width: number) {
   await page.locator('[title="TypeScript/JavaScript"]').first().waitFor();
 }
 
+async function scrollToTop(page: Page) {
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
+}
+
+// smooth スクロールが止まるまで待つ。押した直後はまだ動き出していないことがあるので、
+// 押す前の位置から動いたうえで、2 フレーム続けて同じ位置にいることを条件にする。
+async function waitForScrollToSettle(page: Page, before: number) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (start) =>
+            new Promise<boolean>((resolve) => {
+              const y0 = window.scrollY;
+              requestAnimationFrame(() => {
+                const y1 = window.scrollY;
+                requestAnimationFrame(() => {
+                  resolve(Math.abs(y0 - start) > 1 && y0 === y1 && y1 === window.scrollY);
+                });
+              });
+            }),
+          before,
+        ),
+      { message: 'スクロールが止まらない、または動かない', timeout: 5_000 },
+    )
+    .toBe(true);
+}
+
+async function measureHeading(page: Page, headingId: string) {
+  return page.evaluate((id) => {
+    const topbar = document.querySelector<HTMLElement>('header.console-topbar');
+    const heading = document.getElementById(id);
+    if (!topbar || !heading) return null;
+    const rect = heading.getBoundingClientRect();
+    // 見出しの中央に一番手前で描かれている要素。ヘッダーや別の帯が重なっていれば見出しの外になる。
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return {
+      hiddenPx: topbar.getBoundingClientRect().bottom - rect.top,
+      onTop: hit !== null && heading.contains(hit),
+    };
+  }, headingId);
+}
+
+function expectHeadingLandedBelowTopbar(measured: Awaited<ReturnType<typeof measureHeading>>, label: string) {
+  expect(measured, `${label}: ヘッダーか見出しが見つからない`).not.toBeNull();
+  const hiddenPx = measured?.hiddenPx ?? Number.POSITIVE_INFINITY;
+  expect(hiddenPx, `${label}: 見出しがヘッダーに隠れた量（px）`).toBeLessThanOrEqual(0.5);
+  // 飛んだ先がその会社であること。ヘッダー直下から 48px 以内に見出しが来ていなければ移動していない。
+  expect(hiddenPx, `${label}: 見出しがヘッダーの直下に来ていない（px）`).toBeGreaterThanOrEqual(-48);
+  expect(measured?.onTop, `${label}: 見出しの上に別の要素が重なっている`).toBe(true);
+}
+
 test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () => {
   test.beforeAll(async () => {
     viewSheetId = await createRealVolumeDemoSheet();
@@ -90,57 +142,96 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
     // #377: 概要と担当業務が別の欄で、全案件に本文つきで出る。jsdom（project-section.test.tsx）だけでなく実ブラウザでも数える。
     test(`全案件カードに「概要」と「担当業務」が別の欄で本文つきで出る — ${width}px`, async ({ page }) => {
       await openViewer(page, width);
-      const counts = await page.evaluate(() => {
-        const cards = [...document.querySelectorAll('article')].filter((a) =>
-          [...a.querySelectorAll('span')].some((s) => s.children.length === 0 && s.textContent?.trim() === '概要'),
-        );
-        const labelled = (label: string) =>
-          cards.filter((card) => {
+      const counts = await page.evaluate(
+        ({ summaryOnly, dutiesOnly }) => {
+          const cards = [...document.querySelectorAll('article')].filter((a) =>
+            [...a.querySelectorAll('span')].some((s) => s.children.length === 0 && s.textContent?.trim() === '概要'),
+          );
+          // 欄の本文 = ラベル span の次の兄弟要素（project-card.tsx の CardBlock）。カード全体の文字列では
+          // 欄の入れ替わりや片方への混入を見分けられないので、欄ごとに読む。
+          const field = (card: Element, label: string) => {
             const labelEl = [...card.querySelectorAll('span')].find(
               (s) => s.children.length === 0 && s.textContent?.trim() === label,
             );
-            return (labelEl?.nextElementSibling?.textContent?.trim().length ?? 0) > 0;
-          }).length;
-        return {
-          cards: cards.length,
-          summary: labelled('概要'),
-          duties: labelled('担当業務'),
-          // real-volume-demo の duties だけが持つ行。担当業務の欄に概要の文が入っていないことを数える。
-          dutiesBody: cards.filter((card) => card.textContent?.includes('関連システムとの連携調整')).length,
-        };
-      });
+            return labelEl?.nextElementSibling?.textContent?.trim() ?? '';
+          };
+          return {
+            cards: cards.length,
+            summary: cards.filter((card) => field(card, '概要').length > 0).length,
+            duties: cards.filter((card) => field(card, '担当業務').length > 0).length,
+            // 概要の欄は概要の文だけ、担当業務の欄は担当業務の文だけを持つ。
+            // 欄の入れ替わり（概要の文が担当業務の欄に出る）も、片方への連結もここで落ちる。
+            summaryOnlyInSummary: cards.filter((card) => {
+              const text = field(card, '概要');
+              return text.includes(summaryOnly) && !text.includes(dutiesOnly);
+            }).length,
+            dutiesOnlyInDuties: cards.filter((card) => {
+              const text = field(card, '担当業務');
+              return text.includes(dutiesOnly) && !text.includes(summaryOnly);
+            }).length,
+          };
+        },
+        // real-volume-demo.ts の summary だけ・duties だけが持つ文
+        { summaryOnly: '要件整理から実装・運用まで一気通貫で対応', dutiesOnly: '関連システムとの連携調整' },
+      );
       expect(counts).toEqual({
         cards: REAL_VOLUME_PROJECT_COUNT,
         summary: REAL_VOLUME_PROJECT_COUNT,
         duties: REAL_VOLUME_PROJECT_COUNT,
-        dutiesBody: REAL_VOLUME_PROJECT_COUNT,
+        summaryOnlyInSummary: REAL_VOLUME_PROJECT_COUNT,
+        dutiesOnlyInDuties: REAL_VOLUME_PROJECT_COUNT,
       });
     });
   }
 
   // #377: スマホ幅でヘッダーが画面を食わず、会社へ飛んだ時に見出しがヘッダーの下へ隠れない。
-  test('ヘッダーの高さが 120px 以下で、会社見出しがヘッダーに隠れない — 390px', async ({ page }) => {
+  // 利用者の操作（目次の項目・「会社から探す」のチップを押す）で飛び、smooth スクロールが止まってから測る。
+  test('ヘッダーの高さが 120px 以下で、目次と「会社から探す」から会社へ飛んでも見出しが隠れない — 390px', async ({
+    page,
+  }) => {
     await openViewer(page, 390);
     const header = page.locator('header.console-topbar');
     const box = await header.boundingBox();
     expect(box, 'ヘッダーが見つからない').not.toBeNull();
     expect(box?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(120);
 
-    const hidden = await page.evaluate(() => {
-      const topbar = document.querySelector<HTMLElement>('header.console-topbar');
-      const headings = [...document.querySelectorAll<HTMLElement>('[id^="company-"][id$="-heading"]')];
-      if (!topbar || headings.length < 2) return null;
-      // 先頭以外の会社へ飛ぶ。目次からの移動と同じく、会社の節を scrollIntoView で先頭へ寄せる。
-      return headings.slice(1, 4).map((heading) => {
-        const section = document.getElementById(heading.id.replace(/-heading$/, '')) ?? heading;
-        section.scrollIntoView({ block: 'start', behavior: 'instant' });
-        return Math.max(0, topbar.getBoundingClientRect().bottom - heading.getBoundingClientRect().top);
-      });
-    });
-    expect(hidden, '会社見出しが2件以上ない').not.toBeNull();
-    for (const [index, px] of (hidden ?? []).entries()) {
-      expect(px, `会社 ${index + 2} 件目の見出しがヘッダーに隠れた量（px）`).toBeLessThanOrEqual(0.5);
+    const companies = await page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>('[id^="company-"][id$="-heading"]')].map((heading) => ({
+        id: heading.id,
+        name: heading.textContent?.trim() ?? '',
+      })),
+    );
+    expect(companies.length, '会社見出しが4件以上ない').toBeGreaterThanOrEqual(4);
+
+    // ダッシュボードの閲覧画面は 390px でも <details> の目次（table-of-contents.tsx の inline）。
+    // 項目を押すと skill-sheet-viewer.tsx の scrollToHeading が h2 へ smooth スクロールする。
+    await page
+      .locator('summary')
+      .filter({ hasText: /^目次$/ })
+      .click();
+    const toc = page.getByRole('navigation', { name: '目次', exact: true });
+    for (const [index, company] of companies.slice(1, 4).entries()) {
+      await scrollToTop(page);
+      const item = toc.getByRole('button', { name: company.name, exact: true });
+      await item.scrollIntoViewIfNeeded();
+      const before = await page.evaluate(() => window.scrollY);
+      await item.click();
+      await waitForScrollToSettle(page, before);
+      expectHeadingLandedBelowTopbar(await measureHeading(page, company.id), `目次から会社 ${index + 2} 件目`);
     }
+
+    // 「会社から探す」のチップは #company-<id> へのページ内リンク（company-jump-nav.tsx）。
+    // 到着位置は section の scroll-margin で決まり、目次とは別の経路なので両方を見る。
+    const target = companies[2];
+    await scrollToTop(page);
+    const jumpNav = page.getByRole('navigation', { name: '会社別ジャンプ' });
+    await jumpNav.locator('summary').click();
+    const chip = jumpNav.locator(`a[href="#${target.id.replace(/-heading$/, '')}"]`);
+    await chip.scrollIntoViewIfNeeded();
+    const before = await page.evaluate(() => window.scrollY);
+    await chip.click();
+    await waitForScrollToSettle(page, before);
+    expectHeadingLandedBelowTopbar(await measureHeading(page, target.id), '「会社から探す」から会社 3 件目');
   });
 
   test('タイムラインの全タイトルの左端が揃い、日付列が最長ラベル幅に収まる — 1280px', async ({ page }) => {
