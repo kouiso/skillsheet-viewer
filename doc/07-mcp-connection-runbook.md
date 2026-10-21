@@ -83,10 +83,10 @@ HTTP で直接送った。`/login` のフォームと `/consent` の画面（`au
 
 1. `get_sheet` の stats ブロックから、0 番目の `label` と `value` と、シートの `revision` を控える
 2. 「update_stats を index 0、expectedLabel と fields.value は控えた値のまま、expectedRevision は控えた revision で呼んで」
-   - 期待値: 成功し、`changes` は空、`revision` は新しい値になる（中身は同じで版だけ進む）
+   - 期待値: 成功し、`changes` は空、`revision` は新しい値になる（中身は同じで版だけ進む）。この新しい `revision` を控える
 3. 同じ呼び出しを、**手順 1 で控えた古い revision のまま**もう一度呼ぶ
    - 期待値: `CONFLICT` の isError で、保存されない
-4. `get_sheet` で stats の値が手順 1 と同じことを確かめる
+4. `get_sheet` で、stats の値が手順 1 と同じで、`revision` が手順 2 で控えた値のままであることを確かめる
 
 編集タブを開いたまま手順 2 を行うと、タブ側の次の保存が競合になる（黙って上書きされない）。
 
@@ -114,7 +114,7 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 
 - クライアント側の削除: `claude mcp logout skillsheet` で保存済みのトークンを消し、
   `claude mcp remove skillsheet -s local` で登録を外す。claude.ai はコネクタを削除
-- アクセストークンは JWT で、`/api/mcp` は署名・iss・aud・exp だけを見る。
+- アクセストークンは JWT で、`/api/mcp` のトークン検証は署名・iss・aud・exp だけを見る（OAuth の表で失効を確かめない）。
   クライアント側で消しても、手元に写しがあれば期限まで通る。期限は発行から 1 時間
   （`@better-auth/oauth-provider` の既定 `accessTokenExpiresIn: 3600`。アプリ側で上書きしていない）
 - 失効の要求（`POST /api/auth/oauth2/revoke`）は JWT を受け付けない。400 `unsupported_token_type` が返り、
