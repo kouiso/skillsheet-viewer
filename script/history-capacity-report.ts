@@ -207,14 +207,16 @@ export function renderModelSections(
   for (const preset of LOAD_PRESETS.filter((item) => item.name === 'normal' || item.name === 'high')) {
     lines.push(`### ${preset.name}`);
     lines.push('');
-    lines.push(`| 変えた前提 | 区分 | 月間増分 | ${months}か月後の履歴 | 上限到達 |`);
-    lines.push('|---|---|---:|---:|---|');
+    // 変えた前提の区分と負荷の区分を1列にまとめると、仮定の負荷に実測の値を当てた行が実測に読めてしまう。
+    lines.push(`| 変えた前提 | 変えた前提の区分 | 負荷の区分 | 月間増分 | ${months}か月後の履歴 | 上限到達 |`);
+    lines.push('|---|---|---|---:|---:|---|');
     const variants = sensitivityVariants(preset.load.value, storage.value, base, small, preset.load.kind);
     const rows = sensitivity(preset.load.value, storage.value, option.policy, variants, months);
     rows.forEach((row, index) => {
-      const kind = variants[index]?.kind ?? preset.load.kind;
+      const variant = variants[index];
+      const variantCell = index === 0 || !variant ? '—' : KIND_LABEL[variant.kind];
       lines.push(
-        `| ${row.label} | ${kindCell(kind)} | ${both(row.monthlyNewBytes)} | ${both(row.historyBytesAtMonth)} | ${limitText(row.monthsUntilLimit, SENSITIVITY_HORIZON_MONTHS)} |`,
+        `| ${row.label} | ${variantCell} | ${kindCell(preset.load.kind)} | ${both(row.monthlyNewBytes)} | ${both(row.historyBytesAtMonth)} | ${limitText(row.monthsUntilLimit, SENSITIVITY_HORIZON_MONTHS)} |`,
       );
     });
     lines.push('');

@@ -94,8 +94,12 @@ function parseScenario(value: unknown): MeasurementScenario {
   if (accepted > attempts || errors > attempts - accepted) invalid();
   const failureRate = scenario.failureRate === null ? null : finite(scenario.failureRate);
   // 失敗率は試行と成功から決まる値なので、食い違う report は数え方が壊れている。
-  if (failureRate === null ? attempts !== 0 : Math.abs(failureRate - (attempts - accepted) / attempts) > 1e-6)
+  // 試行 0 件で割ると NaN になり、どんな失敗率とも食い違わなく見えるので先に分ける。
+  if (attempts === 0) {
+    if (failureRate !== null) invalid();
+  } else if (failureRate === null || Math.abs(failureRate - (attempts - accepted) / attempts) > 1e-6) {
     invalid();
+  }
   const latency = object(scenario.latencyMs);
   return {
     name: text(scenario.name),
