@@ -142,7 +142,7 @@ Authentication の OAuth フローを通して全ツールを呼ぶ。
 アクセストークンは JWT で、`/api/mcp` は署名・iss・aud・exp だけを見る（DB は引かない）。
 そのため DB の行を消しても、`POST /api/auth/oauth2/revoke` を呼んでも、発行済みのトークンは期限の 1 時間まで通る。
 本番で revoke は 400 `unsupported_token_type`（JWT は失効できない）を返し、同じトークンで `tools/list` が 200 のままだった
-（[07 の証跡](mcp-evidence-20261021/tool-call-prod.txt) の C、2026-10-21）。refresh_token は発行していない。
+（[07 の証跡](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の C、2026-10-21）。refresh_token は発行していない。
 期限より前に止めたいときは、下の「ロールバック」で `/api/mcp` ごと閉じる。
 
 ### ロールバック
