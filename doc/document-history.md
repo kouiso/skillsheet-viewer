@@ -109,7 +109,7 @@ TO approved_runtime_role;
 
 - 手順 1〜3（バックアップ・表の作成・trigger の導入）: 保持方針は決まったので、この理由では止めない。ほかの導入条件（下の「限定backupを起点にした一連の導入dry-run」の最後の段落）は残る。
 - 手順 4（runtime への EXECUTE 付与＝画面からの一覧・復元の有効化）: 次の 4 つが揃うまで行わない。手で 1 回動かしただけでは、この保留理由を消さない。
-  1. 読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と Neon API の読取用キーがある。
+  1. 読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と、監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）がある。
   2. 監視（観測の取得、Neon の `branch.logical_size` の付加、判定）が 1 日 1 回以上の定期実行になっている。
   3. 届け先（誰に・どの経路で）が [document-history-operation.md](document-history-operation.md) に書いてある。終了コード 5（warning）・3（exceeded）・4（measurement-failed）と、定期実行そのものが止まったことの全部が届く。
   4. `--database-limit-mib 1` で exceeded を本番の定期実行の経路から起こし、届いたことを確かめた。日付と通知へのリンクをここに書く。

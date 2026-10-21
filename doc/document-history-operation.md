@@ -71,7 +71,7 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 ### 始める・止める
 
 監視は読み取りだけの単発コマンドで、常駐しない。止めるときは実行をやめるだけで、保存・履歴・権限には何も残らない。
-本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と Neon API の読取用キーを本人の承認のうえで用意する。role・キー・定期実行・届け先はまだ無い（#590）。
+本番の定期実行には、読取専用の role（SELECT だけ、`default_transaction_read_only=on`）と 監視専用の Neon API キー（branch の `logical_size` を読むだけに使う）を本人の承認のうえで用意する。role・キー・定期実行・届け先はまだ無い（#590）。
 
 全版保持に決めたので、本番の定期実行は画面を有効にする前（[document-history.md](document-history.md)「適用ゲート」の手順 4 の前）に始め、全版保持を続ける間は止めない。止まった・届かなくなったと分かったら、その日のうちに直すか、保持方針を決め直す（#575）。
 
