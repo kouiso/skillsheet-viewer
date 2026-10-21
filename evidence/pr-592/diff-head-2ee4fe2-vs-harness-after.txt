@@ -1,0 +1,32 @@
+# diff: 2ee4fe2:script/measure-document-history.sh (blob ba685935df30275c0734332c63ba41f1226d86fe) -> harness/after (blob f9e5a162922de980ed3dc8db676eaa78232e73ef)
+--- 2ee4fe2:script/measure-document-history.sh
++++ harness/after/script/measure-document-history.sh
+@@ -34,7 +34,7 @@
+ positive_integer HISTORY_MEASURE_LARGE_BYTES "$large_bytes"
+ 
+ # Unix socket のパス長上限（約100文字）に収めるため、長い TMPDIR ではなく /tmp に置く。
+-run_dir="$(mktemp -d /tmp/skillsheet-history-measure.XXXXXX)"
++run_dir="$(mktemp -d "$HOME/worktrees/asano-out/ssv584/runs/after.XXXXXX")"  # harness: /tmp を使わない
+ port=55450
+ started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+ git_sha="$(git -C "$repo_dir" rev-parse HEAD 2>/dev/null || echo unknown)"
+@@ -43,7 +43,7 @@
+ cleanup() {
+   if [[ -f "$run_dir/data/postmaster.pid" ]]; then pg_ctl -D "$run_dir/data" -m fast -w stop >>"$run_dir/server-stop.log" 2>&1 || true; fi
+   # 合成DBの実体はディスクを食うので消す。集計（report.json）とログだけ残す。
+-  rm -rf -- "$run_dir/data"
++  : # harness: 何も消さない（data directory を残す）
+ }
+ finish() {
+   local result=$?
+@@ -107,6 +107,10 @@
+ CREATE TABLE measure_fixture.accepted(sheet text NOT NULL, scenario text NOT NULL, writer integer NOT NULL, accepted integer NOT NULL);
+ SQL
+ 
++# harness: HARNESS_BREAK=1 のとき、保存関数の実行権限を外して保存を全件失敗させる。
++if [[ "${HARNESS_BREAK:-}" == 1 ]]; then
++  "${admin[@]}" -c 'REVOKE EXECUTE ON FUNCTION skillsheet_private.replace_sheet(uuid,text,text,jsonb,text) FROM measure_runtime, PUBLIC' >"$run_dir/harness-break.log" 2>&1
++fi
+ # 作成（revision 0）は計測対象外。
+ for name in burst-small burst-large normal-small normal-large contended; do
+   "${runtime[@]}" -v ON_ERROR_STOP=1 -At -v name="$name" >>"$run_dir/create.log" 2>&1 <<'SQL'
