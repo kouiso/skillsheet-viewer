@@ -14,6 +14,8 @@ logs
 *.log
 # dogfooding の証跡サーバーログは判定根拠なので追跡する（*.log に黙って弾かれていた）
 !doc/dogfooding-evidence/*.log
+# PR 証跡の生成ログも判定根拠なので追跡する（*.log に黙って弾かれていた）
+!doc/evidence/pr-584/*.log
 
 # build output
 dist

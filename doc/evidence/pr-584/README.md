@@ -1,17 +1,23 @@
 # PR #584 証跡：本番の実測（2026-10-21）で容量の土台を置き換えた前後
 
-- PR #584 head（before）: `c0a003d971c21d2e872a9a12cbadd148f9997eb6`
-- 変更後（after、push 済み head）: `415166624e0716b9cb129c295ba01481a6aa6839`
-- この branch（evidence/pr-584）は before の head から切り、この README と同じ階層のファイルだけを足している。コードは変えていない。
+before と after の SHA は、それぞれの checkout で `git rev-parse HEAD` したログの1行目。
+
+- before: `c0a003d971c21d2e872a9a12cbadd148f9997eb6`
+- after: `5810de61176756a7d9609ded1e9524be4df3fadd`
+- 生成時刻（`date -u`、ログの2行目）: before `Wed Oct 21 04:53:38 AM UTC 2026` / after `Wed Oct 21 04:53:39 AM UTC 2026`
+- 作り直した理由: 前の after.png が未 push の b0a23aa から作られ、ラベルだけ書き換えられていた。
+- この branch（evidence/pr-584）は before の head から切り、この README と同じ階層のファイルを足している。アプリのコードは変えていない。生成ログは `.gitignore` の `*.log` に弾かれるので、`doc/evidence/pr-584/*.log` だけ追跡する例外を足している。
 
 | ファイル | 中身 |
 |---|---|
-| `projection-before.md` | before の `script/history-capacity-report.ts` 出力（履歴以外 = 9.2 MiB、10/14 既存報告） |
-| `projection-after.md` | after の同じ出力（履歴以外 = 48.4 MiB、2026-10-21 13:23 JST 実測、空き 975.6 MiB） |
+| `projection-before.md` | before の checkout で `script/history-capacity-report.ts` を実行した出力（履歴以外 = 9.2 MiB、10/14 既存報告） |
+| `projection-after.md` | after の checkout で同じコマンドを実行した出力（履歴以外 = 48.4 MiB、2026-10-21 13:23 JST 実測、空き 975.6 MiB） |
 | `projection.diff` | 上の 2 つの unified diff |
-| `projection-before.png` / `projection-after.png` | 月間モデルの表と normal の感度分析表。黄色は相手と違うセル（PIL で描画） |
+| `projection-before.png` / `projection-after.png` | 月間モデルの表と normal の感度分析表。黄色は相手と違うセル。上部はその checkout の `git rev-parse HEAD` と `date -u` |
+| `generate-before.log` / `generate-after.log` | 各 checkout の `git rev-parse HEAD`、`date -u`、生成コマンドの出力。末尾に PNG 生成の出力 |
+| `render.py` | PNG を描く。SHA と時刻はログの先頭2行から読む |
 
-生成コマンド（両 SHA で同じ。依存の install はしていない）:
+生成コマンド（両 checkout で同じ。依存の install はしていない）:
 
 ```bash
 node --experimental-strip-types --import <拡張子 .ts を補う resolve hook> \

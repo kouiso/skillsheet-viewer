@@ -1,9 +1,5 @@
-<!-- PR #584 head before: c0a003d971c21d2e872a9a12cbadd148f9997eb6 / after (pushed head): 415166624e0716b9cb129c295ba01481a6aa6839 -->
-<!-- 生成: node --experimental-strip-types（tsx の代わりに拡張子を補う resolve hook）script/history-capacity-report.ts --measurement script/fixture/history-measure-report.json、2026-10-21 13:29 JST / 2026-10-20 21:29 PT -->
-<!-- diff projection-before → projection-after（生成出力だけ） -->
-
---- before/c0a003d971c21d2e872a9a12cbadd148f9997eb6
-+++ after/415166624e0716b9cb129c295ba01481a6aa6839
+--- projection-before.md	2026-10-21 04:53:39.205063857 +0000
++++ projection-after.md	2026-10-21 04:53:39.205063857 +0000
 @@ -28,6 +28,23 @@
  | revision | 14（2026-09-16〜2026-10-07、約0.5回/日） | 既存報告。単点で、継続観測の保存頻度ではない |
  | 本文 | 約45.0 KB | 既存報告 |

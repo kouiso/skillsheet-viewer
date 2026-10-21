@@ -1,7 +1,3 @@
-<!-- PR #584 head before: c0a003d971c21d2e872a9a12cbadd148f9997eb6 / after (pushed head): 415166624e0716b9cb129c295ba01481a6aa6839 -->
-<!-- 生成: node --experimental-strip-types（tsx の代わりに拡張子を補う resolve hook）script/history-capacity-report.ts --measurement script/fixture/history-measure-report.json、2026-10-21 13:29 JST / 2026-10-20 21:29 PT -->
-<!-- before = PR head c0a003d971c21d2e872a9a12cbadd148f9997eb6 の出力（履歴以外 9.2 MiB・既存報告） -->
-
 ## 計測条件
 
 - 種類: synthetic-local-postgres（Neon 本番の実測ではない）
