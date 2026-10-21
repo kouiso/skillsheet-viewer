@@ -1,16 +1,27 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MIB } from '../src/db/history-capacity-model';
 import { CANDIDATE_THRESHOLDS, evaluateMonitor } from '../src/db/history-capacity-monitor';
 import { exitCode } from './history-capacity-monitor';
+import { evaluateLiveness, parseArgs as parseLivenessArgs } from './history-monitor-liveness-check';
 import { evaluateKeepalive, parseArgs } from './schedule-keepalive-check';
 
 const workflowsDir = new URL('../.github/workflows/', import.meta.url);
 const workflow = readFileSync(new URL('history-capacity-monitor.yml', workflowsDir), 'utf8');
 const notify = readFileSync(new URL('ci-failure-notify.yml', workflowsDir), 'utf8');
+const watcher = readFileSync(new URL('pdf-layout-check.yml', workflowsDir), 'utf8');
 const collector = new URL('./collect-history-capacity-sample.sh', import.meta.url).pathname;
 const dirs: string[] = [];
 afterEach(() => {
@@ -202,5 +213,167 @@ describe('schedule-keepalive-check', () => {
     expect(() => parseArgs([])).toThrow('LAST_ACTIVITY_REQUIRED');
     expect(() => parseArgs(['--last-activity'])).toThrow('INVALID_VALUE');
     expect(() => parseArgs(['--last-activity', '2026-10-01', '--warn-days', '0'])).toThrow('INVALID_VALUE');
+  });
+});
+
+describe('history-monitor-liveness-check', () => {
+  const now = new Date('2026-10-22T21:05:00Z');
+  const hoursAgo = (hours: number) => new Date(now.getTime() - hours * 3_600_000);
+  const running = { workflowState: 'active', realRuns: 10, now };
+
+  it('成功か失敗で終わった 30 時間以内の実行があれば動いている（失敗は ci-failure-notify が届ける）', () => {
+    expect(evaluateLiveness({ ...running, latest: { conclusion: 'success', createdAt: hoursAgo(22.5) } }).status).toBe(
+      'running',
+    );
+    expect(evaluateLiveness({ ...running, latest: { conclusion: 'failure', createdAt: hoursAgo(30) } }).status).toBe(
+      'running',
+    );
+  });
+
+  it.each([
+    ['UI や API で無効にした', { workflowState: 'disabled_manually' }],
+    ['60 日の無効化', { workflowState: 'disabled_inactivity' }],
+    ['workflow を消した（404）', { workflowState: 'missing' }],
+    ['variable を外して skip された', { latest: { conclusion: 'skipped', createdAt: hoursAgo(22.5) } }],
+    ['cancelled で終わった', { latest: { conclusion: 'cancelled', createdAt: hoursAgo(22.5) } }],
+    ['timed_out で終わった', { latest: { conclusion: 'timed_out', createdAt: hoursAgo(22.5) } }],
+    ['schedule が 1 日落とされた', { latest: { conclusion: 'success', createdAt: hoursAgo(46.5) } }],
+    ['完了した実行が無い', { latest: undefined }],
+  ])('%s は止まっている', (_name, override) => {
+    expect(
+      evaluateLiveness({ ...running, latest: { conclusion: 'success', createdAt: hoursAgo(1) }, ...override }).status,
+    ).toBe('stopped');
+  });
+
+  it('一度も有効にしていない間（毎日 skip）は止まりと見ない。無効の workflow はその間も止まりと見る', () => {
+    const skipped = { conclusion: 'skipped', createdAt: hoursAgo(22.5) };
+    expect(evaluateLiveness({ ...running, realRuns: 0, latest: skipped }).status).toBe('not-enabled');
+    expect(evaluateLiveness({ ...running, realRuns: 0, workflowState: 'disabled_manually' }).status).toBe('stopped');
+  });
+
+  it('不正な引数は拒否する', () => {
+    expect(() => parseLivenessArgs(['--real-runs', '1'])).toThrow('WORKFLOW_STATE_REQUIRED');
+    expect(() => parseLivenessArgs(['--workflow-state', 'active', '--real-runs', '-1'])).toThrow('INVALID_VALUE');
+    expect(() =>
+      parseLivenessArgs(['--workflow-state', 'active', '--real-runs', '1', '--latest-conclusion', 'success']),
+    ).toThrow('LATEST_REQUIRES_BOTH');
+    expect(() => parseLivenessArgs(['--workflow-state', 'active', '--real-runs', '1', '--bogus', 'x'])).toThrow(
+      'UNKNOWN_ARGUMENT',
+    );
+    expect(() => evaluateLiveness({ ...running, realRuns: 1.5 })).toThrow('INVALID_REAL_RUNS');
+  });
+});
+
+describe('容量監視の見張り（pdf-layout-check.yml）', () => {
+  const tsx = join(process.cwd(), 'node_modules', '.bin', 'tsx');
+  function stepScript(name: string): string {
+    const body = watcher.split(`      - name: ${name}\n`)[1]?.split('\n      - ')[0];
+    const script = body?.split('        run: |\n')[1];
+    if (!script) throw new Error(`missing step ${name}`);
+    return script
+      .split('\n')
+      .map((line) => line.replace(/^ {10}/, ''))
+      .join('\n');
+  }
+  type Responses = { workflow?: object; completed?: object; skipped?: object; failRuns?: boolean };
+  /** 偽の gh は URL ごとの応答 JSON に本物の jq をかけて返す。--jq の式も本物の経路で確かめる。 */
+  function runWatcher(responses: Responses) {
+    const dir = tempDir();
+    const bin = join(dir, 'bin');
+    mkdirSync(bin);
+    for (const [name, body] of Object.entries(responses)) {
+      if (typeof body === 'object') writeFileSync(join(dir, `${name}.json`), JSON.stringify(body));
+    }
+    writeFileSync(
+      join(bin, 'gh'),
+      [
+        '#!/bin/bash',
+        `printf '%s\\n' "$2" >> "${dir}/gh-urls"`,
+        'case "$2" in',
+        '  */history-capacity-monitor.yml) file=workflow ;;',
+        `  *status=completed*) file=completed; ${responses.failRuns ? 'echo "HTTP 502" >&2; exit 1' : ':'} ;;`,
+        '  *status=skipped*) file=skipped ;;',
+        '  *) exit 9 ;;',
+        'esac',
+        `[[ -f "${dir}/$file.json" ]] || { echo '{"message":"Not Found","status":"404"}'; echo 'gh: Not Found (HTTP 404)' >&2; exit 1; }`,
+        `jq -r "$4" "${dir}/$file.json"`,
+      ].join('\n'),
+      { mode: 0o755 },
+    );
+    // pnpm exec tsx <script> <args...> を、この repo の tsx でそのまま動かす。
+    writeFileSync(join(bin, 'pnpm'), `#!/bin/bash\nshift 2\nexec "${tsx}" "$@"\n`, { mode: 0o755 });
+    const result = spawnSync(
+      '/bin/bash',
+      ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript('Check history monitor liveness')],
+      {
+        cwd: process.cwd(),
+        env: {
+          PATH: `${bin}:${dirname(jqPath)}:${dirname(process.execPath)}:/usr/bin:/bin`,
+          NODE_ENV: 'test',
+          GITHUB_REPOSITORY: 'kouiso/skillsheet-viewer',
+          GH_TOKEN: 'fake',
+        },
+        encoding: 'utf8',
+      },
+    );
+    const urlLog = join(dir, 'gh-urls');
+    const urls = existsSync(urlLog) ? readFileSync(urlLog, 'utf8') : '';
+    return { result, urls };
+  }
+  const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+  const runs = (total: number, conclusion?: string, hours = 22.5) => ({
+    total_count: total,
+    workflow_runs: conclusion ? [{ conclusion, created_at: ago(hours) }] : [],
+  });
+  const active = { state: 'active' };
+
+  it('PDF の定期検査と同じ毎朝の schedule で、読む権限だけを持つ別 job として流れる', () => {
+    const job = watcher.split('\n  history-monitor-liveness:\n')[1];
+    expect(job).toBeDefined();
+    expect(job).toContain('    permissions:\n      actions: read\n      contents: read\n');
+    expect(job).not.toMatch(/secrets\.|vars\.|write/);
+    expect(notify).toContain('      - "PDF Layout Check"\n');
+  });
+
+  it.each([
+    ['動いている（前日の成功）', { workflow: active, completed: runs(10, 'success'), skipped: runs(2) }, 0, 'running'],
+    [
+      '失敗は ci-failure-notify が届けるので通す',
+      { workflow: active, completed: runs(10, 'failure'), skipped: runs(0) },
+      0,
+      'running',
+    ],
+    [
+      'まだ一度も有効にしていない',
+      { workflow: active, completed: runs(4, 'skipped'), skipped: runs(4) },
+      0,
+      'not-enabled',
+    ],
+    ['workflow を消した（404）', {}, 7, 'missing'],
+    ['画面で無効にした', { workflow: { state: 'disabled_manually' } }, 7, 'disabled_manually'],
+    [
+      '有効にした後で variable を外した',
+      { workflow: active, completed: runs(10, 'skipped'), skipped: runs(3) },
+      7,
+      'skipped',
+    ],
+    ['cancelled で終わった', { workflow: active, completed: runs(10, 'cancelled'), skipped: runs(0) }, 7, 'cancelled'],
+    [
+      'schedule が落とされた（46.5 時間前が最新）',
+      { workflow: active, completed: runs(10, 'success', 46.5), skipped: runs(0) },
+      7,
+      '46 時間',
+    ],
+  ])('%s', (_name, responses, status, text) => {
+    const { result, urls } = runWatcher(responses);
+    expect(result.status, result.stderr).toBe(status);
+    expect(result.stdout).toContain(text);
+    if (status === 7) expect(result.stdout).toContain('::error::History Capacity Monitor が止まっている');
+    for (const url of urls.trim().split('\n').slice(1)) expect(url).toContain('event=schedule');
+  });
+
+  it('実行一覧を読めない時は黙って通さず落ちる', () => {
+    const { result } = runWatcher({ workflow: active, failRuns: true });
+    expect(result.status).not.toBe(0);
   });
 });

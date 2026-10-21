@@ -2,6 +2,8 @@ name: History Capacity Monitor
 
 # 版履歴の容量を毎日1回測り、0 以外（exceeded 3 / measurement-failed 4 / warning 5 / 停止間近 6）なら job を落とす（#590）。
 # 落ちた通知は ci-failure-notify.yml が workflow_run で拾い、Slack と追跡 issue（ci-failure ラベル）へ届ける。
+# この workflow が動かなかった日（削除・無効化・skip・cancelled・schedule の取りこぼし）は、自分では知らせられない。
+# pdf-layout-check.yml の History monitor liveness job が翌朝それを見て落ちる。
 # 本番 DB の secret を読むので、手動実行（workflow_dispatch）は置かない。手動実行は選んだブランチの workflow
 # ファイルを動かせるため、ブランチ側で steps を差し替えて secret を読めてしまう（real-data-main-check.yml と同じ理由）。
 # 読取専用 role と監視専用 Neon キーが本番に揃うまでは動かさない。repository variable の
