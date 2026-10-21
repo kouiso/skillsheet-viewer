@@ -5,10 +5,12 @@ import {
   type LoadProfile,
   MB,
   MIB,
+  maxVersionsInWindow,
   monthlyNewVersions,
   monthsUntilLimit,
   projectCapacity,
   retainedVersionsPerSheet,
+  retainedWalBytes,
   sensitivity,
   toMB,
   toMiB,
@@ -110,6 +112,50 @@ describe('容量の予測', () => {
     expect(rows.map((row) => row.monthlyNewBytes)).toEqual([30_000_000, 60_000_000, 15_000_000]);
     expect(rows[1]?.monthsUntilLimit).toBe(2);
   });
+  it('感度分析の行で保持案を差し替えられ、残る履歴は間引き後の量になる', () => {
+    const tiered = { kind: 'tiered', fullDays: 30, dailyUntilDays: 365 } as const;
+    const [keepAll, tieredRow] = sensitivity(
+      everyDay,
+      storage,
+      { kind: 'keep-all' },
+      [{ label: '基準' }, { label: '段階的間引き', policy: tiered }],
+      14,
+    );
+    // 新しく作られる版は保持案に関係なく同じ。
+    expect(tieredRow?.monthlyNewBytes).toBe(keepAll?.monthlyNewBytes);
+    expect(keepAll?.historyBytesAtMonth).toBe((1 + 4200) * 100_000);
+    // 420日: 全版 300 ＋ 日1版 335 ＋ 月1版（0・1 月目）2 ＋ baseline 1。
+    expect(tieredRow?.historyBytesAtMonth).toBe((1 + 300 + 335 + 2) * 100_000);
+    expect(tieredRow?.monthsUntilLimit).toBeNull();
+  });
+  it('段階的間引きでも月次版は1か月1版ずつ積み上がる', () => {
+    const tiered = { kind: 'tiered', fullDays: 30, dailyUntilDays: 365 } as const;
+    const at24 = retainedVersionsPerSheet(everyDay, tiered, 24 * DAYS_PER_MONTH);
+    const at36 = retainedVersionsPerSheet(everyDay, tiered, 36 * DAYS_PER_MONTH);
+    expect(at36 - at24).toBe(12);
+  });
+});
+
+describe('PITR 保持窓の WAL', () => {
+  it('窓に入る版の最大数 × 1版の WAL を返す', () => {
+    // 月10日活動（3日に1日）で7日窓なら、最も混む窓に活動日が3日入る。
+    const load = { sheets: 2, activeDaysPerMonth: 10, savesPerActiveDay: 30, nonSaveVersionsPerSheetPerMonth: 0 };
+    expect(maxVersionsInWindow(load, 7)).toBe(2 * 3 * 30);
+    expect(retainedWalBytes(load, 1000, 7)).toBe(2 * 3 * 30 * 1000);
+  });
+  it('1日未満の窓はその日の save が全部入る側で数え、save 以外の版は日割りする', () => {
+    const load = { sheets: 1, activeDaysPerMonth: 10, savesPerActiveDay: 30, nonSaveVersionsPerSheetPerMonth: 30 };
+    expect(maxVersionsInWindow(load, 0.25)).toBe(30 + 0.25);
+    expect(maxVersionsInWindow(load, 30)).toBe(300 + 30);
+  });
+  it('窓の長さが0以下・非数なら拒否する', () => {
+    expect(() => maxVersionsInWindow(everyDay, 0)).toThrow(RangeError);
+    expect(() => maxVersionsInWindow(everyDay, Number.NaN)).toThrow(RangeError);
+    expect(() => retainedWalBytes(everyDay, -1, 1)).toThrow(RangeError);
+  });
+});
+
+describe('単位', () => {
   it('MiB と MB を取り違えない', () => {
     expect(toMiB(MIB)).toBe(1);
     expect(toMB(MIB)).toBeCloseTo(1.048576);
