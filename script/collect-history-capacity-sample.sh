@@ -37,7 +37,7 @@ raw="$(PGOPTIONS='-c default_transaction_read_only=on' psql -X -q -At -v ON_ERRO
   "service=$HISTORY_MONITOR_PG_SERVICE" -f "$repo_dir/script/sql/history-size-report.sql" 2>/dev/null)" ||
   fail 'psql の照会が失敗した'
 
-logical="$(curl -fsS --max-time 30 --config - "$api_base/projects/$NEON_PROJECT_ID/branches/$NEON_BRANCH_ID" 2>/dev/null <<EOF | jq -e '.branch.logical_size | numbers'
+logical="$(curl -fsS --max-time 30 --retry 3 --retry-delay 5 --config - "$api_base/projects/$NEON_PROJECT_ID/branches/$NEON_BRANCH_ID" 2>/dev/null <<EOF | jq -e '.branch.logical_size | numbers'
 header = "Authorization: Bearer $NEON_API_KEY"
 EOF
 )" || fail 'Neon API から branch.logical_size を読めなかった'
