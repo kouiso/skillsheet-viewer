@@ -53,6 +53,8 @@ PY
     fi
     HISTORY_MEASURE_BURST_SAVES=20 HISTORY_MEASURE_NORMAL_SAVES=5 ./script/measure-document-history.sh
     ./script/verify-history-retention.sh regression
+    # なぜ: runtime role の権限設定（再実行・拒否・rollback・別 cluster 復旧）を実際の PostgreSQL で確かめる試験を CI でも落とす（#595）。
+    bash ./script/verify-document-db.sh
     ;;
   playwright)
     require_isolated_bridge

@@ -1,7 +1,17 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 
 const workflowsDir = new URL('../.github/workflows/', import.meta.url);
@@ -28,8 +38,20 @@ function tempDir(): string {
   dirs.push(dir);
   return dir;
 }
+// 必須のjqだけを実行可能な絶対パスへ解決し、fixtureのbinへ渡す。jq が /usr/bin に無い環境
+// （Homebrew の macOS など）でも、step の PATH を絞ったまま同じ jq を使えるようにする。
+function fixtureJq(): string {
+  const found = spawnSync('/bin/sh', ['-c', 'command -v jq'], { encoding: 'utf8' }).stdout.trim();
+  if (!isAbsolute(found)) throw new Error('real-data workflow tests require executable jq on the parent PATH');
+  return realpathSync(found);
+}
 // 開発者のshell設定・資格情報・ツールshimを子プロセスへ引き継がない。
 function runStep(name: string, cwd: string, env: Record<string, string>) {
+  const executable = fixtureJq();
+  mkdirSync(join(cwd, 'bin'), { recursive: true });
+  // 同じ cwd で step を複数回呼ぶと前回の link が残る。貼り直して冪等にする。
+  rmSync(join(cwd, 'bin', 'jq'), { force: true });
+  symlinkSync(executable, join(cwd, 'bin', 'jq'));
   return spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript(name)], {
     cwd,
     env: { PATH: `${cwd}/bin:/usr/bin:/bin`, NODE_ENV: 'test', ...env },
