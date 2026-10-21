@@ -18,9 +18,9 @@
 | 上限に達したとき | 容量を増やす操作（insert・update・delete）が、空きを作るか上位プランへ移るまで失敗する。つまり保存も削除も止まる | Neon 公式 [Plans](https://neon.com/docs/introduction/plans)（2026-10-21 閲覧） |
 | プラン | 無料プラン（`subscription_type=free_v3`）。上限内は追加の支払いが無い | 2026-10-21 に project 設定を読んで確認 |
 | 復旧期間（PITR） | 6 時間（`history_retention_seconds=21600`） | 2026-10-21 に project 設定を読んで確認。公式 Plans でも Free は 6 時間 |
-| DB 全体 | 9.2MiB、シート 1 枚、revision 14（2026-09-16〜10-07） | #564 2026-10-14 コメントの既存報告。今の実測ではない |
-| 1 版の容量 | 約 95KB の本文で 104.0KB（詰めた後）、保存直後は約 2 倍 | #574 の合成計測（ローカル PostgreSQL） |
-| 本番の履歴表 | 未導入 | #564 2026-10-14 コメントの既存報告 |
+| 履歴以外の容量 | 48.4MiB（branch の論理容量 50,782,208 B）、シート 1 枚、revision 16（2026-09-16〜2026-10-21） | 2026-10-21 13:23 JST に本番 Neon を読んで確認（#574）。#564 2026-10-14 コメントの「DB 全体」は neondb だけの値で、上限が数える量ではない |
+| 1 版の容量 | 約 95KB の本文で 103.9KB（詰めた後）、保存直後は約 2 倍 | #574 の合成計測（ローカル PostgreSQL、`script/fixture/history-measure-report.json`） |
+| 本番の履歴表 | 未導入（`document_versions` / `deleted_documents` は 0 件） | 2026-10-21 13:23 JST に本番 Neon を読んで確認（#574） |
 
 ## 比べた案
 
@@ -36,37 +36,44 @@
 
 ### 容量（外挿）
 
-`pnpm exec tsx script/history-retention-compare.ts --measurement <report.json>` の出力。負荷の前提は [document-history-capacity.md](document-history-capacity.md) の low / reported-pace / normal / high。
+`pnpm exec tsx script/history-retention-compare.ts --measurement script/fixture/history-measure-report.json` の出力。負荷の前提は [document-history-capacity.md](document-history-capacity.md) の low / reported-pace / normal / high / reported-heavy。
 
-1版 104.0 KB（計測 47e4301、合成・詰めた後）、履歴以外 9.2 MiB と上限 1024.0 MiB は既存報告。結果はすべて外挿。
+1版 103.9 KB（計測 9cc416c、合成・詰めた後）、履歴以外 48.4 MiB（branch の論理容量）と上限 1024.0 MiB は本番の実測（2026-10-21 13:23 JST）。結果はすべて外挿。
 
 | 負荷 | 案 | 12か月後の履歴 (MiB) | 36か月後の履歴 (MiB) | 上限到達 |
 |---|---|---:|---:|---|
 | low | A | 25.1 | 75.0 | 120か月内に届かない |
 | low | B | 7.2 | 9.6 | 120か月内に届かない |
-| low | C | 3.3 | 5.7 | 120か月内に届かない |
+| low | C | 3.3 | 5.6 | 120か月内に届かない |
 | low | D | 7.6 | 12.5 | 120か月内に届かない |
 | low | E | 6.4 | 11.3 | 120か月内に届かない |
 | reported-pace | A | 19.1 | 57.2 | 120か月内に届かない |
-| reported-pace | B | 5.8 | 8.1 | 120か月内に届かない |
+| reported-pace | B | 5.7 | 8.1 | 120か月内に届かない |
 | reported-pace | C | 2.8 | 5.2 | 120か月内に届かない |
 | reported-pace | D | 19.1 | 24.2 | 120か月内に届かない |
 | reported-pace | E | 19.1 | 24.2 | 120か月内に届かない |
-| normal | A | 359.4 | 1078.0 | 34か月目 |
-| normal | B | 91.7 | 96.5 | 120か月内に届かない |
+| normal | A | 359.1 | 1077.1 | 33か月目 |
+| normal | B | 91.6 | 96.4 | 120か月内に届かない |
 | normal | C | 32.2 | 37.0 | 120か月内に届かない |
-| normal | D | 43.1 | 50.5 | 120か月内に届かない |
+| normal | D | 43.1 | 50.4 | 120か月内に届かない |
 | normal | E | 23.0 | 30.3 | 120か月内に届かない |
-| high | A | 14312.2 | 42936.1 | 1か月目 |
-| high | B | 3605.1 | 3676.4 | 1か月目 |
-| high | C | 1225.7 | 1297.1 | 1か月目 |
-| high | D | 1291.1 | 1370.8 | 1か月目 |
-| high | E | 403.3 | 483.0 | 120か月内に届かない |
+| high | A | 14301.0 | 42902.3 | 1か月目 |
+| high | B | 3602.2 | 3673.5 | 1か月目 |
+| high | C | 1224.7 | 1296.0 | 1か月目 |
+| high | D | 1290.1 | 1369.7 | 1か月目 |
+| high | E | 403.0 | 482.6 | 120か月内に届かない |
+| reported-heavy | A | 2377.6 | 7132.6 | 5か月目 |
+| reported-heavy | B | 594.5 | 594.5 | 120か月内に届かない |
+| reported-heavy | C | 198.2 | 198.2 | 120か月内に届かない |
+| reported-heavy | D | 209.1 | 211.7 | 120か月内に届かない |
+| reported-heavy | E | 71.1 | 73.7 | 120か月内に届かない |
 
 読み方:
 
 - 今の報告ペース（reported-pace、1 日 1 保存を月 15 日）なら、全版保持でも 1 年で約 19MiB、3 年で約 57MiB。1 日 1 保存なので、D・E の日ごとの間引きは 1 年目には何も減らさない。
 - 想定の通常負荷（normal、1 日 30 回の自動保存を月 10 日）では、全版保持が 1 年で約 359MiB になり、候補の警告値 200MiB には 7 か月目ごろに届く。
+- 想定の通常負荷（normal）で全版保持を続けると、33 か月目に上限へ届く。
+- 既存報告の重い月が続く場合（reported-heavy、1 シートを月 10 日、1 日 200 保存）は、全版保持が 5 か月目に上限へ届く。B〜E なら 120 か月内に届かない。
 - high（3 シートを月 20 日、1 日 200 保存）では、7 日全版の E 以外はどの案も 1 か月目に上限へ届く。直近の全版だけで上限を超えるため。
 
 ### 容量以外

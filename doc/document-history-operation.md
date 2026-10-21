@@ -11,7 +11,7 @@
 | 保持案 | 提案のみ・未承認 | [document-history-retention.md](document-history-retention.md)（#575） |
 | 保持案の試算 | dry-run あり。削除の経路は無い | `script/history-retention-dry-run.ts`（#576） |
 | 承認済みの方針 | なし | #564 で本人の判断待ち |
-| 本番への導入 | 履歴表そのものが未導入（2026-10-14 の既存報告）。監視・保持処理とも未導入 | [document-history.md](document-history.md)「適用ゲート」 |
+| 本番への導入 | 履歴表そのものが未導入（2026-10-21 13:23 JST の本番読取で `document_versions` / `deleted_documents` は 0 件、#574）。監視・保持処理とも未導入 | [document-history.md](document-history.md)「適用ゲート」 |
 
 ## 監視
 

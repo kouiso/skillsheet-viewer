@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import {
   LOAD_PRESETS,
+  MEASURED_20261021,
   type MeasurementReport,
   parseMeasurementReport,
   perVersionFromScenario,
@@ -43,7 +44,7 @@ export function renderComparison(report: MeasurementReport, horizon = 120) {
   const storage = storageFromMeasurement(base, report.gitSha);
   const lines: string[] = [];
   lines.push(
-    `1版 ${(base.compactBytesPerVersion / 1000).toFixed(1)} KB（計測 ${report.gitSha.slice(0, 7)}、合成・詰めた後）、履歴以外 ${mib(storage.value.nonHistoryBytes)} MiB と上限 ${mib(storage.value.limitBytes)} MiB は既存報告。結果はすべて外挿。`,
+    `1版 ${(base.compactBytesPerVersion / 1000).toFixed(1)} KB（計測 ${report.gitSha.slice(0, 7)}、合成・詰めた後）、履歴以外 ${mib(storage.value.nonHistoryBytes)} MiB（branch の論理容量）と上限 ${mib(storage.value.limitBytes)} MiB は本番の実測（${MEASURED_20261021.measuredAtJst}）。結果はすべて外挿。`,
   );
   lines.push('');
   lines.push('| 負荷 | 案 | 12か月後の履歴 (MiB) | 36か月後の履歴 (MiB) | 上限到達 |');
