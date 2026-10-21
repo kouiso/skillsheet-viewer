@@ -227,11 +227,13 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
     await scrollToTop(page);
     const jumpNav = page.getByRole('navigation', { name: '会社別ジャンプ' });
     await jumpNav.locator('summary').click();
-    const chip = jumpNav.locator(`a[href="#${target.id.replace(/-heading$/, '')}"]`);
+    // href は今のパス付き（/view/db/<id>#company-<id>）なので末尾で探す。
+    const chip = jumpNav.locator(`a[href$="#${target.id.replace(/-heading$/, '')}"]`);
     await chip.scrollIntoViewIfNeeded();
     const before = await page.evaluate(() => window.scrollY);
     await chip.click();
     await waitForScrollToSettle(page, before);
+    expect(new URL(page.url()).pathname, 'チップを押したら閲覧画面を離れた').toBe(`/view/db/${viewSheetId}`);
     expectHeadingLandedBelowTopbar(await measureHeading(page, target.id), '「会社から探す」から会社 3 件目');
   });
 
