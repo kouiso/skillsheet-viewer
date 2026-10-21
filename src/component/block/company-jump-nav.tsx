@@ -1,5 +1,8 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
+import type { MouseEvent } from 'react';
+
 import type { CompanyInfo } from '@/db/block';
 import { companyDisplayName } from '@/db/group-by-company';
 import { formatMonthToken, parseStart, splitPeriodRange } from '@/db/process';
@@ -42,7 +45,25 @@ export function buildCompanyJumpItems(groups: JumpCompanyInput[], headingIdSuffi
   });
 }
 
+/**
+ * ルートレイアウトが <base href="<origin>/"> を差し込むため（app/layout.tsx・#167）、"#company-…" だけの
+ * href は "/#company-…" に解決され、押すと閲覧画面を離れてシート一覧へ移っていた。
+ * 左クリックはこのページのハッシュだけを変える。修飾キー付き（新しいタブ等）はブラウザに任せる。
+ */
+function jumpWithinPage(event: MouseEvent<HTMLAnchorElement>, hash: string) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  if (window.location.hash === hash) {
+    // 同じハッシュを入れ直してもブラウザはスクロールしないので、同じ会社をもう一度押した時は自分で寄せる。
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
+    return;
+  }
+  window.location.hash = hash;
+}
+
 export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompanyInput[]; headingIdSuffix?: string }) {
+  // 新しいタブで開いた時も同じシートの会社へ着くよう、href は今のパス付きにする。
+  const pathname = usePathname();
   const items = buildCompanyJumpItems(groups, headingIdSuffix ?? '');
   if (items.length === 0) return null;
   return (
@@ -56,7 +77,8 @@ export function CompanyJumpNav({ groups, headingIdSuffix }: { groups: JumpCompan
           {items.map((item) => (
             <a
               key={item.href}
-              href={item.href}
+              href={pathname ? `${pathname}${item.href}` : item.href}
+              onClick={(event) => jumpWithinPage(event, item.href)}
               className="inline-flex min-h-11 max-w-full items-baseline gap-1.5 whitespace-nowrap rounded border border-border-strong bg-card px-2.5 py-2 text-[13px] leading-normal text-foreground hover:border-primary hover:text-accent-text"
               title={item.name}
             >

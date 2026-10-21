@@ -222,6 +222,7 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
 
     // 「会社から探す」のチップは #company-<id> へのページ内リンク（company-jump-nav.tsx）。
     // 到着位置は section の scroll-margin で決まり、目次とは別の経路なので両方を見る。
+    // ルートの <base href="/"> のせいで押すとシート一覧へ移っていた（ここで見出しが見つからず落ちる）。
     const target = companies[2];
     await scrollToTop(page);
     const jumpNav = page.getByRole('navigation', { name: '会社別ジャンプ' });
