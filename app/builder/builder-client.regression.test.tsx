@@ -1,9 +1,14 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Block, ProjectBlockData } from '@/db/block';
 import BuilderClient from './builder-client';
 import { type HistoryEntry, historyStorageKey } from './history';
+
+// builder-client.test.tsx と同じ理由。単体 3.3〜3.7 秒のファイルが全体実行の中では 12.8 秒かかり、
+// 負荷の高い時だけ既定の 5 秒を越えて落ちていた（#595）。
+vi.setConfig({ testTimeout: 30_000 });
+configure({ asyncUtilTimeout: 5_000 });
 
 const mockSave = vi.fn().mockResolvedValue({ revision: '6', updatedAt: new Date() });
 const mockInvalidate = vi.fn().mockResolvedValue(undefined);
