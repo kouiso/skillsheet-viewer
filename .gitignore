@@ -75,8 +75,10 @@ playwright/.auth/
 # Claude Code のセッション作業ファイル（ツールが実行のたびに書く一時物）
 .claude/tmp/
 
-# 解約済み Codex の設定置き場（再生成されても追跡しない）
-.agents/
+# .agents/ はツールが書く設定や作業物を追跡しない。共通 Skill の正本 .agents/skills/ だけは追跡する
+# （doc/ai-agent-config.md）。ディレクトリごと除外すると中を戻せないため .agents/* で除外する。
+.agents/*
+!.agents/skills/
 # エージェントのセッション作業物（計画書・作業ブランチ・証跡はリポジトリに入れない）
 .claude/plans/
 .worktrees/
