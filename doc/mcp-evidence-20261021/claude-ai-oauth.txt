@@ -1,0 +1,10 @@
+# main 274ec65 のデプロイ / 2026-10-20T18:3xZ
+# claude.ai Custom Connector の client_id で、本番がログイン・同意のあとに code を
+# claude.ai の callback へ返すところまでを通した。code の交換は claude.ai のサーバーが行うので含まない。
+# code は claude.ai へ送らずに捨てた（state もこちらで作った値なので claude.ai では使えない）。
+
+$ POST /api/auth/sign-in/email（オーナー）-> 200
+$ GET /api/auth/oauth2/authorize?client_id=https://claude.ai/oauth/mcp-oauth-client-metadata&redirect_uri=https://claude.ai/api/mcp/auth_callback&scope=skillsheet:read skillsheet:write&...（ログイン済み）-> 302 /consent
+$ POST /api/auth/oauth2/consent accept=true -> 200 https://claude.ai/api/mcp/auth_callback
+  callback の query のキー: ['code', 'iss', 'state']
+$ POST /api/auth/sign-out -> 200
