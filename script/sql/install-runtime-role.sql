@@ -20,6 +20,8 @@
 -- GUCによるtimeout等の運用制限は、実際のLOGIN接続で別途疎通確認する。
 -- runtimeを管理する他の利用者へのmembershipは除去し、この実行管理者だけ保持する。
 -- log_statement=all、SQL全文の監視・echoは秘密入力も記録するため、管理者が無効化する。
+-- passwordはbind値で渡すため、所要時間・抽出のログはDETAILへ値を出す。値を出さない
+-- log_parameter_max_length=0か、所要時間・抽出・auto_explainのログ無効を入力前に求める。
 -- lock-waitログが有効なら、PASSWORD文だけをdeadlock検査より短い待機に制限する。
 -- server/clientはPostgreSQL 16+ 前提（WITH SET、psqlのbindを使う）。
 --
@@ -36,8 +38,29 @@ SET vars.runtime_role = :'runtime_role';
 SET vars.owner_id = :'owner_id';
 -- utilityのSETへ秘密を埋め込むとPG17のpg_stat_statementsに残る。入力前に監視条件を検査する。
 \set runtime_password_input_allowed false
-SELECT COALESCE(current_setting('pg_stat_statements.track', true), 'none') <> 'all'
-  AND current_setting('log_statement') <> 'all' AS runtime_password_input_allowed
+-- 単位付きの表示値ではなく、pg_settingsの基本単位の値で比べる。読めない設定は拒否側に倒す。
+SELECT COALESCE(COALESCE(current_setting('pg_stat_statements.track', true), 'none') <> 'all'
+  AND current_setting('log_statement') <> 'all'
+  -- 文が失敗した時のCONTEXTにもbind値が出る。
+  AND s.on_error_length = 0
+  AND (s.parameter_length = 0
+    OR (s.min_duration = -1
+      AND (s.min_duration_sample = -1 OR s.statement_sample_rate = 0)
+      AND s.transaction_sample_rate = 0))
+  -- auto_explainはQuery Parametersとして値を出す。未読込ならGUCは無い。
+  AND (COALESCE(current_setting('auto_explain.log_min_duration', true), '-1') = '-1'
+    OR COALESCE(current_setting('auto_explain.log_parameter_max_length', true), '-1') = '0'), false)
+  AS runtime_password_input_allowed
+FROM (
+  SELECT
+    max(setting::numeric) FILTER (WHERE name = 'log_parameter_max_length_on_error') AS on_error_length,
+    max(setting::numeric) FILTER (WHERE name = 'log_parameter_max_length') AS parameter_length,
+    max(setting::numeric) FILTER (WHERE name = 'log_min_duration_statement') AS min_duration,
+    max(setting::numeric) FILTER (WHERE name = 'log_min_duration_sample') AS min_duration_sample,
+    max(setting::numeric) FILTER (WHERE name = 'log_statement_sample_rate') AS statement_sample_rate,
+    max(setting::numeric) FILTER (WHERE name = 'log_transaction_sample_rate') AS transaction_sample_rate
+  FROM pg_settings
+) s
 \gset
 \if :{?runtime_password}
 \if :runtime_password_input_allowed
@@ -46,7 +69,10 @@ SELECT COALESCE(current_setting('pg_stat_statements.track', true), 'none') <> 'a
   \g
 \else
   DO $$ BEGIN
-    RAISE EXCEPTION 'UNSAFE_RUNTIME_PASSWORD_TELEMETRY' USING ERRCODE = '42501';
+    RAISE EXCEPTION 'UNSAFE_RUNTIME_PASSWORD_TELEMETRY' USING ERRCODE = '42501',
+      HINT = 'log_statement と pg_stat_statements.track を all 以外、log_parameter_max_length_on_error を 0 にする。'
+        || 'さらに log_parameter_max_length を 0 にするか、log_min_duration_statement と log_min_duration_sample を -1、'
+        || 'log_transaction_sample_rate を 0 にする（auto_explain 読込時は auto_explain.log_min_duration を -1 にする）。';
   END $$;
 \endif
 \else

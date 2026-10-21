@@ -723,14 +723,23 @@ SQL
 unset pgstat_special_password
 psql "${pgstat_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/pgstat-denial.before"
 psql "${pgstat_args[@]}" -At -c 'SELECT md5(jsonb_agg(to_jsonb(r) ORDER BY rolname)::text) FROM pg_authid r' >"$run_dir/pgstat-denial-roles.before"
-for telemetry_case in track-all-existing track-all-new log-all-existing log-all-new; do
-  telemetry_target=runtime_proof_telemetry_runtime
-  if [[ "$telemetry_case" == *-new ]]; then telemetry_target=runtime_proof_telemetry_new; fi
-  telemetry_setting="SET pg_stat_statements.track='all'"
-  if [[ "$telemetry_case" == log-* ]]; then telemetry_setting="SET log_statement='all'"; fi
-  psql "${pgstat_args[@]}" -v VERBOSITY=verbose -v runtime_role="$telemetry_target" \
-    -v installer_file="$repo_dir/script/sql/install-runtime-role.sql" \
-    -c "$telemetry_setting" -f - >"$run_dir/pgstat-$telemetry_case.log" 2>&1 <<'SQL'
+# bind値はlog_statementの他、所要時間・抽出・失敗時・auto_explainのログでもDETAILへ出る。
+for telemetry_case in track-all log-all duration sample transaction-sample error-parameter auto-explain; do
+  for telemetry_target in runtime_proof_telemetry_runtime runtime_proof_telemetry_new; do
+    case "$telemetry_case" in
+      track-all) telemetry_setting="SET pg_stat_statements.track='all'" ;;
+      log-all) telemetry_setting="SET log_statement='all'" ;;
+      duration) telemetry_setting='SET log_min_duration_statement=0' ;;
+      sample) telemetry_setting='SET log_min_duration_sample=0; SET log_statement_sample_rate=1' ;;
+      transaction-sample) telemetry_setting='SET log_transaction_sample_rate=1' ;;
+      error-parameter) telemetry_setting='SET log_parameter_max_length_on_error=-1' ;;
+      auto-explain) telemetry_setting="LOAD 'auto_explain'; SET auto_explain.log_min_duration=0" ;;
+    esac
+    telemetry_case_log="$telemetry_case-existing"
+    if [[ "$telemetry_target" == *_new ]]; then telemetry_case_log="$telemetry_case-new"; fi
+    psql "${pgstat_args[@]}" -v VERBOSITY=verbose -v runtime_role="$telemetry_target" \
+      -v installer_file="$repo_dir/script/sql/install-runtime-role.sql" \
+      -c "$telemetry_setting" -f - >"$run_dir/pgstat-$telemetry_case_log.log" 2>&1 <<'SQL'
 \set ON_ERROR_STOP off
 \set runtime_password synthetic-pgstat-denied-proof-marker
 \set owner_id runtime-proof-telemetry-owner
@@ -744,20 +753,21 @@ DO $$ BEGIN
 END $$;
 SELECT 'TELEMETRY_PASSWORD_GUC_PASS';
 SQL
-  telemetry_first_error="$(rg -m1 'ERROR:' "$run_dir/pgstat-$telemetry_case.log")"
-  [[ "$telemetry_first_error" == *'ERROR:  42501:'*'UNSAFE_RUNTIME_PASSWORD_TELEMETRY'* ]]
-  rg -q TELEMETRY_PASSWORD_GUC_PASS "$run_dir/pgstat-$telemetry_case.log"
-  if rg -q 'synthetic-pgstat-denied-proof-marker' "$run_dir/pgstat-$telemetry_case.log" "$run_dir/pgstat-server.log"; then
-    printf '拒否したtelemetry設定で合成passwordがログへ露出しました\n' >&2
-    exit 1
-  fi
-  for pgstat_observer in boundary_admin runtime_proof_stats_actor; do
-    [[ "$(psql "${pgstat_args[@]}" -U "$pgstat_observer" -At -c "SELECT count(*) FROM metrics.pg_stat_statements WHERE query LIKE '%synthetic-pgstat-denied-proof-marker%'")" == 0 ]]
+    telemetry_first_error="$(rg -m1 'ERROR:' "$run_dir/pgstat-$telemetry_case_log.log")"
+    [[ "$telemetry_first_error" == *'ERROR:  42501:'*'UNSAFE_RUNTIME_PASSWORD_TELEMETRY'* ]]
+    rg -q TELEMETRY_PASSWORD_GUC_PASS "$run_dir/pgstat-$telemetry_case_log.log"
+    if rg -q 'synthetic-pgstat-denied-proof-marker' "$run_dir/pgstat-$telemetry_case_log.log" "$run_dir/pgstat-server.log"; then
+      printf '拒否したtelemetry設定で合成passwordがログへ露出しました\n' >&2
+      exit 1
+    fi
+    for pgstat_observer in boundary_admin runtime_proof_stats_actor; do
+      [[ "$(psql "${pgstat_args[@]}" -U "$pgstat_observer" -At -c "SELECT count(*) FROM metrics.pg_stat_statements WHERE query LIKE '%synthetic-pgstat-denied-proof-marker%'")" == 0 ]]
+    done
+    psql "${pgstat_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/pgstat-$telemetry_case_log.after"
+    psql "${pgstat_args[@]}" -At -c 'SELECT md5(jsonb_agg(to_jsonb(r) ORDER BY rolname)::text) FROM pg_authid r' >"$run_dir/pgstat-$telemetry_case_log-roles.after"
+    cmp "$run_dir/pgstat-denial.before" "$run_dir/pgstat-$telemetry_case_log.after"
+    cmp "$run_dir/pgstat-denial-roles.before" "$run_dir/pgstat-$telemetry_case_log-roles.after"
   done
-  psql "${pgstat_args[@]}" -At -f "$repo_dir/script/sql/read-runtime-provisioning-proof.sql" >"$run_dir/pgstat-$telemetry_case.after"
-  psql "${pgstat_args[@]}" -At -c 'SELECT md5(jsonb_agg(to_jsonb(r) ORDER BY rolname)::text) FROM pg_authid r' >"$run_dir/pgstat-$telemetry_case-roles.after"
-  cmp "$run_dir/pgstat-denial.before" "$run_dir/pgstat-$telemetry_case.after"
-  cmp "$run_dir/pgstat-denial-roles.before" "$run_dir/pgstat-$telemetry_case-roles.after"
 done
 # 前回trueが残っていても、事前SQLが失敗したON_ERROR_STOP off接続ではbindを実行しない。
 psql "${pgstat_args[@]}" -v VERBOSITY=verbose -v installer_file="$repo_dir/script/sql/install-runtime-role.sql" \
@@ -849,6 +859,52 @@ SQL
   cmp "$run_dir/pgstat-denial-roles.before" "$run_dir/pgstat-missing-$missing_principal_case-roles.after"
 done
 printf '再利用sessionでrole・owner未定義の拒否・旧password含む全catalog維持: PASS\n'
+# 値を出さない設定なら、所要時間・抽出・auto_explainのログが有効でもinstallは通り、
+# そのログ行があってもpasswordは含まない。passwordは実LOGINで設定済みを確かめる。
+for quiet_case in duration sample transaction-sample sample-rate-zero auto-explain; do
+  case "$quiet_case" in
+    duration) quiet_setting='SET log_min_duration_statement=0; SET log_parameter_max_length=0' ;;
+    sample) quiet_setting='SET log_min_duration_sample=0; SET log_statement_sample_rate=1; SET log_parameter_max_length=0' ;;
+    transaction-sample) quiet_setting='SET log_transaction_sample_rate=1; SET log_parameter_max_length=0' ;;
+    sample-rate-zero) quiet_setting='SET log_min_duration_sample=0; SET log_statement_sample_rate=0' ;;
+    auto-explain) quiet_setting="LOAD 'auto_explain'; SET auto_explain.log_min_duration=0; SET auto_explain.log_parameter_max_length=0" ;;
+  esac
+  quiet_marker="synthetic-quiet-$quiet_case-proof-marker"
+  quiet_log_start="$(wc -c <"$run_dir/pgstat-server.log")"
+  psql "${pgstat_args[@]}" -v runtime_role=runtime_proof_telemetry_runtime -v runtime_password="$quiet_marker" \
+    -v owner_id=runtime-proof-telemetry-owner -v installer_file="$repo_dir/script/sql/install-runtime-role.sql" \
+    -c "$quiet_setting" -f - >"$run_dir/pgstat-quiet-$quiet_case.log" 2>&1 <<'SQL'
+\i :installer_file
+DO $$ BEGIN
+ IF coalesce(current_setting('vars.runtime_password',true),'')<>'' THEN
+  RAISE EXCEPTION 'QUIET_PASSWORD_GUC_SURVIVED_SUCCESS';
+ END IF;
+END $$;
+SELECT 'QUIET_TELEMETRY_INSTALL_PASS';
+SQL
+  rg -q QUIET_TELEMETRY_INSTALL_PASS "$run_dir/pgstat-quiet-$quiet_case.log"
+  tail -c +"$((quiet_log_start + 1))" "$run_dir/pgstat-server.log" >"$run_dir/pgstat-quiet-$quiet_case-server.log"
+  # 抽出率0以外は、bind文のログ行が実際に出たことを確かめ、ログ無効による素通りと区別する。
+  quiet_bind_logged=false
+  if rg -q "set_config\('vars.runtime_password'" "$run_dir/pgstat-quiet-$quiet_case-server.log"; then
+    quiet_bind_logged=true
+  fi
+  quiet_bind_expected=true
+  if [[ "$quiet_case" == sample-rate-zero ]]; then quiet_bind_expected=false; fi
+  if [[ "$quiet_bind_logged" != "$quiet_bind_expected" ]]; then
+    printf 'bind文のログ行の有無が想定と違います: %s logged=%s\n' "$quiet_case" "$quiet_bind_logged" >&2
+    exit 1
+  fi
+  if rg -q "$quiet_marker" "$run_dir/pgstat-quiet-$quiet_case.log" "$run_dir/pgstat-server.log"; then
+    printf '値を出さないtelemetry設定で合成passwordがログへ露出しました: %s\n' "$quiet_case" >&2
+    exit 1
+  fi
+  for pgstat_observer in boundary_admin runtime_proof_stats_actor; do
+    [[ "$(psql "${pgstat_args[@]}" -U "$pgstat_observer" -At -c "SELECT count(*) FROM metrics.pg_stat_statements WHERE query LIKE '%$quiet_marker%'")" == 0 ]]
+  done
+  [[ "$(PGPASSWORD="$quiet_marker" psql "${pgstat_args[@]}" -U runtime_proof_telemetry_runtime -At -c 'SELECT SESSION_USER')" == runtime_proof_telemetry_runtime ]]
+done
+printf '所要時間・抽出・auto_explainのログが値を出さない設定でinstall成功・password記録なし: PASS\n'
 printf '実SQL統計の初回・再実行でpassword記録なし・特殊文字bind・危険telemetry拒否: PASS\n'
 
 cleanup
