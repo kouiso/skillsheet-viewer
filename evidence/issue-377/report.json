@@ -1,0 +1,236 @@
+[
+  {
+    "tag": "before",
+    "page": "list",
+    "width": 390,
+    "headerHeight": 65,
+    "viewportH": 844,
+    "headerRatio": 7.7,
+    "buttons": [
+      {
+        "label": "テーマ切り替え",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      }
+    ],
+    "scrollW": 390,
+    "clientW": 390,
+    "overlap": {
+      "tocEntries": 0,
+      "rows": [],
+      "maxOverlap": null
+    }
+  },
+  {
+    "tag": "before",
+    "page": "noproject",
+    "width": 390,
+    "headerHeight": 65,
+    "viewportH": 844,
+    "headerRatio": 7.7,
+    "buttons": [
+      {
+        "label": "シート一覧へ戻る",
+        "visibleText": "エンジニアスキルシート",
+        "hasPopup": null,
+        "w": 186
+      },
+      {
+        "label": "PDFダウンロード",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      },
+      {
+        "label": "Excelダウンロード",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      },
+      {
+        "label": "Wordダウンロード",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      },
+      {
+        "label": "テーマ切り替え",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      }
+    ],
+    "scrollW": 390,
+    "clientW": 390,
+    "overlap": {
+      "tocEntries": 1,
+      "rows": [
+        {
+          "text": "スキルマトリクス",
+          "headerBottom": 65,
+          "headingTop": 719.5,
+          "overlap": 0,
+          "atBottom": false
+        }
+      ],
+      "maxOverlap": 0
+    }
+  },
+  {
+    "tag": "before",
+    "page": "list",
+    "width": 1024,
+    "headerHeight": 65,
+    "viewportH": 844,
+    "headerRatio": 7.7,
+    "buttons": [
+      {
+        "label": "テーマ切り替え",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      }
+    ],
+    "scrollW": 1024,
+    "clientW": 1024,
+    "overlap": {
+      "tocEntries": 0,
+      "rows": [],
+      "maxOverlap": null
+    }
+  },
+  {
+    "tag": "before",
+    "page": "noproject",
+    "width": 1024,
+    "headerHeight": 65,
+    "viewportH": 844,
+    "headerRatio": 7.7,
+    "buttons": [
+      {
+        "label": "シート一覧へ戻る",
+        "visibleText": "エンジニアスキルシート",
+        "hasPopup": null,
+        "w": 230
+      },
+      {
+        "label": "PDFダウンロード",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      },
+      {
+        "label": "Excelダウンロード",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      },
+      {
+        "label": "Wordダウンロード",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      },
+      {
+        "label": "テーマ切り替え",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      }
+    ],
+    "scrollW": 1024,
+    "clientW": 1024,
+    "overlap": {
+      "tocEntries": 1,
+      "rows": [
+        {
+          "text": "スキルマトリクス",
+          "headerBottom": 65,
+          "headingTop": 65.2,
+          "overlap": 0,
+          "atBottom": false
+        }
+      ],
+      "maxOverlap": 0
+    }
+  },
+  {
+    "tag": "before",
+    "page": "list",
+    "width": 1280,
+    "headerHeight": 65,
+    "viewportH": 844,
+    "headerRatio": 7.7,
+    "buttons": [
+      {
+        "label": "テーマ切り替え",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      }
+    ],
+    "scrollW": 1280,
+    "clientW": 1280,
+    "overlap": {
+      "tocEntries": 0,
+      "rows": [],
+      "maxOverlap": null
+    }
+  },
+  {
+    "tag": "before",
+    "page": "noproject",
+    "width": 1280,
+    "headerHeight": 65,
+    "viewportH": 844,
+    "headerRatio": 7.7,
+    "buttons": [
+      {
+        "label": "シート一覧へ戻る",
+        "visibleText": "エンジニアスキルシート",
+        "hasPopup": null,
+        "w": 230
+      },
+      {
+        "label": "PDFダウンロード",
+        "visibleText": "PDF",
+        "hasPopup": null,
+        "w": 72
+      },
+      {
+        "label": "Excelダウンロード",
+        "visibleText": "Excel",
+        "hasPopup": null,
+        "w": 80
+      },
+      {
+        "label": "Wordダウンロード",
+        "visibleText": "Word",
+        "hasPopup": null,
+        "w": 82
+      },
+      {
+        "label": "テーマ切り替え",
+        "visibleText": "",
+        "hasPopup": null,
+        "w": 44
+      }
+    ],
+    "scrollW": 1280,
+    "clientW": 1280,
+    "overlap": {
+      "tocEntries": 1,
+      "rows": [
+        {
+          "text": "スキルマトリクス",
+          "headerBottom": 65,
+          "headingTop": 65.2,
+          "overlap": 0,
+          "atBottom": false
+        }
+      ],
+      "maxOverlap": 0
+    }
+  }
+]
