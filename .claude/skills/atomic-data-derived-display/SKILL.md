@@ -2,6 +2,7 @@
 name: atomic-data-derived-display
 description: Use when designing or reviewing how data is stored — a schema, a DB column, a JSON field, a config file, a form the user types into, or a migration. Bans storing pre-registered combinations, annotations, and relationships inside a value. One fact per entry; composition happens at display time. Triggers on parenthetical detail baked into a name, values joined by + / ・ 、, a status embedded in a date, or a label embedded in a title.
 ---
+<!-- generated-by: script/sync-agent-config.mjs from .agents/skills/atomic-data-derived-display/SKILL.md. Edit the source, then run the script. -->
 
 # 組み合わせを人間に事前登録させるな
 
