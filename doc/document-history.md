@@ -70,7 +70,8 @@
 ## 容量と保存負荷の計測（#574）
 
 合成データでの計測手順・結果・月間モデルは [document-history-capacity.md](document-history-capacity.md)。
-1 版は約 95KB の本文で詰めた後 103.9KB、保存直後は dead tuple 込みでその約 2 倍になる（合成・ローカル PostgreSQL の実測、SHA 9cc416c。[document-history-capacity.md](document-history-capacity.md)「結果」と同じ値）。本番の実測ではない。
+1 版は約 95KB の本文で詰めた後 103.9KB、保存直後は dead tuple 込みでその約 2 倍になる（合成・ローカル PostgreSQL の実測。`script/fixture/history-measure-report.json`、SHA 9cc416c）。この 1 版の値は本番の実測ではない。
+上限到達の計算に使う履歴以外の容量 48.4MiB とプラン・PITR 保持窓だけは、2026-10-21 に本番を読み取りだけで測った値（同じ文書の「本番の実測」）。
 
 ## 容量と保持の状態（#564）
 

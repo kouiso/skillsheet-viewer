@@ -4,7 +4,7 @@
  * 以前は project-card-detail.test.ts が `wrap` / `minPresenceAhead` の乗り方を見ていたが、
  * それらは @react-pdf の自動改ページを小突くための指定で、割り付けを自前にした今は存在しない。
  * 同じ意図（見出しだけがページ末尾に残らない・カードの枠が二重に閉じない）を、
- * 葉の `keepWithNext` と `frame` の言葉で見る。描画（renderToBuffer）はしない（CLAUDE.md）。
+ * 葉の `keepWithNext` と `frame` の言葉で見る。描画（renderToBuffer）はしない（AGENTS.md）。
  */
 import { describe, expect, it } from 'vitest';
 

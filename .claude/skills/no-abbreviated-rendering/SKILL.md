@@ -2,6 +2,7 @@
 name: no-abbreviated-rendering
 description: Use when rendering the user's own data into any output a human reads — a PDF, a report, a table, a list, a card, a chart, an export, a summary view. Bans truncating, summarising, or "compact mode"-ing real data to make it fit. Triggers on 他N件 / and N more / ellipsis / top-N only / a compact variant of a row / a character cap on a field / "…" in generated output.
 ---
+<!-- generated-by: script/sync-agent-config.mjs from .agents/skills/no-abbreviated-rendering/SKILL.md. Edit the source, then run the script. -->
 
 # 簡易表記はあかん
 
