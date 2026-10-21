@@ -192,6 +192,31 @@ export const REPORTED_20261014 = {
   bodyBytes: 45 * 1000,
 } as const;
 
+/**
+ * 2026-10-21 13:23 JST（2026-10-20 21:23 PT）の本番 Neon への読み取りだけの実測。本文は読まず、集計値だけ。
+ * project cool-boat-26004396 / branch main（br-empty-forest-aqe1538i）/ PostgreSQL 17.11。
+ * 容量上限 `branch_logical_size_limit` が数えるのは branch 全体の論理容量（neondb 以外の DB も含む）なので、
+ * 履歴以外の容量にはこの値を使う。10/14 の 9.2 MiB（neondb の pg_database_size）は既存報告として別に残す。
+ */
+export const MEASURED_20261021 = {
+  source:
+    '本番 Neon の読取（2026-10-21 13:23 JST、project cool-boat-26004396、branch main、Neon API の describe_project / list_branches と SELECT のみ）',
+  measuredAtJst: '2026-10-21 13:23 JST',
+  measuredAtPt: '2026-10-20 21:23 PT',
+  branchLogicalBytes: 50_782_208,
+  neondbBytes: 9_609_216,
+  limitBytes: 1_073_741_824,
+  plan: 'free_v3',
+  pitrWindowSeconds: 21_600,
+  sheets: 1,
+  blocks: 12,
+  revision: 16,
+  periodLabel: '2026-09-16〜2026-10-21',
+  bodyLogicalBytes: 95_080,
+  bodyStoredBytes: 45_440,
+  historyTablesPresent: 0,
+} as const;
+
 export interface LoadPreset {
   name: 'low' | 'normal' | 'high' | 'reported-pace' | 'reported-heavy';
   load: Sourced<LoadProfile>;
@@ -278,7 +303,8 @@ export const REPORTED_HISTORY_CAP_BYTES = 256 * MIB;
 export const REPORTED_BYTES_PER_VERSION_444 = 47.5 * 1000;
 
 /**
- * Neon の history window（PITR で戻れる期間）の既定値と上限。プランで決まり、この project のプランは確認していない。
+ * Neon の history window（PITR で戻れる期間）の既定値と上限。プランで決まる。
+ * この project は free_v3・history_retention_seconds=21600（6時間）を 2026-10-21 に実測した（MEASURED_20261021）。
  * 出典は NEON_HISTORY_SOURCE。
  */
 export const PITR_WINDOWS: { label: string; days: number }[] = [
@@ -295,10 +321,10 @@ export function storageFromMeasurement(perVersion: MeasuredPerVersion, sha: stri
   return {
     value: {
       bytesPerVersion: perVersion.compactBytesPerVersion,
-      nonHistoryBytes: REPORTED_20261014.databaseBytes,
-      limitBytes: REPORTED_20261014.limitBytes,
+      nonHistoryBytes: MEASURED_20261021.branchLogicalBytes,
+      limitBytes: MEASURED_20261021.limitBytes,
     },
     kind: 'measured',
-    source: `1版の容量は計測 ${sha.slice(0, 7)} の ${perVersion.scenario}（合成・VACUUM FULL 後）。非履歴容量と上限は ${REPORTED_20261014.source}`,
+    source: `1版の容量は計測 ${sha.slice(0, 7)} の ${perVersion.scenario}（合成・VACUUM FULL 後）。非履歴容量（branch の論理容量）と上限は ${MEASURED_20261021.source}`,
   };
 }
