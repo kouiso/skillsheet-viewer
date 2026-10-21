@@ -131,7 +131,9 @@ pnpm exec tsx script/history-capacity-monitor.ts --sample sample-1.json --sample
 
 試しの警告は、variable `HISTORY_MONITOR_DATABASE_LIMIT_MIB` を `1` にして次の定期実行を待つ。exceeded（3）で落ちて Slack と追跡 issue に届いたら、その日付と通知・issue へのリンクを [document-history.md](document-history.md)「適用ゲート」に書き、variable を消す。手動実行の口が無いので、試しも本番と同じ schedule の経路を通る。
 
-届け先: 磯貝さん（Slack と ci-failure の追跡 issue）。試しの警告を送った日と証拠: 未実施（本番の窓で行う）。
+見張りの試しも同じ窓で行う。監視が一度動いた後に `HISTORY_MONITOR_ENABLED` を外し、翌朝 JST 06:00 の `PDF Layout Check` が落ちて Slack と追跡 issue に届いたら、日付とリンクを同じ「適用ゲート」に書き、variable を戻す。
+
+届け先: 磯貝さん（Slack と ci-failure の追跡 issue）。試しの警告と見張りの試しを送った日と証拠: 未実施（本番の窓で行う）。
 
 ## 回帰検証（隔離環境）
 
