@@ -1,0 +1,35 @@
+# gitleaks の既定ルールに、過去のドキュメントに残るダミー値の許可だけを足す。
+# 以前は .gitleaksignore に「コミット SHA:ファイル:ルール:行」の指紋で列挙していたが、
+# 履歴の書き換えやバックアップ用ブランチへの複製で SHA が変わるたびに指紋が外れ、
+# schedule の全履歴スキャンだけが落ちた（#580）。
+# そこで SHA ではなく「ファイル」と「値そのもの」の両方が一致した時だけ許可する。
+# 全体の [allowlist] は条件が OR 固定で、パスだけ一致しても実値を見逃すため使わない。
+# 値は完全一致で書き、同じファイルに別の値が入った時は検知させる。
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "API 設計ドキュメントの例示値"
+condition = "AND"
+paths = ['''^\.claude/skills/api-design/SKILL\.md$''']
+regexes = ['''^sk_live_abc123$''']
+
+[[rules.allowlists]]
+description = "旧認証テスト報告の、末尾を截断した Firebase 公開キー"
+condition = "AND"
+paths = ['''^AUTHENTICATION_TEST_REPORT\.md$''']
+regexes = ['''^AIzaSyCcDeNiirm2MGXw\.\.\.$''']
+
+# 閉じた PR のブランチにも残る、壊れたトークンで 401 を確かめた記録。
+# 全履歴スキャンは --all で全ブランチを見るため、main に無くても許可が要る。
+[[rules]]
+id = "curl-auth-header"
+
+[[rules.allowlists]]
+description = "MCP 認可前の確認記録にある、わざと壊したトークン"
+condition = "AND"
+paths = ['''^doc/mcp-evidence-20261020/probe-authorize\.txt$''']
+regexes = ['''^abc\.def\.ghi$''']
