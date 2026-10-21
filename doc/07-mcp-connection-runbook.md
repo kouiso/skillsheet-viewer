@@ -2,10 +2,12 @@
 
 [06 Remote MCP](06-remote-mcp.md) の設計を前提に、Claude から本番の skillsheet-viewer へ MCP で接続し、
 動作を確かめるための手順をまとめる。**認証設定（Better Auth / OAuth / 環境変数）は変更しない。**
-手順はすべてクライアント側の操作と、読み取りだけの確認で構成する。
+手順はクライアント側の操作と読み取りの確認が中心。書き込みは 2-2 だけで、保存される呼び出しは中身を変えない 1 回、
+続けて保存されない競合確認を 1 回行う。
 
 - 本番 URL: `https://skill-sheet-snowy.vercel.app/api/mcp`
-- 証跡: [mcp-evidence-20261014/](mcp-evidence-20261014/)（main `b45efe7d9` 時点で取得）
+- 証跡: [mcp-evidence-20261014/](mcp-evidence-20261014/)（main `b45efe7d9` 時点）、
+  [mcp-evidence-20261020/](https://github.com/kouiso/skillsheet-viewer/tree/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020)・[mcp-evidence-20261021/](https://github.com/kouiso/skillsheet-viewer/tree/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021)（main `274ec65` 時点。ファイルは `evidence/pr-583` の `be3512b9e61920b48427397c0d90abfdf700cfd5`）
 
 ## 1. 事前確認（トークン不要・読み取りのみ）
 
@@ -24,6 +26,22 @@ curl -s $H/.well-known/oauth-authorization-server/api/auth                      
 
 2026-10-14 の実測: [probe-unauth.txt](mcp-evidence-20261014/probe-unauth.txt)（すべて期待値どおり）。
 
+### 1-1. 認可の入口（ログイン前まで）
+
+ログインせずに、実クライアントの登録が通るかと、不正な要求が止まるかを確かめられる。
+クライアント登録は CIMD（クライアントが公開するメタデータ URL を `client_id` にする方式）なので、
+`client_id` には各クライアントの URL を入れる。
+
+| 要求 | 期待値 |
+|------|--------|
+| Claude Code（`https://claude.ai/oauth/claude-code-client-metadata`、`http://localhost:<port>/callback`） | 302 で `/login` へ |
+| claude.ai（`https://claude.ai/oauth/mcp-oauth-client-metadata`、`https://claude.ai/api/mcp/auth_callback`） | 302 で `/login` へ |
+| 無いスコープ（`skillsheet:admin`） | 302 で redirect_uri へ `error=invalid_scope` |
+| クライアントの登録に無い redirect_uri | 302 で `/api/auth/error?error=invalid_redirect` |
+| URL でない `client_id` | 302 で `/api/auth/error?error=invalid_client` |
+
+2026-10-20 の実測: [probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)（すべて期待値どおり）。
+
 ## 2. Claude Code から接続する
 
 ```bash
@@ -35,17 +53,42 @@ claude mcp list        # 認可前は「! Needs authentication」
 
 認可前の実測: [claude-code-connect.txt](mcp-evidence-20261014/claude-code-connect.txt)。
 
-続けて Claude Code の対話画面で `/mcp` → `skillsheet` → **Authenticate** を選ぶ。
+続けて端末で `claude mcp login skillsheet` を実行する（対話画面の `/mcp` → `skillsheet` → **Authenticate** でも同じ）。
 
 1. ブラウザが開き、`/api/auth/oauth2/authorize` から `/login` に進む
 2. **オーナーのアカウントで**ログインする（オーナー以外はトークン発行後も 403）
-3. `/consent` でスコープが `skillsheet:read` のみであることを確かめて許可する
-4. Claude Code に戻り、`claude mcp list` が `✔ Connected` になる
+3. `/consent` に「スキルシートの閲覧」と「スキルシートの編集」の 2 行が出るので、許可する
+   - Claude Code は 401 応答の `scope="skillsheet:read skillsheet:write"` をそのまま要求する
+     （[claude-code-login.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/claude-code-login.txt)）。同意画面はスコープを選び分けられない
+4. 端末に戻り、`claude mcp list` が `✔ Connected` になる
 
-接続後の確認（読み取りのみ。書き込みツールは本番データを変えるので、確認目的では呼ばない）:
+2026-10-21 の実測: [claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)（`claude mcp login` → Connected → 切断まで）。
+ただし手順 1〜3 の画面は通していない。ログインは `POST /api/auth/sign-in/email`、同意は `POST /api/auth/oauth2/consent`（accept=true）を
+HTTP で直接送った。`/login` のフォームと `/consent` の画面（`authClient.oauth2.consent` の呼び出しと、返った URL への移動）は未確認で、
+自動テストも `/consent` には無い。最初に通るのは、オーナーが「3. claude.ai Custom Connector から接続する」の手順 3 を行うとき。
+
+### 2-1. 接続後の読み取り
+
+手順は、接続した Claude Code に次を頼む。
 
 - 「skillsheet の list_sheets を呼んで」→ シート一覧が返る
 - 「get_sheet でそのシートを取って」→ ブロックと `revision` が返る
+
+2026-10-21 の実測 [tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) は、Claude Code と同じ client_id（`https://claude.ai/oauth/claude-code-client-metadata`）のトークンで `/api/mcp` の JSON-RPC を直接呼んだ記録である。直接呼んだ範囲は `list_sheets` を含む 8 ツールすべてで、書き込みは保存されない入力である。
+
+### 2-2. 書き込みの確認（中身を変えない 1 回）
+
+書き込みの経路を通すが、シートの中身は変えない。`update_stats` に今と同じ値を渡す。
+本番の版番号が進むので、**オーナーの承認を得てから**行う（2026-10-21 時点で未実施）。
+
+1. `get_sheet` の stats ブロックから、0 番目の `label` と `value` と、シートの `revision` を控える
+2. 「update_stats を index 0、expectedLabel と fields.value は控えた値のまま、expectedRevision は控えた revision で呼んで」
+   - 期待値: 成功し、`changes` は空、`revision` は新しい値になる（中身は同じで版だけ進む）。この新しい `revision` を控える
+3. 同じ呼び出しを、**手順 1 で控えた古い revision のまま**もう一度呼ぶ
+   - 期待値: `CONFLICT` の isError で、保存されない
+4. `get_sheet` で、stats の値が手順 1 と同じで、`revision` が手順 2 で控えた値のままであることを確かめる
+
+編集タブを開いたまま手順 2 を行うと、タブ側の次の保存が競合になる（黙って上書きされない）。
 
 ## 3. claude.ai Custom Connector から接続する
 
@@ -53,6 +96,10 @@ claude mcp list        # 認可前は「! Needs authentication」
 2. URL に `https://skill-sheet-snowy.vercel.app/api/mcp` を入れる
 3. OAuth 同意画面でオーナーとしてログインし、許可する
 4. 新しい会話で「list_sheets を呼んで」と頼み、一覧が返ることを確かめる
+
+サーバー側（claude.ai の client_id でログイン・同意すると、code が claude.ai の callback へ返る）は、ログインと同意を HTTP で送って
+2026-10-21 に確認した: [claude-ai-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-ai-oauth.txt)。
+残りはオーナーの claude.ai アカウントでの 1〜4 だけ。手順 3 が `/login` と `/consent` の画面を通す最初の確認になる。
 
 ## 4. MCP Inspector で全ツールを確かめる
 
@@ -65,9 +112,17 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 
 ## 5. 失効・切断
 
-- クライアント側の削除: `claude mcp remove skillsheet -s local`、claude.ai はコネクタを削除
-- サーバー側の即時失効・MCP 全体の停止は [06 の「トークン失効」「ロールバック」](06-remote-mcp.md#トークン失効)を参照。
-  **どちらも本番の DB・環境変数の変更になるので、オーナーの承認を得てから行う。**
+- クライアント側の削除: `claude mcp logout skillsheet` で保存済みのトークンを消し、
+  `claude mcp remove skillsheet -s local` で登録を外す。claude.ai はコネクタを削除
+- アクセストークンは JWT で、`/api/mcp` のトークン検証は署名・iss・aud・exp だけを見る（OAuth の表で失効を確かめない）。
+  クライアント側で消しても、手元に写しがあれば期限まで通る。期限は発行から 1 時間
+  （`@better-auth/oauth-provider` の既定 `accessTokenExpiresIn: 3600`。アプリ側で上書きしていない）
+- 失効の要求（`POST /api/auth/oauth2/revoke`）は JWT を受け付けない。400 `unsupported_token_type` が返り、
+  同じトークンはそのまま通る（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の C）
+- refresh_token は発行されない。1 時間たつとクライアントは `claude mcp login` からやり直しになる
+- 今すぐ全部のトークンを止めたいときは [06 の「ロールバック」](06-remote-mcp.md#ロールバック)（`MCP_ENABLED=false` を明示して再デプロイ）。
+  変数を消すだけでは本番は有効のまま。
+  **本番の環境変数の変更になるので、オーナーの承認を得てから行う。**
 
 ## 6. 証跡の残し方
 
@@ -75,12 +130,18 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 - トークン、Cookie、`set-cookie`、`x-vercel-id` などはファイルに残さない
 - 認可前（Needs authentication）と認可後（Connected、`list_sheets` の結果）をそろえる
 
-## 現状（2026-10-14）
+## 現状（2026-10-21）
 
 | 項目 | 状態 |
 |------|------|
-| 公開 endpoint（401 / PRM / AS metadata） | 確認済み（probe-unauth.txt） |
-| Claude Code への登録 | 確認済み（Needs authentication まで） |
-| Claude Code の OAuth 認可 → Connected | **未実施**: オーナーのブラウザログインが必要 |
-| claude.ai Custom Connector | **未実施**: オーナーの claude.ai ログインが必要 |
-| 失効・Fluid compute の確認 | 未実施（本番設定に触れるためオーナー承認待ち） |
+| 公開 endpoint（401 / PRM / AS metadata） | 確認済み（probe-unauth.txt、[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
+| 認可の入口（Claude Code・claude.ai のクライアント登録、無効スコープ・redirect・client の拒否） | 確認済み（[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
+| Fluid compute と実行ログ | 確認済み: Fluid 有効、既定の上限 300 秒、iad1。確認中の要求はすべて info で error 0 件（[vercel-runtime.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/vercel-runtime.txt)） |
+| Claude Code の OAuth 認可 → Connected → 切断 | 確認済み。ただしログインと同意は画面を使わず HTTP で送った（[claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)） |
+| `/login` → `/consent` の画面での認可（フォーム入力、同意画面の許可ボタン、callback への移動） | **未実施**: 画面はまだ一度も通していない。オーナーが 3 章の手順 3 を行うと通る |
+| 全 8 ツールの呼び出し（読み取りは値を返す、書き込みは競合・対象なし・入力不正で止まる） | 確認済み。Claude Code と同じ client_id のトークンで JSON-RPC を直接呼んだ（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt)。本番の中身は前後で同じ） |
+| 無効スコープ（閲覧だけのトークンで書き込み → 403） | 確認済み（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の A） |
+| 競合（古い revision → CONFLICT） | 確認済み（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の B） |
+| 失効 | 確認済み: JWT はサーバー側で失効できない（400）。期限前に止める手段はロールバック（`MCP_ENABLED=false` で再デプロイ）だけ（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の C） |
+| claude.ai Custom Connector | サーバー側は確認済み。ログインと同意は HTTP で送った（[claude-ai-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-ai-oauth.txt)）。claude.ai の画面での追加は**未実施**: オーナーの claude.ai アカウントの操作（手順 3） |
+| 2-2 の中身を変えない書き込み（成功して版だけ進む） | **未実施**: 本番の版番号が進むため、オーナーの承認が先 |

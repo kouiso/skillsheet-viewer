@@ -18,7 +18,7 @@ Claude Code / claude.ai Custom Connector から、OAuth 2.1 で認証・認可�
 MCP クライアント（Claude Code / claude.ai / MCP Inspector）
   │  POST /api/mcp（JSON-RPC, Bearer token）
   ▼
-app/api/mcp/route.ts ── MCP_ENABLED が無い環境では 404
+app/api/mcp/route.ts ── MCP が無効な環境では 404（MCP_ENABLED=false、または本番以外で未設定）
   ▼
 requireMcpAuth（@better-auth/mcp）
   │  JWT 署名検証（/api/auth/jwks）・iss・aud・exp
@@ -139,16 +139,21 @@ Authentication の OAuth フローを通して全ツールを呼ぶ。
 
 ### トークン失効
 
-Better Auth の OAuth テーブル（`oauth_access_token` / `oauth_refresh_token`）の該当行を
-削除または `revoked` を設定すれば、以後の検証は失敗し 401 になる。
-（revoked 判定はトークン確認時に DB を参照する経路で有効。JWT のみの検証経路では
-署名・iss・aud・exp が見られるため、即時失効させたい場合は行削除が確実。）
+アクセストークンは JWT で、`/api/mcp` のトークン検証（`requireMcpAuth`、`src/server/mcp/handler.ts`）は署名・iss・aud・exp だけを見る。
+このとき `oauth_access_token` などの OAuth の表は引かない（ツールの実行はその後でシートの DB を読み書きする）。
+そのため OAuth の表の行を消しても、`POST /api/auth/oauth2/revoke` を呼んでも、発行済みのトークンは期限の 1 時間まで通る。
+本番で revoke は 400 `unsupported_token_type`（JWT は失効できない）を返し、同じトークンで `tools/list` が 200 のままだった
+（[07 の証跡](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の C、2026-10-21）。refresh_token は発行していない。
+期限より前に止めたいときは、下の「ロールバック」で `/api/mcp` ごと閉じる。
 
 ### ロールバック
 
-`MCP_ENABLED` を外す（または `'true'` 以外にする）だけで、`/api/mcp` と
-`.well-known` 経路は 404 に戻る。通常画面・tRPC・閲覧ゲートへの影響は無い。
-発行済みトークンは検証経路ごと塞がれるため追加作業は不要。
+本番では `MCP_ENABLED=false` を**明示して**再デプロイする。`/api/mcp` と `.well-known` 経路は 404 に戻る。
+通常画面・tRPC・閲覧ゲートへの影響は無い。発行済みトークンは検証経路ごと塞がれるため追加作業は不要。
+
+変数を消すだけ、または `'false'` 以外の値にするだけでは止まらない。`isMcpEnabled()`（`src/lib/mcp-config.ts`）は
+`'true'` と `'false'` 以外を未設定と同じに扱い、Vercel 本番（`VERCEL_ENV=production`）では有効と判定する。
+Vercel の環境変数は再デプロイするまで動いている関数に反映されない。
 
 ## 設計上の注意
 
@@ -206,9 +211,8 @@ JWT は `/api/auth/jwks` で生成されたローカル DB の署名鍵を使い
 - Vercel の実行ログ（production、直近 1 時間）で `/api/mcp` の 200・202・401・403・405 が記録され、
   error・warning・fatal は 0 件だった
 
-## 未検証事項（SBI4 の残作業）
+## 確認状況
 
-- ブラウザ経由の OAuth 認可フロー（`/login` → `/consent` → code → token）の実測
-- claude.ai Custom Connector の実接続（オーナーの claude.ai ログインが必要）
-- 書き込みツールで実際に保存する経路の本番実測と、トークン失効の実測
-- Vercel 上での Fluid compute の設定確認
+残りと確認済みの範囲は [07 の「現状」](07-mcp-connection-runbook.md#現状2026-10-21) に一本化した。
+Fluid compute は 2026-10-20 に有効を確認済み。
+ブラウザで `/login` → `/consent` を通す認可は未実施（本番の認可はログインと同意を HTTP で送って確かめた）。
