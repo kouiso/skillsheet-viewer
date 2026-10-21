@@ -133,9 +133,11 @@ save_script() { # <sheet name> <first payload iteration> <saves>
 admin_value() { "${admin[@]}" -At -c "$1"; }
 size_report() { PGOPTIONS='-c default_transaction_read_only=on' "${admin[@]}" -At -f "$repo_dir/script/sql/history-size-report.sql"; }
 
-run_scenario() { # <scenario> <order> <sheet name>:<first payload iteration>:<saves>...（1 つが writer 1 本）
-  local scenario=$1 order=$2
-  shift 2
+# mode: exclusive は writer ごとに別シートで、保存は全件 OK・SQL エラー 0 件でなければ止める（#584 P2）。
+#       contended は同じシートを取り合うので CONFLICT は許すが、SQL エラーと OK・CONFLICT 以外の結果は止める。
+run_scenario() { # <scenario> <order> <exclusive|contended> <sheet name>:<first payload iteration>:<saves>...（1 つが writer 1 本）
+  local scenario=$1 order=$2 mode=$3
+  shift 3
   local wal_before wal_after waits_before waits_after size_before size_after_write size_after_compact pids=() spec name first saves writer
   local sheets=()
   wal_before="$(admin_value 'SELECT pg_current_wal_lsn()')"
@@ -150,12 +152,24 @@ run_scenario() { # <scenario> <order> <sheet name>:<first payload iteration>:<sa
   done
   local start_ms end_ms
   start_ms="$(admin_value "SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)")"
+  local writer_flags=()
+  # exclusive は最初の SQL エラーで psql を止め、終了コードで気づく。contended は CONFLICT 後の読み直しを続けるため付けず、
+  # SQL の ERROR は stderr の行数で数えて下で止める。
+  [[ "$mode" == exclusive ]] && writer_flags=(-v ON_ERROR_STOP=1)
   for ((writer = 1; writer <= $#; writer++)); do
-    # 失敗も数えるため ON_ERROR_STOP を付けない。結果は status 行、SQL の ERROR は stderr の行数で数える。
-    "${runtime[@]}" -At -f "$run_dir/$scenario-$writer.sql" >"$run_dir/$scenario-$writer.out" 2>"$run_dir/$scenario-$writer.err" &
+    "${runtime[@]}" "${writer_flags[@]}" -At -f "$run_dir/$scenario-$writer.sql" >"$run_dir/$scenario-$writer.out" 2>"$run_dir/$scenario-$writer.err" &
     pids+=("$!")
   done
-  for pid in "${pids[@]}"; do wait "$pid"; done
+  local status writer_failed=0
+  for ((writer = 1; writer <= $#; writer++)); do
+    status=0
+    wait "${pids[writer - 1]}" || status=$?
+    if (( status != 0 )); then
+      printf '%s writer %s: psql が終了コード %s で止まった（%s）\n' "$scenario" "$writer" "$status" "$run_dir/$scenario-$writer.err" >&2
+      writer_failed=1
+    fi
+  done
+  if (( writer_failed )); then exit 1; fi
   end_ms="$(admin_value "SELECT floor(extract(epoch FROM clock_timestamp()) * 1000)")"
   wal_after="$(admin_value 'SELECT pg_current_wal_lsn()')"
   waits_after="$(grep -c 'still waiting for' "$run_dir/server.log" || true)"
@@ -182,6 +196,19 @@ run_scenario() { # <scenario> <order> <sheet name>:<first payload iteration>:<sa
     errors=$((errors + $(grep -c 'ERROR:' "$run_dir/$scenario-$writer.err" || true)))
     admin_value "INSERT INTO measure_fixture.accepted VALUES ('$name', '$scenario', $writer, $writer_accepted)" >/dev/null
   done
+  # 保存が全件失敗しても版数の照合は通るので、ここで結果そのものを確かめる。
+  if (( errors != 0 )); then
+    printf '%s: SQL エラーが %s 件ある\n' "$scenario" "$errors" >&2
+    exit 1
+  fi
+  if [[ "$mode" == exclusive ]] && (( accepted != attempts )); then
+    printf '%s: 競合しないシナリオで保存 %s 件中 %s 件しか成功していない\n' "$scenario" "$attempts" "$accepted" >&2
+    exit 1
+  fi
+  if (( accepted + conflicts != attempts )); then
+    printf '%s: OK でも CONFLICT でもない結果が %s 件ある\n' "$scenario" "$((attempts - accepted - conflicts))" >&2
+    exit 1
+  fi
   "${admin[@]}" -q \
     -v scenario="$scenario" -v ord="$order" -v sheets="${sheets[*]}" -v writers="$#" \
     -v attempts="$attempts" -v accepted="$accepted" -v conflicts="$conflicts" -v errors="$errors" \
@@ -203,11 +230,11 @@ SQL
   printf '%s: 保存 %s 件中 %s 件成功、CONFLICT %s 件、エラー %s 件、ロック待ち %s 回\n' "$scenario" "$attempts" "$accepted" "$conflicts" "$errors" "$((waits_after - waits_before))"
 }
 
-run_scenario burst-small 1 "burst-small:1:$burst_saves"
-run_scenario burst-large 2 "burst-large:1:$burst_saves"
-run_scenario normal-parallel 3 "normal-small:1:$normal_saves" "normal-large:1:$normal_saves"
+run_scenario burst-small 1 exclusive "burst-small:1:$burst_saves"
+run_scenario burst-large 2 exclusive "burst-large:1:$burst_saves"
+run_scenario normal-parallel 3 exclusive "normal-small:1:$normal_saves" "normal-large:1:$normal_saves"
 # 同じシートを 2 writer が同時に保存する。writer 2 は本文を後半の iteration から取る。
-run_scenario same-sheet-contention 4 "contended:1:$normal_saves" "contended:$((normal_saves + 1)):$normal_saves"
+run_scenario same-sheet-contention 4 contended "contended:1:$normal_saves" "contended:$((normal_saves + 1)):$normal_saves"
 "${admin[@]}" -q -c "\\copy measure_fixture.latency FROM '$run_dir/latency.tsv'"
 
 # 合成DB試験: シートごとに 版数 = 作成1 + 結果が OK だった保存数、最新 revision = OK の数。
