@@ -58,9 +58,11 @@ function runCollector(options: { psqlFails?: boolean; logical?: string; env?: Re
     `printf '%s\\n' "$*" > "${dir}/curl-args"; cat > "${dir}/curl-config"; printf '%s\\n' '{"branch":{"logical_size":${options.logical ?? '50782208'}}}'`,
   );
   const out = join(dir, 'sample.json');
-  const result = spawnSync('/bin/bash', ['--noprofile', '--norc', collector, out], {
+  // bash 経由ではなく workflow と同じく直接起動する。実行権限が落ちたら（exit 126）ここで落ちる。
+  const result = spawnSync(collector, [out], {
     env: {
       PATH: `${bin}:${dirname(jqPath)}:/usr/bin:/bin`,
+      NODE_ENV: 'test',
       PGSERVICEFILE: join(dir, 'pg_service.conf'),
       HISTORY_MONITOR_PG_SERVICE: 'history-monitor',
       NEON_API_KEY: API_KEY,
