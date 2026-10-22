@@ -21,6 +21,7 @@ on:
       - "Semgrep"
       - "TruffleHog Secret Scan"
       - "Deploy Smoke"
+      - "History Capacity Monitor"
     types: [completed]
     branches: [main, develop]
 

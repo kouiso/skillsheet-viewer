@@ -55,6 +55,8 @@ PY
     ./script/verify-history-retention.sh regression
     # なぜ: runtime role の権限設定（再実行・拒否・rollback・別 cluster 復旧）を実際の PostgreSQL で確かめる試験を CI でも落とす（#595）。
     bash ./script/verify-document-db.sh
+    # なぜ: 読取・書込境界と版履歴の SQL 試験（既定シート不正時に作成・削除を拒否する回帰 #596 を含む）を CI でも落とす。
+    bash ./script/verify-document-history.sh
     ;;
   playwright)
     require_isolated_bridge
