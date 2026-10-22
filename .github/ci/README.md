@@ -12,7 +12,7 @@ lint が `&&` だけの鎖で、その1段が `./script/check-naming.sh` の時�
 Playwrightが失敗してもheadlessを実行し、最初の失敗コードを返す。
 準備済みブラウザ検査の直接入口は既存の隔離preloadを必要とする。
 
-Node 22.21.1、pnpm 10.33.0、Bash、Python 3と固定依存が必要となる。
+Node 22.23.4、pnpm 10.33.0、Bash、Python 3と固定依存が必要となる。
 PDFの検査ではクラウドと同じPDFシステムツールが必要となる。
 E2Eでは既存の隔離環境・認証用の設定とChromiumを使う。
 依存やブラウザの導入、DBの実起動を契約テストは行わない。

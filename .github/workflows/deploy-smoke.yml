@@ -35,7 +35,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           # mise.toml の TOML は node-version-file で解釈できないため手動同期（ci.yml と同じ）
-          node-version: '22.21.1'
+          node-version: '22.23.4'
 
       - name: Verify deployed CSS tokens
         env:
