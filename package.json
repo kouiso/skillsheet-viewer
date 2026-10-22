@@ -8,10 +8,10 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "volta": {
-    "node": "22.23.4"
+    "node": "24.22.1"
   },
   "scripts": {
     "dev": "next dev",
