@@ -454,6 +454,8 @@ test('17. every project prints both 概要 and 担当業務 with the duties body
 
   // real-volume-demo の duties だけが持つ行。概要の文には無いので、担当業務の本文が出た案件の数になる。
   expect(count('関連システムとの連携調整')).toBe(REAL_VOLUME_PROJECT_COUNT);
+  // 概要の固有成行も同じ数だけ出る。どちらかが欠けると件数が割れる。
+  expect(count('要件整理から実装・運用まで一気通貫で対応')).toBe(REAL_VOLUME_PROJECT_COUNT);
   expect(count('担当業務')).toBeGreaterThanOrEqual(REAL_VOLUME_PROJECT_COUNT);
   expect(count('概要')).toBeGreaterThanOrEqual(REAL_VOLUME_PROJECT_COUNT);
 });
