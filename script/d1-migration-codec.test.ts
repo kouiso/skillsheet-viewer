@@ -7,12 +7,10 @@ import {
   type MigrationKind,
   type MigrationTable,
 } from './d1-migration-codec';
+import { migrationTableSchema } from './d1-migration-snapshot';
 import fixture from './fixture/d1-migration.json';
 
-const history: MigrationTable = {
-  ...fixture.tables[0].table,
-  columns: fixture.tables[0].table.columns.map((column) => ({ ...column, kind: column.kind as MigrationKind })),
-};
+const history: MigrationTable = migrationTableSchema.parse(fixture.tables[0].table);
 const original = fixture.tables[0].rows[0];
 function one(kind: MigrationKind, nullable = false): MigrationTable {
   return {
@@ -203,10 +201,7 @@ describe('Postgres → D1 移行用のオフライン境界', () => {
 
   it('合成の履歴・削除再送防止・principals・旧migration台帳をSQLite TEXTへ往復して照合する', () => {
     for (const entry of fixture.tables) {
-      const table: MigrationTable = {
-        ...entry.table,
-        columns: entry.table.columns.map((column) => ({ ...column, kind: column.kind as MigrationKind })),
-      };
+      const table: MigrationTable = migrationTableSchema.parse(entry.table);
       const rows = entry.rows.map((row) => encodeMigrationRow(table, row));
       // D1 の実行試験ではなく、SQLite の型 affinity で64bit文字列が数値へ戻らないことの独立検証。
       const restored: unknown[] = JSON.parse(
