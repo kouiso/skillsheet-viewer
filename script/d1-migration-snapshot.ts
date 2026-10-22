@@ -37,16 +37,19 @@ const tableSchema = z.strictObject({
 });
 const ledgerSchema = z.strictObject({
   origin: originSchema,
-  tables: z
-    .array(
-      z.strictObject({
-        table: tableSchema,
-        disposition: z.enum(['migrate', 'preserve']),
-        state: z.enum(['present', 'not-installed']),
-      }),
-    )
-    .min(1),
+  // 表が0件と確定したDBも来歴ごと保持する。欠落の判定は上位の全DB/全表棚卸しと突き合わせる。
+  tables: z.array(
+    z.strictObject({
+      table: tableSchema,
+      disposition: z.enum(['migrate', 'preserve']),
+      state: z.enum(['present', 'not-installed']),
+    }),
+  ),
 });
+
+export const migrationLedgerSchema = ledgerSchema;
+export const migrationTableSchema = tableSchema;
+
 const snapshotTableSchema = z.discriminatedUnion('state', [
   z.strictObject({ name: tableName, state: z.literal('present'), rows: z.array(z.unknown()) }),
   z.strictObject({ name: tableName, state: z.literal('not-installed') }),
