@@ -37,7 +37,7 @@
       "sha256": "ea104fef023d6b62168770f275150614d36c297bf12bb768175e4398e84bad75"
     },
     {
-      "file": "workers-viewer-1440.png",
+      "file": "worker-viewer-1440.png",
       "runtime": "workers",
       "page": "viewer",
       "viewportWidth": 1440,
@@ -45,7 +45,7 @@
       "sha256": "6160bf4a94ff64942e139854e4db3caefd4afb014e1647b086fb06501115f057"
     },
     {
-      "file": "workers-viewer-390.png",
+      "file": "worker-viewer-390.png",
       "runtime": "workers",
       "page": "viewer",
       "viewportWidth": 390,
@@ -53,7 +53,7 @@
       "sha256": "d6c28032f81a6852ba541e8d88ca5866ad59cb41ce2400c196ad1d4f593e2262"
     },
     {
-      "file": "workers-builder-1440.png",
+      "file": "worker-builder-1440.png",
       "runtime": "workers",
       "page": "builder",
       "viewportWidth": 1440,
@@ -61,7 +61,7 @@
       "sha256": "813f6db998f571261ad7e7f4509a8c4d425a6cb75c4f62abaa2851637e24c332"
     },
     {
-      "file": "workers-builder-390.png",
+      "file": "worker-builder-390.png",
       "runtime": "workers",
       "page": "builder",
       "viewportWidth": 390,

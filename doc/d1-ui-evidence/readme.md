@@ -8,8 +8,8 @@
 
 | 画面 | Next PC 1440px | Next 390px | Workers PC 1440px | Workers 390px |
 | --- | --- | --- | --- | --- |
-| 閲覧 | [画像](next-viewer-1440.png) | [画像](next-viewer-390.png) | [画像](workers-viewer-1440.png) | [画像](workers-viewer-390.png) |
-| Builder | [画像](next-builder-1440.png) | [画像](next-builder-390.png) | [画像](workers-builder-1440.png) | [画像](workers-builder-390.png) |
+| 閲覧 | [画像](next-viewer-1440.png) | [画像](next-viewer-390.png) | [画像](worker-viewer-1440.png) | [画像](worker-viewer-390.png) |
+| Builder | [画像](next-builder-1440.png) | [画像](next-builder-390.png) | [画像](worker-builder-1440.png) | [画像](worker-builder-390.png) |
 
 8画面でIBM Plex Sans JP/Monoのloaded、横スクロールなし、ブラウザ例外なし、外部通信なしを確認した。同一画面のruntime間4組はピクセル一致した。ファイルごとのSHA-256と検証範囲は[検証記録](verification.json)にある。
 
