@@ -26,7 +26,7 @@ GitHub Private Repository（Markdown シード元）
 ## 前提
 
 - Machine: macOS または Windows WSL2
-- Node.js: v22.x（`mise` で固定。`mise.toml` = Node 22.21.1 / pnpm 10.33.0）
+- Node.js: v22.x（`mise` で固定。`mise.toml` = Node 22.23.4 / pnpm 10.33.0）
 - パッケージマネージャ: pnpm（mise が導入）
 - **Neon Postgres が必須**（`DATABASE_URL`）。ローカルでも接続先の Postgres が必要です
 
