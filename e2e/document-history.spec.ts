@@ -198,10 +198,17 @@ test('版の履歴の「会社から探す」を新しいタブで開いても�
       expect(new URL(tab.url()).searchParams.get('sheet')).toBe(sheetId);
       // WHY: 新しいタブはアプリ起動とシート取得をまるごとやり直す。
       // 既定の expect 5 秒では CI 負荷下で切替ボタンが描画前に切られる。
-      // CI では同 URL の再ナビゲーションが networkidle 後も残ることがあり、15 秒でも足りない。
-      await expect(tab.getByRole('button', { name: /^シートを切り替える:/ })).toHaveAccessibleName(expectedSwitcher, {
-        timeout: 30_000,
-      });
+      // ポップアップの初回遷移は Playwright が pending 扱いのまま commit を取りこぼす
+      // ことがあり、描画済みでも expect が navigation 待ちで 30 秒止まる。
+      // DOM ポーリングなら遷移の帳簿に影響されずスイッチャー名を確認できる。
+      await tab.waitForFunction(
+        (expected) =>
+          [...document.querySelectorAll('button[aria-label^="シートを切り替える:"]')].some(
+            (button) => button.getAttribute('aria-label') === expected,
+          ),
+        expectedSwitcher,
+        { timeout: 30_000 },
+      );
     } finally {
       await tab.close();
     }
