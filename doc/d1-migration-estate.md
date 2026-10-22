@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | Neon project | `cool-boat-26004396` | このproject以外を自動探索・採用しない |
 | main branch | `br-empty-forest-aqe1538i` | 他branchと行を混ぜない |
-| main内のDB | `neondb`、`devin_repro_e2e`、`skillsheet_e2e`の3個 | 本番対象はmain/neondb。別E2E DBを本番へ統合しない |
+| main内のDB | `neondb`、`devin_repro_e2e`、`skillsheet_e2e`の3個 | 現行Vercelが実際に使うsource branch/databaseは未確定。main/neondbを本番と断定せず、別E2E DBを本番へ統合しない |
 | project全体 | 10branch: main 1、ready検証 1、archived 8 | main以外の正確なbranch IDと各branch内のDB一覧はこの担当に未共有。mainの3DBが全branchにも存在するとは推測しない |
 | main/neondb | 19表。`skillsheet_private.principals`、`drizzle.__drizzle_migrations`を含む | 全19表の名前・列・制約の一覧は未確定。コードのpublic20表候補から19表を逆算しない |
 | E2E DB | `document_versions`、`deleted_documents`が存在し、`skillsheet_e2e`には`drive_destination`も存在 | DBごとに表集合が異なる。他DBの存在で補完しない |
