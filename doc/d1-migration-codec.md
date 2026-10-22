@@ -7,6 +7,7 @@ Vercel を維持し、Workers と同じ D1 を正本にする [#598](https://git
 ## 実装と入口の契約
 
 - `script/d1-migration-codec.ts`: `encodeMigrationRow(table, row)` が値を D1 の TEXT/INTEGER/NULL 向けに変換する。`compareMigrationTable(table, postgresRows, d1Rows)` は同じ表の件数、厳密な主キー集合、型正規化後の全行を照合する。行順は問わない。戻り値は一致判定、件数、差分件数、SHA-256だけで、本文・PK・owner・認証情報を含めない。checksumも本番由来ならアクセスを制限し、公開CI成果物に出さない。
+- `decodeMigrationRow(table, d1Row)` はD1の読戻し値を検証してPG export形式へ戻す。booleanを0/1からfalse/trueへ戻し、64bit・μs・JSON/配列の生文字列・NULLは保持する。これは逆移送用の行変換であり、実DBへの逆importや切替後データの復旧を行うものではない。
 - `script/d1-migration-json.ts`: JSONを数値トークンのまま読み、オブジェクトのキー順・数値表記を正規化する。JSON.parseによるnumber化を避け、巨大整数・小数・未知プロパティを保持する。配列順、欠落、null、文字列の内容は変えない。重複キーは拒否する。
 - `script/fixture/d1-migration.json`: 合成データのみ。履歴全列と複合キー、削除復元後も残る再送防止台帳、空になった削除台帳、public外のprincipalsと旧migration台帳の例。全表・全データ所在の台帳ではない。
 

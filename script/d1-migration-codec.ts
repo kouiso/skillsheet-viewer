@@ -25,6 +25,7 @@ export interface MigrationTable {
 }
 export type MigrationCell = string | number | null;
 export type MigrationRow = Record<string, MigrationCell>;
+export type MigrationExportRow = Record<string, MigrationCell | boolean>;
 type Source = 'postgres' | 'd1';
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const kinds = new Set<MigrationKind>([
@@ -153,6 +154,17 @@ export function encodeMigrationRow(table: MigrationTable, row: unknown, source: 
   )
     fail('COLUMN_MISMATCH');
   return Object.fromEntries(table.columns.map((column) => [column.name, cell(column, row[column.name], source)]));
+}
+
+/** D1読戻し値をPG export契約へ戻す。逆移送の準備部品で、PGへの書込や旧snapshot復旧は行わない。 */
+export function decodeMigrationRow(table: MigrationTable, row: unknown): MigrationExportRow {
+  const normalized = encodeMigrationRow(table, row, 'd1');
+  return Object.fromEntries(
+    table.columns.map((column) => {
+      const value = normalized[column.name];
+      return [column.name, column.kind === 'boolean' && value !== null ? value === 1 : value];
+    }),
+  );
 }
 
 function normalizedTable(table: MigrationTable, rows: readonly unknown[], source: Source) {

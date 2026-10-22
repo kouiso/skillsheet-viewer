@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   compareMigrationTable,
+  decodeMigrationRow,
   encodeMigrationRow,
   type MigrationKind,
   type MigrationTable,
@@ -116,6 +117,26 @@ describe('Postgres → D1 移行用のオフライン境界', () => {
     expect(() => encodeMigrationRow(table, { ...raw[1], boolean: 0 })).toThrow('MIGRATION_INVALID_BOOLEAN');
     expect(() => encodeMigrationRow(table, raw[1], 'd1')).toThrow('MIGRATION_INVALID_BOOLEAN');
     expect(compareMigrationTable(table, [raw[0]], [{ ...encoded[0], json: 'null' }]).changedCount).toBe(1);
+    expect(encoded.map((row) => decodeMigrationRow(table, row))).toEqual([
+      raw[0],
+      raw[1],
+      { ...raw[2], array: '[null,"","read","read"]' },
+    ]);
+  });
+
+  it('逆移送用の行にも64bit・μs・未知JSONを保持し、D1の不正な型を黙って直さない', () => {
+    const target = encodeMigrationRow(history, original);
+    const restored = decodeMigrationRow(history, target);
+    expect(restored.revision).toBe('9007199254740993');
+    expect(restored.transaction_id).toBe('9223372036854775807');
+    expect(restored.recorded_at).toBe('2026-10-22T11:30:40.123456Z');
+    expect(restored.blocks).toContain('9007199254740993');
+    expect(compareMigrationTable(history, [restored], [target]).matches).toBe(true);
+    expect(() => decodeMigrationRow(history, { ...target, revision: 9007199254740992 })).toThrow(
+      'MIGRATION_EXPECTED_RAW_TEXT',
+    );
+    expect(() => decodeMigrationRow(one('boolean'), { value: '1' })).toThrow('MIGRATION_INVALID_BOOLEAN');
+    expect(() => decodeMigrationRow(one('boolean'), { value: 2 })).toThrow('MIGRATION_INVALID_BOOLEAN');
   });
 
   it.each([
@@ -213,6 +234,8 @@ print(json.dumps([dict(row) for row in db.execute('SELECT * FROM fixture')]))
       const result = compareMigrationTable(table, entry.rows, restored);
       expect(result.matches, table.name).toBe(true);
       expect(result.sourceChecksum).toBe(result.targetChecksum);
+      const rollbackRows = restored.map((row) => decodeMigrationRow(table, row));
+      expect(compareMigrationTable(table, rollbackRows, rows).matches, table.name).toBe(true);
     }
   });
 });
