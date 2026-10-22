@@ -43,12 +43,14 @@ export function createD1Transport(options: D1TransportOptions) {
         headers,
         body: JSON.stringify(request),
         cache: 'no-store',
-        redirect: 'error',
+        // workerdはredirect:errorを実装しない。転送を追わず、下で3xxを結果不明として止める。
+        redirect: 'manual',
         signal: AbortSignal.timeout(10_000),
       });
     } catch {
       throw new DocumentError('GATEWAY_OUTCOME_UNKNOWN');
     }
+    if (response.status >= 300 && response.status < 400) throw new DocumentError('GATEWAY_OUTCOME_UNKNOWN');
     let body: unknown;
     try {
       body = await response.json();

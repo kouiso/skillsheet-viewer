@@ -19,11 +19,28 @@ describe('D1共通接続の送受信契約', () => {
     ).resolves.toEqual({ status: 'EMPTY' });
     const [url, init] = fetcher.mock.calls[0];
     expect(url.href).toBe('https://gateway.invalid/v1/operation');
-    expect(init).toMatchObject({ redirect: 'error', cache: 'no-store' });
+    expect(init).toMatchObject({ redirect: 'manual', cache: 'no-store' });
     expect(init.headers.get('x-owner-id')).toBeNull();
     expect(init.headers.get('cookie')).toBe('synthetic=cookie');
     expect(init.headers.get('x-skillsheet-service-token')).toBe(config.serviceToken);
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it.each([301, 302, 303, 307, 308])('業務APIの%sは成功JSONでも追跡・再送せず結果不明にする', async (status) => {
+    const fetcher = vi.fn().mockResolvedValue(
+      Response.json(
+        { result: { status: 'EMPTY' } },
+        {
+          status,
+          headers: { location: 'https://unrelated.invalid/collect' },
+        },
+      ),
+    );
+    const client = createD1Transport({ ...config, fetch: fetcher });
+    await expect(client.operation({ operation: 'list' }, new Headers())).rejects.toMatchObject({
+      code: 'GATEWAY_OUTCOME_UNKNOWN',
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1].redirect).toBe('manual');
   });
   it('mutateの応答喪失は結果不明として1回で止める', async () => {
     const fetcher = vi.fn().mockRejectedValue(new Error('synthetic network loss'));

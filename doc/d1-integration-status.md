@@ -16,8 +16,8 @@
 
 | #598の要求 | 現在のアプリ成果 | 未達・統合後の確認 |
 | --- | --- | --- |
-| Vercelを残しWorkersにもUIを提供 | Vercel buildを保持し、OpenNext用config/scriptsを追加 | IBM Plexの取得失敗でUI bundle未生成。WorkersでSSR/RSC、server actions、route handlers、PC/390px描画を未確認。vinextとの実ランタイム比較も未完了 |
-| 同じ一つのD1正本 | 両アプリoriginから同じWorker業務APIへ接続する構成。ローカルD1でread/write、Next API/MCP往復を検証 | 本番D1は未設定。実Vercel/Workers交互・同時操作のlive E2Eは未実施 |
+| Vercelを残しWorkersにもUIを提供 | Vercel用Next buildとOpenNext Workers bundleを生成。ローカルで両UIのSSR/RSC閲覧・編集画面をPC/390pxで確認 | 実deployment・server actions・全出力のWorkers E2Eとvinext比較は未完了 |
+| 同じ一つのD1正本 | 両アプリoriginから同じWorker業務APIへ接続。Next本番buildとWorkers UIから同じ隔離ローカルD1へ交互保存・読取・同時CAS・未認証拒否を実走 | 本番D1は未設定。実Vercel/Workers deployment間のlive E2Eは未実施 |
 | Vercelから安全な接続 | サーバー専用client、サービス認証＋利用者認可、固定owner、strict DTO。ブラウザーへD1/アカウント管理credentialを渡さない | サービス資格情報と必要ならAccess policyの実作成・登録は個別ゲート。REST管理APIを通常経路には使わない |
 | PG固有文書境界と原子性 | 既存private functionとの対応を文書化。D1 batchでCAS・子交換・履歴・削除・既定昇格を全rollback。未知SQL/owner偽装拒否を合成試験 | 全移送データのconstraint/参照照合と両deploymentでの並行保存は未検証 |
 | 全版・削除済み文書を保持 | 全版capture/restore、確認値、tombstone、操作ごとの負64bit TEXT識別を実装。受領codecで負IDを保持できることをローカルD1と接続試験 | runtime追加表を含む実snapshot保全・逆移送ツールは未実装。全履歴を共通の-1にする旧案は採用しない |
@@ -25,13 +25,13 @@
 | CIMDのSSRF防御 | Workersの未実装DNSをplain fetchで代替せず、固定Node境界で公式DNS pinningを維持。conditional cache/304も保持 | 合成transportとprivate IP拒否まで。実公開metadata hostへの取得・認可往復は未実施 |
 | JSON/配列/64bit/日時を保存 | revisionはdecimal TEXT、日時UTC小数6桁、JSONはタグ付きraw DTO。SQL NULL/JSON nullを区別。原文は丸めない | BA意味値viewで表現不能な数値を持つmetadataは拒否する。実値を読まず全データとの互換完了は判断できない |
 | PDF/XLSX/DOCX・Drive | 既存サービス/出力経路を維持。D1経路のDrive owner境界と合成CRUDを検証。既存PDF単体検査は成功済み | Workers UIでのPDFフォント・画像、WorkersサーバーでXLSX/DOCX、実Drive認可/保存は未検証 |
-| 静的資材・Sentry/PostHog | 既存font/image/telemetry設定を保持 | Workers UIでの資材配信と監視の実接続・通知は未確認。合成検証から実監視先へイベントを送らない |
+| 静的資材・Sentry/PostHog | IBM Plexを同family/weightの固定npm配布物から自己配信。両UIのローカルfont読込・8画面を確認 | 全画像・監視の実接続/通知は未確認。合成検証から実監視先へイベントを送らない |
 | 全データ・全branch/DB保全 | 全体台帳・型codec・全行/snapshot照合の13ファイルを統合。親から共有された3DB/10branchesを分離して扱い、実本番sourceは推測しない | 実棚卸しの全一覧と外部保存物の完全性・永続保全・全行照合は未実施。合成fixtureを実棚卸しの代用にしない |
 | D1上限・費用・全版保持 | SQLは固定の業務操作。Gateway入力は1MiBに制限 | 実容量/最大文書/全版増加量/利用プラン未確定。履歴は全文JSONセルを使うためD1の2MB行上限との適合を別途評価。費用・bind/SQL/読書込予算の最終評価は未完了 |
 | 切替・全writer停止・逆同期 | backend誤設定やD1障害からNeonへ自動fallbackしない | 認証・MCP・定期処理を含むfreeze、切替直前照合、切替後データを失わない逆同期/復旧は未リハーサル |
 | 独立rollback・API/schema整合 | `/v1/operation` の限定契約を実装 | deployment間のschema互換ゲート/health/routing/rollback pipelineは未整備。旧deployを戻すとNeonへ書ける状態を残してよいとは判断しない |
 | #590監視・二重運用・Neon保全 | Neon削除・解約は実施しない | D1容量/失敗/停止監視、backup/restore、両deployment定期検査・通知は未実装/未確認。#590/#593/#331は完了扱いにしない |
-| 全検査とCI緑 | ローカル合成検査の結果は個別に記録 | 本番build・Workers UI E2E・対象commitのCI緑は未達。Node24の今回の対象検査を全移行の最終検証とは扱わない |
+| 全検査とCI緑 | ローカルの両buildとWorkers UI実走まで確認。検査結果は個別に記録 | 全出力/認証機能の実deployment E2Eと対象commitのCI緑は別途確認。全移行の最終検証とは扱わない |
 
 ## 移行13ファイルとの接続契約
 
@@ -85,3 +85,15 @@ CDは本人の指定どおり、Vercelの既存Git連携を保持し、Workers�
 | `pnpm build` / `pnpm build:workers` | ともにexit 1。IBM Plex Mono / Sans JPのGoogle Fonts取得失敗。Workers UI bundle生成・実走には進めていない |
 
 追加テストの最初の型検査ではJSON fixtureのunion型の絞込み不足を検出し、Zodの実行時検証で修正した。型assertionやテスト緩和で回避していない。再実行したlint・型・全3設定は成功した。buildのフォント失敗は未解決であり、repoのDone Gate・push条件は満たしていない。PR・CI手動起動・実DB・実credential・設定変更・deployは未実施。
+
+## 正規npm配布物によるフォント修正後
+
+上のフォント失敗は移行統合時点の履歴。本人から別の正規npm配布物の採用を許可された後、[Webフォント契約](web-font.md)の固定版Fontsourceへ変更した。Googleの既知403の再試行・通信許可/TLS変更は行わない。`721f60f`を祖先に保持する独立branch `feature/598-self-hosted-ibm-plex` で実装する。
+
+両build成功後の実走で2点を修正した。D1 UIはNeonのDATABASE_URLを必須にせず、Gatewayの必要設定を検証する。workerd非対応のfetch redirect:errorをmanualと明示的3xx拒否へ替え、追跡・資格情報転送・自動再送を防ぐ。診断時だけ変更した生成bundleは破棄し、ソースから再buildした成果で再検証した。
+
+ChromiumでNext production / OpenNext workerd UIの閲覧・Builderを1440pxと390px、計8画像で確認。両fontのloaded、横overflowなし、ブラウザ例外なし、外部通信なしを検査し、同じ画面のruntime間4組はピクセル一致した。合成の空文書を使った確認で、実経歴の画面比較ではない。同じ隔離D1へのNext→Workers読取、Workers→Next読取、同一版の並行保存で片方のみ成功、未認証Builder拒否も実走した。
+
+実本番デプロイ、実DB・credential・OAuth grant、WorkersでのPDF/XLSX/DOCX/Drive操作、既存CDN font実体とのbyte比較、API/schema独立rollbackと全データ切替はこの結果に含めない。これらは本番切替ゲートとして残す。ログ・fontの全参照binary manifest・画像・実走scriptは `.evidence/font-npm/`。
+
+最終ソースのlint・型検査・全3設定はexit 0。UI 1084、Node 1153、PDF 225の計2462成功、既存8skip（元の2452件にD1必須設定5件と3xx拒否5件を追加）。Next/Vercel用 `pnpm build` と `pnpm build:workers` はともにexit 0、厳格engine付きfrozen installもexit 0。ローカル検査を満たした通常branch pushだけを対象とし、PR作成・CI手動起動・保護branch push・merge・本番切替は行わない。既存CIはPR/main pushを契機にするため、このfeature branch単独のpushをCI緑の証明とは扱わない。
