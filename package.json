@@ -27,6 +27,7 @@
     "test:e2e": "pnpm build && node script/headless-e2e.mjs",
     "test:e2e:playwright": "pnpm build && pnpm test:playwright",
     "test:e2e:local": "./script/e2e-isolated-db.sh run bash .github/ci/run.sh e2e-prepared",
+    "test:d1:app": "tsx script/verify-d1-app.ts",
     "verify:deployed-css": "node script/verify-deployed-css.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
@@ -120,7 +121,8 @@
     "tailwindcss": "^4.3.0",
     "tsx": "^4.23.9",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "wrangler": "4.148.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -1,3 +1,4 @@
+import { getDocumentDb } from '@/server/d1-runtime';
 // クライアントバンドルに巻き込まれた瞬間にビルドを失敗させる。
 import 'server-only';
 
@@ -19,7 +20,6 @@ import 'server-only';
 
 import { revalidateTag } from 'next/cache';
 import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech, StatItem } from '@/db/block';
-import { getDb } from '@/db/client';
 import type { RawDocumentBlock } from '@/db/document-contract';
 import { createDocumentService, DocumentError, type DocumentSnapshot } from '@/db/document-service';
 import { getOwnerId } from '@/db/skillsheet';
@@ -69,7 +69,7 @@ export function invalidateDbSheetCache(): void {
 }
 
 function documents() {
-  return createDocumentService(getDb(), getOwnerId());
+  return createDocumentService(getDocumentDb(), getOwnerId());
 }
 
 /** MCP の list_sheets が返す一覧行。updatedAt は表示専用（CAS には revision を使う）。 */

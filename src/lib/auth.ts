@@ -40,6 +40,7 @@ function resolveAuthBaseURL(): string | undefined {
 // not during `next build` static analysis.
 // Use a helper function so TypeScript infers the concrete return type correctly.
 function createAuth(withMcpOauth: boolean) {
+  if (process.env.SKILLSHEET_DB_BACKEND === 'd1') throw new Error('D1 MCP OAuth runtime is not verified');
   const url = process.env.DATABASE_URL;
   if (!url) throw new Error('DATABASE_URL is not set');
   const secret = process.env.BETTER_AUTH_SECRET;
