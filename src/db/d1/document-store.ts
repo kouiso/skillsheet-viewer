@@ -54,7 +54,8 @@ export function createD1DocumentStore(db: D1Binding, owner: string): OperationCo
     return statement(
       `INSERT INTO document_versions
       (sheet_id,owner_id,revision,title,blocks,action,recorded_at,transaction_id,restored_from,restored_before)
-      SELECT s.id,s.owner_id,s.revision,s.title,${blocksJson},?,?,?,?,?
+      SELECT s.id,s.owner_id,s.revision,s.title,${blocksJson},?,?,
+      (SELECT transaction_id FROM d1_transactions WHERE id='${token}'),?,?
       FROM skill_sheets s WHERE s.owner_id=? AND ${id ? 's.id=? AND' : ''} ${guard(token)}
       ON CONFLICT(sheet_id,revision) DO UPDATE SET blocks=CASE
         WHEN document_versions.owner_id=excluded.owner_id AND document_versions.title=excluded.title
@@ -65,7 +66,6 @@ export function createD1DocumentStore(db: D1Binding, owner: string): OperationCo
         THEN document_versions.blocks ELSE NULL END`,
       action,
       now,
-      '-1',
       restored ?? null,
       before ?? null,
       owner,
@@ -88,7 +88,14 @@ export function createD1DocumentStore(db: D1Binding, owner: string): OperationCo
   ): Promise<{ changed: boolean; value: unknown }> {
     // readは同じbatch内。別writerの更新を保存応答に取り違えない。
     const results = await db.batch([
-      ...queries,
+      queries[0],
+      statement(
+        `INSERT INTO d1_transactions(id,transaction_id) SELECT ?1,?2 WHERE ${guard(token)}
+        AND NOT EXISTS(SELECT 1 FROM document_versions WHERE transaction_id=?2)`,
+        token,
+        (-((BigInt(`0x${token.replaceAll('-', '').slice(0, 16)}`) % 9223372036854775807n) + 1n)).toString(),
+      ),
+      ...queries.slice(1),
       readStatement(id),
       statement('DELETE FROM d1_operation_guard WHERE id=?', token),
     ]);
@@ -234,7 +241,8 @@ export function createD1DocumentStore(db: D1Binding, owner: string): OperationCo
         capture(token, 'baseline', now),
         statement(
           `INSERT INTO document_versions(sheet_id,owner_id,revision,title,blocks,action,recorded_at,transaction_id)
-        SELECT s.id,s.owner_id,?,s.title,${blocksJson},'delete',?,'-1'
+        SELECT s.id,s.owner_id,?,s.title,${blocksJson},'delete',?,
+        (SELECT transaction_id FROM d1_transactions WHERE id='${token}')
         FROM skill_sheets s WHERE s.id=? AND s.owner_id=? AND ${guard(token)}`,
           nextRevision,
           now,

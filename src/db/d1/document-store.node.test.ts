@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getPlatformProxy, type PlatformProxy } from 'wrangler';
 import { createDocumentHistory } from '../document-history';
 import { createDocumentService, DocumentError } from '../document-service';
@@ -21,6 +21,28 @@ const statement = (sql: string, ...params: (string | number | null)[]) =>
     .prepare(sql)
     .bind(...params)
     .all();
+const transactions = async () => (await statement('SELECT id,transaction_id FROM d1_transactions ORDER BY id')).results;
+
+it('移送した負のsigned32bit orderを格納保全し、業務編集では拒否する', async () => {
+  await service.create(sheet, '架空', blocks);
+  await statement('UPDATE blocks SET "order"=? WHERE id=?', -2147483648, blockId);
+  expect((await statement('SELECT "order" FROM blocks WHERE id=?', blockId)).results).toEqual([{ order: -2147483648 }]);
+  await expect(service.replace(sheet, '0', '不正連番', [{ ...blocks[0], order: -2147483648 }])).rejects.toBeInstanceOf(
+    DocumentError,
+  );
+  expect((await statement('SELECT "order" FROM blocks WHERE id=?', blockId)).results).toEqual([{ order: -2147483648 }]);
+});
+
+// 失敗が本文だけでなく、版・削除ledger・初期化状態・永続操作識別も戻すことを比較する。
+async function documentState() {
+  const tables = ['skill_sheets', 'blocks', 'document_versions', 'deleted_documents', 'skillsheet_state'];
+  return {
+    documents: await Promise.all(
+      tables.map(async (table) => (await statement(`SELECT * FROM ${table} ORDER BY rowid`)).results),
+    ),
+    transactions: await transactions(),
+  };
+}
 
 beforeAll(async () => {
   platform = await getPlatformProxy<{ DB: D1Binding }>({
@@ -44,6 +66,9 @@ beforeAll(async () => {
 afterAll(async () => {
   await platform?.dispose();
 });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 beforeEach(async () => {
   for (const table of [
     'blocks',
@@ -52,6 +77,7 @@ beforeEach(async () => {
     'document_versions',
     'deleted_documents',
     'd1_operation_guard',
+    'd1_transactions',
     'viewer_login_attempt',
     'drive_destination',
   ]) {
@@ -123,7 +149,9 @@ describe('ローカルworkerd D1の文書契約（実DB・Neon不使用）', () 
   it('別シートのblock ID衝突は親・blocks・履歴・操作guardを全rollback', async () => {
     await service.create(sheet, '合成', blocks);
     await service.create(other, '第二', []);
+    const before = await documentState();
     await expect(service.replace(other, '0', 'bad', blocks)).rejects.toThrow();
+    expect(await documentState()).toEqual(before);
     expect(await service.read(other)).toMatchObject({
       status: 'OK',
       snapshot: { title: '第二', revision: '0', blocks: [] },
@@ -147,7 +175,7 @@ describe('ローカルworkerd D1の文書契約（実DB・Neon不使用）', () 
     });
     expect(await service.read(sheet)).toMatchObject({ status: 'OK', snapshot: { revision: '9223372036854775807' } });
   });
-  it('移行契約のTEXT版・桁境界順序・6桁UTC日時と-1 transaction sentinel', async () => {
+  it('移行契約のTEXT版・桁境界順序・6桁UTC日時と操作ごとの64bit transaction ID', async () => {
     await service.create(sheet, '合成', blocks);
     await statement("UPDATE skill_sheets SET revision='9' WHERE id=?", sheet);
     await service.replace(sheet, '9', '10版', blocks);
@@ -165,9 +193,22 @@ describe('ローカルworkerd D1の文書契約（実DB・Neon不使用）', () 
       .results[0];
     expect(row.kind).toBe('text');
     expect(row.updated_at).toMatch(/\.\d{6}Z$/);
-    expect((await statement('SELECT DISTINCT transaction_id FROM document_versions')).results).toEqual([
-      { transaction_id: '-1' },
-    ]);
+    const registry = await transactions();
+    expect(registry).toHaveLength(3);
+    for (const operation of registry) {
+      expect(operation.transaction_id).toMatch(/^-[1-9][0-9]*$/);
+      expect(BigInt(String(operation.transaction_id))).toBeGreaterThanOrEqual(-9223372036854775807n);
+      expect(BigInt(String(operation.transaction_id))).toBeLessThan(0n);
+    }
+    const versions = (await statement('SELECT revision,transaction_id FROM document_versions WHERE sheet_id=?', sheet))
+      .results;
+    const transactionAt = (revision: string) =>
+      versions.find((version) => version.revision === revision)?.transaction_id;
+    expect(transactionAt('9')).toBe(transactionAt('10'));
+    expect(transactionAt('99')).toBe(transactionAt('100'));
+    expect(new Set(versions.map((version) => version.transaction_id))).toEqual(
+      new Set(registry.map((operation) => operation.transaction_id)),
+    );
   });
   it('SQL NULL/JSON nullを区別し巨大JSON数値とNULL配列要素を格納したまま保つ', async () => {
     await statement(
@@ -220,13 +261,95 @@ describe('ローカルworkerd D1の文書契約（実DB・Neon不使用）', () 
   it('確定済み同revisionの本文不一致を検知して全rollback', async () => {
     await service.create(sheet, '合成', blocks);
     await statement('UPDATE skill_sheets SET title=? WHERE id=?', '外部改変した合成データ', sheet);
+    const before = await documentState();
     await expect(service.replace(sheet, '0', '更新', blocks)).rejects.toThrow();
+    expect(await documentState()).toEqual(before);
     expect(await service.read(sheet)).toMatchObject({
       status: 'OK',
       snapshot: { revision: '0', title: '外部改変した合成データ' },
     });
     expect((await history.read(sheet, '0')).title).toBe('合成');
     expect(await history.list(sheet)).toHaveLength(1);
+    expect((await statement('SELECT * FROM d1_operation_guard')).results).toEqual([]);
+  });
+  it.each([
+    ['owner_id', '別の合成owner'],
+    ['title', '改ざんされた合成履歴'],
+    ['blocks', '[]'],
+  ])('確定済み履歴の%s改ざんは別操作で上書きせず操作識別もrollback', async (column, value) => {
+    await service.create(sheet, '合成', blocks);
+    await statement(`UPDATE document_versions SET ${column}=? WHERE sheet_id=? AND revision='0'`, value, sheet);
+    const before = await documentState();
+    await expect(service.replace(sheet, '0', '上書きしてはいけない更新', [])).rejects.toThrow();
+    expect(await documentState()).toEqual(before);
+    expect(await service.read(sheet)).toMatchObject({
+      status: 'OK',
+      snapshot: { revision: '0', title: '合成', blocks },
+    });
+    expect((await statement('SELECT * FROM d1_operation_guard')).results).toEqual([]);
+  });
+  it('移行済みPostgres transaction IDを保持し新しいD1操作だけ別の負IDを記録', async () => {
+    await service.create(sheet, '合成', blocks);
+    // 移行済み履歴を模した合成fixture。PGの64bit IDをNumber経由にしない。
+    await statement("UPDATE document_versions SET transaction_id='9007199254740993' WHERE sheet_id=?", sheet);
+    await statement('DELETE FROM d1_transactions');
+    await service.replace(sheet, '0', 'D1で保存', []);
+    const versions = (
+      await statement('SELECT revision,transaction_id FROM document_versions WHERE sheet_id=? ORDER BY revision', sheet)
+    ).results;
+    expect(versions[0]).toEqual({ revision: '0', transaction_id: '9007199254740993' });
+    expect(versions[1]).toMatchObject({ revision: '1' });
+    expect(versions[1].transaction_id).toMatch(/^-[1-9][0-9]*$/);
+    expect((await transactions()).map((operation) => operation.transaction_id)).toEqual([versions[1].transaction_id]);
+  });
+  it('削除と既定昇格は同じ操作IDを共有し次の独立した保存は別ID', async () => {
+    await service.create(sheet, '第一', blocks);
+    await service.create(other, '第二', []);
+    const initialRegistry = await transactions();
+    expect(initialRegistry).toHaveLength(2);
+    expect(new Set(initialRegistry.map((operation) => operation.transaction_id)).size).toBe(2);
+    await service.delete(sheet, '0');
+    const deleted = (
+      await statement("SELECT action,transaction_id FROM document_versions WHERE sheet_id=? AND revision='1'", sheet)
+    ).results[0];
+    const promoted = (
+      await statement("SELECT action,transaction_id FROM document_versions WHERE sheet_id=? AND revision='1'", other)
+    ).results[0];
+    expect(deleted.action).toBe('delete');
+    expect(promoted.action).toBe('save');
+    expect(deleted.transaction_id).toBe(promoted.transaction_id);
+    expect(initialRegistry.map((operation) => operation.transaction_id)).not.toContain(deleted.transaction_id);
+    expect(await transactions()).toHaveLength(3);
+    await service.replace(other, '1', '次の独立保存', []);
+    const saved = (
+      await statement("SELECT transaction_id FROM document_versions WHERE sheet_id=? AND revision='2'", other)
+    ).results[0];
+    expect(saved.transaction_id).not.toBe(deleted.transaction_id);
+    expect(await transactions()).toHaveLength(4);
+    expect(new Set((await transactions()).map((operation) => operation.transaction_id)).size).toBe(4);
+    expect((await statement('SELECT * FROM d1_operation_guard')).results).toEqual([]);
+  });
+  it('別UUIDが同じ64bit操作IDに衝突したら既存registryと全文書状態を保持して拒否', async () => {
+    const uuid = vi.spyOn(crypto, 'randomUUID');
+    uuid.mockReturnValueOnce('30000000-0000-4000-8000-000000000001');
+    await service.create(sheet, '合成', blocks);
+    const before = await documentState();
+    // 下位のUUIDだけ異なるので、既存registryの64bit識別子と衝突する。
+    uuid.mockReturnValue('30000000-0000-4000-8000-000000000002');
+    await expect(service.replace(sheet, '0', '衝突した更新', [])).rejects.toThrow();
+    expect(await documentState()).toEqual(before);
+    expect((await statement('SELECT * FROM d1_operation_guard')).results).toEqual([]);
+  });
+  it('registryに無い移行済み履歴の操作IDと衝突しても新しい識別記録を残さずrollback', async () => {
+    await service.create(sheet, '合成', blocks);
+    // このUUIDの先頭64bitは0x4000。候補ID -16385を既存履歴だけに保つ。
+    await statement("UPDATE document_versions SET transaction_id='-16385' WHERE sheet_id=?", sheet);
+    await statement('DELETE FROM d1_transactions');
+    const before = await documentState();
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('00000000-0000-4000-8000-000000000000');
+    await expect(service.replace(sheet, '0', '移行済みIDと衝突', [])).rejects.toThrow();
+    expect(await documentState()).toEqual(before);
+    expect(await transactions()).toEqual([]);
     expect((await statement('SELECT * FROM d1_operation_guard')).results).toEqual([]);
   });
   it('save→復元→Undo、古い確認と再送を拒否、全版保持', async () => {

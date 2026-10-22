@@ -16,6 +16,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:workers": "opennextjs-cloudflare build --config wrangler.ui.jsonc",
+    "preview:workers": "opennextjs-cloudflare preview --config wrangler.ui.jsonc",
     "start": "next start",
     "lint": "biome check . --error-on-warnings && node script/check-jsdom-pdf-assertion.mjs && node script/check-telemetry-import.mjs && node script/sync-agent-config.mjs --check && ./script/check-naming.sh",
     "format": "biome format --write .",
@@ -96,6 +98,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
     "@next/bundle-analyzer": "^16.3.6",
+    "@opennextjs/cloudflare": "1.20.10",
     "@playwright/test": "^1.51.1",
     "@storybook/addon-docs": "^10.5.4",
     "@storybook/nextjs-vite": "^10.5.4",

@@ -10,7 +10,7 @@ CREATE INDEX skill_sheets_owner_id_idx ON skill_sheets(owner_id);
 CREATE UNIQUE INDEX skill_sheets_owner_default_unique ON skill_sheets(owner_id) WHERE is_default=1;
 CREATE TABLE blocks (
   id TEXT PRIMARY KEY NOT NULL, sheet_id TEXT NOT NULL REFERENCES skill_sheets(id) ON DELETE CASCADE,
-  type TEXT NOT NULL, "order" INTEGER NOT NULL CHECK("order">=0),
+  type TEXT NOT NULL, "order" INTEGER NOT NULL CHECK(typeof("order")='integer' AND "order" BETWEEN -2147483648 AND 2147483647),
   data TEXT NOT NULL CHECK(json_valid(data)), UNIQUE(sheet_id,"order")
 );
 CREATE TABLE skillsheet_state (
@@ -31,6 +31,16 @@ CREATE TABLE deleted_documents (
 CREATE INDEX deleted_documents_owner_idx ON deleted_documents(owner_id);
 -- batch中だけ存在するCAS成功フラグ。commit/rollbackのどちらでも残らない。
 CREATE TABLE d1_operation_guard (id TEXT PRIMARY KEY NOT NULL);
+-- PG txidと衝突しない負のsigned64bit TEXT。操作UUIDとの対応を永続保全する。
+CREATE TABLE d1_transactions (
+  id TEXT PRIMARY KEY NOT NULL, transaction_id TEXT UNIQUE NOT NULL
+);
+CREATE TABLE d1_oauth_revocation (token_hash TEXT PRIMARY KEY NOT NULL, revoked_at TEXT NOT NULL);
+CREATE TABLE d1_dpop_replay (key TEXT PRIMARY KEY NOT NULL, expires_at TEXT NOT NULL);
+CREATE TABLE d1_oauth_family (
+  client_id TEXT NOT NULL, user_id TEXT NOT NULL, revoked_through INTEGER NOT NULL,
+  PRIMARY KEY(client_id,user_id)
+);
 CREATE TABLE viewer_login_attempt (
   key TEXT PRIMARY KEY NOT NULL, failure_count INTEGER NOT NULL DEFAULT 0,
   window_started_at TEXT NOT NULL, locked_until TEXT

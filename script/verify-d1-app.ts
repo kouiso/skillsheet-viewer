@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
@@ -46,7 +47,12 @@ const synthetic = {
   BETTER_AUTH_SECRET: 'synthetic-better-auth-placeholder-only-32',
   SESSION_SECRET: 'synthetic-viewer-placeholder-only-32',
   APP_ORIGINS: JSON.stringify([origin]),
+  MCP_ENABLED: 'true',
+  MCP_RESOURCE_URL: `${origin}/api/mcp`,
+  BETTER_AUTH_URL: origin,
+  D1_CIMD_TRANSPORT_URL: `${origin}/api/d1/cimd`,
 };
+const syntheticKey = generateKeyPairSync('ed25519');
 const sheetId = '10000000-0000-4000-8000-000000000001';
 const proxy = await getPlatformProxy<{ DB: D1Binding }>({
   configPath: 'wrangler.d1.jsonc',
@@ -64,6 +70,20 @@ try {
       .map((sql) => db.prepare(sql)),
   );
   const now = d1Timestamp();
+  await db.batch([
+    db
+      .prepare('INSERT INTO jwks(id,public_key,private_key,created_at,alg) VALUES(?,?,?,?,?)')
+      .bind(
+        'synthetic-jwk',
+        JSON.stringify(syntheticKey.publicKey.export({ format: 'jwk' })),
+        'unusable-placeholder',
+        now,
+        'EdDSA',
+      ),
+    db
+      .prepare('INSERT INTO oauth_client(id,client_id,redirect_uris) VALUES(?,?,?)')
+      .bind('synthetic-client', 'synthetic-client', '[]'),
+  ]);
   await db
     .prepare('INSERT INTO "user"(id,name,email,email_verified,created_at,updated_at) VALUES(?,?,?,0,?,?)')
     .bind(synthetic.SKILLSHEET_OWNER_ID, '架空オーナー', 'synthetic@example.invalid', now, now)
@@ -119,7 +139,6 @@ const app = spawn(
       BETTER_AUTH_URL: origin,
       VIEWER_CODE: 'synthetic-viewer-code',
       REVALIDATE_SECRET: 'synthetic-revalidate-placeholder',
-      MCP_ENABLED: 'false',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   },
@@ -194,6 +213,45 @@ try {
     `${origin}/api/trpc/sheet.builderState?input=${encodeURIComponent(JSON.stringify({ json: { sheetId } }))}`,
   );
   assert.equal(denied.status, 401);
+  const sessionResult = await fetch(`${origin}/api/auth/get-session?disableCookieCache=true`, { headers: { cookie } });
+  const session = await sessionResult.json();
+  const jwtData = [
+    { alg: 'EdDSA', kid: 'synthetic-jwk' },
+    {
+      sub: synthetic.SKILLSHEET_OWNER_ID,
+      sid: session.session.id,
+      azp: 'synthetic-client',
+      iss: `${origin}/api/auth`,
+      aud: synthetic.MCP_RESOURCE_URL,
+      scope: 'skillsheet:read',
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 300,
+    },
+  ]
+    .map((value) => Buffer.from(JSON.stringify(value)).toString('base64url'))
+    .join('.');
+  const token = `${jwtData}.${sign(null, Buffer.from(jwtData), syntheticKey.privateKey).toString('base64url')}`;
+  const mcpRequest = (name: string) =>
+    fetch(`${origin}/api/mcp`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } }),
+    });
+  const mcp = await mcpRequest('list_sheets');
+  assert.equal(mcp.status, 200, await mcp.clone().text());
+  assert((await mcp.text()).includes(after.snapshot.title));
+  assert.equal((await mcpRequest('update_company')).status, 403);
+  assert.equal((await fetch(`${origin}/.well-known/oauth-protected-resource/api/mcp`)).status, 200);
+  const nodeBoundary = await fetch(`${origin}/api/d1/cimd`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-skillsheet-service-token': synthetic.D1_GATEWAY_SERVICE_TOKEN },
+    body: JSON.stringify({ operation: 'metadata.fetch', url: 'https://127.0.0.1/metadata', method: 'GET' }),
+  });
+  assert.equal(nodeBoundary.status, 502); // DNS pinningのprivate IP拒否、実外部通信なし。
   const evidence = {
     status: 'passed',
     runtime: process.version,
@@ -206,10 +264,13 @@ try {
       'Worker replace → Next read',
       'D1 viewer cache bypass',
       'unauthenticated builder denied',
+      'Next MCP → Worker → D1 read and write scope denial',
+      'Next canonical OAuth discovery',
+      'Next CIMD Node boundary rejects private IP',
     ],
     limitations: [
       'Next dev API only; Google Fonts prevents production build',
-      'Next UI on Workers and MCP OAuth are not verified',
+      'Next UI on Workers is not verified; real credentials/grants are not used',
     ],
   };
   await writeFile(path.join(output, 'next-api-result.json'), `${JSON.stringify(evidence, null, 2)}\n`);

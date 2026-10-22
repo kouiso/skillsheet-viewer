@@ -27,7 +27,7 @@ export function createD1Transport(options: D1TransportOptions) {
       'x-skillsheet-app-origin': options.appOrigin,
     });
     // 利用者の証明はcookie/bearerだけ。user/owner/roleなどの自己申告ヘッダーは運ばない。
-    for (const key of ['cookie', 'authorization', 'origin', 'user-agent']) {
+    for (const key of ['cookie', 'authorization', 'dpop', 'origin', 'user-agent', 'accept', 'mcp-protocol-version']) {
       const value = source.get(key);
       if (value) headers.set(key, value);
     }
@@ -77,14 +77,22 @@ export function createD1Transport(options: D1TransportOptions) {
   }
   async function auth(request: Request) {
     const sourceUrl = new URL(request.url);
-    if (!sourceUrl.pathname.startsWith('/api/auth/')) throw new DocumentError('INVALID_REQUEST');
+    if (
+      !sourceUrl.pathname.startsWith('/api/auth/') &&
+      ![
+        '/api/mcp',
+        '/.well-known/oauth-protected-resource/api/mcp',
+        '/.well-known/oauth-authorization-server/api/auth',
+      ].includes(sourceUrl.pathname)
+    )
+      throw new DocumentError('INVALID_REQUEST');
     const headers = authHeaders(request.headers);
     const contentType = request.headers.get('content-type');
     if (contentType) headers.set('content-type', contentType);
     const response = await fetcher(new URL(sourceUrl.pathname + sourceUrl.search, endpoint), {
       method: request.method,
       headers,
-      body: request.method === 'GET' ? undefined : await request.text(),
+      body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.text(),
       cache: 'no-store',
       redirect: 'manual',
       signal: AbortSignal.timeout(10_000),

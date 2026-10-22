@@ -93,6 +93,7 @@ export function createD1Gateway(options: D1GatewayOptions) {
         return { status: 'OK', snapshot: await history.restoreDeleted(r.sheetId, r.expectedRevision, r.confirmation) };
       }
       case 'drive.read':
+      case 'oauth.revoke':
       case 'drive.save':
       case 'drive.clear':
         return options.executeAuxiliary(r);

@@ -1,4 +1,5 @@
 import { customType, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { authJson } from './json-value';
 import { d1Timestamp } from './value';
 
 // 既存Better Auth/OAuthの列名を維持。日時はUTC ISO、booleanは0/1、配列/JSONはTEXT。
@@ -91,34 +92,34 @@ export const oauthClient = sqliteTable('oauth_client', {
   skipConsent: integer('skip_consent', { mode: 'boolean' }),
   enableEndSession: integer('enable_end_session', { mode: 'boolean' }),
   subjectType: text('subject_type'),
-  scopes: text('scopes', { mode: 'json' }),
-  clientCredentialsScopes: text('client_credentials_scopes', { mode: 'json' }).default([]),
+  scopes: authJson('scopes'),
+  clientCredentialsScopes: authJson('client_credentials_scopes').default('[]'),
   userId: text('user_id'),
   createdAt: isoDate('created_at').$defaultFn(() => new Date()),
   updatedAt: isoDate('updated_at').$defaultFn(() => new Date()),
   name: text('name'),
   uri: text('uri'),
   icon: text('icon'),
-  contacts: text('contacts', { mode: 'json' }),
+  contacts: authJson('contacts'),
   tos: text('tos'),
   policy: text('policy'),
   softwareId: text('software_id'),
   softwareVersion: text('software_version'),
   softwareStatement: text('software_statement'),
-  redirectUris: text('redirect_uris', { mode: 'json' }).notNull(),
-  postLogoutRedirectUris: text('post_logout_redirect_uris', { mode: 'json' }),
+  redirectUris: authJson('redirect_uris').notNull(),
+  postLogoutRedirectUris: authJson('post_logout_redirect_uris'),
   backchannelLogoutUri: text('backchannel_logout_uri'),
   backchannelLogoutSessionRequired: integer('backchannel_logout_session_required', { mode: 'boolean' }),
   tokenEndpointAuthMethod: text('token_endpoint_auth_method'),
   applicationType: text('application_type'),
   jwks: text('jwks'),
   jwksUri: text('jwks_uri'),
-  grantTypes: text('grant_types', { mode: 'json' }),
-  responseTypes: text('response_types', { mode: 'json' }),
+  grantTypes: authJson('grant_types'),
+  responseTypes: authJson('response_types'),
   requirePKCE: integer('require_pkce', { mode: 'boolean' }),
   dpopBoundAccessTokens: integer('dpop_bound_access_tokens', { mode: 'boolean' }).default(false),
   referenceId: text('reference_id'),
-  metadata: text('metadata', { mode: 'json' }),
+  metadata: authJson('metadata'),
 });
 
 export const oauthResource = sqliteTable('oauth_resource', {
@@ -129,21 +130,21 @@ export const oauthResource = sqliteTable('oauth_resource', {
   refreshTokenTtl: integer('refresh_token_ttl'),
   signingAlgorithm: text('signing_algorithm'),
   signingKeyId: text('signing_key_id'),
-  allowedScopes: text('allowed_scopes', { mode: 'json' }),
-  customClaims: text('custom_claims', { mode: 'json' }),
+  allowedScopes: authJson('allowed_scopes'),
+  customClaims: authJson('custom_claims'),
   dpopBoundAccessTokensRequired: integer('dpop_bound_access_tokens_required', { mode: 'boolean' }).default(false),
   disabled: integer('disabled', { mode: 'boolean' }).default(false),
   createdAt: isoDate('created_at').$defaultFn(() => new Date()),
   updatedAt: isoDate('updated_at').$defaultFn(() => new Date()),
   policyVersion: integer('policy_version').default(1),
-  metadata: text('metadata', { mode: 'json' }),
+  metadata: authJson('metadata'),
 });
 
 export const oauthClientResource = sqliteTable('oauth_client_resource', {
   id: text('id').primaryKey().notNull(),
   clientId: text('client_id').notNull(),
   resourceId: text('resource_id').notNull(),
-  metadata: text('metadata', { mode: 'json' }),
+  metadata: authJson('metadata'),
   createdAt: isoDate('created_at').$defaultFn(() => new Date()),
 });
 
@@ -155,8 +156,8 @@ export const oauthRefreshToken = sqliteTable('oauth_refresh_token', {
   userId: text('user_id'),
   referenceId: text('reference_id'),
   authorizationCodeId: text('authorization_code_id'),
-  resources: text('resources', { mode: 'json' }),
-  requestedUserInfoClaims: text('requested_user_info_claims', { mode: 'json' }),
+  resources: authJson('resources'),
+  requestedUserInfoClaims: authJson('requested_user_info_claims'),
   expiresAt: isoDate('expires_at'),
   createdAt: isoDate('created_at').$defaultFn(() => new Date()),
   revoked: isoDate('revoked'),
@@ -164,8 +165,8 @@ export const oauthRefreshToken = sqliteTable('oauth_refresh_token', {
   rotationReplayResponse: text('rotation_replay_response'),
   rotationReplayExpiresAt: isoDate('rotation_replay_expires_at'),
   authTime: isoDate('auth_time'),
-  confirmation: text('confirmation', { mode: 'json' }),
-  scopes: text('scopes', { mode: 'json' }).notNull(),
+  confirmation: authJson('confirmation'),
+  scopes: authJson('scopes').notNull(),
 });
 
 export const oauthAccessToken = sqliteTable('oauth_access_token', {
@@ -176,14 +177,14 @@ export const oauthAccessToken = sqliteTable('oauth_access_token', {
   userId: text('user_id'),
   referenceId: text('reference_id'),
   authorizationCodeId: text('authorization_code_id'),
-  resources: text('resources', { mode: 'json' }),
-  requestedUserInfoClaims: text('requested_user_info_claims', { mode: 'json' }),
+  resources: authJson('resources'),
+  requestedUserInfoClaims: authJson('requested_user_info_claims'),
   refreshId: text('refresh_id'),
   expiresAt: isoDate('expires_at'),
   createdAt: isoDate('created_at').$defaultFn(() => new Date()),
   revoked: isoDate('revoked'),
-  confirmation: text('confirmation', { mode: 'json' }),
-  scopes: text('scopes', { mode: 'json' }).notNull(),
+  confirmation: authJson('confirmation'),
+  scopes: authJson('scopes').notNull(),
 });
 
 export const oauthConsent = sqliteTable('oauth_consent', {
@@ -191,9 +192,9 @@ export const oauthConsent = sqliteTable('oauth_consent', {
   clientId: text('client_id').notNull(),
   userId: text('user_id'),
   referenceId: text('reference_id'),
-  resources: text('resources', { mode: 'json' }),
-  requestedUserInfoClaims: text('requested_user_info_claims', { mode: 'json' }),
-  scopes: text('scopes', { mode: 'json' }).notNull(),
+  resources: authJson('resources'),
+  requestedUserInfoClaims: authJson('requested_user_info_claims'),
+  scopes: authJson('scopes').notNull(),
   createdAt: isoDate('created_at').$defaultFn(() => new Date()),
   updatedAt: isoDate('updated_at').$defaultFn(() => new Date()),
 });

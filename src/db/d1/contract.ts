@@ -47,6 +47,7 @@ export const documentOperationSchema = z.discriminatedUnion('operation', [
 ]);
 
 export const auxiliaryOperationSchema = z.discriminatedUnion('operation', [
+  z.strictObject({ operation: z.literal('oauth.revoke'), token: z.string().min(1).max(16384) }),
   z.strictObject({ operation: z.literal('drive.read') }),
   z.strictObject({
     operation: z.literal('drive.save'),
