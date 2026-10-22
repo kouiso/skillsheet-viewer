@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, configure, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { TRPCClientError } from '@trpc/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -6,6 +6,12 @@ import type { Block } from '@/db/block';
 import type { DocumentSnapshot } from '@/db/document-service';
 
 import BuilderClient, { assembleMarkdown, blockToItem, type EditorItem } from './builder-client';
+
+// builder 全体を描画する結合試験で、1件が CPU だけで数秒かかる。単体実行で通る試験が、全体実行で他の worker や
+// 隔離 DB の起動と CPU を取り合った時だけ既定の 5 秒（findBy は 1 秒）を越えて落ちていた（#595 の 6 件、
+// 5,072〜6,009ms のタイムアウトと alertdialog の未検出）。全体実行の中では単体の約 3.5 倍に延びる実測に合わせて余裕を取る。
+vi.setConfig({ testTimeout: 30_000 });
+configure({ asyncUtilTimeout: 5_000 });
 
 // TRPCClientError.data.code を実クラスで組み立てる（instanceof チェックを本物にするため）。
 function trpcClientError(code: string): TRPCClientError<never> {
