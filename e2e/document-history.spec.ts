@@ -196,7 +196,11 @@ test('版の履歴の「会社から探す」を新しいタブで開いても�
     try {
       await tab.waitForLoadState('networkidle');
       expect(new URL(tab.url()).searchParams.get('sheet')).toBe(sheetId);
-      await expect(tab.getByRole('button', { name: /^シートを切り替える:/ })).toHaveAccessibleName(expectedSwitcher);
+      // WHY: 新しいタブはアプリ起動とシート取得をまるごとやり直す。
+      // 既定の expect 5 秒では CI 負荷下で切替ボタンが描画前に切られる。
+      await expect(tab.getByRole('button', { name: /^シートを切り替える:/ })).toHaveAccessibleName(expectedSwitcher, {
+        timeout: 15_000,
+      });
     } finally {
       await tab.close();
     }
