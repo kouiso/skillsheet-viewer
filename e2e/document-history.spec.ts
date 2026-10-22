@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, type Page, test } from '@playwright/test';
 import { createTRPCClient, httpLink } from '@trpc/client';
 import superjson from 'superjson';
+import { buildRealVolumeDemoBlocks } from '../src/db/fixture';
 import type { AppRouter } from '../src/server/trpc/router';
 import { authFile, login } from './auth';
 
@@ -151,5 +152,73 @@ test('history records immutable snapshots, restores and undoes through UI, and r
     const current = await client.sheet.builderState.query({ sheetId });
     if (current.status === 'OK')
       await client.sheet.delete.mutate({ sheetId, expectedRevision: current.snapshot.revision });
+  }
+});
+
+// #377: 版の履歴の全体プレビューにも「会社から探す」が出る。ビルダーはシートを ?sheet= で選ぶ。
+// 新しいタブで開くリンクがクエリを落とすと既定の別シートの編集画面に着いてしまう。
+test('版の履歴の「会社から探す」を新しいタブで開いても同じシートの編集画面が開く', async ({ page }) => {
+  await login(page);
+  const client = clientFor(page);
+  const sheetId = randomUUID();
+  const decoyId = randomUUID();
+  const blocks = buildRealVolumeDemoBlocks().map((block, order) => ({ ...block, id: randomUUID(), order }));
+  const title = `Company jump history ${sheetId}`;
+  // クエリの無い /builder は既定のシートを開く。所有者の最初のシートが既定になる。
+  // 別のシートを先に作って試すシートが既定にならないようにする。
+  await client.sheet.create.mutate({ sheetId: decoyId, title: `Company jump decoy ${decoyId}`, blocks: [] });
+  // 既定のシートを先に消すと既定が付け替わる。後片付けは試すシートから消す。
+  const cleanup = [decoyId];
+  try {
+    const created = await client.sheet.create.mutate({ sheetId, title, blocks });
+    cleanup.unshift(sheetId);
+    // 版を2つにして、比較画面から全体プレビューへ切り替えられるようにする。
+    await client.sheet.save.mutate({ sheetId, expectedRevision: created.revision, title: `${title} v2`, blocks });
+    const expectedSwitcher = `シートを切り替える: ${title} v2`;
+
+    // 前提: クエリの無い /builder は別のシートを開く。これが崩れると下の確認は何も見分けない。
+    await page.goto('/builder', { waitUntil: 'networkidle' });
+    await expect(page.getByRole('button', { name: /^シートを切り替える:/ })).not.toHaveAccessibleName(expectedSwitcher);
+
+    await page.goto(`/builder?sheet=${sheetId}`, { waitUntil: 'networkidle' });
+    await page.getByRole('button', { name: '版の履歴を開く', exact: true }).click();
+    await page.getByRole('button', { name: '選択した版の全体プレビュー', exact: true }).click();
+    const jumpNav = page.getByRole('navigation', { name: '会社別ジャンプ' }).first();
+    await jumpNav.getByText('会社から探す').click();
+    const chip = jumpNav.getByRole('link').first();
+    await expect(chip).toHaveAttribute('href', new RegExp(`^/builder\\?sheet=${sheetId}#company-`));
+
+    // 中クリック・Cmd+クリックと同じく、修飾キー付きのクリックで新しいタブに開く。
+    const [tab] = await Promise.all([
+      page.context().waitForEvent('page'),
+      chip.click({ modifiers: ['ControlOrMeta'] }),
+    ]);
+    try {
+      await tab.waitForLoadState('networkidle');
+      expect(new URL(tab.url()).searchParams.get('sheet')).toBe(sheetId);
+      // WHY: 新しいタブはアプリ起動とシート取得をまるごとやり直す。
+      // 既定の expect 5 秒では CI 負荷下で切替ボタンが描画前に切られる。
+      // ポップアップの初回遷移は Playwright が pending 扱いのまま commit を取りこぼす
+      // ことがあり、描画済みでも expect が navigation 待ちで 30 秒止まる。
+      // DOM ポーリングなら遷移の帳簿に影響されずスイッチャー名を確認できる。
+      await tab.waitForFunction(
+        (expected) =>
+          [...document.querySelectorAll('button[aria-label^="シートを切り替える:"]')].some(
+            (button) => button.getAttribute('aria-label') === expected,
+          ),
+        expectedSwitcher,
+        { timeout: 30_000 },
+      );
+    } finally {
+      await tab.close();
+    }
+    // 元のタブは移動しない。
+    expect(new URL(page.url()).searchParams.get('sheet')).toBe(sheetId);
+  } finally {
+    for (const id of cleanup) {
+      const current = await client.sheet.builderState.query({ sheetId: id });
+      if (current.status === 'OK')
+        await client.sheet.delete.mutate({ sheetId: id, expectedRevision: current.snapshot.revision });
+    }
   }
 });
