@@ -20,6 +20,9 @@ dist
 dist-ssr
 stats.html
 .next/
+.wrangler/
+.open-next/
+.dev.vars*
 /out/
 /build
 
