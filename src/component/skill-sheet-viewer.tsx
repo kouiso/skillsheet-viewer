@@ -2,7 +2,8 @@
 
 import { motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
-import { memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { type MouseEvent, memo, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import rehypeSanitize from 'rehype-sanitize';
@@ -103,8 +104,60 @@ interface MarkdownContentProps {
   onImageClick: (src: string) => void;
 }
 
+/**
+ * "#見出し" の slug を実際の要素 id に対応させる。
+ * 書き手が書くのは見出しの文字（または GitHub 式の slug）だが、実際に付く id は
+ * rehype-slug が小文字化等をしたうえで先頭にブロック id が付く（rehypePrefixHeadingIds）。
+ * slugger の変換をここで再実装するとずれた時に静かに壊れるため、生成済みの DOM から探す。
+ * 優先順は「同じブロックの見出し」→「ページ内のそのままの id」の順（別ブロックの見出し・
+ * company-… などページ内の他要素を指すリンクも拾う）。
+ */
+function resolveBodyHeadingId(container: Element | null, slug: string, blockId: string): string {
+  const prefix = `${blockId}-`;
+  if (document.getElementById(`${prefix}${slug}`)) return `${prefix}${slug}`;
+  const lower = slug.toLowerCase();
+  const scope = container ?? document;
+  for (const el of scope.querySelectorAll<HTMLElement>('[id]')) {
+    if (!el.id.startsWith(prefix)) continue;
+    const suffix = el.id.slice(prefix.length);
+    // 小文字化された slug 形式（#step-1-概要）と、見出しテキストそのまま（#見出しA）の両方を拾う
+    if (suffix.toLowerCase() === lower || (el.textContent ?? '').trim().toLowerCase() === lower) {
+      return el.id;
+    }
+  }
+  return slug;
+}
+
+// 本文の "#…" リンクをこのページの中の移動として扱う。作りは「会社から探す」
+// （block/company-jump-nav.tsx の jumpWithinPage）に揃える。
+// 左クリックはこのページのハッシュだけを変える。修飾キー付き（新しいタブ等）はブラウザに任せる。
+function jumpToBodyHeading(event: MouseEvent<HTMLAnchorElement>, slug: string, blockId: string) {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  // 書き手が percent-encoding した "#%E8%A6%8B…" 形も受け付ける（見出し id は未エンコードのまま）。
+  let decoded = slug;
+  try {
+    decoded = decodeURIComponent(slug);
+  } catch {
+    // 不正な % エスケープを含む場合はデコードせず、そのままの文字列で id を探す
+  }
+  const resolved = resolveBodyHeadingId(event.currentTarget.closest('.markdown-content'), decoded, blockId);
+  const hash = `#${resolved}`;
+  if (window.location.hash === hash) {
+    // 同じハッシュを入れ直してもブラウザはスクロールしないので、同じリンクをもう一度押した時は自分で寄せる。
+    document.getElementById(resolved)?.scrollIntoView({ block: 'start' });
+    return;
+  }
+  window.location.hash = hash;
+}
+
 // Markdown本文はactiveIdに依存しないためメモ化してスクロール再描画を防ぐ。
 const MarkdownContent = memo(function MarkdownContent({ content, blockId, onImageClick }: MarkdownContentProps) {
+  // 新しいタブで開いた時も同じシートを開くよう、"#…" リンクの href は今のパスとクエリ付きにする
+  // （company-jump-nav.tsx と同じ考え方。useSearchParams は App Router の文脈が無いテスト環境で null を返す）。
+  const pathname = usePathname();
+  const query = useSearchParams()?.toString() ?? '';
+  const pageHref = pathname ? `${pathname}${query ? `?${query}` : ''}` : '';
   const rehypePlugins = useMemo(
     () => [
       rehypeRaw,
@@ -121,6 +174,27 @@ const MarkdownContent = memo(function MarkdownContent({ content, blockId, onImag
         remarkPlugins={MARKDOWN_REMARK_PLUGINS}
         rehypePlugins={rehypePlugins}
         components={{
+          a({ node: _node, href, children, ...props }) {
+            // "#…" だけのリンクはルートの <base href="<origin>/">（app/layout.tsx・#167）のせいで
+            // サイトトップへ解決され、押すと閲覧画面を離れてシート一覧へ移っていた。
+            // ページ内移動として扱い、見出しテキスト由来の slug は同じブロックの見出し id へ対応させる。
+            if (typeof href === 'string' && href.startsWith('#')) {
+              return (
+                <a
+                  {...props}
+                  href={pageHref ? `${pageHref}${href}` : href}
+                  onClick={(event) => jumpToBodyHeading(event, href.slice(1), blockId)}
+                >
+                  {children}
+                </a>
+              );
+            }
+            return (
+              <a {...props} href={href}>
+                {children}
+              </a>
+            );
+          },
           p({ node, children, ...props }) {
             const content = node?.children.filter((child) => child.type !== 'text' || child.value.trim() !== '');
             const standaloneLink = content?.length === 1 && content[0].type === 'element' && content[0].tagName === 'a';

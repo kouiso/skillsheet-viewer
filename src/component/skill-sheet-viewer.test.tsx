@@ -1,10 +1,40 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Block, ProjectItem } from '@/db/block';
 
 import SkillSheetViewer from './skill-sheet-viewer';
+
+// jsdom には App Router の文脈が無い。usePathname() も useSearchParams() も null を返す。
+// それだと "#…" リンクの href を組み立てる枝を一度も通らない。ページごとの値を差し込む
+// （company-jump-nav.test.tsx と同じやり方）。
+const nav = vi.hoisted(() => ({
+  pathname: null as string | null,
+  search: null as URLSearchParams | null,
+}));
+vi.mock('next/navigation', () => ({
+  usePathname: () => nav.pathname,
+  useSearchParams: () => nav.search,
+}));
+
+afterEach(() => {
+  nav.pathname = null;
+  nav.search = null;
+});
+
+function withBaseHref(run: () => void) {
+  // 本番と同じく <base href="<origin>/"> がある状態。"#…" だけの href はトップへ解決される。
+  const base = document.createElement('base');
+  base.href = `${window.location.origin}/`;
+  document.head.prepend(base);
+  try {
+    run();
+  } finally {
+    base.remove();
+    window.history.replaceState(null, '', '/');
+  }
+}
 
 // framer-motion はアニメーション専用 props を除いた素の要素に置換する
 vi.mock('framer-motion', () => ({
@@ -400,4 +430,78 @@ it('Console指定をプロフィールへ伝搬し、目次を本文内に置く
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   await waitFor(() => expect(document.querySelector('.console-toc')).toBeInTheDocument());
+});
+
+// #603: 本文の "#…" リンクが <base href="/"> のせいでシート一覧へ解決されていた不具合の回帰検査。
+describe('Markdown 本文の #見出し リンクが閲覧画面を離れない', () => {
+  const MD = '## 見出しA\n\n[本文リンク](#見出しA)\n\n## 末尾の見出し\n\n本文本文本文。';
+
+  it('左クリックは既定の遷移を止め、このページのハッシュを同じブロックの見出し id へ変える', async () => {
+    withBaseHref(() => {
+      window.history.replaceState(null, '', '/view/db/sheet-1');
+      nav.pathname = '/view/db/sheet-1';
+      render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: MD }} />);
+      const link = screen.getByRole('link', { name: '本文リンク' });
+      const heading = document.querySelector<HTMLElement>('.markdown-content h2');
+      // 見出し id は <blockId>-<slug>。legacy 経路の blockId は 'legacy'、slug は小文字化される
+      expect(heading?.id).toBe('legacy-見出しa');
+      const notPrevented = fireEvent.click(link);
+      expect(notPrevented, '既定の遷移（/#見出しA への移動）が止まっていない').toBe(false);
+      expect(window.location.pathname).toBe('/view/db/sheet-1');
+      expect(decodeURIComponent(window.location.hash)).toBe(`#${heading?.id}`);
+    });
+  });
+
+  it('blocks 経路でも見出しテキストのリンクを同じブロックの見出し id へ対応させる', async () => {
+    withBaseHref(() => {
+      window.history.replaceState(null, '', '/view/db/sheet-1');
+      nav.pathname = '/view/db/sheet-1';
+      render(
+        <SkillSheetViewer
+          skillSheet={{ title: 'テスト', content: '' }}
+          blocks={[{ id: 'md1', order: 0, type: 'markdown', data: { markdown: MD } }]}
+        />,
+      );
+      const heading = document.querySelector<HTMLElement>('.markdown-content h2');
+      expect(heading?.id).toBeTruthy();
+      const link = screen.getByRole('link', { name: '本文リンク' });
+      expect(fireEvent.click(link)).toBe(false);
+      expect(window.location.pathname).toBe('/view/db/sheet-1');
+      expect(decodeURIComponent(window.location.hash)).toBe(`#${heading?.id}`);
+    });
+  });
+
+  it('同じブロックに見出しが無いリンクはそのままの id を探す（ページ内の他要素を拾う）', async () => {
+    withBaseHref(() => {
+      window.history.replaceState(null, '', '/view/db/sheet-1');
+      nav.pathname = '/view/db/sheet-1';
+      const elsewhere = document.createElement('div');
+      elsewhere.id = 'page-element';
+      document.body.appendChild(elsewhere);
+      try {
+        render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: '[外へ](#page-element)' }} />);
+        expect(fireEvent.click(screen.getByRole('link', { name: '外へ' }))).toBe(false);
+        expect(window.location.pathname).toBe('/view/db/sheet-1');
+        expect(window.location.hash).toBe('#page-element');
+      } finally {
+        elsewhere.remove();
+      }
+    });
+  });
+
+  it('修飾キー付きのクリックはブラウザに任せ、href は今のパス付きになる（新しいタブで同じシート）', async () => {
+    withBaseHref(() => {
+      window.history.replaceState(null, '', '/view/db/sheet-1');
+      nav.pathname = '/view/db/sheet-1';
+      render(<SkillSheetViewer skillSheet={{ title: 'テスト', content: MD }} />);
+      const link = screen.getByRole('link', { name: '本文リンク' });
+      expect(link.getAttribute('href')).toMatch(/^\/view\/db\/sheet-1#/);
+      try {
+        expect(fireEvent.click(link, { metaKey: true })).toBe(true);
+      } finally {
+        // jsdom はハッシュだけのリンクを辿るので、次の試験へハッシュを持ち越さない。
+        window.history.replaceState(null, '', '/');
+      }
+    });
+  });
 });
