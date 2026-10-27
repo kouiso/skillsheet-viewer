@@ -38,7 +38,12 @@ vi.mock('@/lib/trpc-client', () => ({
     }),
   },
 }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  // MarkdownContent が見出しリンクをページ内 hash 化するのに使う。jsdom では固定値で足りる
+  usePathname: () => '/',
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/context/theme-context', () => ({ useThemeMode: () => ({ mode: 'light', toggleTheme: vi.fn() }) }));
 
