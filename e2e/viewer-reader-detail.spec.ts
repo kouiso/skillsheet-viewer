@@ -2,7 +2,7 @@ import process from 'node:process';
 import { expect, type Page, test } from '@playwright/test';
 import { REAL_VOLUME_PROJECT_COUNT } from '@/db/fixture';
 import { authFile } from './auth';
-import { createRealVolumeDemoSheet, deleteSheet } from './document-fixture';
+import { createRealVolumeDemoSheet, createSheet, deleteSheet } from './document-fixture';
 
 // #393: 閲覧画面で読み手が引っかかる細部 4 件の回帰検査。
 // 合成フィクスチャ（real-volume-demo）のみを使う。実データは使わない。
@@ -319,5 +319,52 @@ test.describe('#393 閲覧画面の細部（読み手の引っかかり）', () 
       );
     });
     expect(clipped, '切り詰められた目次項目がゼロであること').toEqual([]);
+  });
+});
+
+// #603: 本文の "#見出し" リンクが <base href="/"> のせいでシート一覧へ解決されていた不具合の回帰検査。
+// markdown ブロックを持つ最小の合成シートで確かめる（実データは使わない）。
+test.describe('#603 本文の #見出し リンク', () => {
+  let sheetId = '';
+
+  test.beforeAll(async () => {
+    sheetId = await createSheet('#603 本文リンク検証', [
+      {
+        type: 'markdown',
+        data: {
+          markdown:
+            '## 見出しA\n\n[本文リンク](#見出しA)\n\n## 末尾の見出し\n\nスクロール用の本文。'.repeat(40) +
+            '\n\n## 見出しA\n\n繰り返しの末段。',
+        },
+      },
+    ]);
+  });
+
+  test.afterAll(async () => {
+    if (sheetId) await deleteSheet(sheetId);
+  });
+
+  test('左クリックはページを離れず、同じブロックの見出し id へ移る', async ({ page }) => {
+    const route = `/view/db/${sheetId}`;
+    await authViewer(page, route);
+    const markdown = page.locator('.markdown-content').first();
+    const heading = markdown.getByRole('heading', { name: '見出しA' }).first();
+    await heading.waitFor();
+    const headingId = await heading.getAttribute('id');
+    expect(headingId, '見出しに id が付いていない').toBeTruthy();
+
+    const link = markdown.getByRole('link', { name: '本文リンク' }).first();
+    // 新しいタブで開いても同じシートになるよう、href は今のパス付きのはず。
+    const href = await link.getAttribute('href');
+    expect(href, 'リンクの href が今のパス付きでない').toContain(route);
+
+    await link.scrollIntoViewIfNeeded();
+    const before = await page.evaluate(() => window.scrollY);
+    await link.click();
+    await waitForScrollToSettle(page, before);
+
+    const url = new URL(page.url());
+    expect(url.pathname, 'リンクを押したら閲覧画面を離れた').toBe(route);
+    expect(decodeURIComponent(url.hash), 'ハッシュが同じブロックの見出し id ではない').toBe(`#${headingId}`);
   });
 });
