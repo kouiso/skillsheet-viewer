@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isProjectBlockData } from './block';
-import type { Database } from './client';
 import { canonicalJson, isRevision, type RawDocumentBlock } from './document-contract';
+import type { DocumentConnection } from './document-operation';
 import { createHistoryRepository } from './document-repository';
 import { createDocumentService, DocumentError, type DocumentSnapshot, readDocumentResult } from './document-service';
 
@@ -69,7 +69,7 @@ export function visibleChanges(current: RawDocumentBlock[], target: RawDocumentB
   return [...visible(target)].filter(([key]) => !before.has(key)).map(([, value]) => value);
 }
 
-export function createDocumentHistory(db: Pick<Database, 'execute'>, owner: string) {
+export function createDocumentHistory(db: DocumentConnection, owner: string) {
   const repository = createHistoryRepository(db, owner),
     documents = createDocumentService(db, owner);
   async function read(sheetId: string, targetRevision: string) {
@@ -158,7 +158,7 @@ export function createDocumentHistory(db: Pick<Database, 'execute'>, owner: stri
       if (preview.sameContent) throw new DocumentError('ALREADY_CURRENT');
       if (!preview.canRestore) throw new DocumentError('UNEDITABLE_DOCUMENT', preview.target.validation.issues);
       if (confirmation !== preview.confirmation) throw new DocumentError('VISIBILITY_CONFIRMATION_REQUIRED');
-      const saved = snapshot(await repository.restore(sheetId, targetRevision, expectedRevision));
+      const saved = snapshot(await repository.restore(sheetId, targetRevision, expectedRevision, confirmation));
       if (
         saved.sheetId.toLowerCase() !== sheetId.toLowerCase() ||
         saved.revision !== (BigInt(expectedRevision) + 1n).toString() ||
@@ -211,7 +211,7 @@ export function createDocumentHistory(db: Pick<Database, 'execute'>, owner: stri
       const preview = await this.previewDeleted(sheetId, expectedDeletionRevision);
       if (!preview.canRestore) throw new DocumentError('UNEDITABLE_DOCUMENT', preview.target.validation.issues);
       if (confirmation !== preview.confirmation) throw new DocumentError('VISIBILITY_CONFIRMATION_REQUIRED');
-      const saved = snapshot(await repository.restoreDeleted(sheetId, expectedDeletionRevision));
+      const saved = snapshot(await repository.restoreDeleted(sheetId, expectedDeletionRevision, confirmation));
       if (
         saved.sheetId.toLowerCase() !== sheetId.toLowerCase() ||
         saved.revision !== (BigInt(expectedDeletionRevision) + 1n).toString() ||

@@ -1,11 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-
-import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
+import { getOwnerId, SkillSheetNotFoundError } from '@/db';
 import { buildSkillSheetXlsx } from '@/lib/export/build-xlsx';
 import { buildSkillSheetXlsxDigest } from '@/lib/export/build-xlsx-digest';
 import { digestTitle, EXPORT_EDITIONS } from '@/lib/export/edition';
 import { isEditor } from '@/server/auth-gate';
+import { getDocumentDb } from '@/server/d1-runtime';
 import { readViewerDocument } from '@/server/document-view';
 import { hasViewerSession } from '@/server/viewer-gate';
 
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const sheet = await readViewerDocument(getDb(), getOwnerId(), id);
+    const sheet = await readViewerDocument(getDocumentDb(), getOwnerId(), id);
     const buf =
       edition.data === 'digest'
         ? await buildSkillSheetXlsxDigest(sheet.blocks, sheet.title)

@@ -8,14 +8,16 @@
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
-    "node": "22.x"
+    "node": "24.x"
   },
   "volta": {
-    "node": "22.23.4"
+    "node": "24.22.1"
   },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:workers": "opennextjs-cloudflare build --config wrangler.ui.jsonc",
+    "preview:workers": "opennextjs-cloudflare preview --config wrangler.ui.jsonc",
     "start": "next start",
     "lint": "biome check . --error-on-warnings && node script/check-jsdom-pdf-assertion.mjs && node script/check-telemetry-import.mjs && node script/sync-agent-config.mjs --check && ./script/check-naming.sh",
     "format": "biome format --write .",
@@ -27,6 +29,7 @@
     "test:e2e": "pnpm build && node script/headless-e2e.mjs",
     "test:e2e:playwright": "pnpm build && pnpm test:playwright",
     "test:e2e:local": "./script/e2e-isolated-db.sh run bash .github/ci/run.sh e2e-prepared",
+    "test:d1:app": "tsx script/verify-d1-app.ts",
     "verify:deployed-css": "node script/verify-deployed-css.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
@@ -43,6 +46,8 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/ibm-plex-sans-jp": "5.3.1",
     "@modelcontextprotocol/server": "2.3.1",
     "@neondatabase/serverless": "^1.1.0",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -95,6 +100,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.0",
     "@next/bundle-analyzer": "^16.3.6",
+    "@opennextjs/cloudflare": "1.20.10",
     "@playwright/test": "^1.51.1",
     "@storybook/addon-docs": "^10.5.4",
     "@storybook/nextjs-vite": "^10.5.4",
@@ -120,7 +126,8 @@
     "tailwindcss": "^4.3.0",
     "tsx": "^4.23.9",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.9"
+    "vitest": "^3.0.9",
+    "wrangler": "4.148.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

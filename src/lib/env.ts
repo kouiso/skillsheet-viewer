@@ -2,7 +2,8 @@
  * サーバー環境変数のフェイルファスト検証。
  *
  * 必須（欠けると致命的）:
- *   DATABASE_URL          — Neon Postgres 接続文字列（正本データ源）
+ *   DATABASE_URL          — Neon選択時のPostgres接続文字列
+ *   D1_GATEWAY_URL / D1_GATEWAY_SERVICE_TOKEN / BETTER_AUTH_URL — D1選択時の共通接続境界
  *   SESSION_SECRET        — 閲覧用 HMAC セッション署名鍵
  *   VIEWER_CODE           — 閲覧用ログインコード
  *   BETTER_AUTH_SECRET    — 編集者ログイン（Better Auth）の署名鍵
@@ -53,7 +54,16 @@ export function assertServerEnv(): void {
   if (validated) return;
   if (isBuildPhase()) return;
 
-  const missing = REQUIRED_SERVER_ENV.filter((key) => {
+  const required: readonly string[] =
+    process.env.SKILLSHEET_DB_BACKEND === 'd1'
+      ? [
+          ...REQUIRED_SERVER_ENV.filter((key) => key !== 'DATABASE_URL'),
+          'D1_GATEWAY_URL',
+          'D1_GATEWAY_SERVICE_TOKEN',
+          'BETTER_AUTH_URL',
+        ]
+      : REQUIRED_SERVER_ENV;
+  const missing = required.filter((key) => {
     const value = process.env[key];
     return value === undefined || value === '';
   });
@@ -61,7 +71,7 @@ export function assertServerEnv(): void {
   if (missing.length > 0) {
     throw new Error(
       `必須のサーバー環境変数が設定されていません: ${missing.join(', ')}。` +
-        ` これらを設定してから起動してください（必須: ${REQUIRED_SERVER_ENV.join(', ')}）。`,
+        ` これらを設定してから起動してください（必須: ${required.join(', ')}）。`,
     );
   }
 
