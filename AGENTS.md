@@ -61,3 +61,9 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## GitHub Project での作業管理
+
+- この repo の作業は GitHub Project（`.github/scrum-board.yml` の番号）で管理する
+- 次にやる物と、課題の起こし方は `.agents/skills/scrum-board/SKILL.md`
+- Status は Backlog / In progress / In review / Done の 4 つ。Todo は作らん
