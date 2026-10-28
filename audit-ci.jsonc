@@ -3,13 +3,8 @@
   "moderate": false,
   "low": false,
   "critical": true,
-  "allowlist": [
-    // image-size@2.0.2 には JXL/HEIF パーサーの DoS 脆弱性（GHSA-5p2g-fcmc-qvqq, GHSA-w3rx-r6r6-pgpr）があるが、
-    // 修正版がリリースされていない（2026-08-07 時点 latest が 2.0.2）。
-    // 本プロジェクトでは image-size は Storybook 用ビルダー（@storybook/nextjs-vite > vite-plugin-storybook-nextjs）の
-    // 開発時依存経由でのみ使用され、本番ビルド・ランタイムには含まれないため、allowlist とする。
-    // 修正版リリース時は即座に解除すること。追跡: https://github.com/kouiso/skillsheet-viewer/issues/180
-    "GHSA-5p2g-fcmc-qvqq",
-    "GHSA-w3rx-r6r6-pgpr"
-  ]
+  // image-size の DoS 勧告（GHSA-5p2g-fcmc-qvqq / GHSA-w3rx-r6r6-pgpr）は、storybook 10.6 系で
+  // 依存が probe-image-size へ切り替わり image-size がツリーから外れたため解消した。
+  // 復活時に脆弱版を拾わないよう pnpm.overrides で >=2.0.3 の下限も残す（旧 allowlist 解除・追跡 #180）。
+  "allowlist": []
 }
