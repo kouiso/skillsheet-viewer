@@ -1,5 +1,6 @@
 import { getAuth } from '@/lib/auth';
 import { isMcpEnabled } from '@/lib/mcp-config';
+import { d1Auth, isD1Runtime } from '@/server/d1-runtime';
 
 export const runtime = 'nodejs';
 
@@ -19,6 +20,7 @@ export async function GET(request: Request): Promise<Response> {
   if (!isMcpEnabled()) {
     return new Response('Not Found', { status: 404 });
   }
+  if (isD1Runtime()) return d1Auth(request);
   return (await getAuth()).handler(request);
 }
 

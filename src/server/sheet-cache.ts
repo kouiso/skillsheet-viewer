@@ -1,4 +1,5 @@
 import { currentMonthKey } from '@/db/derived-display';
+import { getDocumentDb, isD1Runtime } from '@/server/d1-runtime';
 // クライアントバンドルに巻き込まれた瞬間にビルドを失敗させる。
 // これまでは「Client Component から import しないこと」というコメントだけが頼りで、
 // 誤って読み込んでも誰も気づけなかった（秘密情報の露出・巨大ドライバの同梱に直結する）。
@@ -6,7 +7,6 @@ import { currentMonthKey } from '@/db/derived-display';
 import 'server-only';
 
 import { unstable_cache } from 'next/cache';
-import { getDb } from '@/db/client';
 import { DocumentError } from '@/db/document-service';
 import { getOwnerId, SkillSheetNotFoundError } from '@/db/skillsheet';
 import { fetchSheetFile, listSheets as githubListSheets } from '@/server/github-sheet';
@@ -109,7 +109,7 @@ export const getCachedSheet = unstable_cache((path: string) => fetchSheetFile(pa
 // 指定 ID のシートを読む（/view/db/[id] が使う）。fetchedAt を同梱する（Issue #204）。
 const getCachedDbSheetByIdRaw = unstable_cache(
   async (owner: string, id: string, referenceMonth: number) => ({
-    ...(await readViewerDocument(getDb(), owner, id, referenceMonth)),
+    ...(await readViewerDocument(getDocumentDb(), owner, id, referenceMonth)),
     fetchedAt: Date.now(),
   }),
   ['db-sheet-by-id-v13-month'],
@@ -120,15 +120,17 @@ const getCachedDbSheetByIdRaw = unstable_cache(
 export async function getCachedDbSheetById(id: string): ReturnType<typeof getCachedDbSheetByIdRaw> {
   const owner = getOwnerId();
   const referenceMonth = currentMonthKey();
+  if (isD1Runtime())
+    return { ...(await readViewerDocument(getDocumentDb(), owner, id, referenceMonth)), fetchedAt: Date.now() };
   return withDbHealthCheck(await getCachedDbSheetByIdRaw(owner, id, referenceMonth), () =>
-    readViewerDocument(getDb(), owner, id, referenceMonth),
+    readViewerDocument(getDocumentDb(), owner, id, referenceMonth),
   );
 }
 
 // デフォルトシート（後方互換 /view/db 単体表示）。fetchedAt を同梱する（Issue #204）。
 const getCachedDbSheetRaw = unstable_cache(
   async (owner: string, referenceMonth: number) => ({
-    ...(await readViewerDocument(getDb(), owner, null, referenceMonth)),
+    ...(await readViewerDocument(getDocumentDb(), owner, null, referenceMonth)),
     fetchedAt: Date.now(),
   }),
   ['db-sheet-v13-month'],
@@ -139,7 +141,9 @@ const getCachedDbSheetRaw = unstable_cache(
 export async function getCachedDbSheet(): ReturnType<typeof getCachedDbSheetRaw> {
   const owner = getOwnerId();
   const referenceMonth = currentMonthKey();
+  if (isD1Runtime())
+    return { ...(await readViewerDocument(getDocumentDb(), owner, null, referenceMonth)), fetchedAt: Date.now() };
   return withDbHealthCheck(await getCachedDbSheetRaw(owner, referenceMonth), () =>
-    readViewerDocument(getDb(), owner, null, referenceMonth),
+    readViewerDocument(getDocumentDb(), owner, null, referenceMonth),
   );
 }

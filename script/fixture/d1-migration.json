@@ -1,0 +1,102 @@
+{
+  "tables": [
+    {
+      "table": {
+        "name": "public.document_versions",
+        "columns": [
+          { "name": "sheet_id", "kind": "uuid", "nullable": false },
+          { "name": "owner_id", "kind": "text", "nullable": false },
+          { "name": "revision", "kind": "revision", "nullable": false },
+          { "name": "title", "kind": "text", "nullable": false },
+          { "name": "blocks", "kind": "json", "nullable": false },
+          { "name": "action", "kind": "text", "nullable": false },
+          { "name": "recorded_at", "kind": "timestamp", "nullable": false },
+          { "name": "transaction_id", "kind": "int64", "nullable": false },
+          { "name": "restored_from", "kind": "revision", "nullable": true },
+          { "name": "restored_before", "kind": "revision", "nullable": true }
+        ],
+        "primaryKey": ["sheet_id", "revision"]
+      },
+      "rows": [
+        {
+          "sheet_id": "AAAAAAAA-0000-0000-0000-000000000001",
+          "owner_id": "fixture-owner-a",
+          "revision": "9007199254740993",
+          "title": "合成の削除済み文書",
+          "blocks": "[{\"id\":\"fixture-block\",\"type\":\"future-type\",\"order\":0,\"data\":{\"unknown\":9007199254740993,\"nested\":[null,false,\"日本語\"]}}]",
+          "action": "delete",
+          "recorded_at": "2026-10-22 20:30:40.123456+09",
+          "transaction_id": "9223372036854775807",
+          "restored_from": null,
+          "restored_before": null
+        },
+        {
+          "sheet_id": "aaaaaaaa-0000-0000-0000-000000000001",
+          "owner_id": "fixture-owner-a",
+          "revision": "9007199254740994",
+          "title": "合成の復元済み文書",
+          "blocks": "[]",
+          "action": "restore-deleted",
+          "recorded_at": "2026-10-22T11:30:40.123457Z",
+          "transaction_id": "9007199254740995",
+          "restored_from": "9007199254740993",
+          "restored_before": "9007199254740993"
+        }
+      ]
+    },
+    {
+      "table": {
+        "name": "public.skillsheet_state",
+        "columns": [
+          { "name": "owner_id", "kind": "text", "nullable": false },
+          { "name": "deleted_sheet_ids", "kind": "uuid-array", "nullable": false },
+          { "name": "initialized_at", "kind": "timestamp", "nullable": false }
+        ],
+        "primaryKey": ["owner_id"]
+      },
+      "rows": [
+        {
+          "owner_id": "fixture-owner-a",
+          "deleted_sheet_ids": "[\"aaaaaaaa-0000-0000-0000-000000000001\"]",
+          "initialized_at": "2026-10-22T00:00:00.000001Z"
+        }
+      ]
+    },
+    {
+      "table": {
+        "name": "public.deleted_documents",
+        "columns": [
+          { "name": "sheet_id", "kind": "uuid", "nullable": false },
+          { "name": "owner_id", "kind": "text", "nullable": false },
+          { "name": "revision", "kind": "revision", "nullable": false },
+          { "name": "deleted_at", "kind": "timestamp", "nullable": false }
+        ],
+        "primaryKey": ["sheet_id"]
+      },
+      "rows": []
+    },
+    {
+      "table": {
+        "name": "skillsheet_private.principals",
+        "columns": [
+          { "name": "login_name", "kind": "text", "nullable": false },
+          { "name": "owner_id", "kind": "text", "nullable": false }
+        ],
+        "primaryKey": ["login_name"]
+      },
+      "rows": [{ "login_name": "fixture-runtime", "owner_id": "fixture-owner-a" }]
+    },
+    {
+      "table": {
+        "name": "drizzle.__drizzle_migrations",
+        "columns": [
+          { "name": "id", "kind": "integer", "nullable": false },
+          { "name": "hash", "kind": "text", "nullable": false },
+          { "name": "created_at", "kind": "int64", "nullable": true }
+        ],
+        "primaryKey": ["id"]
+      },
+      "rows": [{ "id": 1, "hash": "fixture-migration-hash", "created_at": "9007199254740993" }]
+    }
+  ]
+}

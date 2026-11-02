@@ -229,7 +229,7 @@
   --shadow-elevation-4: var(--elevation-4);
   --shadow-elevation-8: var(--elevation-8);
 
-  /* next/font はスコープ付きのファミリ名を生成するので、まず変数を引く。
+  /* font.css が同じ IBM Plex ファミリとロード中の補正を変数へ設定する。
      リテラル名は変数が無い場合（Storybook 等）のフォールバックとして後ろに残す。 */
   --font-sans:
     var(--font-ibm-sans-jp), 'IBM Plex Sans JP', 'IBM Plex Sans', 'Helvetica Neue', Arial,

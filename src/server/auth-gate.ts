@@ -1,8 +1,8 @@
 import { headers } from 'next/headers';
 import { cache } from 'react';
-
 import { getAuth } from '@/lib/auth';
 import { reportDegradation } from '@/server/report-error';
+import { getD1EditorUserId, isD1Runtime } from './d1-runtime';
 
 /**
  * 編集者（オーナー）認可の単一チェックポイント（DAL）。
@@ -23,10 +23,14 @@ export async function isEditor(requestHeaders?: Headers): Promise<boolean> {
  */
 async function resolveEditorUserId(requestHeaders?: Headers): Promise<string | null> {
   const ownerId = process.env.SKILLSHEET_OWNER_ID;
-  if (!process.env.BETTER_AUTH_SECRET || !process.env.DATABASE_URL || !ownerId) {
+  if (!process.env.BETTER_AUTH_SECRET || (!isD1Runtime() && !process.env.DATABASE_URL) || !ownerId) {
     return null;
   }
   try {
+    if (isD1Runtime()) {
+      const userId = await getD1EditorUserId(requestHeaders ?? new Headers(await headers()));
+      return userId === ownerId ? userId : null;
+    }
     const session = await (await getAuth()).api.getSession({ headers: requestHeaders ?? (await headers()) });
     const userId = session?.user?.id;
     if (!userId || userId !== ownerId) {
