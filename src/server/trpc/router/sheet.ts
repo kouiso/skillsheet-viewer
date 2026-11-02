@@ -1,9 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
-import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
+import { getOwnerId, SkillSheetNotFoundError } from '@/db';
 import { isRevision } from '@/db/document-contract';
 import { createDocumentHistory } from '@/db/document-history';
 import { createDocumentService, DocumentError } from '@/db/document-service';
+import { getDocumentDb } from '@/server/d1-runtime';
 import { getCachedDbSheet, getCachedDbSheetById, toStaleSheet } from '@/server/sheet-cache';
 import { invalidateDbSheetCache } from '@/server/sheet-service';
 
@@ -17,7 +18,7 @@ import {
 } from '../schema';
 
 function documents() {
-  return createDocumentService(getDb(), getOwnerId());
+  return createDocumentService(getDocumentDb(), getOwnerId());
 }
 async function navigation() {
   return (await documents().list()).map((s) => ({ id: s.sheetId, title: s.title, updatedAt: new Date(s.updatedAt) }));
@@ -42,6 +43,8 @@ async function documentCall<T>(action: () => Promise<T>): Promise<T> {
                     'SNAPSHOT_ID_MISMATCH',
                     'OWNER_REQUIRED',
                     'UNREADABLE_DOCUMENT',
+                    'GATEWAY_OUTCOME_UNKNOWN',
+                    'INVALID_GATEWAY_CONFIG',
                   ].includes(error.code)
                 ? 'INTERNAL_SERVER_ERROR'
                 : 'BAD_REQUEST';
@@ -56,7 +59,7 @@ const historyRevision = z.string().refine(isRevision, 'invalid revision');
 const restoreInput = historyId.extend({ targetRevision: historyRevision, expectedRevision: historyRevision });
 const deletedInput = historyId.extend({ expectedDeletionRevision: historyRevision });
 function history() {
-  return createDocumentHistory(getDb(), getOwnerId());
+  return createDocumentHistory(getDocumentDb(), getOwnerId());
 }
 
 export const sheetRouter = router({
