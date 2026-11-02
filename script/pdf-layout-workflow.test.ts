@@ -33,7 +33,7 @@ function stepScript(name: string): string {
 }
 function runStep(name: string, dir: string) {
   return spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', stepScript(name)], {
-    env: { PATH: `${dir}:/usr/bin:/bin`, NODE_ENV: 'test', RUNNER_TEMP: dir },
+    env: { PATH: `${dir}:/usr/bin:/bin:/usr/sbin:/sbin`, NODE_ENV: 'test', RUNNER_TEMP: dir },
     encoding: 'utf8',
   });
 }
@@ -230,7 +230,13 @@ it.each([
   if (mutation === 'missing-input') rmSync(out);
   const result = runStep('Record synthetic evidence', dir);
   expect(result.status).toBe(1);
-  expect(result.stdout).toContain('::error::Synthetic');
+  const expectedError =
+    mutation === 'missing-input'
+      ? 'Synthetic input is missing.'
+      : mutation === 'duplicate-record'
+        ? 'Synthetic evidence must contain exactly one record.'
+        : 'Synthetic input hash mismatch.';
+  expect(result.stdout.trim()).toBe(`::error::${expectedError}`);
   expect(result.stdout + result.stderr).not.toContain('PDF_SYNTHETIC_FIXTURE');
   expect(result.stdout + result.stderr).not.toContain('SYNTHETIC_INPUT_CHANGED');
 });

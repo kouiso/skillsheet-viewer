@@ -119,7 +119,27 @@ describe('定期実行の workflow', () => {
       .map((line) => line.replace(/^ {10}/, ''))
       .join('\n');
     if (!script) throw new Error('missing script in Collect sample');
-    // cwd に script/ が無いので collector は 127 で落ちる（権限落ちの 126 と同じ「標本なし」の経路）。
+    // 環境変数付きコマンドの起動失敗は bash の版で 1 / 127 が異なるため、同じ shell で観測する。
+    const missingCollector = spawnSync(
+      '/bin/bash',
+      [
+        '--noprofile',
+        '--norc',
+        '-e',
+        '-o',
+        'pipefail',
+        '-c',
+        'PGSERVICEFILE="$RUNNER_TEMP/pg_service.conf" ./script/collect-history-capacity-sample.sh sample.json',
+      ],
+      {
+        cwd,
+        env: { PATH: `${dirname(jqPath)}:/usr/bin:/bin`, NODE_ENV: 'test', RUNNER_TEMP: cwd },
+        encoding: 'utf8',
+      },
+    );
+    expect(missingCollector.error).toBeUndefined();
+    expect(missingCollector.signal).toBeNull();
+    expect(missingCollector.status).toBeGreaterThan(0);
     const result = spawnSync('/bin/bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
       cwd,
       env: {
@@ -134,7 +154,7 @@ describe('定期実行の workflow', () => {
     const files = readdirSync(join(cwd, 'history-samples'));
     expect(files).toHaveLength(1);
     const sample = JSON.parse(readFileSync(join(cwd, 'history-samples', files[0] ?? ''), 'utf8'));
-    expect(sample.collectionError).toBe('collector exited 127 without a sample');
+    expect(sample.collectionError).toBe(`collector exited ${missingCollector.status} without a sample`);
     expect(evaluateMonitor([sample]).status).toBe('measurement-failed');
     expect(readdirSync(cwd)).not.toContain('pg_service.conf');
   });
