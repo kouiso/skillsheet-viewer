@@ -1,0 +1,10 @@
+{
+  "$comment": "text-checks.cjs の出どころ。brain #110 の共通版ができたら、その写しに差し替えて repo・commit・path を書き、sha256 を写しの値にする。写しを手で直すと sha256 がずれてテストが落ちる（元を直してから写し直す）。",
+  "status": "provisional",
+  "repo": "kouiso/brain",
+  "issue": 110,
+  "commit": null,
+  "path": null,
+  "file": ".github/scripts/text-checks.cjs",
+  "sha256": "c6f1c4a29760a7074e866c858490e1c43a3b2b753c2786065b83ac0364d6d7c7"
+}
