@@ -1,10 +1,50 @@
 {
-  "$comment": "text-checks.cjs の出どころ。brain #110 の共通版ができたら、その写しに差し替えて repo・commit・path を書き、sha256 を写しの値にする。写しを手で直すと sha256 がずれてテストが落ちる（元を直してから写し直す）。",
-  "status": "provisional",
+  "$comment": "brain #110 の本体（Python 3 標準ライブラリのみ）の写し。写しは一字も変えない。直すときは brain 側を直してから、commit を書き換えて写し直す。写しを手で直すと sha256 がずれて .github/scripts/text-checks.test.mjs が落ちる。",
+  "status": "vendored",
   "repo": "kouiso/brain",
   "issue": 110,
-  "commit": null,
-  "path": null,
-  "file": ".github/scripts/text-checks.cjs",
-  "sha256": "c6f1c4a29760a7074e866c858490e1c43a3b2b753c2786065b83ac0364d6d7c7"
+  "branch": "chore/110-text-checks",
+  "commit": "c95d9ac1982c60ee8546a8a7b4616c995d2eb541",
+  "files": [
+    {
+      "path": ".github/scripts/text-checks/public_text_check.py",
+      "source": "script/checks/public_text_check.py",
+      "sha256": "1e8c291875a3817caab42acbbfcf82ad4a5332bc2dc3834b96afba01fb661a09"
+    },
+    {
+      "path": ".github/scripts/text-checks/format_check.py",
+      "source": "script/checks/format_check.py",
+      "sha256": "afd532914e276dd1743e5aba4b6d8d773966215fff7d62fac6cd453ea513345e"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/README.md",
+      "source": "script/checks/examples/README.md",
+      "sha256": "62b0044425ef99860dfb6b56c958ab1a1d616bbf12fd89daea311ad8d4dabc7a"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/issue_ng.md",
+      "source": "script/checks/examples/issue_ng.md",
+      "sha256": "12f960c49afdff6a77a0cfa64f9fa392c07c657cc512c77104c23834883fa223"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/issue_ok.md",
+      "source": "script/checks/examples/issue_ok.md",
+      "sha256": "b037b29d576db63617fd61a01c65badfab8e044ff4f9b8b019a9f771b1d6b268"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/pr_ng.md",
+      "source": "script/checks/examples/pr_ng.md",
+      "sha256": "fa6be092e6098ccb487eb7baee0222168b6babe5b1b781eb9b5d0a36bcb43f60"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/pr_ok.md",
+      "source": "script/checks/examples/pr_ok.md",
+      "sha256": "c4cd65dcb15ee6152dd64f2821786b6754f1968006d973461f637e0775416fb0"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/public_ok.md",
+      "source": "script/checks/examples/public_ok.md",
+      "sha256": "6425758d2a7cce5c084f059c5bc5f471ac2d7a5eb49a2f504e46d077d1820b05"
+    }
+  ]
 }

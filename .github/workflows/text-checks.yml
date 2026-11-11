@@ -1,18 +1,15 @@
 name: Text Checks
 
-# issue・PR・コメント本文の書き方チェックと公開内容チェック（#615）。
-# 判定は .github/scripts/text-checks.cjs、設定は .github/text-checks.config.json。
+# issue・PR 本文の書き方チェックと公開内容チェック（#615）。Actions の分数を抑えるため、きっかけは本文の作成・編集だけ（コメントは見ない）。
+# 判定は brain #110 の本体の写し .github/scripts/text-checks/（Python 3 標準ライブラリのみ、出どころは
+# .github/text-checks.source.json）。呼び出しと知らせる文は .github/scripts/text-checks-caller.cjs、設定は .github/text-checks.config.json。
 # 本文の自動編集・自動削除はしない。目印つきのコメントを1つだけ作り、直れば同じコメントを更新する。
 # pull_request_target でも PR 側のコードは取り出さない（checkout は既定ブランチのまま）。
 on:
   issues:
     types: [opened, edited, reopened]
-  issue_comment:
-    types: [created, edited]
   pull_request_target:
     types: [opened, edited, reopened, ready_for_review]
-  pull_request_review_comment:
-    types: [created, edited]
 
 permissions:
   contents: read
@@ -20,7 +17,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: text-checks-${{ github.event.issue.number || github.event.pull_request.number }}-${{ github.event.comment.id || 'body' }}
+  group: text-checks-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -36,42 +33,37 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
           sparse-checkout: |
-            .github/scripts/text-checks.cjs
+            .github/scripts/text-checks/public_text_check.py
+            .github/scripts/text-checks/format_check.py
+            .github/scripts/text-checks-caller.cjs
             .github/text-checks.config.json
           sparse-checkout-cone-mode: false
       - name: Run checks
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          # 非公開の規則（禁止語・固有語）。リポにもログにも置かない。未設定なら空で、公開してよい形だけで判定する。
-          TEXT_CHECKS_PRIVATE_RULES: ${{ secrets.TEXT_CHECKS_PRIVATE_RULES }}
+          # 追加の禁止語（顧客名・固有の語など、1行1語）。リポにもログにも置かない。
+          # runner の一時ファイルに書いて本体へ PUBLIC_TEXT_EXTRA_FILE で渡す。未設定なら一般の規則だけで判定する。
+          PUBLIC_TEXT_EXTRA: ${{ secrets.PUBLIC_TEXT_EXTRA }}
         with:
           script: |
-            const checks = require('./.github/scripts/text-checks.cjs');
+            const checks = require('./.github/scripts/text-checks-caller.cjs');
             const config = require('./.github/text-checks.config.json');
-            config.publicContent.rules = config.publicContent.rules.concat(checks.loadPrivateRules(process.env.TEXT_CHECKS_PRIVATE_RULES));
+            const extraFile = checks.writeExtraFile(process.env.PUBLIC_TEXT_EXTRA, process.env.RUNNER_TEMP);
             const { owner, repo } = context.repo;
             const p = context.payload;
 
-            let number, body, author, kind, source, labels = [], draft = false;
-            if (p.comment) {
-              number = (p.issue || p.pull_request).number;
-              body = p.comment.body;
-              author = p.comment.user.login;
-              kind = 'comment';
-              source = `comment-${p.comment.id}`;
-            } else if (p.pull_request) {
+            let number, body, author, kind, labels = [], draft = false;
+            if (p.pull_request) {
               number = p.pull_request.number;
               body = p.pull_request.body;
               author = p.pull_request.user.login;
               kind = 'pull_request';
-              source = 'body';
               draft = p.pull_request.draft;
             } else {
               number = p.issue.number;
               body = p.issue.body;
               author = p.issue.user.login;
               kind = 'issue';
-              source = 'body';
               labels = (p.issue.labels || []).map((l) => l.name);
             }
 
@@ -91,15 +83,15 @@ jobs:
 
             const failures = [];
 
-            const pub = checks.checkPublicContent(body, config);
-            const pubKey = `public-${source}`;
-            await upsert(pubKey, checks.formatReport('public', pub, config).replace(`${config.marker}:public`, `${config.marker}:${pubKey}`), pub.ok);
-            if (!pub.ok) failures.push(`公開内容チェック: ${pub.findings.map((f) => f.id).join(', ')}`);
+            const pub = checks.runPublicCheck(body, { extraFile });
+            const pubKey = 'public-body';
+            await upsert(pubKey, checks.formatReport('public', pub, config, pubKey), pub.ok);
+            if (!pub.ok) failures.push(`公開内容チェック: ${checks.groupHits(pub.hits).map((g) => g.rule).join(', ')}`);
 
-            if (kind !== 'comment' && !checks.shouldSkipFormat({ kind, author, labels, draft }, config)) {
-              const fmt = kind === 'issue' ? checks.checkIssueFormat(body, config) : checks.checkPrFormat(body, config);
+            if (!checks.shouldSkipFormat({ kind, author, labels, draft }, config)) {
+              const fmt = checks.runFormatCheck(body, kind === 'issue' ? 'issue' : 'pr');
               await upsert('format', checks.formatReport('format', fmt, config), fmt.ok);
-              if (!fmt.ok) failures.push(`書き方チェック: ${fmt.missing.map((m) => m.name).join(', ')}`);
+              if (!fmt.ok) failures.push(`書き方チェック: ${fmt.problems.length}件不足`);
             }
 
             if (failures.length > 0) core.setFailed(failures.join(' / '));

@@ -1,212 +1,152 @@
-// text-checks.cjs のテスト（#615）。workflow 側は CJS のまま require するので、
-// テストは ESM にして createRequire で読む（devin-slack-relay.test.mjs と同じ形）。
+// text-checks のテスト（#615）。判定の本体は brain #110 の写し（Python）で、ここでは
+// ①写しが元のコミットから一字もずれていないこと、②写しが本体と同じ結果を返すこと（本体の examples）、
+// ③呼び出し側（text-checks-caller.cjs）が規則名だけを返し、当たった文字や追加の語を出さないことを確かめる。
 // 秘密の形の例は、検査ツールに本物と間違われないよう文字をつないで作る（どれも作り物）。
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { describe, expect, test } from 'vitest';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterAll, describe, expect, test } from 'vitest';
 
 const require = createRequire(import.meta.url);
-const checks = require('./text-checks.cjs');
+const caller = require('./text-checks-caller.cjs');
 const config = require('../text-checks.config.json');
+const source = require('../text-checks.source.json');
 
+const ROOT = path.resolve(import.meta.dirname, '../..');
+const EXAMPLES = path.join(caller.CHECKS_DIR, 'examples');
+const example = (name) => readFileSync(path.join(EXAMPLES, name), 'utf8');
 const join = (...parts) => parts.join('');
 
-const GOOD_ISSUE = [
-  '## 背景',
-  'このリポは公開されている。',
-  '## 今どこまで',
-  '- 調べた（2026-10-29）',
-  '## 次にやること',
-  '1. 公開内容チェックを入れる',
-  '## 誰の判断待ち',
-  '- 磯貝さん: 入れてよいか',
-  '## 完了条件',
-  '- 赤と緑をテストで確かめた',
-].join('\n');
+function listFiles(dir) {
+  return readdirSync(dir).flatMap((name) => {
+    const full = path.join(dir, name);
+    return statSync(full).isDirectory() ? listFiles(full) : [full];
+  });
+}
 
-const GOOD_PR = [
-  '## 概要',
-  '書き方チェックを入れる。',
-  '## 変更内容',
-  '- workflow と設定を足した',
-  '## 関連Issue',
-  'Refs #615',
-].join('\n');
-
-describe('書き方チェック（issue）', () => {
-  test('5つの見出しがそろっていれば OK', () => {
-    expect(checks.checkIssueFormat(GOOD_ISSUE, config)).toEqual({ ok: true, missing: [] });
+describe('写しのずれ検査（brain #110 の本体）', () => {
+  test('元のリポと固定したコミットが書いてある', () => {
+    expect(source.status).toBe('vendored');
+    expect(source.repo).toBe('kouiso/brain');
+    expect(source.issue).toBe(110);
+    expect(source.commit).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  test('見出しが無いと赤になり、足りない見出しの名前が出る', () => {
-    const body = GOOD_ISSUE.replace('## 誰の判断待ち\n- 磯貝さん: 入れてよいか\n', '');
-    const r = checks.checkIssueFormat(body, config);
-    expect(r.ok).toBe(false);
-    expect(r.missing).toEqual([{ name: '誰の判断待ち', reason: '見出しがない' }]);
+  test.each(source.files.map((f) => [f.path, f]))('%s が写したときの中身と一致する', (_p, f) => {
+    const actual = createHash('sha256')
+      .update(readFileSync(path.join(ROOT, f.path)))
+      .digest('hex');
+    expect(actual).toBe(f.sha256);
   });
 
-  test('見出しだけ・「-」だけ・コメントだけ・_No response_ は未記入', () => {
-    const body = GOOD_ISSUE.replace('- 調べた（2026-10-29）', '-')
-      .replace('1. 公開内容チェックを入れる', '<!-- ここに書く -->')
-      .replace('- 赤と緑をテストで確かめた', '_No response_');
-    const r = checks.checkIssueFormat(body, config);
-    expect(r.ok).toBe(false);
-    expect(r.missing.map((m) => m.name)).toEqual(['今どこまで', '次にやること', '完了条件']);
-    expect(r.missing.every((m) => m.reason === '中身が書いていない')).toBe(true);
+  test('写しの置き場所には、記録にないファイルが無い', () => {
+    const listed = source.files.map((f) => f.path).sort();
+    const present = listFiles(caller.CHECKS_DIR)
+      .map((p) => path.relative(ROOT, p))
+      .filter((p) => !p.includes('__pycache__'))
+      .sort();
+    expect(present).toEqual(listed);
+  });
+});
+
+describe('写しが本体と同じ結果を返す（本体の examples）', () => {
+  test('issue_ok は緑、issue_ng は本体と同じ3件で赤', () => {
+    expect(caller.runFormatCheck(example('issue_ok.md'), 'issue')).toEqual({ ok: true, problems: [] });
+    expect(caller.runFormatCheck(example('issue_ng.md'), 'issue')).toEqual({
+      ok: false,
+      problems: ['「今どこまで」が未記入です', '「次にやること」が未記入です', '見出し「誰の判断待ち」がありません'],
+    });
   });
 
-  test('フォームの「###」見出しと別名（完成の定義など）も数える', () => {
-    const body = [
-      '### (Why?)なぜ、このタスクをやるのか？',
-      '理由',
-      '### 今どこまで',
-      '途中',
-      '### (How To ?) やり方の指定があるか？',
-      'なし',
-      '### 誰の判断待ち',
-      '山南',
-      '### (Complete!) 完成の定義(箇条書き)',
-      '- 動く',
-    ].join('\n');
-    expect(checks.checkIssueFormat(body, config).ok).toBe(true);
+  test('pr_ok は緑、pr_ng は本体と同じ2件で赤', () => {
+    expect(caller.runFormatCheck(example('pr_ok.md'), 'pr')).toEqual({ ok: true, problems: [] });
+    expect(caller.runFormatCheck(example('pr_ng.md'), 'pr')).toEqual({
+      ok: false,
+      problems: ['見出し「変更内容」がありません', '「関連Issue」に `Closes #番号` か `Refs #番号` がありません'],
+    });
+  });
+
+  test('public_ok は緑（コミット番号は注意だけで止めない）', () => {
+    const r = caller.runPublicCheck(example('public_ok.md'));
+    expect(r.ok).toBe(true);
+    expect(r.hits).toEqual([]);
   });
 
   test('直すと赤から緑に変わる', () => {
-    const broken = GOOD_ISSUE.replace('## 完了条件\n- 赤と緑をテストで確かめた', '## 完了条件\n');
-    expect(checks.checkIssueFormat(broken, config).ok).toBe(false);
-    expect(checks.checkIssueFormat(GOOD_ISSUE, config).ok).toBe(true);
+    const fixed = example('issue_ng.md')
+      .replace('### 今どこまで\n-', '### 今どこまで\n- 作った')
+      .replace('<!-- ここに書く -->', '- 呼ぶ側を作る\n\n## 誰の判断待ち\n- 副長');
+    expect(caller.runFormatCheck(fixed, 'issue').ok).toBe(true);
   });
 });
 
-describe('書き方チェック（PR）', () => {
-  test('概要・変更内容・関連Issue があれば OK', () => {
-    expect(checks.checkPrFormat(GOOD_PR, config)).toEqual({ ok: true, missing: [] });
-  });
-
-  test('今の PR テンプレート（Issue リンク・概要・見て欲しいポイント）で書いたものも OK', () => {
-    const body = [
-      '## Issue リンク / Link to Issue',
-      'close #615',
-      '### 概要',
-      '入れる',
-      '### 見て欲しいポイント',
-      '- [ ] workflow の権限',
-    ].join('\n');
-    expect(checks.checkPrFormat(body, config).ok).toBe(true);
-  });
-
-  test('関連Issue が無い・テンプレートのままの「close #」は赤', () => {
-    const r1 = checks.checkPrFormat(GOOD_PR.replace('Refs #615', ''), config);
-    expect(r1.ok).toBe(false);
-    expect(r1.missing.map((m) => m.name)).toEqual(['関連Issue']);
-    const r2 = checks.checkPrFormat(GOOD_PR.replace('Refs #615', 'close #'), config);
-    expect(r2.ok).toBe(false);
-  });
-
-  test('コメントの中だけにある Closes は数えない', () => {
-    const body = GOOD_PR.replace('Refs #615', '<!-- Closes #1 -->');
-    expect(checks.checkPrFormat(body, config).ok).toBe(false);
-  });
-});
-
-describe('公開内容チェック', () => {
-  const samples = {
-    'private-key': join('-----BEGIN ', 'RSA PRIVATE', ' KEY-----'),
-    'aws-access-key': join('AK', 'IA', 'ABCDEFGHIJKLMNOP'),
-    'github-token': join('gh', 'p_', 'a'.repeat(36)),
-    'slack-token': join('xo', 'xb-', '1234567890-abcdef'),
-    'api-key-sk': join('s', 'k-', 'proj-', 'x'.repeat(24)),
-    'google-api-key': join('AI', 'za', 'B'.repeat(35)),
-    jwt: join('ey', 'J', 'a'.repeat(12), '.', 'ey', 'J', 'b'.repeat(12), '.', 'c'.repeat(12)),
-    'secret-assignment': join('pass', 'word', '=', 'hunter2hunter2'),
-    'db-connection-string': join('postgres', '://', 'user', ':', 'pw12345', '@', 'db.example.test/app'),
-    'personal-email': join('taro.example', '@', 'gmail', '.com'),
+describe('公開内容チェック（呼び出し側）', () => {
+  const FAKE = {
+    '秘密の値(よくある鍵の形)': join('これを使う: ', 'gh', 'p_', 'EXAMPLEONLY0000'),
+    'DBの名前・接続先': join('接続先は ', 'postgres', '://example/test'),
+    メールアドレス: join('連絡先は someone', '@', 'example.com'),
+    金額: join('見積もりは 120,000', '円'),
   };
 
-  for (const [id, sample] of Object.entries(samples)) {
-    test(`作り物の例で赤になる: ${id}`, () => {
-      const body = `ふつうの1行目\n${sample}\nふつうの3行目`;
-      const r = checks.checkPublicContent(body, config);
-      expect(r.ok).toBe(false);
-      const hit = r.findings.find((f) => f.id === id);
-      expect(hit).toBeDefined();
-      expect(hit.lines).toEqual([2]);
-      expect(hit.count).toBe(1);
-    });
-  }
-
-  test('ふつうの文章は緑（issue #615 の本文の形、会社のメール、DB の話題だけ）', () => {
-    const body = [
-      GOOD_ISSUE,
-      '連絡は info@example.co.jp へ。',
-      'DB は D1 を使う。接続先は環境変数で渡す。',
-      'パスワードは 1Password で管理する。',
-    ].join('\n');
-    expect(checks.checkPublicContent(body, config)).toEqual({ ok: true, findings: [] });
+  test.each(Object.entries(FAKE))('作り物の例で赤になる: %s', (rule, text) => {
+    const r = caller.runPublicCheck(`ふつうの1行目\n${text}`);
+    expect(r.ok).toBe(false);
+    expect(r.hits).toContainEqual({ rule, line: 2, count: 1 });
   });
 
-  test('知らせる文には当たった文字そのものを書かない', () => {
-    const sample = samples['aws-access-key'];
-    const r = checks.checkPublicContent(`a\n${sample}`, config);
-    const report = checks.formatReport('public', r, config);
-    expect(report).toContain('aws-access-key');
-    expect(report).toContain('1件、2行目');
-    expect(report).not.toContain(sample);
+  test('知らせる文には規則の名前と行だけを書き、当たった文字は書かない', () => {
+    const text = FAKE.メールアドレス;
+    const report = caller.formatReport('public', caller.runPublicCheck(text), config);
     expect(report.startsWith(`${config.marker}:public\n`)).toBe(true);
+    expect(report).toContain('- メールアドレス: 1件、1行目');
+    expect(report).not.toContain('example.com');
+  });
+
+  test('本文が空なら公開内容は OK（本体の終了コード 2）', () => {
+    expect(caller.runPublicCheck('').ok).toBe(true);
+    expect(caller.runPublicCheck('  \n').ok).toBe(true);
   });
 });
 
-describe('対象外', () => {
+describe('追加の禁止語（secret から一時ファイルで渡す）', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'text-checks-'));
+  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+  test('未設定なら一時ファイルを作らず、一般の規則だけで判定する', () => {
+    expect(caller.writeExtraFile(undefined, dir)).toBeNull();
+    expect(caller.writeExtraFile('  \n', dir)).toBeNull();
+    expect(caller.runPublicCheck('サンプル商事さんの件', { extraFile: null }).ok).toBe(true);
+  });
+
+  test('語が当たると赤、知らせる文に語は出ない（規則名は番号だけ）', () => {
+    const file = caller.writeExtraFile('# 注釈\nサンプル商事', dir);
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+    const r = caller.runPublicCheck('サンプル商事さんの件', { extraFile: file });
+    expect(r.hits).toEqual([{ rule: '追加の禁止語 1 番目', line: 1, count: 1 }]);
+    const report = caller.formatReport('public', r, config, 'public-body');
+    expect(report.startsWith(`${config.marker}:public-body\n`)).toBe(true);
+    expect(report).not.toContain('サンプル商事');
+  });
+});
+
+describe('対象外と知らせる文', () => {
   test('ボット・下書き PR・アラート系ラベルは書き方チェックを飛ばす', () => {
-    expect(checks.shouldSkipFormat({ kind: 'pull_request', author: 'devin-ai-integration[bot]' }, config)).toBe(true);
-    expect(checks.shouldSkipFormat({ kind: 'pull_request', author: 'kouiso', draft: true }, config)).toBe(true);
-    expect(checks.shouldSkipFormat({ kind: 'issue', author: 'kouiso', labels: ['ci-failure'] }, config)).toBe(true);
-    expect(checks.shouldSkipFormat({ kind: 'issue', author: 'kouiso', labels: ['feature'] }, config)).toBe(false);
+    expect(caller.shouldSkipFormat({ kind: 'issue', author: 'github-actions[bot]' }, config)).toBe(true);
+    expect(caller.shouldSkipFormat({ kind: 'pull_request', author: 'someone', draft: true }, config)).toBe(true);
+    expect(caller.shouldSkipFormat({ kind: 'issue', author: 'someone', labels: ['ci-failure'] }, config)).toBe(true);
+    expect(caller.shouldSkipFormat({ kind: 'issue', author: 'someone', labels: ['bug'] }, config)).toBe(false);
+    expect(caller.shouldSkipFormat({ kind: 'pull_request', author: 'someone', draft: false }, config)).toBe(false);
   });
 
-  test('結果の文は目印で始まる（同じコメントを更新するため）', () => {
-    const ok = checks.formatReport('format', { ok: true, missing: [] }, config);
-    expect(ok).toBe(`${config.marker}:format\n書き方チェック: OK`);
-  });
-});
-
-describe('写しのずれ検査', () => {
-  test('text-checks.cjs の中身が text-checks.source.json の sha256 と一致する', async () => {
-    const { createHash } = await import('node:crypto');
-    const { readFileSync } = await import('node:fs');
-    const source = require('../text-checks.source.json');
-    const file = require.resolve('./text-checks.cjs');
-    const actual = createHash('sha256').update(readFileSync(file)).digest('hex');
-    expect(actual).toBe(source.sha256);
-  });
-});
-
-describe('非公開の規則（secret から読む）', () => {
-  test('未設定なら空で、公開してよい形だけで判定する', () => {
-    expect(checks.loadPrivateRules(undefined)).toEqual([]);
-    expect(checks.loadPrivateRules('')).toEqual([]);
-  });
-  test('語が当たると赤、知らせる文に語も式も出ない', () => {
-    const word = 'Zq' + 'xwordsample';
-    const rules = checks.loadPrivateRules(JSON.stringify([word, { pattern: 'a.b+c', flags: 'i' }]));
-    expect(rules.map((r) => r.id)).toEqual(['private-1', 'private-2']);
-    const cfg = {
-      ...config,
-      publicContent: { ...config.publicContent, rules: config.publicContent.rules.concat(rules) },
-    };
-    const res = checks.checkPublicContent(`ふつうの文\nここに ${word.toLowerCase()} がある`, cfg);
-    expect(res.ok).toBe(false);
-    expect(res.findings.map((f) => f.id)).toEqual(['private-1']);
-    const report = checks.formatReport('public', res, cfg);
-    expect(report).not.toContain(word.toLowerCase());
-    expect(report).not.toContain(word);
-  });
-  test('JSON が壊れていても中身はエラー文に出さない', () => {
-    const bad = '[' + 'Zq' + 'xsecretword';
-    expect(() => checks.loadPrivateRules(bad)).toThrow(/中身は表示しない/);
-    try {
-      checks.loadPrivateRules(bad);
-    } catch (e) {
-      expect(e.message).not.toContain('Zqxsecretword');
-    }
+  test('書き方の結果の文は目印で始まり、足りないものを本体の文のまま並べる', () => {
+    const r = caller.runFormatCheck(example('pr_ng.md'), 'pr');
+    const report = caller.formatReport('format', r, config);
+    expect(report.split('\n')[0]).toBe(`${config.marker}:format`);
+    expect(report).toContain('- 見出し「変更内容」がありません');
+    expect(caller.formatReport('format', { ok: true, problems: [] }, config)).toBe(
+      `${config.marker}:format\n書き方チェック: OK`,
+    );
   });
 });
