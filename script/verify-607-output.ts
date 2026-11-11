@@ -472,6 +472,7 @@ async function verifyRuntime(kind: 'next' | 'worker') {
   console.log(`[${kind}] verification done`);
 }
 
+let failed = false;
 try {
   if (!ONLY || ONLY === 'next') await verifyRuntime('next');
   if (!ONLY || ONLY === 'worker') await verifyRuntime('worker');
@@ -481,8 +482,12 @@ try {
     .catch(() => ({}));
   await writeFile(path.join(OUT, 'report.json'), JSON.stringify({ ...existing, ...results }, null, 2));
   console.log(`ALL OK -> ${OUT}`);
+} catch (e) {
+  // finally 内の process.exit(0) が失敗を握りつぶし、終了コード0・エラー無しで終わっていた
+  failed = true;
+  console.error('[FAILED] #607 output verification', e);
 } finally {
   // gateway.stop() がハングするケースがあるため終了は打ち切る
   await Promise.race([cleanup(), new Promise((r) => setTimeout(r, 5000))]);
-  process.exit(0);
+  process.exit(failed ? 1 : 0);
 }
