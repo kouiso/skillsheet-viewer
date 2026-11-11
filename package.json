@@ -127,7 +127,7 @@
     "tsx": "^4.23.9",
     "typescript": "^5.7.3",
     "vitest": "^3.0.9",
-    "wrangler": "4.148.0"
+    "wrangler": "4.157.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -151,7 +151,8 @@
       "source-map-js": ">=1.2.2",
       "vite@7": "^7.3.7",
       "posthog-js>dompurify": ">=3.4.17",
-      "image-size": ">=2.0.3"
+      "image-size": ">=2.0.3",
+      "@node-minify/core>glob": "^10.5.0"
     },
     "patchedDependencies": {
       "@react-pdf/textkit@6.3.0": "patch/@react-pdf__textkit@6.3.0.patch"

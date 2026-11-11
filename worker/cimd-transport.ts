@@ -22,7 +22,8 @@ export function createCimdTransport(
     if (!['GET', 'HEAD'].includes(source.method)) throw new Error('INVALID_CIMD_METHOD');
     const response = await fetcher(target, {
       method: 'POST',
-      redirect: 'error',
+      // workerd は redirect: 'error' を Request 生成時に TypeError で拒否する。manual で受けて下の !response.ok で弾く
+      redirect: 'manual',
       cache: 'no-store',
       signal: AbortSignal.timeout(6000),
       headers: { 'content-type': 'application/json', 'x-skillsheet-service-token': serviceToken },

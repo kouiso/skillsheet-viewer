@@ -30,7 +30,7 @@ describe('CIMDのWorkers→限定Node transport境界', () => {
     expect(upstream.mock.calls[0][1]).toMatchObject({ method: 'GET', redirect: 'error' });
     expect([...upstream.mock.calls[0][1].headers.entries()]).toEqual([['accept', 'application/json']]);
     expect(JSON.stringify(upstream.mock.calls)).not.toContain(service);
-    expect(bridge.mock.calls[0][1]?.redirect).toBe('error');
+    expect(bridge.mock.calls[0][1]?.redirect).toBe('manual');
   });
   it('conditional validatorと304のcache metadataを保持する', async () => {
     const upstream = vi
