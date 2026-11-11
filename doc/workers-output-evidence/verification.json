@@ -9,10 +9,7 @@
       "runtime": "next",
       "page": "menu-sp",
       "viewportWidth": 390,
-      "imageSize": [
-        390,
-        844
-      ],
+      "imageSize": [390, 844],
       "sha256": "20bee9f9399be1c67523d77caf584002e08ce561356d5ded5c385aa4fb5f1e69"
     },
     {
@@ -20,10 +17,7 @@
       "runtime": "next",
       "page": "menu-digest",
       "viewportWidth": 1440,
-      "imageSize": [
-        1440,
-        900
-      ],
+      "imageSize": [1440, 900],
       "sha256": "d934da3942eb16e059b341ba6725f19cd1977a502736b697756b87826f82352d"
     },
     {
@@ -31,10 +25,7 @@
       "runtime": "next",
       "page": "menu-office",
       "viewportWidth": 1440,
-      "imageSize": [
-        1440,
-        900
-      ],
+      "imageSize": [1440, 900],
       "sha256": "8c39e7abcfdba9d2b5c81d83fbabedd8e0ffdc30101ecd2c34c007b4e3472ba5"
     },
     {
@@ -42,10 +33,7 @@
       "runtime": "next",
       "page": "viewer",
       "viewportWidth": 1440,
-      "imageSize": [
-        1440,
-        900
-      ],
+      "imageSize": [1440, 900],
       "sha256": "cd697229ea5ecf3584278cb7a35557b199e9c91fe71d2929028d9dd3b4bd99d4"
     },
     {
@@ -53,10 +41,7 @@
       "runtime": "next",
       "page": "viewer",
       "viewportWidth": 390,
-      "imageSize": [
-        390,
-        844
-      ],
+      "imageSize": [390, 844],
       "sha256": "204356c7c2a329bf858f879c9d446d5394ded67af19a631f1ca2b46488d4fa2d"
     },
     {
@@ -64,10 +49,7 @@
       "runtime": "worker",
       "page": "menu-sp",
       "viewportWidth": 390,
-      "imageSize": [
-        390,
-        844
-      ],
+      "imageSize": [390, 844],
       "sha256": "e98502581c85534755622aab985dd1787ab3906f9199beb1660e13f8430b710a"
     },
     {
@@ -75,10 +57,7 @@
       "runtime": "worker",
       "page": "menu-digest",
       "viewportWidth": 1440,
-      "imageSize": [
-        1440,
-        900
-      ],
+      "imageSize": [1440, 900],
       "sha256": "bf801c872b25b4c75718482edb0fd52914502f7a72c7eb8f871ae89b84a81527"
     },
     {
@@ -86,10 +65,7 @@
       "runtime": "worker",
       "page": "menu-office",
       "viewportWidth": 1440,
-      "imageSize": [
-        1440,
-        900
-      ],
+      "imageSize": [1440, 900],
       "sha256": "34200c198757e12a81d8f89abd2dfbb831a3af000e09f04a93589feba5bbbc7d"
     },
     {
@@ -97,10 +73,7 @@
       "runtime": "worker",
       "page": "viewer",
       "viewportWidth": 1440,
-      "imageSize": [
-        1440,
-        900
-      ],
+      "imageSize": [1440, 900],
       "sha256": "cd697229ea5ecf3584278cb7a35557b199e9c91fe71d2929028d9dd3b4bd99d4"
     },
     {
@@ -108,10 +81,7 @@
       "runtime": "worker",
       "page": "viewer",
       "viewportWidth": 390,
-      "imageSize": [
-        390,
-        844
-      ],
+      "imageSize": [390, 844],
       "sha256": "7be4c74ff4819a81cb8ec551626fb9375e48edb44f1a28e73139a7d27be72733"
     }
   ],

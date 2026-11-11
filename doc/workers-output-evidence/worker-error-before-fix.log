@@ -1,0 +1,12 @@
+# 修正前の再現 (2026-11-11): @opennextjs/cloudflare 1.20.10 + wrangler 4.157.0, pnpm build:workers 後に wrangler dev --config wrangler.ui.jsonc で GET /
+[wrangler:info] Ready on http://127.0.0.1:<port>
+[wrangler:error] Error: Unexpected loadManifest(/.next/server/preview-props.json) call!
+    at loadManifest (file://<repo>/.open-next/server-functions/default/handler.mjs:343:34567)
+    at NextNodeServer.getPreviewProps (file://<repo>/.open-next/server-functions/default/handler.mjs:7868:31617)
+    at new Server (file://<repo>/.open-next/server-functions/default/handler.mjs:330:2548)
+    at new NextNodeServer (file://<repo>/.open-next/server-functions/default/handler.mjs:7868:9408)
+    at .open-next/server-functions/default/handler.mjs (file://<repo>/.open-next/server-functions/default/handler.mjs:7884:60104)
+    at null.<anonymous> (file://<repo>/.open-next/worker.js:39:39)
+    at async jsonError (file://<repo>/node_modules/.pnpm/wrangler@4.157.0_@types+node@24.13.1/node_modules/wrangler/templates/middleware/middleware-miniflare3-json-error.ts:22:10)
+    at async drainBody (file://<repo>/node_modules/.pnpm/wrangler@4.157.0_@types+node@24.13.1/node_modules/wrangler/templates/middleware/middleware-ensure-req-body-drained.ts:5:10)
+[wrangler:info] GET / 500 Internal Server Error (3727ms)

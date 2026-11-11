@@ -8,7 +8,7 @@
 
 - **症状（修正前）**: workerd が全リクエストで `Unexpected loadManifest(/.next/server/preview-props.json)` を投げ 500 を返した。`@opennextjs/cloudflare@1.20.10` の loadManifest ビルド時インライン化に `preview-props.json` が含まれず、Next 16.4 の NextNodeServer コンストラクタで必ず失敗した。`next start`（Node 実ランタイム）では manifest を disk から読むため無事だった。
 - **修正**: `@opennextjs/cloudflare` を `1.20.10` → `1.20.13` に bump。上流修正 [opennextjs-cloudflare#1356](https://github.com/opennextjs/opennextjs-cloudflare/pull/1356)（1.20.11）で preview-props.json のインライン化が入った。1.20.14/1.20.15 は repo の min-release-age=7日で未採用。
-- 修正前のエラー抜粋: [worker-error-before-fix.log](worker-error-before-fix.log)。修正後の全検査結果は [verification.json](verification.json)。
+- 修正前のエラー抜粋: [worker-error-before-fix.log](worker-error-before-fix.log)（2026-11-11 に 1.20.10 で再採取。ローカルパスは伏せた）。修正後の全検査結果は [verification.json](verification.json)。
 
 ## 検証済み（両ランタイム）
 
