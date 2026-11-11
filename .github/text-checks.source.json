@@ -3,23 +3,18 @@
   "status": "vendored",
   "repo": "kouiso/brain",
   "issue": 110,
-  "branch": "chore/110-text-checks",
-  "commit": "c95d9ac1982c60ee8546a8a7b4616c995d2eb541",
+  "branch": "main",
+  "commit": "d1f35ad758a0a614ba961e6383a322fb60413a2f",
   "files": [
-    {
-      "path": ".github/scripts/text-checks/public_text_check.py",
-      "source": "script/checks/public_text_check.py",
-      "sha256": "1e8c291875a3817caab42acbbfcf82ad4a5332bc2dc3834b96afba01fb661a09"
-    },
-    {
-      "path": ".github/scripts/text-checks/format_check.py",
-      "source": "script/checks/format_check.py",
-      "sha256": "afd532914e276dd1743e5aba4b6d8d773966215fff7d62fac6cd453ea513345e"
-    },
     {
       "path": ".github/scripts/text-checks/examples/README.md",
       "source": "script/checks/examples/README.md",
-      "sha256": "62b0044425ef99860dfb6b56c958ab1a1d616bbf12fd89daea311ad8d4dabc7a"
+      "sha256": "56df166bf7a014bd23134d6d75edf15ac78c0e4d1d737712b499697b6715da60"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/config_skillsheet_example.json",
+      "source": "script/checks/examples/config_skillsheet_example.json",
+      "sha256": "82dfbb2019bc14c2cbd615ecd6886eb4126ddb17432d3dd972cc328094ebf109"
     },
     {
       "path": ".github/scripts/text-checks/examples/issue_ng.md",
@@ -32,6 +27,21 @@
       "sha256": "b037b29d576db63617fd61a01c65badfab8e044ff4f9b8b019a9f771b1d6b268"
     },
     {
+      "path": ".github/scripts/text-checks/examples/issue_skillsheet_empty.md",
+      "source": "script/checks/examples/issue_skillsheet_empty.md",
+      "sha256": "257c48a6ee93479a7751753571f4d2c0261357f5066bdd1aadcc7bcb7fd1098e"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/issue_skillsheet_example.md",
+      "source": "script/checks/examples/issue_skillsheet_example.md",
+      "sha256": "33a9abede6280f9b0ae25ed94fd1682df94f418119d07cca52dbfd1a3c877b47"
+    },
+    {
+      "path": ".github/scripts/text-checks/examples/issue_skillsheet_task_example.md",
+      "source": "script/checks/examples/issue_skillsheet_task_example.md",
+      "sha256": "e3d62303f47cac4dea00a29e47a554cf51b9afd62b998f88a9f0f3b8cf5dc12b"
+    },
+    {
       "path": ".github/scripts/text-checks/examples/pr_ng.md",
       "source": "script/checks/examples/pr_ng.md",
       "sha256": "fa6be092e6098ccb487eb7baee0222168b6babe5b1b781eb9b5d0a36bcb43f60"
@@ -42,9 +52,24 @@
       "sha256": "c4cd65dcb15ee6152dd64f2821786b6754f1968006d973461f637e0775416fb0"
     },
     {
+      "path": ".github/scripts/text-checks/examples/pr_skillsheet_example.md",
+      "source": "script/checks/examples/pr_skillsheet_example.md",
+      "sha256": "5e63d0aecdceba8104f8c35f0a71a1589eed8ca623a6b4b22caf2eb3cf8e33ab"
+    },
+    {
       "path": ".github/scripts/text-checks/examples/public_ok.md",
       "source": "script/checks/examples/public_ok.md",
       "sha256": "6425758d2a7cce5c084f059c5bc5f471ac2d7a5eb49a2f504e46d077d1820b05"
+    },
+    {
+      "path": ".github/scripts/text-checks/format_check.py",
+      "source": "script/checks/format_check.py",
+      "sha256": "434334a979535577b57d6b807a7fed7ed49a231b9f7d94250ad117f23b0b402a"
+    },
+    {
+      "path": ".github/scripts/text-checks/public_text_check.py",
+      "source": "script/checks/public_text_check.py",
+      "sha256": "1e8c291875a3817caab42acbbfcf82ad4a5332bc2dc3834b96afba01fb661a09"
     }
   ]
 }

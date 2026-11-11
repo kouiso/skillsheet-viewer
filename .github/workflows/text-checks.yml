@@ -37,6 +37,7 @@ jobs:
             .github/scripts/text-checks/format_check.py
             .github/scripts/text-checks-caller.cjs
             .github/text-checks.config.json
+            .github/text-checks.headings.json
           sparse-checkout-cone-mode: false
       - name: Run checks
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0

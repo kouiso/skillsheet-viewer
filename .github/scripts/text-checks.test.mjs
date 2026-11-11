@@ -51,20 +51,22 @@ describe('写しのずれ検査（brain #110 の本体）', () => {
   });
 });
 
+const CORE = { configFile: null };
+
 describe('写しが本体と同じ結果を返す（本体の examples）', () => {
   test('issue_ok は緑、issue_ng は本体と同じ3件で赤', () => {
-    expect(caller.runFormatCheck(example('issue_ok.md'), 'issue')).toEqual({ ok: true, problems: [] });
-    expect(caller.runFormatCheck(example('issue_ng.md'), 'issue')).toEqual({
+    expect(caller.runFormatCheck(example('issue_ok.md'), 'issue', CORE)).toEqual({ ok: true, problems: [] });
+    expect(caller.runFormatCheck(example('issue_ng.md'), 'issue', CORE)).toEqual({
       ok: false,
       problems: ['「今どこまで」が未記入です', '「次にやること」が未記入です', '見出し「誰の判断待ち」がありません'],
     });
   });
 
   test('pr_ok は緑、pr_ng は本体と同じ2件で赤', () => {
-    expect(caller.runFormatCheck(example('pr_ok.md'), 'pr')).toEqual({ ok: true, problems: [] });
-    expect(caller.runFormatCheck(example('pr_ng.md'), 'pr')).toEqual({
+    expect(caller.runFormatCheck(example('pr_ok.md'), 'pr', CORE)).toEqual({ ok: true, problems: [] });
+    expect(caller.runFormatCheck(example('pr_ng.md'), 'pr', CORE)).toEqual({
       ok: false,
-      problems: ['見出し「変更内容」がありません', '「関連Issue」に `Closes #番号` か `Refs #番号` がありません'],
+      problems: ['見出し「変更内容」がありません', '「関連Issue」に #番号 か issue の URL がありません'],
     });
   });
 
@@ -78,7 +80,37 @@ describe('写しが本体と同じ結果を返す（本体の examples）', () =
     const fixed = example('issue_ng.md')
       .replace('### 今どこまで\n-', '### 今どこまで\n- 作った')
       .replace('<!-- ここに書く -->', '- 呼ぶ側を作る\n\n## 誰の判断待ち\n- 副長');
-    expect(caller.runFormatCheck(fixed, 'issue').ok).toBe(true);
+    expect(caller.runFormatCheck(fixed, 'issue', CORE).ok).toBe(true);
+  });
+
+  test('このリポの見出しの例は、設定なしでは赤、設定ありでは緑（本体の examples）', () => {
+    for (const [name, kind] of [
+      ['issue_skillsheet_example.md', 'issue'],
+      ['issue_skillsheet_task_example.md', 'issue'],
+      ['pr_skillsheet_example.md', 'pr'],
+    ]) {
+      expect(caller.runFormatCheck(example(name), kind, CORE).ok).toBe(false);
+      expect(caller.runFormatCheck(example(name), kind)).toEqual({ ok: true, problems: [] });
+    }
+  });
+
+  test('設定ありでも、別名の見出しが空なら赤', () => {
+    expect(caller.runFormatCheck(example('issue_skillsheet_empty.md'), 'issue').ok).toBe(false);
+  });
+});
+
+describe('このリポの見出しの設定', () => {
+  test('設定は本体の examples の設定と同じ中身', () => {
+    expect(readFileSync(caller.HEADINGS_CONFIG, 'utf8')).toBe(example('config_skillsheet_example.json'));
+  });
+
+  test('フォームの形（### 見出し）の本文でも通る', () => {
+    const issue =
+      '### (Why?)なぜ、このタスクをやるのか？\n分かりやすくする。\n\n### (Complete!) 完成の定義(箇条書き)\n- 画面が直る\n';
+    expect(caller.runFormatCheck(issue, 'issue')).toEqual({ ok: true, problems: [] });
+    const pr =
+      '## Issue リンク / Link to Issue\nCloses #615\n\n## 概要\n直した。\n\n## 見て欲しいポイント\n- 呼び出し側\n';
+    expect(caller.runFormatCheck(pr, 'pr')).toEqual({ ok: true, problems: [] });
   });
 });
 

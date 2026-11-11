@@ -7,6 +7,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const CHECKS_DIR = path.join(__dirname, 'text-checks');
+// このリポのフォームとテンプレートの見出しを、本体の見出しの別名として渡す設定（brain #135・#139）。
+const HEADINGS_CONFIG = path.join(__dirname, '..', 'text-checks.headings.json');
 
 function isBotActor(login, config) {
   if (!login) return false;
@@ -31,6 +33,7 @@ function writeExtraFile(raw, dir) {
 function runCli(script, args, text, extraFile) {
   const env = { ...process.env };
   delete env.PUBLIC_TEXT_EXTRA_FILE;
+  delete env.TEXT_CHECKS_CONFIG;
   if (extraFile) env.PUBLIC_TEXT_EXTRA_FILE = extraFile;
   return spawnSync('python3', [path.join(CHECKS_DIR, script), ...args, '--json'], {
     input: text,
@@ -48,9 +51,10 @@ function runPublicCheck(text, { extraFile = null } = {}) {
   return { ok: data.ok, hits: data.hits, notices: data.notices };
 }
 
-// 書き方チェック。kind は issue か pr。
-function runFormatCheck(text, kind) {
-  const r = runCli('format_check.py', ['--kind', kind], text || '', null);
+// 書き方チェック。kind は issue か pr。既定ではこのリポの見出しの設定を渡す。configFile: null で本体の既定だけで判定する。
+function runFormatCheck(text, kind, { configFile = HEADINGS_CONFIG } = {}) {
+  const args = ['--kind', kind, ...(configFile ? ['--config', configFile] : [])];
+  const r = runCli('format_check.py', args, text || '', null);
   if (r.status !== 0 && r.status !== 1) throw new Error(`format_check.py が終了コード ${r.status} で止まりました`);
   const data = JSON.parse(r.stdout);
   return { ok: data.ok, problems: data.problems };
@@ -86,6 +90,7 @@ function formatReport(kind, result, config, key = kind) {
 
 module.exports = {
   CHECKS_DIR,
+  HEADINGS_CONFIG,
   isBotActor,
   shouldSkipFormat,
   writeExtraFile,
