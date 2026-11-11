@@ -30,4 +30,4 @@
 ## 未実行・対象外
 
 - 本番環境・実デプロイ間のE2E、本番D1・実データへの接続（合成D1のみ）。
-- macOS で既存から失敗する2テスト（`script/pdf-layout-workflow.test.ts` / `script/history-capacity-monitor-workflow.test.ts` 各1件、collector exit code と合成入力扱いの環境差）はベースコミットでも同失敗。今回の変更と無関係。
+- 2026-11-02 の木（ベースコミット a88020b）では macOS で `script/pdf-layout-workflow.test.ts` / `script/history-capacity-monitor-workflow.test.ts` が各1件落ちていたが、main 取り込み後の head（2026-11-11）では `pnpm test` 3構成すべて通過している。
