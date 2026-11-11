@@ -1,7 +1,7 @@
 {
-  "capturedAt": "2026-11-02",
+  "capturedAt": "2026-11-11",
   "fixture": "synthetic sheet '架空出力検証シート' (fictional demo blocks) only; no real career data",
-  "runtime": "Node 24.22.1 / next start (Next production) and wrangler dev (OpenNext workerd) / Chrome 154.0.8037.93 via Playwright",
+  "runtime": "Node 24.22.1 / next start (Next production, next 16.4.2) and wrangler dev (OpenNext workerd, @opennextjs/cloudflare 1.20.13, wrangler 4.157.0) / Chrome 157.0.8103.50 via Playwright",
   "gateway": "worker/d1-api.ts via unstable_dev, isolated local D1 (persist dir under tmp)",
   "images": [
     {
@@ -10,7 +10,7 @@
       "page": "menu-sp",
       "viewportWidth": 390,
       "imageSize": [390, 844],
-      "sha256": "20bee9f9399be1c67523d77caf584002e08ce561356d5ded5c385aa4fb5f1e69"
+      "sha256": "9ea9e6c933ddaec91b7b86cd91112d9caa591e45e4bf70cf023b20b18fee2fd3"
     },
     {
       "file": "next-menu-digest-1440.png",
@@ -18,7 +18,7 @@
       "page": "menu-digest",
       "viewportWidth": 1440,
       "imageSize": [1440, 900],
-      "sha256": "d934da3942eb16e059b341ba6725f19cd1977a502736b697756b87826f82352d"
+      "sha256": "ac44d88baaae543a8254a9e784ea93c8d8afa00980305485b1de6f6fd28aa56f"
     },
     {
       "file": "next-menu-office-1440.png",
@@ -26,7 +26,7 @@
       "page": "menu-office",
       "viewportWidth": 1440,
       "imageSize": [1440, 900],
-      "sha256": "8c39e7abcfdba9d2b5c81d83fbabedd8e0ffdc30101ecd2c34c007b4e3472ba5"
+      "sha256": "14e038b7b1cd9712ba4ef239297f5201eeea4a8ab7cc0924389f49f0950ec2cb"
     },
     {
       "file": "next-viewer-1440.png",
@@ -34,7 +34,7 @@
       "page": "viewer",
       "viewportWidth": 1440,
       "imageSize": [1440, 900],
-      "sha256": "cd697229ea5ecf3584278cb7a35557b199e9c91fe71d2929028d9dd3b4bd99d4"
+      "sha256": "d2afd1f6b04bd2a2b056871ab77ebbe7672a883810f5bd9f3cc383f6f2304c95"
     },
     {
       "file": "next-viewer-390.png",
@@ -42,7 +42,7 @@
       "page": "viewer",
       "viewportWidth": 390,
       "imageSize": [390, 844],
-      "sha256": "204356c7c2a329bf858f879c9d446d5394ded67af19a631f1ca2b46488d4fa2d"
+      "sha256": "b40c0275a05f29fe1a59fa51bde713d665df405df42c43dd535fd537b2efc64d"
     },
     {
       "file": "worker-menu-390.png",
@@ -50,7 +50,7 @@
       "page": "menu-sp",
       "viewportWidth": 390,
       "imageSize": [390, 844],
-      "sha256": "e98502581c85534755622aab985dd1787ab3906f9199beb1660e13f8430b710a"
+      "sha256": "ee9869c30e6f4747655cbb6372fc02fb2da11d43ffc60ee2a022d3388293674c"
     },
     {
       "file": "worker-menu-digest-1440.png",
@@ -58,7 +58,7 @@
       "page": "menu-digest",
       "viewportWidth": 1440,
       "imageSize": [1440, 900],
-      "sha256": "bf801c872b25b4c75718482edb0fd52914502f7a72c7eb8f871ae89b84a81527"
+      "sha256": "4add7afcfc83c5d39ce9460e5a1c5b6974a08a971b4e6039ab53d7c9875e70bb"
     },
     {
       "file": "worker-menu-office-1440.png",
@@ -66,7 +66,7 @@
       "page": "menu-office",
       "viewportWidth": 1440,
       "imageSize": [1440, 900],
-      "sha256": "34200c198757e12a81d8f89abd2dfbb831a3af000e09f04a93589feba5bbbc7d"
+      "sha256": "e83b7d1296ed5a372ca23c52513209a86ef087c8a9db2fbd7ddf92a40a8ab309"
     },
     {
       "file": "worker-viewer-1440.png",
@@ -74,7 +74,7 @@
       "page": "viewer",
       "viewportWidth": 1440,
       "imageSize": [1440, 900],
-      "sha256": "cd697229ea5ecf3584278cb7a35557b199e9c91fe71d2929028d9dd3b4bd99d4"
+      "sha256": "d2afd1f6b04bd2a2b056871ab77ebbe7672a883810f5bd9f3cc383f6f2304c95"
     },
     {
       "file": "worker-viewer-390.png",
@@ -82,12 +82,12 @@
       "page": "viewer",
       "viewportWidth": 390,
       "imageSize": [390, 844],
-      "sha256": "7be4c74ff4819a81cb8ec551626fb9375e48edb44f1a28e73139a7d27be72733"
+      "sha256": "b10363b3af4ab7adc222b30868ccd255e611a4f9935b56b65317449432047b18"
     }
   ],
   "report": {
-    "worker": {
-      "origin": "http://127.0.0.1:52284",
+    "next": {
+      "origin": "http://127.0.0.1:63063",
       "routes": "ok",
       "bodyChecks": {
         "xlsx-full": {
@@ -131,9 +131,8 @@
       "browser": "ok",
       "revision": "0"
     },
-    "baseRevision": "0",
-    "next": {
-      "origin": "http://127.0.0.1:65199",
+    "worker": {
+      "origin": "http://127.0.0.1:63064",
       "routes": "ok",
       "bodyChecks": {
         "xlsx-full": {
@@ -176,6 +175,8 @@
       },
       "browser": "ok",
       "revision": "0"
-    }
-  }
+    },
+    "baseRevision": "0"
+  },
+  "sourceCommit": "107d365d84d72029d7492516f5e1e0651dccdbfa"
 }

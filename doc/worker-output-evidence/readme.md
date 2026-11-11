@@ -1,13 +1,13 @@
 # Workers実ランタイム出力検証の証跡（#607）
 
-#598 の子。合成データだけの隔離ローカルD1に対し、Next production（`next start`）とOpenNext workerd（`wrangler dev` / `.open-next/worker.js`）の両ランタイムから、同一文書・同一基準月（2026-11）の出力を実ブラウザ（Chrome 154）と実routeで実行した結果。2026-11-02 撮影・採取。
+#598 の子。合成データだけの隔離ローカルD1に対し、Next production（`next start`）とOpenNext workerd（`wrangler dev` / `.open-next/worker.js`）の両ランタイムから、同一文書・同一基準月（2026-11）の出力を実ブラウザ（Chrome 157）と実routeで実行した結果。2026-11-11 に main 取り込み後の木（next 16.4.2 / wrangler 4.157.0）で撮り直した。
 
 合成の**架空デモ文書**（`架空出力検証シート` / `buildConsoleDemoBlocks`）だけを使っている。実経歴本文は含まない。認証情報・環境値・接続先・ローカルパス・個人情報は公開しない。
 
 ## 検出したランタイム互換バグと最小修正
 
 - **症状（修正前）**: workerd が全リクエストで `Unexpected loadManifest(/.next/server/preview-props.json)` を投げ 500 を返した。`@opennextjs/cloudflare@1.20.10` の loadManifest ビルド時インライン化に `preview-props.json` が含まれず、Next 16.4 の NextNodeServer コンストラクタで必ず失敗した。`next start`（Node 実ランタイム）では manifest を disk から読むため無事だった。
-- **修正**: `@opennextjs/cloudflare` を `1.20.10` → `1.20.13` に bump。上流修正 [opennextjs-cloudflare#1356](https://github.com/opennextjs/opennextjs-cloudflare/pull/1356)（1.20.11）で preview-props.json のインライン化が入った。1.20.14/1.20.15 は repo の min-release-age=7日で未採用。
+- **修正**: `@opennextjs/cloudflare` を `1.20.10` → `1.20.13` に bump。上流修正 [opennextjs-cloudflare#1356](https://github.com/opennextjs/opennextjs-cloudflare/pull/1356)（1.20.11）で preview-props.json のインライン化が入った。選定時（11-02）は 1.20.14 以降が `.npmrc` の7日待ちに届かず見送った。
 - 修正前のエラー抜粋: [worker-error-before-fix.log](worker-error-before-fix.log)（2026-11-11 に 1.20.10 で再採取。ローカルパスは伏せた）。修正後の全検査結果は [verification.json](verification.json)。
 
 ## 検証済み（両ランタイム）
