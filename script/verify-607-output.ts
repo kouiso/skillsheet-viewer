@@ -37,6 +37,11 @@ import { buildConsoleDemoBlocks } from '../src/db/fixture/fictional-demo';
 import { createD1Transport } from '../src/server/d1-transport';
 
 const ONLY = process.argv[2]; // 'next' | 'worker' | undefined
+// 打ち間違いで何も検査せず ALL OK になるのを防ぐため、setup より前に弾く
+if (ONLY !== undefined && ONLY !== 'next' && ONLY !== 'worker') {
+  console.error(`[FAILED] 引数は next / worker のどちらか（指定なしで両方）: ${ONLY}`);
+  process.exit(1);
+}
 const OUT = path.resolve('.evidence/607-output');
 const TITLE = '架空出力検証シート';
 const OWNER = 'synthetic-owner';
