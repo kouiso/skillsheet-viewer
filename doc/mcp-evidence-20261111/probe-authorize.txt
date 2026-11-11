@@ -1,0 +1,29 @@
+# 07 の 1-1 認可の入口（ログイン前まで・読み取りのみ）
+# 取得: 2026-11-11T02:55:55Z (UTC) / main ef07a7f
+# state・code_challenge・sig・exp・ba_iat は伏せ字。ログイン・同意はしていない
+
+## Claude Code のクライアント（期待 302 で /login へ）
+$ curl -s -D - "$H/api/auth/oauth2/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclaude-code-client-metadata&redirect_uri=http%3A%2F%2Flocalhost%3A62901%2Fcallback&scope=skillsheet%3Aread+skillsheet%3Awrite&resource=...&code_challenge_method=S256&..."
+HTTP/2 302 
+location: /login?response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A62901%2Fcallback&scope=skillsheet%3Aread+skillsheet%3Awrite&state=<r>&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclaude-code-client-metadata&code_challenge=<r>&code_challenge_method=S256&resource=https%3A%2F%2Fskill-sheet-snowy.vercel.app%2Fapi%2Fmcp&exp=<r>&ba_iat=<r>&ba_param=ba_iat&ba_param=ba_param&ba_param=client_id&ba_param=code_challenge&ba_param=code_challenge_method&ba_param=exp&ba_param=redirect_uri&ba_param=resource&ba_param=response_type&ba_param=scope&ba_param=state&sig=<r>
+
+## claude.ai Custom Connector のクライアント（期待 302 で /login へ）
+$ curl -s -D - "$H/api/auth/oauth2/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-oauth-client-metadata&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=skillsheet%3Aread+skillsheet%3Awrite&resource=...&code_challenge_method=S256&..."
+HTTP/2 302 
+location: /login?response_type=code&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=skillsheet%3Aread+skillsheet%3Awrite&state=<r>&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-oauth-client-metadata&code_challenge=<r>&code_challenge_method=S256&resource=https%3A%2F%2Fskill-sheet-snowy.vercel.app%2Fapi%2Fmcp&exp=<r>&ba_iat=<r>&ba_param=ba_iat&ba_param=ba_param&ba_param=client_id&ba_param=code_challenge&ba_param=code_challenge_method&ba_param=exp&ba_param=redirect_uri&ba_param=resource&ba_param=response_type&ba_param=scope&ba_param=state&sig=<r>
+
+## 無いスコープ skillsheet:admin（期待 302 で redirect_uri へ error=invalid_scope）
+$ curl -s -D - "$H/api/auth/oauth2/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclaude-code-client-metadata&redirect_uri=http%3A%2F%2Flocalhost%3A62901%2Fcallback&scope=skillsheet%3Aadmin&resource=...&code_challenge_method=S256&..."
+HTTP/2 302 
+location: http://localhost:62901/callback?error=invalid_scope&error_description=The+following+scopes+are+invalid%3A+skillsheet%3Aadmin&state=<r>&iss=https%3A%2F%2Fskill-sheet-snowy.vercel.app%2Fapi%2Fauth
+
+## クライアントの登録に無い redirect_uri（期待 302 で error=invalid_redirect）
+$ curl -s -D - "$H/api/auth/oauth2/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fclaude-code-client-metadata&redirect_uri=https%3A%2F%2Fevil.example%2Fcallback&scope=skillsheet%3Aread&resource=...&code_challenge_method=S256&..."
+HTTP/2 302 
+location: https://skill-sheet-snowy.vercel.app/api/auth/error?error=invalid_redirect&error_description=invalid+redirect+uri
+
+## URL でない client_id（期待 302 で error=invalid_client）
+$ curl -s -D - "$H/api/auth/oauth2/authorize?response_type=code&client_id=not-a-client&redirect_uri=http%3A%2F%2Flocalhost%3A62901%2Fcallback&scope=skillsheet%3Aread&resource=...&code_challenge_method=S256&..."
+HTTP/2 302 
+location: https://skill-sheet-snowy.vercel.app/api/auth/error?error=invalid_client&error_description=client+not+found
+

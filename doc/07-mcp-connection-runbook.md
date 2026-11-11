@@ -7,7 +7,8 @@
 
 - 本番 URL: `https://skill-sheet-snowy.vercel.app/api/mcp`
 - 証跡: [mcp-evidence-20261014/](mcp-evidence-20261014/)（main `b45efe7d9` 時点）、
-  [mcp-evidence-20261020/](https://github.com/kouiso/skillsheet-viewer/tree/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020)・[mcp-evidence-20261021/](https://github.com/kouiso/skillsheet-viewer/tree/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021)（main `274ec65` 時点。ファイルは `evidence/pr-583` の `be3512b9e61920b48427397c0d90abfdf700cfd5`）
+  [mcp-evidence-20261020/](https://github.com/kouiso/skillsheet-viewer/tree/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020)・[mcp-evidence-20261021/](https://github.com/kouiso/skillsheet-viewer/tree/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021)（main `274ec65` 時点。ファイルは `evidence/pr-583` の `be3512b9e61920b48427397c0d90abfdf700cfd5`）、
+  [mcp-evidence-20261111/](mcp-evidence-20261111/)（main `ef07a7f` 時点の再確認。1 章と 1-1 だけ）
 
 ## 1. 事前確認（トークン不要・読み取りのみ）
 
@@ -25,6 +26,9 @@ curl -s $H/.well-known/oauth-authorization-server/api/auth                      
 [06 の「有効化の順序」](06-remote-mcp.md#環境変数)を見て、**自分で設定を変えずに**オーナーへ確認する。
 
 2026-10-14 の実測: [probe-unauth.txt](mcp-evidence-20261014/probe-unauth.txt)（すべて期待値どおり）。
+2026-11-11 の再確認: [probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)・[probe-authorize.txt](mcp-evidence-20261111/probe-authorize.txt)（すべて期待値どおり）。
+URL でない `client_id` の `error_description` は 10/20 の `client_id is required` から `client not found` に変わったが、
+`error=invalid_client` で止まる点は同じ。期待値は `error` の値で見る。
 
 ### 1-1. 認可の入口（ログイン前まで）
 
@@ -130,12 +134,12 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 - トークン、Cookie、`set-cookie`、`x-vercel-id` などはファイルに残さない
 - 認可前（Needs authentication）と認可後（Connected、`list_sheets` の結果）をそろえる
 
-## 現状（2026-10-21）
+## 現状（2026-10-21、11-11 に 1 章と 1-1 を再確認）
 
 | 項目 | 状態 |
 |------|------|
-| 公開 endpoint（401 / PRM / AS metadata） | 確認済み（probe-unauth.txt、[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
-| 認可の入口（Claude Code・claude.ai のクライアント登録、無効スコープ・redirect・client の拒否） | 確認済み（[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
+| 公開 endpoint（401 / PRM / AS metadata） | 確認済み。2026-11-11 に main `ef07a7f` で再確認（[probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)）。10-20 は probe-unauth.txt、[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
+| 認可の入口（Claude Code・claude.ai のクライアント登録、無効スコープ・redirect・client の拒否） | 確認済み。2026-11-11 に再確認（[probe-authorize.txt](mcp-evidence-20261111/probe-authorize.txt)）。10-20 は [probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt) |
 | Fluid compute と実行ログ | 確認済み: Fluid 有効、既定の上限 300 秒、iad1。確認中の要求はすべて info で error 0 件（[vercel-runtime.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/vercel-runtime.txt)） |
 | Claude Code の OAuth 認可 → Connected → 切断 | 確認済み。ただしログインと同意は画面を使わず HTTP で送った（[claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)） |
 | `/login` → `/consent` の画面での認可（フォーム入力、同意画面の許可ボタン、callback への移動） | **未実施**: 画面はまだ一度も通していない。オーナーが 3 章の手順 3 を行うと通る |
@@ -145,3 +149,5 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 | 失効 | 確認済み: JWT はサーバー側で失効できない（400）。期限前に止める手段はロールバック（`MCP_ENABLED=false` で再デプロイ）だけ（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の C） |
 | claude.ai Custom Connector | サーバー側は確認済み。ログインと同意は HTTP で送った（[claude-ai-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-ai-oauth.txt)）。claude.ai の画面での追加は**未実施**: オーナーの claude.ai アカウントの操作（手順 3） |
 | 2-2 の中身を変えない書き込み（成功して版だけ進む） | **未実施**: 本番の版番号が進むため、オーナーの承認が先 |
+| MCP Inspector の画面での確認（4 章） | **未実施**: 全ツールは JSON-RPC を直接呼んで確かめた（上の行）。Inspector の画面は使っていない |
+| 2026-11-11 の再確認の範囲 | 1 章と 1-1 だけ（ログインなし・読み取りのみ）。2 章以降はトークンが要るため今回はやっていない |
