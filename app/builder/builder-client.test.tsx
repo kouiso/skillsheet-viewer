@@ -649,25 +649,43 @@ describe('BuilderClient', () => {
   // 破棄する（シート切替・閲覧へリンクと同じ SPA 内遷移）。CodeRabbit 指摘: 未保存ガードが
   // 作成導線だけ抜けていた（Major/データ消失）ため、confirmDiscardChanges() 経由になったことを検証する。
   it('未保存の変更がある状態で「新規シート」を押すと確認ダイアログを挟み、拒否時は作成ダイアログを開かない', async () => {
-    const user = userEvent.setup();
-    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
-    await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
-    await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
-    await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
-    const confirmation = await screen.findByRole('alertdialog');
-    expect(within(confirmation).getByRole('button', { name: '編集に戻る' })).toHaveFocus();
-    await user.click(within(confirmation).getByRole('button', { name: '編集に戻る' }));
-    expect(screen.queryByText('新規シートを作成')).not.toBeInTheDocument();
+    // 操作に実時間で 600ms 以上かかっても、自動保存前の未保存ガードを検証する。
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const view = render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    try {
+      fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '## A!' } });
+      fireEvent.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+      fireEvent.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
+      expect(mockSave).not.toHaveBeenCalled();
+      const confirmation = screen.getByRole('alertdialog');
+      expect(within(confirmation).getByRole('button', { name: '編集に戻る' })).toHaveFocus();
+      await act(async () => {
+        fireEvent.click(within(confirmation).getByRole('button', { name: '編集に戻る' }));
+      });
+      expect(screen.queryByText('新規シートを作成')).not.toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('## A!');
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it('未保存の変更があっても確認ダイアログを承諾すれば「新規シート」の作成ダイアログが開く', async () => {
-    const user = userEvent.setup();
-    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
-    await user.type(screen.getByPlaceholderText('Markdown を入力...'), '!');
-    await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
-    await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
-    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて移動' }));
-    expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const view = render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    try {
+      fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '## A!' } });
+      fireEvent.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+      fireEvent.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
+      expect(mockSave).not.toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '変更を捨てて移動' }));
+      });
+      expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it('未保存の変更が無ければ確認ダイアログを挟まず「新規シート」の作成ダイアログが開く', async () => {

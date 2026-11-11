@@ -1,13 +1,13 @@
 import 'server-only';
 import { type Block, blocksToMarkdown, filterVisibleProjectData, isBlockInput } from '@/db/block';
-import type { Database } from '@/db/client';
 import { currentMonthKey } from '@/db/derived-display';
+import type { DocumentConnection } from '@/db/document-operation';
 import { createDocumentService, DocumentError } from '@/db/document-service';
 import { SkillSheetNotFoundError } from '@/db/skillsheet';
 
 /** 表示用adapter。既定解決・初期化はDB限定readに委ね、書込みを行わない。 */
 export async function readViewerDocument(
-  db: Pick<Database, 'execute'>,
+  db: DocumentConnection,
   owner: string,
   sheetId: string | null,
   referenceMonth = currentMonthKey(),
@@ -36,7 +36,7 @@ export async function readViewerDocument(
   };
 }
 
-export async function readViewerList(db: Pick<Database, 'execute'>, owner: string) {
+export async function readViewerList(db: DocumentConnection, owner: string) {
   return (await createDocumentService(db, owner).list()).map((s) => ({
     id: s.sheetId,
     title: s.title,

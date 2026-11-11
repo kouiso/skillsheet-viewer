@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-
-import { getDb, getOwnerId, SkillSheetNotFoundError } from '@/db';
+import { getOwnerId, SkillSheetNotFoundError } from '@/db';
 import { buildSkillSheetDocx } from '@/lib/export/build-docx';
 import { EXPORT_EDITIONS } from '@/lib/export/edition';
 import { isEditor } from '@/server/auth-gate';
+import { getDocumentDb } from '@/server/d1-runtime';
 import { readViewerDocument } from '@/server/document-view';
 import { hasViewerSession } from '@/server/viewer-gate';
 
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const sheet = await readViewerDocument(getDb(), getOwnerId(), id);
+    const sheet = await readViewerDocument(getDocumentDb(), getOwnerId(), id);
     const buf = await buildSkillSheetDocx(sheet.blocks, sheet.title, sheet.referenceMonth);
     const filename = encodeURIComponent(`${sheet.title}.docx`);
     return new NextResponse(new Uint8Array(buf), {

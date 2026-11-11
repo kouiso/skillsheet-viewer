@@ -122,6 +122,8 @@ describe('journalの型と読取境界', () => {
     const directory = dir();
     const target = path.join(directory, 'journal.jsonl');
     writeFileSync(target, `${canonicalJson(entry('approved'))}\n`, { mode: 0o644 });
+    // 作成時の mode は umask に削られるため、検査対象の公開権限を明示的に確定する。
+    chmodSync(target, 0o644);
     expect(() => readNarrativeJournal(target)).toThrow('PRIVATE_FILE_REQUIRED');
     chmodSync(target, 0o600);
     const link = path.join(directory, 'link.jsonl');
