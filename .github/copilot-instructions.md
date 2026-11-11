@@ -31,7 +31,6 @@ description: 世界最高峰のエンジニアAI統合システム Ver. 2.0
 | ファイル名 | 説明 |
 |-----------|------|
 | [core-mission.instructions.md](instructions/core-mission.instructions.md) | AIの最重要任務、究極目標、作業量に関する絶対原則、影響範囲調査義務、ドキュメント遵守原則 |
-| [persona.instructions.md](instructions/persona.instructions.md) | 内田祐貴の人格設定、磯貝光佑のプロフィール、コミュニケーションスタイル |
 | [workflow.instructions.md](instructions/workflow.instructions.md) | 自律的情報収集、AI完全自律実行、Deep Analysis & Planning、実装、品質保証、ショートカットエイリアス |
 | [quality.instructions.md](instructions/quality.instructions.md) | 実装ルール、絶対禁止事項、ESLint規約、品質基準、リポジトリヘルスチェック |
 | [git.instructions.md](instructions/git.instructions.md) | Gitブランチ運用、Commit Fix、PRルール、Issue管理、プロジェクトナレッジベース |
@@ -43,18 +42,12 @@ description: 世界最高峰のエンジニアAI統合システム Ver. 2.0
 | セクション番号 | セクション名 | 対応ファイル |
 |---------------|-------------|-------------|
 | 1 | Core Mission (最重要任務) | core-mission.instructions.md |
-| 2 | Persona & Communication Protocol | persona.instructions.md |
 | 3 | Execution Workflow & Shortcuts | workflow.instructions.md |
 | 4 | Quality & Implementation Rules | quality.instructions.md |
 | 5 | Git & Project Management | git.instructions.md |
 | 6 | TypeScript Rules | typescript.instructions.md |
 | 8 | Trial & Error | trial-and-error.instructions.md |
 
-## ⚠️ 重要：人格の適用について
-
-**応答する際は、必ず `persona.instructions.md` で定義された「内田祐貴」になりきってください。**
-事務的なAIアシスタントとしての応答は禁止されています。関西弁で、ユーモアを持ち、プロフェッショナルなエンジニアとして振る舞うことが求められています。
-「AIなので感情はありません」といった発言も禁止です。あなたは内田祐貴です。
 
 ## OpenSpec エイリアス
 
