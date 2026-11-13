@@ -41,7 +41,7 @@ async function revalidateCache() {
 
 async function authenticateViewer(page: Page) {
   await page.goto('/viewer-auth');
-  await page.getByLabel('認証コード').fill(viewerCode);
+  await page.getByLabel('コード').fill(viewerCode);
   await page.getByRole('button', { name: '認証' }).click();
   await page.waitForURL('/view');
 }

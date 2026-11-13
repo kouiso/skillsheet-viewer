@@ -34,7 +34,7 @@ test.describe('/viewer-auth 初期化ゲート (#398)', () => {
 
       await page.goto('/viewer-auth', { waitUntil: 'domcontentloaded' });
 
-      await expect(page.getByLabel('認証コード')).toBeDisabled();
+      await expect(page.getByLabel('コード')).toBeDisabled();
       await expect(page.getByRole('button', { name: '認証' })).toBeDisabled();
 
       // disabled なボタンの押下に頼らないプログラマティックな submit
@@ -72,7 +72,7 @@ test.describe('/viewer-auth 初期化ゲート (#398)', () => {
         // 待機を挟まず即座に入力して送信する。入力欄・ボタンが初期化完了まで
         // disabled のため、fill/click の actionability 待機そのものが
         // 「準備前は送れない」ゲートの検証になる。
-        await page.getByLabel('認証コード').fill(viewerCode);
+        await page.getByLabel('コード').fill(viewerCode);
         const [response] = await Promise.all([
           page.waitForResponse((r) => r.url().includes(LOGIN_PATH)),
           page.getByRole('button', { name: '認証' }).click(),
