@@ -14,6 +14,7 @@
   --json を付けると機械向けの JSON で出す（skillsheet #615 など、呼び出す側のため）。
 終了コード: 0=引っかかりなし、1=引っかかりあり、2=本文が空。
 """
+import argparse
 import json
 import os
 import re
@@ -90,21 +91,15 @@ def report(hits, notes, lines):
 
 
 def main(argv=None):
-    args = list(sys.argv[1:] if argv is None else argv)
-    extra_path = os.environ.get("PUBLIC_TEXT_EXTRA_FILE") or None
-    as_json = False
-    files = []
-    i = 0
-    while i < len(args):
-        if args[i] == "--extra":
-            extra_path = args[i + 1]
-            i += 2
-        elif args[i] == "--json":
-            as_json = True
-            i += 1
-        else:
-            files.append(args[i])
-            i += 1
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--extra", metavar="禁止語ファイル",
+                        help="追加の禁止語ファイル（環境変数 PUBLIC_TEXT_EXTRA_FILE より優先。最後の指定が効く）")
+    parser.add_argument("--json", action="store_true", help="機械向けの JSON で出す")
+    parser.add_argument("files", nargs="*", metavar="ファイル", help="調べるファイル。無ければ標準入力")
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+    extra_path = args.extra or os.environ.get("PUBLIC_TEXT_EXTRA_FILE") or None
+    as_json = args.json
+    files = args.files
     if files:
         parts = []
         for fp in files:

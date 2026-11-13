@@ -237,6 +237,9 @@ def main(argv=None):
     kind, as_json, config_path, files = "issue", False, None, []
     i = 0
     while i < len(args):
+        if args[i] in ("-h", "--help"):
+            print(__doc__.strip())
+            return 0
         if args[i] == "--kind":
             if i + 1 >= len(args):
                 print("--kind には issue か pr を付けてください", file=sys.stderr)
