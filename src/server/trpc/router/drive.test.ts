@@ -100,7 +100,7 @@ describe('drive.setDestination / clearDestination', () => {
     stubGoogleEnv();
     const caller = callerWith('owner-1');
     await expect(caller.setDestination({ folderId: 'f-1', folderName: 'フォルダA' })).resolves.toEqual({ ok: true });
-    expect(saveDriveDestination).toHaveBeenCalledWith('owner-1', { folderId: 'f-1', folderName: 'フォルダA' }, {});
+    expect(saveDriveDestination).toHaveBeenCalledWith('owner-1', { folderId: 'f-1', folderName: 'フォルダA' });
   });
 
   it('folderId が空なら zod で弾く', async () => {
@@ -116,6 +116,6 @@ describe('drive.setDestination / clearDestination', () => {
     stubGoogleEnv();
     const caller = callerWith('owner-1');
     await expect(caller.clearDestination()).resolves.toEqual({ ok: true });
-    expect(clearDriveDestination).toHaveBeenCalledWith('owner-1', {});
+    expect(clearDriveDestination).toHaveBeenCalledWith('owner-1');
   });
 });
