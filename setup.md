@@ -29,6 +29,7 @@ GitHub Private Repository（Markdown シード元）
 - Node.js: v22.x（`mise` で固定。`mise.toml` = Node 22.23.4 / pnpm 10.33.0）
 - パッケージマネージャ: pnpm（mise が導入）
 - **Neon Postgres が必須**（`DATABASE_URL`）。ローカルでも接続先の Postgres が必要です
+- PDF の試験に必要な外部コマンド（`pnpm test` で使う）: Ghostscript（`gs`）・ImageMagick（`identify` / `convert`）・poppler（`poppler-utils`）。CI は `.github/workflows/ci.yml` の「Install system dependencies for PDF rasterization」で Linux に 3 つとも入れている。macOS は `brew install ghostscript imagemagick poppler`、WSL2 / Ubuntu は `sudo apt-get install -y ghostscript imagemagick poppler-utils`
 
 ```bash
 # mise をインストール後（https://mise.jdx.dev/）、リポジトリ直下で

@@ -206,21 +206,53 @@ const viewerCookie = (() => {
 
 const results: Record<string, unknown> = {};
 const children: ChildProcess[] = [];
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const groupAlive = (pid: number) => {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+// wrangler は workerd を子に持つ。親だけ SIGKILL すると workerd が残り、workerd は SIGTERM でも止まらないことがある。
+// detached で起動して自分のプロセスグループを作り、グループごと SIGTERM → 残れば SIGKILL で止める。
+// 親が先に死んでもグループに子が残る場合があるので、親の終了状態ではなくグループの生死を見る。
+async function stopTree(c: ChildProcess, graceMs = 3000): Promise<void> {
+  const pid = c.pid;
+  if (pid === undefined) return;
+  try {
+    process.kill(-pid, 'SIGTERM');
+  } catch {}
+  for (let waited = 0; waited < graceMs && groupAlive(pid); waited += 100) await sleep(100);
+  if (groupAlive(pid)) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {}
+    for (let waited = 0; waited < 2000 && groupAlive(pid); waited += 100) await sleep(100);
+  }
+}
 const cleanup = async () => {
-  for (const c of children) c.kill('SIGKILL');
+  await Promise.allSettled(children.map((c) => stopTree(c)));
   await gateway.stop().catch(() => {});
 };
-process.on('SIGINT', () => void cleanup().then(() => process.exit(130)));
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
+  process.on(sig, () => void cleanup().then(() => process.exit(128 + { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 }[sig])));
+}
 
-async function waitReady(url: string, tries = 120): Promise<void> {
-  for (let i = 0; i < tries; i++) {
+// 1 回の fetch は 5 秒、待ち全体は 120 秒で打ち切る。相手が応答しないまま台本ごと止まるのを防ぐ。
+const READY_FETCH_TIMEOUT_MS = 5_000;
+const READY_TOTAL_TIMEOUT_MS = 120_000;
+async function waitReady(url: string, totalMs = READY_TOTAL_TIMEOUT_MS): Promise<void> {
+  const deadline = Date.now() + totalMs;
+  while (Date.now() < deadline) {
     try {
-      const r = await fetch(url);
+      const r = await fetch(url, { signal: AbortSignal.timeout(READY_FETCH_TIMEOUT_MS) });
       if (r.status === 200) return;
     } catch {}
-    await new Promise((r) => setTimeout(r, 500));
+    await sleep(500);
   }
-  throw new Error(`${url} did not become ready`);
+  throw new Error(`${url} did not become ready within ${totalMs}ms`);
 }
 
 async function zipText(buf: Buffer): Promise<string> {
@@ -289,6 +321,7 @@ async function verifyRuntime(kind: 'next' | 'worker') {
           REVALIDATE_SECRET: 'synthetic-revalidate-placeholder',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
       },
     );
   } else {
@@ -325,6 +358,7 @@ async function verifyRuntime(kind: 'next' | 'worker') {
         cwd: process.cwd(),
         env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'production' },
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
       },
     );
   }
@@ -467,7 +501,7 @@ async function verifyRuntime(kind: 'next' | 'worker') {
     );
     report.revision = (revAfter as { snapshot: { revision: string } }).snapshot.revision;
   } finally {
-    app.kill('SIGKILL');
+    await stopTree(app);
     log.end();
   }
   // 診断に本文を含まないこと

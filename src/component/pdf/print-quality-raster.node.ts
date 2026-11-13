@@ -144,6 +144,15 @@ interface InkBlob extends PixelRect {
   inkPixels: number;
 }
 
+/**
+ * 外部コマンドが無い・動かない時に、足りない道具の名前と入れ方を失敗文に出す。
+ * CI（.github/workflows/ci.yml の「Install system dependencies for PDF rasterization」）が
+ * 入れる 3 つと同じ名前。入れ方は setup.md の「前提」にもある。
+ */
+const RASTER_TOOLS_HINT =
+  '必要な外部コマンド: Ghostscript (gs)・ImageMagick (identify / convert)・poppler (poppler-utils)。' +
+  'macOS: brew install ghostscript imagemagick poppler / Ubuntu: sudo apt-get install -y ghostscript imagemagick poppler-utils';
+
 /** gs で 1 ページ 1 PNG に展開する。一時ディレクトリごと呼び出し側が削除すること。 */
 function rasterizePdfPages(pdfBuffer: Buffer, dpi: number): { dir: string; pngPaths: string[] } {
   const dir = mkdtempSync(path.join(tmpdir(), 'pdf-raster-'));
@@ -158,7 +167,7 @@ function rasterizePdfPages(pdfBuffer: Buffer, dpi: number): { dir: string; pngPa
     );
   } catch (error) {
     rmSync(dir, { recursive: true, force: true });
-    throw new Error(`Ghostscript (gs) でのラスタライズに失敗した。gs がインストールされているか確認すること: ${error}`);
+    throw new Error(`${RASTER_TOOLS_HINT}（Ghostscript (gs) でのラスタライズに失敗した）: ${error}`);
   }
   const pngPaths = readdirSync(dir)
     .filter((f) => f.startsWith('page-') && f.endsWith('.png'))
@@ -172,17 +181,21 @@ function readPageGray(pngPath: string): { width: number; height: number; data: B
   // 内部TTLは未設定時だけ有限にし、無制限値の時刻演算に依存しない。
   // 呼出元が設定した制限とImageMagickのpolicyは維持する。PDF全体の期限ではない。
   const environment = { ...process.env, MAGICK_TIME_LIMIT: process.env.MAGICK_TIME_LIMIT ?? '120' };
-  const dims = execFileSync('identify', ['-format', '%w %h', pngPath], { env: environment })
-    .toString()
-    .trim()
-    .split(/\s+/)
-    .map(Number);
-  const [width, height] = dims;
-  const data = execFileSync('convert', [pngPath, '-colorspace', 'Gray', '-depth', '8', 'gray:-'], {
-    env: environment,
-    maxBuffer: 1024 * 1024 * 64,
-  });
-  return { width, height, data };
+  try {
+    const dims = execFileSync('identify', ['-format', '%w %h', pngPath], { env: environment })
+      .toString()
+      .trim()
+      .split(/\s+/)
+      .map(Number);
+    const [width, height] = dims;
+    const data = execFileSync('convert', [pngPath, '-colorspace', 'Gray', '-depth', '8', 'gray:-'], {
+      env: environment,
+      maxBuffer: 1024 * 1024 * 64,
+    });
+    return { width, height, data };
+  } catch (error) {
+    throw new Error(`${RASTER_TOOLS_HINT}（ImageMagick の identify / convert が失敗した）: ${error}`);
+  }
 }
 
 function firstInkPixel(

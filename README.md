@@ -56,6 +56,10 @@ mise install
 # 2. 依存インストール
 pnpm install
 
+# 2'. PDF の試験（pnpm test）に要る外部コマンド: Ghostscript・ImageMagick・poppler
+#     macOS: brew install ghostscript imagemagick poppler
+#     Ubuntu / WSL2: sudo apt-get install -y ghostscript imagemagick poppler-utils
+
 # 3. DB を用意する（下の A または B。詳細は setup.md）
 
 # 4. 開発サーバー起動（http://localhost:3000）
