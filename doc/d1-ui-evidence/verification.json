@@ -1,0 +1,115 @@
+{
+  "sourceCommit": "6cf7eef8b70417e9e1753af821f565908f4f4bbd",
+  "capturedAt": "2026-10-22",
+  "fixture": "synthetic empty sheet only; no real career data",
+  "runtime": "Node 24.22.1 / Next production build and OpenNext workerd UI / Chromium",
+  "images": [
+    {
+      "file": "next-viewer-1440.png",
+      "runtime": "next",
+      "page": "viewer",
+      "viewportWidth": 1440,
+      "imageSize": [1440, 1065],
+      "sha256": "6160bf4a94ff64942e139854e4db3caefd4afb014e1647b086fb06501115f057"
+    },
+    {
+      "file": "next-viewer-390.png",
+      "runtime": "next",
+      "page": "viewer",
+      "viewportWidth": 390,
+      "imageSize": [390, 1065],
+      "sha256": "d6c28032f81a6852ba541e8d88ca5866ad59cb41ce2400c196ad1d4f593e2262"
+    },
+    {
+      "file": "next-builder-1440.png",
+      "runtime": "next",
+      "page": "builder",
+      "viewportWidth": 1440,
+      "imageSize": [1440, 1000],
+      "sha256": "813f6db998f571261ad7e7f4509a8c4d425a6cb75c4f62abaa2851637e24c332"
+    },
+    {
+      "file": "next-builder-390.png",
+      "runtime": "next",
+      "page": "builder",
+      "viewportWidth": 390,
+      "imageSize": [390, 1000],
+      "sha256": "ea104fef023d6b62168770f275150614d36c297bf12bb768175e4398e84bad75"
+    },
+    {
+      "file": "worker-viewer-1440.png",
+      "runtime": "workers",
+      "page": "viewer",
+      "viewportWidth": 1440,
+      "imageSize": [1440, 1065],
+      "sha256": "6160bf4a94ff64942e139854e4db3caefd4afb014e1647b086fb06501115f057"
+    },
+    {
+      "file": "worker-viewer-390.png",
+      "runtime": "workers",
+      "page": "viewer",
+      "viewportWidth": 390,
+      "imageSize": [390, 1065],
+      "sha256": "d6c28032f81a6852ba541e8d88ca5866ad59cb41ce2400c196ad1d4f593e2262"
+    },
+    {
+      "file": "worker-builder-1440.png",
+      "runtime": "workers",
+      "page": "builder",
+      "viewportWidth": 1440,
+      "imageSize": [1440, 1000],
+      "sha256": "813f6db998f571261ad7e7f4509a8c4d425a6cb75c4f62abaa2851637e24c332"
+    },
+    {
+      "file": "worker-builder-390.png",
+      "runtime": "workers",
+      "page": "builder",
+      "viewportWidth": 390,
+      "imageSize": [390, 1000],
+      "sha256": "ea104fef023d6b62168770f275150614d36c297bf12bb768175e4398e84bad75"
+    }
+  ],
+  "assertions": {
+    "fontFamiliesLoaded": ["IBM Plex Sans JP", "IBM Plex Mono"],
+    "horizontalOverflow": false,
+    "browserPageErrors": 0,
+    "externalBrowserRequests": 0,
+    "pixelIdenticalRuntimePairs": 4,
+    "sharedLocalD1": [
+      "Next save visible from Workers",
+      "Workers save visible from Next",
+      "same-revision concurrent save: exactly one success",
+      "unauthenticated Builder denied"
+    ]
+  },
+  "localChecks": {
+    "lint": "passed",
+    "typeCheck": "passed",
+    "nextBuild": "passed",
+    "workersBuild": "passed",
+    "testsPassed": 2462,
+    "existingSkipped": 8
+  },
+  "remoteChecksForSourceCommit": {
+    "Vercel": {
+      "state": "success",
+      "deploymentState": "READY",
+      "source": "git preview",
+      "url": "https://vercel.com/kouisos-projects/skillsheet-viewer/EEkfv7gqSC6Wkbv1zis78yvVURq2"
+    },
+    "Deploy Smoke": {
+      "state": "completed",
+      "conclusion": "skipped",
+      "reason": "production-only job condition; preview deployment",
+      "url": "https://github.com/kouiso/skillsheet-viewer/actions/runs/39814272501"
+    },
+    "mainCI": "not triggered; feature push without PR is outside its trigger"
+  },
+  "limitations": [
+    "Synthetic empty sheet screenshots; no proof of real career content layout",
+    "No production D1 cutover or real credential/OAuth/Drive use",
+    "No Workers PDF/XLSX/DOCX interaction proved by these screenshots",
+    "No live deployment application URL visited",
+    "No claim that all remote CI gates passed"
+  ]
+}

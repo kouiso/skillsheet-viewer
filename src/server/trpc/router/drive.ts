@@ -1,4 +1,4 @@
-import { getDb, getOwnerId } from '@/db';
+import { getOwnerId } from '@/db';
 import { clearDriveDestination, readDriveDestination, saveDriveDestination } from '@/db/drive-destination';
 
 import { editorProcedure, router } from '../init';
@@ -30,19 +30,19 @@ export const driveRouter = router({
   setting: editorProcedure.query(async () => {
     const client = googleClientConfig();
     if (!client) return { enabled: false as const };
-    const destination = await readDriveDestination(getOwnerId(), getDb());
+    const destination = await readDriveDestination(getOwnerId());
     return { enabled: true as const, client, destination };
   }),
 
   /** Picker で選んだフォルダを保存先として記録する。 */
   setDestination: editorProcedure.input(driveDestinationInputSchema).mutation(async ({ input }) => {
-    await saveDriveDestination(getOwnerId(), { folderId: input.folderId, folderName: input.folderName }, getDb());
+    await saveDriveDestination(getOwnerId(), { folderId: input.folderId, folderName: input.folderName });
     return { ok: true as const };
   }),
 
   /** 保存先を消す。次回の保存は再度フォルダ選択から始まる。 */
   clearDestination: editorProcedure.mutation(async () => {
-    await clearDriveDestination(getOwnerId(), getDb());
+    await clearDriveDestination(getOwnerId());
     return { ok: true as const };
   }),
 });

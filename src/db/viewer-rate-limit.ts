@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { eq, lt, or, sql } from 'drizzle-orm';
+import { d1Auxiliary, isD1Runtime } from '@/server/d1-runtime';
 
 import { type Database, getDb } from './client';
 import { viewerLoginAttempt } from './schema';
@@ -77,11 +78,9 @@ function stateFrom(row: { failureCount: number; lockedUntil: Date | null }, now:
  *
  * 返り値が locked=true のときは、このリクエストは照合に進んではいけない。
  */
-export async function reserveViewerLoginAttempt(
-  key: string,
-  now = new Date(),
-  db: Database = getDb(),
-): Promise<RateLimitState> {
+export async function reserveViewerLoginAttempt(key: string, now = new Date(), db?: Database): Promise<RateLimitState> {
+  if (!db && isD1Runtime()) return (await d1Auxiliary({ operation: 'viewer.reserve', key })) as RateLimitState;
+  db ??= getDb();
   const windowStart = new Date(now.getTime() - WINDOW_MS).toISOString();
   const lockUntil = new Date(now.getTime() + LOCK_MS).toISOString();
   const nowIso = now.toISOString();
@@ -121,11 +120,9 @@ export async function reserveViewerLoginAttempt(
 }
 
 /** いま試行できるかを、枠を消費せずに見る（表示や事前判定用）。 */
-export async function checkViewerLoginLock(
-  key: string,
-  now = new Date(),
-  db: Database = getDb(),
-): Promise<RateLimitState> {
+export async function checkViewerLoginLock(key: string, now = new Date(), db?: Database): Promise<RateLimitState> {
+  if (!db && isD1Runtime()) return (await d1Auxiliary({ operation: 'viewer.check', key })) as RateLimitState;
+  db ??= getDb();
   const [row] = await db.select().from(viewerLoginAttempt).where(eq(viewerLoginAttempt.key, key)).limit(1);
   if (!row) return { locked: false, retryAfterSeconds: 0, remainingAttempts: MAX_FAILURES };
   if (
@@ -138,7 +135,12 @@ export async function checkViewerLoginLock(
 }
 
 /** 認証に成功したら記録を消す。正しい利用者を巻き込まないため。 */
-export async function clearViewerLoginFailures(key: string, db: Database = getDb()): Promise<void> {
+export async function clearViewerLoginFailures(key: string, db?: Database): Promise<void> {
+  if (!db && isD1Runtime()) {
+    await d1Auxiliary({ operation: 'viewer.clear', key });
+    return;
+  }
+  db ??= getDb();
   await db.delete(viewerLoginAttempt).where(eq(viewerLoginAttempt.key, key));
 }
 
@@ -148,7 +150,12 @@ export async function clearViewerLoginFailures(key: string, db: Database = getDb
  * 攻撃側は送り元を変えられるので、放っておくと行が増え続ける。
  * cron を増やさずに済むよう、失敗を記録するついでに呼ぶ想定（失敗自体が稀なので負荷にならない）。
  */
-export async function purgeExpiredViewerLoginAttempts(now = new Date(), db: Database = getDb()): Promise<void> {
+export async function purgeExpiredViewerLoginAttempts(now = new Date(), db?: Database): Promise<void> {
+  if (!db && isD1Runtime()) {
+    await d1Auxiliary({ operation: 'viewer.purge' });
+    return;
+  }
+  db ??= getDb();
   const nowIso = now.toISOString();
   const windowStart = new Date(now.getTime() - WINDOW_MS).toISOString();
   await db.delete(viewerLoginAttempt).where(

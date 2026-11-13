@@ -7,6 +7,7 @@ import {
   type RawDocumentBlock,
   validateDocumentBlocks,
 } from './document-contract';
+import type { DocumentConnection, DocumentOperation } from './document-operation';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export class DocumentError extends Error {
@@ -88,9 +89,10 @@ export function readDocumentResult(value: unknown): DocumentRead {
 }
 
 /** 全writerで共有する文書境界。認証済みアプリの固定ownerを必ずDBへ渡す。 */
-export function createDocumentService(db: Pick<Database, 'execute'>, expectedOwner: string) {
+export function createDocumentService(db: DocumentConnection, expectedOwner: string) {
   if (!expectedOwner) throw new DocumentError('OWNER_REQUIRED');
-  async function execute(query: SQL): Promise<unknown> {
+  async function execute(query: SQL, request: DocumentOperation): Promise<unknown> {
+    if ('documentOperation' in db) return db.documentOperation(request, expectedOwner);
     let result: Awaited<ReturnType<Database['execute']>>;
     try {
       result = await db.execute(query);
@@ -107,7 +109,10 @@ export function createDocumentService(db: Pick<Database, 'execute'>, expectedOwn
   async function read(sheetId: string | null = null): Promise<DocumentRead> {
     if (sheetId !== null) requireId(sheetId);
     const result = readDocumentResult(
-      await execute(sql`select skillsheet_private.read_snapshot(${sheetId}::uuid, ${expectedOwner}::text) as result`),
+      await execute(sql`select skillsheet_private.read_snapshot(${sheetId}::uuid, ${expectedOwner}::text) as result`, {
+        operation: 'read',
+        sheetId,
+      }),
     );
     if (sheetId && result.status === 'OK' && result.snapshot.sheetId.toLowerCase() !== sheetId.toLowerCase()) {
       throw new DocumentError('SNAPSHOT_ID_MISMATCH');
@@ -136,7 +141,9 @@ export function createDocumentService(db: Pick<Database, 'execute'>, expectedOwn
     read,
     /** navigation専用。編集中のIDと版はreadのsnapshotからだけ取得する。 */
     async list(): Promise<DocumentSummary[]> {
-      const result = await execute(sql`select skillsheet_private.list_sheets(${expectedOwner}::text) as result`);
+      const result = await execute(sql`select skillsheet_private.list_sheets(${expectedOwner}::text) as result`, {
+        operation: 'list',
+      });
       if (!Array.isArray(result)) throw new DocumentError('INVALID_DB_RESPONSE');
       const ids = new Set<string>();
       return result.map((row) => {
@@ -169,6 +176,7 @@ export function createDocumentService(db: Pick<Database, 'execute'>, expectedOwn
       return saved(
         await execute(
           sql`select skillsheet_private.create_sheet(${sheetId}::uuid, ${title}::text, ${json}::jsonb, ${expectedOwner}::text) as result`,
+          { operation: 'create', sheetId, title, blocks },
         ),
       );
     },
@@ -187,17 +195,39 @@ export function createDocumentService(db: Pick<Database, 'execute'>, expectedOwn
       if (!current.snapshot.validation.editable)
         throw new DocumentError('UNEDITABLE_DOCUMENT', current.snapshot.validation.issues);
       // 検査後の競合はDB CASで拒否する。読取成功を更新権限や版一致の代用にしない。
-      return saved(
-        await execute(
-          sql`select skillsheet_private.replace_sheet(${sheetId}::uuid, ${expectedRevision}::text, ${title}::text, ${json}::jsonb, ${expectedOwner}::text) as result`,
-        ),
-      );
+      try {
+        return saved(
+          await execute(
+            sql`select skillsheet_private.replace_sheet(${sheetId}::uuid, ${expectedRevision}::text, ${title}::text, ${json}::jsonb, ${expectedOwner}::text) as result`,
+            { operation: 'replace', sheetId, expectedRevision, title, blocks },
+          ),
+        );
+      } catch (error) {
+        // Vercel→Worker間の応答だけ失われた場合も再送しない。DBから同IDを読み、
+        // 直後の版・全文一致だけを保存済みと確認する。明示拒否はここへ入れない。
+        if (error instanceof DocumentError && error.code === 'GATEWAY_OUTCOME_UNKNOWN') {
+          try {
+            const result = await read(sheetId);
+            if (
+              result.status === 'OK' &&
+              result.snapshot.revision === (BigInt(expectedRevision) + 1n).toString() &&
+              result.snapshot.title === title &&
+              canonicalJson(result.snapshot.blocks) === json
+            )
+              return result.snapshot;
+          } catch {
+            /* 読戻しの失敗で元の結果不明を隠さない。 */
+          }
+        }
+        throw error;
+      }
     },
     async delete(sheetId: string, expectedRevision: string): Promise<void> {
       requireId(sheetId);
       requireRevision(expectedRevision);
       const result = await execute(
         sql`select skillsheet_private.delete_sheet(${sheetId}::uuid, ${expectedRevision}::text, ${expectedOwner}::text) as result`,
+        { operation: 'delete', sheetId, expectedRevision },
       );
       if (!record(result) || !['OK', 'NOT_FOUND', 'CONFLICT', 'INVALID_STATE'].includes(String(result.status))) {
         throw new DocumentError('INVALID_DB_RESPONSE');

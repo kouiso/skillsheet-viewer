@@ -1,4 +1,5 @@
 import { eq } from 'drizzle-orm';
+import { d1OwnerAuxiliary, isD1Runtime } from '@/server/d1-runtime';
 
 import { type Database, getDb } from './client';
 import { driveDestination } from './schema';
@@ -18,7 +19,10 @@ export interface DriveDestination {
 }
 
 /** 保存先を 1 件読む。未設定なら null。 */
-export async function readDriveDestination(ownerId: string, db: Database = getDb()): Promise<DriveDestination | null> {
+export async function readDriveDestination(ownerId: string, db?: Database): Promise<DriveDestination | null> {
+  if (!db && isD1Runtime())
+    return (await d1OwnerAuxiliary(ownerId, { operation: 'drive.read' })) as DriveDestination | null;
+  db ??= getDb();
   const [row] = await db
     .select({
       folderId: driveDestination.folderId,
@@ -34,8 +38,13 @@ export async function readDriveDestination(ownerId: string, db: Database = getDb
 export async function saveDriveDestination(
   ownerId: string,
   destination: DriveDestination,
-  db: Database = getDb(),
+  db?: Database,
 ): Promise<void> {
+  if (!db && isD1Runtime()) {
+    await d1OwnerAuxiliary(ownerId, { operation: 'drive.save', ...destination });
+    return;
+  }
+  db ??= getDb();
   const now = new Date();
   await db
     .insert(driveDestination)
@@ -56,6 +65,11 @@ export async function saveDriveDestination(
 }
 
 /** 保存先を消す（選び直しの前の状態へ戻す）。 */
-export async function clearDriveDestination(ownerId: string, db: Database = getDb()): Promise<void> {
+export async function clearDriveDestination(ownerId: string, db?: Database): Promise<void> {
+  if (!db && isD1Runtime()) {
+    await d1OwnerAuxiliary(ownerId, { operation: 'drive.clear' });
+    return;
+  }
+  db ??= getDb();
   await db.delete(driveDestination).where(eq(driveDestination.ownerId, ownerId));
 }
