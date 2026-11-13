@@ -26,9 +26,6 @@ curl -s $H/.well-known/oauth-authorization-server/api/auth                      
 [06 の「有効化の順序」](06-remote-mcp.md#環境変数)を見て、**自分で設定を変えずに**オーナーへ確認する。
 
 2026-10-14 の実測: [probe-unauth.txt](mcp-evidence-20261014/probe-unauth.txt)（すべて期待値どおり）。
-2026-11-11 の再確認: [probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)・[probe-authorize.txt](mcp-evidence-20261111/probe-authorize.txt)（すべて期待値どおり）。
-URL でない `client_id` の `error_description` は 10/20 の `client_id is required` から `client not found` に変わったが、
-`error=invalid_client` で止まる点は同じ。期待値は `error` の値で見る。
 
 ### 1-1. 認可の入口（ログイン前まで）
 
@@ -45,6 +42,10 @@ URL でない `client_id` の `error_description` は 10/20 の `client_id is re
 | URL でない `client_id` | 302 で `/api/auth/error?error=invalid_client` |
 
 2026-10-20 の実測: [probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)（すべて期待値どおり）。
+
+2026-11-11 の再確認: [probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)・[probe-authorize.txt](mcp-evidence-20261111/probe-authorize.txt)（すべて期待値どおり）。
+URL でない `client_id` の `error_description` は 10/20 の `client_id is required` から `client not found` に変わったが、
+`error=invalid_client` で止まる点は同じ。期待値は `error` の値で見る。
 
 ## 2. Claude Code から接続する
 
@@ -138,7 +139,7 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 
 | 項目 | 状態 |
 |------|------|
-| 公開 endpoint（401 / PRM / AS metadata） | 確認済み。2026-11-11 に main `ef07a7f` で再確認（[probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)）。10-20 は probe-unauth.txt、[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)） |
+| 公開 endpoint（401 / PRM / AS metadata） | 確認済み。2026-11-11 に main `ef07a7f` で再確認（[probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)）。10-14 は [probe-unauth.txt](mcp-evidence-20261014/probe-unauth.txt)、10-20 は [probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt) |
 | 認可の入口（Claude Code・claude.ai のクライアント登録、無効スコープ・redirect・client の拒否） | 確認済み。2026-11-11 に再確認（[probe-authorize.txt](mcp-evidence-20261111/probe-authorize.txt)）。10-20 は [probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt) |
 | Fluid compute と実行ログ | 確認済み: Fluid 有効、既定の上限 300 秒、iad1。確認中の要求はすべて info で error 0 件（[vercel-runtime.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/vercel-runtime.txt)） |
 | Claude Code の OAuth 認可 → Connected → 切断 | 確認済み。ただしログインと同意は画面を使わず HTTP で送った（[claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)） |
@@ -149,5 +150,5 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 | 失効 | 確認済み: JWT はサーバー側で失効できない（400）。期限前に止める手段はロールバック（`MCP_ENABLED=false` で再デプロイ）だけ（[tool-call-prod.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/tool-call-prod.txt) の C） |
 | claude.ai Custom Connector | サーバー側は確認済み。ログインと同意は HTTP で送った（[claude-ai-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-ai-oauth.txt)）。claude.ai の画面での追加は**未実施**: オーナーの claude.ai アカウントの操作（手順 3） |
 | 2-2 の中身を変えない書き込み（成功して版だけ進む） | **未実施**: 本番の版番号が進むため、オーナーの承認が先 |
-| MCP Inspector の画面での確認（4 章） | **未実施**: 全ツールは JSON-RPC を直接呼んで確かめた（上の行）。Inspector の画面は使っていない |
+| MCP Inspector の画面での確認（4 章） | **未実施**: 全ツールは JSON-RPC を直接呼んで確かめた（全 8 ツールの呼び出しの行）。Inspector の画面は使っていない |
 | 2026-11-11 の再確認の範囲 | 1 章と 1-1 だけ（ログインなし・読み取りのみ）。2 章以降はトークンが要るため今回はやっていない |
