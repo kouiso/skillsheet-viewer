@@ -3,7 +3,8 @@ name: Text Checks
 # issue・PR 本文の書き方チェックと公開内容チェック（#615）。Actions の分数を抑えるため、きっかけは本文の作成・編集だけ（コメントは見ない）。
 # 判定は brain #110 の本体の写し .github/scripts/text-checks/（Python 3 標準ライブラリのみ、出どころは
 # .github/text-checks.source.json）。呼び出しと知らせる文は .github/scripts/text-checks-caller.cjs、設定は .github/text-checks.config.json。
-# 本文の自動編集・自動削除はしない。目印つきのコメントを1つだけ作り、直れば同じコメントを更新する。
+# 本文の自動編集・自動削除はしない。目印つきのコメントを検査の種類ごとに1つ（最大2つ）作り、直れば同じコメントを更新する。
+# 公開内容チェックは起こしたのが誰でも必ず動く。ボットを飛ばすのは書き方チェックだけ（caller の shouldSkipFormat）。
 # pull_request_target でも PR 側のコードは取り出さない（checkout は既定ブランチのまま）。
 on:
   issues:
@@ -25,7 +26,6 @@ jobs:
     name: Check issue / PR text
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: ${{ !endsWith(github.actor, '[bot]') }}
     steps:
       - name: Checkout default branch (no PR code)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
