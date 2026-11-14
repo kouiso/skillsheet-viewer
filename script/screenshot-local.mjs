@@ -23,7 +23,7 @@ for (const theme of ['light', 'dark']) {
     page.on('pageerror', (e) => errors.push(String(e)));
 
     await page.goto(`${BASE}/viewer-auth?next=${encodeURIComponent(ROUTES[0])}`, { waitUntil: 'domcontentloaded' });
-    await page.getByLabel('認証コード').fill(CODE);
+    await page.getByLabel('コード').fill(CODE);
     await page.getByRole('button', { name: '認証' }).click();
     // ここで握り潰すと、認証に失敗したまま「認証コード入力画面」を対象画面のスクショとして保存してしまう。
     await page.waitForURL(`**${ROUTES[0]}`, { timeout: 20000 });
