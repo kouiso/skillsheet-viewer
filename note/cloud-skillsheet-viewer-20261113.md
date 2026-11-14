@@ -73,6 +73,7 @@ DESIGN-INVENTORY 2026-11-14T13:44:02Z | ボード 107 枚 × main 4d8ca74（コ�
 - 未起票の色トークンの差: surface3・faint・text-2・dark の border-strong・warn の文字色・overlay（#671 の外）。
 - 判断 11 件（4-1〜4-11）をマネージャーに JUDGE 束 3 で送った。
 - 着手（作業役）: U11（fix/design-u11-sheet-switch）、U13 の目次（fix/design-u13-toc）、U14 PDF の確認（読むだけ）、U17 一致の実画面確認（読むだけ）。
+DECIDED 2026-11-14T13:45:23Z | 失敗の芽: #666 の作業役が後片付けで `pkill -u ubuntu -f next-server -n`（ubuntu ユーザーの一番新しい next-server を 1 つ止める）を使った。同じ時刻に ubuntu で e2e・撮影を回している作業役が他にいたので、他人のサーバーを止めた可能性がある（本人の確認では残りは自分の defunct だけ・未確認） | reason 指示の「自分が起こしたものだけ止める」が名前や利用者での一括停止を禁じていなかった | 対策: 以後の指示に「止めるのは自分が起動した PID だけ。pkill・killall・名前や利用者での一括停止は使わない」と書く
 
 ## 2026-11-14T11:45Z（再開後の記録）
 
