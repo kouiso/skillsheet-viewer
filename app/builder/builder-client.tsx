@@ -238,6 +238,8 @@ const BuilderClient = ({
   // 未保存変更の検知。最後に保存成功した時点のスナップショット（タイトル＋構造化ブロック）を
   // 保持し、現在の内容と差分があれば dirty とみなす（保存成功で更新）。
   const lastSavedSnapshotRef = useRef<string>(snapshot(initialBlocks.map(blockToItem), initialTitle));
+  // 「変更を捨てて履歴を開く」で編集欄を戻す先。lastSavedSnapshotRef は文字列で復元できないため、中身も持つ。
+  const lastSavedStateRef = useRef({ items: initialBlocks.map(blockToItem), title: initialTitle });
   const [isDirty, setIsDirty] = useState(false);
 
   // SPA 内遷移（シート切替・閲覧へ等）は beforeunload が発火せず、key={activeSheetId} の
@@ -317,6 +319,8 @@ const BuilderClient = ({
   const setProfileCustomDraft = useCallback((id: string, rows: CustomMetaRow[]) => {
     profileCustomDraftsRef.current.set(id, rows);
   }, []);
+  // 手動保存の直近の失敗が「送り直しても直らない」種類かを履歴オープン側へ伝える。
+  const saveFailureRef = useRef<'conflict' | 'invalid' | 'invalid-period' | 'not-found' | 'precondition' | null>(null);
   const hasBlockedDraft = () =>
     blockedItemIdsRef.current.size > 0 || [...profileCustomDraftsRef.current.values()].some(hasUncommittedProfileRows);
   const blockedProfileIds = items
@@ -516,6 +520,7 @@ const BuilderClient = ({
         void utils.sheet.list.invalidate().catch(() => undefined);
       }
       lastSavedSnapshotRef.current = savedSnapshot;
+      lastSavedStateRef.current = { items: currentItems, title: currentTitle };
       failedSnapshotRef.current = null;
       // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
       setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
@@ -856,6 +861,7 @@ const BuilderClient = ({
   };
 
   const handleSave = async () => {
+    saveFailureRef.current = null;
     if (!mountedRef.current) return false;
     if (loadFailure !== null || !activeSheetId) {
       toast.error('読み込みに失敗したままなので保存できません。ページを再読み込みしてください。');
@@ -874,6 +880,7 @@ const BuilderClient = ({
       // ここで「重複」と断定すると、原因が未入力の場合に誤った診断になる
       // （chatgpt-codex-connector レビュー指摘）。行単位のエラー表示（ProfileBlockEditor）
       // が実際の原因を示すので、ここでは理由を特定しない案内にとどめる。
+      saveFailureRef.current = 'invalid';
       toast.error(
         'プロフィールの項目名を確認してください（重複または未入力があります）。解消してから保存してください。',
       );
@@ -903,6 +910,7 @@ const BuilderClient = ({
       expectedRevision: savedRevisionRef.current,
     };
     if (validateDocumentBlocks(payload.blocks).some((issue) => issue.code === 'PERIOD_PROJECTION_MISMATCH')) {
+      saveFailureRef.current = 'invalid-period';
       toast.error('保存できない入力があります。期間の日付などの診断を確認してください。');
       return;
     }
@@ -932,6 +940,7 @@ const BuilderClient = ({
           // 保存成功した内容をスナップショットとして記録し、dirty を解除する
           // （保存中に編集が入っていた場合は dirty のままにする）。
           lastSavedSnapshotRef.current = savedSnapshot;
+          lastSavedStateRef.current = { items: currentItems, title: currentTitle };
           setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
           setAutosaveStatus('saved');
           setLastSaveKind('manual');
@@ -952,6 +961,7 @@ const BuilderClient = ({
             // （直後の自動保存が同じ競合を繰り返し踏むのを防ぐ）。
             autosaveStoppedRef.current = true;
             followUpRef.current = false;
+            saveFailureRef.current = 'conflict';
             setAutosaveStatus('conflict');
             const reload = await confirm({
               title: 'このシートはほかの画面で更新されています。',
@@ -964,6 +974,11 @@ const BuilderClient = ({
             // 競合インジケータの再読み込みボタンと同じくフルリロードで最新版を反映する。
             if (reload) window.location.reload();
           } else {
+            // 入力エラー（BAD_REQUEST）は同じ内容で送り直しても直らない。通信などは直りうる。
+            if (err instanceof TRPCClientError && err.data?.code === 'BAD_REQUEST') saveFailureRef.current = 'invalid';
+            if (err instanceof TRPCClientError && err.data?.code === 'NOT_FOUND') saveFailureRef.current = 'not-found';
+            if (err instanceof TRPCClientError && err.data?.code === 'PRECONDITION_FAILED')
+              saveFailureRef.current = 'precondition';
             toast.error('保存に失敗しました');
           }
         } finally {
@@ -980,6 +995,27 @@ const BuilderClient = ({
         () => resolve(false),
       ),
     );
+  };
+
+  // 未保存の編集を捨て、編集欄を最後に保存した内容へ戻す（履歴の復元ボタンを止める isDirty も偽にする）。
+  const discardUnsavedEdits = () => {
+    const { items: savedItems, title: savedTitle } = lastSavedStateRef.current;
+    itemsRef.current = savedItems;
+    setItems(savedItems);
+    titleRef.current = savedTitle;
+    setTitle(savedTitle);
+    setBlockedItemIds(new Set());
+    blockedItemIdsRef.current = new Set();
+    profileCustomDraftsRef.current.clear();
+    setIsDirty(false);
+    failedSnapshotRef.current = null;
+    followUpRef.current = false;
+    setAutosaveStatus('idle');
+    // 捨てた未保存ブロックを選んだままにしない。選択ブロックと選択案件を、保存済みの中から揃えて選び直す
+    // （onRestored と同じ流儀。案件だけ古い id が残ると、入力した時に捨てたはずの案件が再追加される）。
+    if (!savedItems.some((item) => item.id === selectedBlockId)) setSelectedBlockId(savedItems[0]?.id ?? 'new-project');
+    if (!savedItems.some((item) => item.type === 'project' && item.id === selectedProjectId))
+      setSelectedProjectId(savedItems.find((item) => item.type === 'project')?.id ?? 'new-project');
   };
 
   const openHistoryAfterSave = async () => {
@@ -1005,6 +1041,35 @@ const BuilderClient = ({
         if (!mountedRef.current || hasBlockedDraft()) return;
         const saved = await handleSave();
         if (saved && snapshot(itemsRef.current, titleRef.current) === lastSavedSnapshotRef.current) break;
+        // 直らない失敗は送り直しても同じ結果になるので、確認を往復させず理由を出して抜ける。
+        // 競合は handleSave が理由と次の操作（最新を読み込む／あとで）を出し終えている。
+        if (saveFailureRef.current === 'conflict') return;
+        if (saveFailureRef.current === 'invalid' || saveFailureRef.current === 'invalid-period') {
+          // 手元で原因が分かる時（期間の不一致）はそれを名指しする。サーバの BAD_REQUEST は原因が分からないので汎用文。
+          const cause =
+            saveFailureRef.current === 'invalid-period'
+              ? '案件の期間の入力に、保存できないものがあります（開始・終了の日付が期間の表記と合っていません）。'
+              : '入力内容に、保存できない箇所があります。';
+          const discard = await confirm({
+            title: '未保存の変更を保存できません。',
+            description: `${cause}同じ内容で送り直しても保存できません。このまま履歴を開くと、未保存の変更は失われます。`,
+            confirmLabel: '変更を捨てて履歴を開く',
+            cancelLabel: '編集に戻る',
+            danger: true,
+          });
+          if (!discard) return;
+          discardUnsavedEdits();
+          break;
+        }
+        // 見つからない・前提が変わった場合も送り直しでは直らない。短い理由を出して往復を抜ける。
+        if (saveFailureRef.current === 'not-found') {
+          toast.error('このシートが見つからないため保存できません。再読み込みして確認してください。');
+          return;
+        }
+        if (saveFailureRef.current === 'precondition') {
+          toast.error('保存の前提が変わったため保存できません。再読み込みして最新を確認してください。');
+          return;
+        }
         if (
           !(await confirm({
             title: '履歴を開く前の保存を完了できませんでした。',
@@ -1336,6 +1401,7 @@ const BuilderClient = ({
             savedTitleRef.current = result.snapshot.title;
             savedRevisionRef.current = result.snapshot.revision;
             lastSavedSnapshotRef.current = snapshot(restored, result.snapshot.title);
+            lastSavedStateRef.current = { items: restored, title: result.snapshot.title };
             setIsDirty(false);
             failedSnapshotRef.current = null;
             followUpRef.current = false;

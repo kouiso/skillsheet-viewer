@@ -73,6 +73,8 @@ const defaultProps = { sheets: [defaultSheet], activeSheetId: 'sheet-1', initial
 
 describe('BuilderClient', () => {
   beforeEach(() => vi.clearAllMocks());
+  // 保存の失敗を固定する試験が実装を残さないよう、毎回既定の成功応答へ戻す（自動保存が先に Once を消費しても揺れない）。
+  afterEach(() => mockSave.mockResolvedValue({ updatedAt: new Date(), revision: '6' }));
 
   it('debounce前のプレビュー開始・再フォーカス・再オープンは最新スキルを送り旧本文に戻さない', () => {
     vi.useFakeTimers();
@@ -421,6 +423,150 @@ describe('BuilderClient', () => {
     expect(mockSave).toHaveBeenCalledTimes(2);
     expect(mockSave.mock.calls[1][0]).toEqual(mockSave.mock.calls[0][0]);
     expect(mockSave.mock.calls[1][0].expectedRevision).toBe('5');
+  });
+
+  it('履歴前の保存が競合で失敗したら、同じ確認を往復させず理由を出して編集に戻る', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValue(trpcClientError('CONFLICT'));
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '競合する下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    const conflict = await screen.findByRole('alertdialog');
+    expect(within(conflict).getByText('このシートはほかの画面で更新されています。')).toBeInTheDocument();
+    await user.click(within(conflict).getByRole('button', { name: 'あとで' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('競合する下書き');
+  });
+
+  it('履歴前の保存が入力エラーなら、繰り返さず理由を出し、編集に戻れる', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '直らない下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    const reason = await screen.findByRole('alertdialog');
+    expect(within(reason).getByText('未保存の変更を保存できません。')).toBeInTheDocument();
+    expect(within(reason).getByText(/このまま履歴を開くと、未保存の変更は失われます。/)).toBeInTheDocument();
+    expect(within(reason).getByText(/入力内容に、保存できない箇所があります/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
+    await user.click(within(reason).getByRole('button', { name: '編集に戻る' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('直らない下書き');
+  });
+
+  it('履歴前の入力エラーで「変更を捨てて履歴を開く」を選ぶと履歴が開く', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '捨てる下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて履歴を開く' }),
+    );
+    expect(await screen.findByRole('region', { name: '版の履歴' })).toBeInTheDocument();
+    // 下書きを捨てて保存済みに戻っているので、復元は止められていない。
+    expect(screen.queryByText(/未保存の入力があります/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '編集画面へ' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('原文');
+  });
+
+  it('履歴前の保存が NOT_FOUND でも確認を往復させず、理由を出して編集に戻る', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValue(trpcClientError('NOT_FOUND'));
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '行き先の無い下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('行き先の無い下書き');
+  });
+
+  it('捨てて履歴を開いた後は、未保存の案件ブロックの選択が残らず、再入力で復活もしない', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
+    render(<BuilderClient initialBlocks={mdBlocks(['既存本文'])} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '＋ 会社' }));
+    fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '未保存の会社' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて履歴を開く' }),
+    );
+    await user.click(await screen.findByRole('button', { name: '編集画面へ' }));
+    expect(screen.queryByDisplayValue('未保存の会社')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '＋ 会社' }));
+    fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '入れ直した会社' } });
+    mockSave.mockResolvedValue({ revision: '6' });
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    const saved = mockSave.mock.calls.at(-1)?.[0].blocks;
+    const projects = saved.filter((b: Block) => b.type === 'project');
+    expect(projects).toHaveLength(1);
+    expect(projects[0].data.companies).toHaveLength(1);
+    expect(projects[0].data.companies[0]).toMatchObject({ name: '入れ直した会社' });
+  });
+
+  it('期間投影の不一致（クライアント側検証）で履歴前の保存が止まった時も、往復せず理由を出す', async () => {
+    const user = userEvent.setup();
+    render(
+      <BuilderClient
+        initialTitle="期間検証"
+        {...defaultProps}
+        initialBlocks={[
+          {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            type: 'project',
+            order: 0,
+            data: {
+              companies: [{ id: 'c1', name: '検証会社', kind: '', period: '', note: '' }],
+              items: [
+                {
+                  id: 'p1',
+                  companyId: 'c1',
+                  title: '案件',
+                  scope: '',
+                  period: '2026.08 — ',
+                  ongoing: true,
+                  role: '',
+                  team: '',
+                  tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+                  process: [],
+                  duties: '',
+                  acquired: '',
+                  comment: '',
+                },
+              ],
+            },
+          },
+        ]}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '期間不一致の下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    const reason = await screen.findByRole('alertdialog');
+    expect(within(reason).getByText('未保存の変更を保存できません。')).toBeInTheDocument();
+    expect(within(reason).getByText(/案件の期間の入力に、保存できないものがあります/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
   it('期間投影が不一致の下書きを保存APIへ送信しない', async () => {
