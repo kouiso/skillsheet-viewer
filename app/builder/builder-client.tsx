@@ -345,14 +345,11 @@ const BuilderClient = ({
   // デバウンスして更新し、タイピングのラグを防ぐ。初期値・初回レンダリングは即時反映。
   const [referenceMonth] = useState(() => currentMonthKey(new Date()));
   // 数字カードの編集欄に出す「いまの値」。プレビュー・閲覧と同じ表示対象の案件から出す。
-  const statContext = useMemo(
-    () =>
-      markdownExperienceContext(
-        items.flatMap((item) => (item?.type === 'project' ? [item.data] : [])),
-        referenceMonth,
-      ),
-    [items, referenceMonth],
-  );
+  // 案件ブロックが無いシートは閲覧画面・PDF が保存値をそのまま出すので、context を渡さず編集可にする。
+  const statContext = useMemo(() => {
+    const projectData = items.flatMap((item) => (item?.type === 'project' ? [item.data] : []));
+    return projectData.length > 0 ? markdownExperienceContext(projectData, referenceMonth) : undefined;
+  }, [items, referenceMonth]);
   const [previewContent, setPreviewContent] = useState(() => assembleMarkdown(items, { referenceMonth }));
   const previewContentRef = useRef(previewContent);
   const isFirstPreviewRender = useRef(true);

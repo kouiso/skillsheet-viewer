@@ -125,6 +125,26 @@ describe('StatsBlockEditor', () => {
       expect(screen.getAllByText('案件から自動で出します')).toHaveLength(2);
     });
 
+    it('案件ブロックが無いシートでは計算される項目も編集でき、保存値を出す', () => {
+      // 案件ブロックが無いと builder は context を渡さない。閲覧画面・PDF も保存値をそのまま出すので揃える。
+      const onChange = vi.fn();
+      render(<StatsBlockEditor data={data} onChange={onChange} />);
+      const experience = screen.getByRole('textbox', { name: '統計項目1の数値' });
+      expect(experience).not.toHaveAttribute('readonly');
+      expect(experience).toHaveValue('99');
+      fireEvent.change(experience, { target: { value: '7' } });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText('案件から自動で出します')).toBeNull();
+    });
+
+    it('context が無ければ編集できる', () => {
+      render(<StatsBlockEditor data={{ items: [{ value: '4', unit: '件', label: '案件数' }] }} onChange={vi.fn()} />);
+      const count = screen.getByRole('textbox', { name: '統計項目1の数値' });
+      expect(count).not.toHaveAttribute('readonly');
+      expect(count).toHaveValue('4');
+      expect(screen.queryByText('案件から自動で出します')).toBeNull();
+    });
+
     it('計算しない組み合わせ（単位が年・月でない経験年数）は種類が経験年数でも打てる', () => {
       render(
         <StatsBlockEditor

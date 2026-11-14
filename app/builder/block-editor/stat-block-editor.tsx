@@ -21,7 +21,10 @@ export function StatsBlockEditor({
 }: {
   data: StatsBlockData;
   onChange: (data: StatsBlockData) => void;
-  /** 閲覧画面と同じ表示対象の案件。渡すと、計算される項目に今の値を出す。 */
+  /**
+   * 閲覧画面と同じ表示対象の案件。渡すと、計算される項目に今の値を出して読み取り専用にする。
+   * 渡さない（案件ブロックが無いシート）と、閲覧画面・PDF と同じく保存値をそのまま出して編集できる。
+   */
   context?: Pick<MarkdownExperienceContext, 'projects' | 'referenceMonth'>;
 }) {
   const editorId = useId();
@@ -40,7 +43,8 @@ export function StatsBlockEditor({
         <span />
       </div>
       {data.items.map((item, index) => {
-        const computed = isStatComputed(item);
+        // 案件の出どころ（context）が無いと閲覧画面・PDF は計算せず保存値を出す。編集欄も同じにする。
+        const computed = context !== undefined && isStatComputed(item);
         // 閲覧画面・PDF と同じ resolveDisplayedStats で出し、編集欄だけ別の計算をしない。
         const shownValue =
           computed && context
