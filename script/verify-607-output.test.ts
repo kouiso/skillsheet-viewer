@@ -19,5 +19,6 @@ describe('verify-607-output の引数', () => {
     expect(result.stdout).not.toContain('ALL OK');
     expect(result.stdout).not.toContain('[setup]');
     expect(result.stderr).toContain('[FAILED]');
-  });
+    // tsx の起動だけで数秒かかり、並列実行だと vitest 既定の5秒を超えて落ちるため、spawnSync と同じ60秒にする
+  }, 60_000);
 });
