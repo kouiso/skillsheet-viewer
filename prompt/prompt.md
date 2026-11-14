@@ -22,7 +22,7 @@
 - **Markdown レンダリング**: react-markdown
 - **PDF**: @react-pdf/renderer（クライアント側で動的 import）
 - **DB / ORM**: Drizzle ORM + Neon serverless Postgres（正本データ源）
-- **ランタイム / パッケージ管理**: mise（Node 22.x）/ pnpm
+- **ランタイム / パッケージ管理**: mise（Node の版は `.node-version` を見る）/ pnpm
 
 ## 認証の2系統設計
 
