@@ -1,0 +1,45 @@
+REVIEW | reviewer: general-purpose, opus 5.5 medium | authored no commit on this PR | head 9fc30b487487fbe8837725887db6a80d7483bc4e | axes: pass line, design, scope, tests, body vs diff, evidence | verdict PASS | must 0 want 0 nit 1
+
+af162b3 のレビュー（must 2 / want 1 / nit 1）の続き。対象は ee6756a（指摘への修正）と 9fc30b4（main 4d8ca74 #664 の取り込み）。リードが決めた事項（1280 の列幅・390 の構成・40px ボタン → #674、暗色の del/dels → #671、場所の語は #632 の AC に従う）は数えていない。
+
+## 前回の指摘 4 件
+
+1. must 1（本文が head と合っていない）: 直っている。待機中の本文 `pending-673-body.md` は「base は main」「#665 は 94fe259 でマージ済み」、ファイル名は `app/builder/field-label.ts`、手元の検査は ee6756a の全体と 9fc30b4 での lint・type-check・`app/builder` の vitest を分けて書いている。**今 GitHub に載っている本文はまだ古いまま**（待機中の本文と 42 行違う）。待機中の本文を載せるまではパスライン 7 を満たさない。
+2. must 2（スキル表の見出しが「名称」になっていた）: 直っている。`app/builder/field-label.ts:67` `name: 'スキル'`、`app/builder/block-editor/skill-block-editor.tsx:55-57` が表を引き、読み上げ名は `:79` `スキル${i + 1}の名称` で main（main の 72 行目）と同じ。見出しを固定するテストは `skill-block-editor.test.tsx:25-35`。
+3. want 1（表の語が編集画面から読まれていない）: 直っている。`project-form.tsx:400` `title={PROJECT_FIELD_LABELS.process}`、`:128` `` aria-label={`${COMPANY_FIELD_LABELS.period}（自動計算）`} ``（出る文字列は main の「会社の期間（自動計算）」と同じ）。差分だけの語には `field-label.ts:33,34,43,93,98` に「差分のみ」のコメントと、`:12-15` に決まりの説明がある。
+4. nit 1（並び順の枠にどのブロックか出ない）: 直っている。`version-diff.ts:154-159` で後の版の並びの `companyId` を持たせ、`:323-335`（`if (leaf.fixed)` の枝）で 1 社に収まる時は会社名、そうでない時はブロック名を頭に付ける。ブロックの並び順は今まで通り頭なし。試しに流した結果: 1 社の案件の並べ替え →「株式会社A › 案件の並び順」、2 社にまたがる案件の並べ替え →「経歴（案件） › 案件の並び順」、会社の並べ替え →「経歴（案件） › 会社の並び順」、所属会社が未設定の案件を含む並べ替え →「経歴（案件） › 案件の並び順」。本文の説明と合っている。
+
+## must
+
+0件
+
+## want
+
+0件
+
+## nit
+
+1. 並び順の枠の場所のうち、テストで固めたのは「1 社に収まる案件の並べ替え」（`version-diff.test.ts:253-259`）だけ。「複数社にまたがる時はブロック名」と「会社の並べ替えはブロック名」の 2 つの枝は試験が無い — `app/builder/version-diff.ts:332-333`。今の動作は正しい（上の試し流し）ので nit にした。
+   → `version-diff.test.ts` の「並びが変わっても」の describe に、2 社の案件の並べ替えと会社の並べ替えの 2 件を足す。
+
+## 軸ごとに見たもの
+
+- **パスライン**
+  1. 9fc30b4 が head（`pulls/673` の head.sha と一致）。`git rev-list --count 9fc30b4..origin/main` = 0 で、main から遅れていない。
+  2. 作者以外の判定はこのレビュー（まだ載せていない）。これまでの review は 0 件、レビュースレッドは 0 件（`/pulls/673/ccr/review_threads` は `[]`）。
+  3. 9fc30b4 の check run は 13 件で、success 12・neutral 1（CodeRabbit。無料枠の上限で review を出していない）、failure 0。Node (test)・Node (e2e)・Node (build)・Node (lint)・Node (typecheck)・Naming convention は全部 success。commit status の「Vercel」は failure だが、説明は「Deployment rate limited — retry in 24 hours.」で、日ごとのデプロイ枠を使い切っただけ。コードの失敗ではない。mergeable_state は `unstable`（この Vercel の status による）。待機中の LOCAL-CHECK は、全体の検査が ee6756a、9fc30b4 は一部だと 1 行目に書いている。head の全体は CI が通しているので、ここは CI で満たしている。
+  4. #632 の受け入れ基準 9 項目: 場所は会社名と案件名、項目名は対応表 1 か所（`field-label.ts`）で、編集画面と差分が同じ表を読む。引用符なし・改行あり、追加・削除ブロックに JSON や内部 ID なし、省略なし、vitest の試験あり（前回確かめた分は ee6756a で変わっていない）。画面と 390 のはみ出しは下の証跡のとおり。lint・type-check・test・build は CI で通っている。PDF の 5 件の例外も今回は出ていない（落ちたのは 0 件）。
+  5. 明・暗 × 1440・390 の 4 枚（`doc/version-diff-evidence/`）は af162b3 から変わっていない（`git diff af162b3 9fc30b4 -- doc/version-diff-evidence` は空）。ee6756a で変わったのは並び順の枠の場所と編集画面の見出しで、どちらも 4 枚には写っていない。前回 4 枚を開き、390 で横はみ出しが無いことを確かめている。
+  6. 変更は #632 の 1 件。`Closes #632` あり。
+  7. 待機中の本文は差分と合っている（下の「本文と差分」）。載っている本文は古い（前回の指摘 1 を参照）。
+  8. ee6756a で足した試験のデータは「株式会社A」「案件A」などの合成。
+- **設計**: 並び順の枠は、後の版の並びにある案件の `companyId` の集合で 1 社かを決め、その会社名を同じ側の文書の `companies` から引く。会社の並べ替えでは `companyId` が無いので集合が `{undefined}` になり、会社が見つからずブロック名に落ちる。結果として正しいが、たまたまそうなる形（会社は id を持つので `undefined` に当たる会社が無い）。理由を書く程ではないと判断して指摘にしていない。
+- **範囲**: `git diff origin/main...HEAD` は 20 ファイルで、全部 #632（差分・対応表・エディタが表を引く変更・証跡）。ee6756a は 6 ファイル。9fc30b4 の取り込みで PR の差分に入った他の変更は無い。
+- **#664 との衝突**: `git show --cc 9fc30b4` の衝突は `stat-block-editor.tsx` の import 行だけ。`git diff 4d8ca74 9fc30b4 -- app/builder/block-editor/stat-block-editor.tsx` は `STAT_FIELD_LABELS` の import 1 行と、`FIELDS` と見出し 3 語を表から引く 6 行だけ。`isStatComputed`・`resolveDisplayedStats`・`context`・読み取り専用の処理は 4d8ca74 と同じ。`stat-block-editor.test.tsx`・`src/db/derived-display.ts`・`src/db/derived-display.test.ts` は 4d8ca74 と差が無い。
+- **編集画面の語**: `git diff origin/main...HEAD` の、エディタ（block-editor 6 ファイル・`project-form.tsx`・`canvas/palette.tsx`・`builder-client.tsx`）で消えた語と、置き換えた表の値を 1 つずつ突き合わせた。会社名・開始年月日・終了年月日・職種・業務内容・名前・所属会社・肩書き・自己PR・強み・スキルカテゴリ・スキル・経験年数・習熟度・推し・数値・単位・ラベル・見出し・テキスト／テーブル他 7 種のブロック名・会社の種別・会社の期間（自動計算）・会社の説明・案件タイトル・スコープ / 担当領域・役割・期間・開始月・終了月・継続中・チーム規模・担当工程・担当業務・習得スキル・コメント・概要（任意）／概要。全部 main と同じ文字列になる。
+- **テスト**: 9fc30b4 で `pnpm vitest run app/builder --maxWorkers=2` は 24 ファイル 276 件通過（load average 3 前後、時間切れ 0）。`./script/check-naming.sh` OK。修正前に落ちることも確かめた: `field-label.ts:67` を「名称」に戻すと見出しの試験 1 件が落ち、`skill-block-editor.tsx` の見出しを「名称」の直書きに戻しても同じ 1 件が落ちる。`version-diff.ts` を af162b3 のものに戻すと「並べ替えだけの変更も「案件の並び順」として出す」の 1 件が落ちる。どれも `git checkout -- <file>` で戻し、作業ツリーはきれい。
+- **本文と差分**: 待機中の本文の記述（対応表の置き場と読む画面の一覧、見出しを「スキル」に戻したことと読み上げ名「スキル1の名称」は元のまま、担当工程と会社の期間を表から引く、「差分のみ」のコメント、並び順の枠の場所の決まり、#664 の取り込みで import 行を両方残したこと、試験の一覧）は差分と合っている。
+- **証跡**: 上のパスライン 5 のとおり。CodeRabbit は上限で指摘 0 件。
+
+---
+_Generated by [Claude Code](https://claude.ai/code)_
