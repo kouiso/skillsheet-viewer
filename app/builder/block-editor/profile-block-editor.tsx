@@ -3,7 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { PROFILE_META_LABELS, type ProfileBlockData, type ProfileMeta } from '@/db/block';
-import { PROFILE_FIELD_LABELS } from '../field-labels';
+import { PROFILE_FIELD_LABELS } from '../field-label';
 
 // よく使う既知8項目の入力欄（プレースホルダ）。PROFILE_META_LABELS（src/db）と
 // キーを揃えること。並び順もここが基準になる。

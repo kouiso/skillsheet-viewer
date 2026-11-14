@@ -2,7 +2,7 @@
 
 import { DateTokenPicker } from '@/component/date-token-picker';
 import type { ExperienceBlockData } from '@/db/block';
-import { EXPERIENCE_FIELD_LABELS } from '../field-labels';
+import { EXPERIENCE_FIELD_LABELS } from '../field-label';
 
 export const ExperienceBlockEditor = ({
   data,

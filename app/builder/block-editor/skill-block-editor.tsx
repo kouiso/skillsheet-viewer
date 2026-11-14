@@ -3,7 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { SelectOrCustom } from '@/component/select-or-custom';
 import type { SkillEntry } from '@/db/block';
-import { SKILL_FIELD_LABELS } from '../field-labels';
+import { SKILL_FIELD_LABELS } from '../field-label';
 
 const LEVEL_OPTIONS = ['実務経験あり', '設計可能', '指導可能', '基礎知識のみ'];
 

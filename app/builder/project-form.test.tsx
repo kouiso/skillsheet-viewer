@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectItem } from '@/db/block';
-import { PROJECT_FIELD_LABELS, TECH_FIELD_LABELS } from './field-labels';
+import { PROJECT_FIELD_LABELS, TECH_FIELD_LABELS } from './field-label';
 import { ProjectForm } from './project-form';
 
 const project: ProjectItem = {

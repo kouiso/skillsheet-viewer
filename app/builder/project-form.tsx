@@ -12,7 +12,7 @@ import {
 } from '@/db/process';
 
 import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constant';
-import { COMPANY_FIELD_LABELS, PROJECT_FIELD_LABELS } from './field-labels';
+import { COMPANY_FIELD_LABELS, PROJECT_FIELD_LABELS } from './field-label';
 import { GrowTextarea } from './grow-textarea';
 import { MonthDatePicker } from './month-date-picker';
 import { projectHasBlockingPeriod } from './project-warning';

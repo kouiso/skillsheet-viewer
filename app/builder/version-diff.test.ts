@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Block } from '@/db/block';
-import { COMPANY_FIELD_LABELS, PROJECT_FIELD_LABELS, TECH_FIELD_LABELS } from './field-labels';
+import { COMPANY_FIELD_LABELS, PROJECT_FIELD_LABELS, TECH_FIELD_LABELS } from './field-label';
 import { documentDifferences, formatLocation } from './version-diff';
 
 type Tech = { lang: string[]; fw: string[]; db: string[]; infra: string[]; tools: string[]; collab: string[] };

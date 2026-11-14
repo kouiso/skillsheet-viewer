@@ -42,7 +42,7 @@ import { CanvasDroppable } from './canvas/canvas-droppable';
 import { createPaletteItem, DragPreview, PALETTE_ITEMS, type PaletteBlockType, PaletteChip } from './canvas/palette';
 import { SortableBlock } from './canvas/sortable-block';
 import { CreateSheetDialog } from './create-sheet-dialog';
-import { BLOCK_TYPE_LABELS } from './field-labels';
+import { BLOCK_TYPE_LABELS } from './field-label';
 import { type HistoryEntry, loadHistory, pushHistory } from './history';
 import { HistoryDrawer } from './history-drawer';
 import { ProjectEditor } from './project-editor';

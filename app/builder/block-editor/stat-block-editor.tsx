@@ -5,7 +5,7 @@ import { useId } from 'react';
 import { Button } from '@/component/ui/button';
 import { Input } from '@/component/ui/input';
 import type { StatItem, StatsBlockData } from '@/db/block';
-import { STAT_FIELD_LABELS } from '../field-labels';
+import { STAT_FIELD_LABELS } from '../field-label';
 
 const FIELDS = [
   { key: 'value', label: STAT_FIELD_LABELS.value },

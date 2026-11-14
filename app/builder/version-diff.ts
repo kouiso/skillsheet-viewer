@@ -11,7 +11,7 @@ import {
   STAT_FIELD_LABELS,
   TABLE_FIELD_LABELS,
   TECH_FIELD_LABELS,
-} from './field-labels';
+} from './field-label';
 
 /** 版の差分の1項目。場所は人が読む語の並び（添字・内部IDは含めない）。 */
 export interface DocumentDifference {
@@ -343,7 +343,7 @@ function describe(leaf: Leaf, roots: Roots): { location: string[]; before: strin
 
 /**
  * 2つの版の差分を、場所・前・後の組で返す。原文を省略せず、変わった項目は全部返す。
- * 場所は会社名・案件名・スキル名などの語で示し、項目名は編集画面と同じ対応表（field-labels.ts）から引く。
+ * 場所は会社名・案件名・スキル名などの語で示し、項目名は編集画面と同じ対応表（field-label.ts）から引く。
  * 値は JSON にせず、文字列はそのまま（引用符なし・改行はそのまま）。
  */
 export function documentDifferences(before: DiffRoot, after: DiffRoot): DocumentDifference[] {

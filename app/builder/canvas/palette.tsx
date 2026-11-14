@@ -3,7 +3,7 @@
 import { useDraggable } from '@dnd-kit/core';
 import { Plus, Table } from 'lucide-react';
 
-import { BLOCK_TYPE_LABELS } from '../field-labels';
+import { BLOCK_TYPE_LABELS } from '../field-label';
 import { type EditorItem, newId } from '../serialize';
 
 export type PaletteBlockType = 'markdown' | 'table';

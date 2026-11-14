@@ -2,7 +2,7 @@
 
 import { AlignCenter, AlignLeft, AlignRight, Plus, Trash2 } from 'lucide-react';
 import type { TableAlign, TableColumn } from '@/db/block';
-import { TABLE_FIELD_LABELS } from '../field-labels';
+import { TABLE_FIELD_LABELS } from '../field-label';
 
 const ALIGN_OPTIONS: { value: TableAlign; Icon: typeof AlignLeft; label: string }[] = [
   { value: 'left', Icon: AlignLeft, label: '左揃え' },
