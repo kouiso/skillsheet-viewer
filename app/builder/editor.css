@@ -909,118 +909,6 @@
   color: var(--faint);
   margin: -8px 0 12px;
 }
-.pv-card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-editor);
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 13px;
-}
-.pv-no {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  /* 見出し番号と同じ理由で濃い緑に載せる */
-  color: var(--on-accent);
-  background: var(--primary-dark);
-  border-radius: 6px;
-  padding: 1px 7px;
-}
-.pv-period {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--faint);
-}
-.pv-title {
-  font-size: 16px;
-  line-height: 1.35;
-  margin-top: 5px;
-}
-.pv-scope {
-  font-size: 12px;
-  color: var(--muted-foreground);
-  margin-top: 3px;
-}
-.pv-company-note {
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--muted-foreground);
-  margin-top: 4px;
-}
-/* 役割・会社・人数・期間の1行メタ（閲覧側 project-card.tsx のメタ行に対応）。
-   以前は見出しの右枠に置いていたが、役割の位置が案件ごとにずれるため左端始まりの
-   1行にした（#289/#290）。 */
-.pv-meta {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--faint);
-  margin-top: 4px;
-}
-.pv-summary {
-  font-size: 12.5px;
-  line-height: 1.85;
-  color: var(--muted-foreground);
-  margin: 0;
-}
-.pv-tech {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.pv-tech span {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  padding: 2px 7px;
-  border-radius: 5px;
-  background: var(--chip-bg);
-  color: var(--chip-text);
-}
-.pv-proc-wrap {
-  border-top: 1px solid var(--border);
-  padding-top: 13px;
-}
-.pv-proc {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-items: flex-end;
-}
-.pv-proc .pp {
-  flex: 1 0 64px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-.pv-proc .pp .lbl {
-  font-family: var(--font-mono);
-  /* 8.5px は本文として読めない大きさだった。 */
-  font-size: 12px;
-  white-space: nowrap;
-}
-.pv-proc .pp .bar {
-  width: 100%;
-  height: 7px;
-  border-radius: var(--bar-round);
-}
-.pv-block {
-  margin-top: 14px;
-}
-.pv-block .bt {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: var(--accent-text);
-  margin-bottom: 5px;
-}
-.pv-block .bc {
-  font-size: 12px;
-  line-height: 1.8;
-  color: var(--foreground);
-}
-
 /* 注意は下書き保存を追加で止めない。既存の期間整合性エラーは別途表示する。 */
 .field-warning {
   display: flex;
@@ -1036,7 +924,7 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
-.field-warning button, .pv-expand {
+.field-warning button {
   min-height: 44px;
   padding: 6px 10px;
   text-decoration: underline;
@@ -1044,16 +932,22 @@
   font-weight: 600;
   cursor: pointer;
 }
-.field-warning button:focus-visible, .pv-expand:focus-visible {
+.field-warning button:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
 }
-.pv-expand { color: var(--accent-text); align-self: flex-start; }
-.pv-card-hidden { border: 2px dashed var(--muted-foreground); }
+/* 閲覧側では非表示の案件。カード本体の見た目は変えず、外側に破線の枠を足す。 */
+.pv-card-hidden { border: 2px dashed var(--muted-foreground); border-radius: var(--radius-lg); padding: 4px; }
+/* 閲覧画面（viewer-console.css の .viewer-project-grid article）と同じ折り返し。
+   プレビュー列は狭いので、画面幅ではなくカード幅で工程を 4 列（狭ければ 3 列）にし、技術は 1 列に積む。 */
+.pv-card-host article { container-type: inline-size; }
+.pv-card-host article .grid.items-baseline { grid-template-columns: minmax(0, 1fr); }
+.pv-card-host article .grid.items-end { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@container (max-width: 340px) {
+  .pv-card-host article .grid.items-end { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 /* 長い連続文字列も切り落とさず、プレビュー内で全文を折り返す。 */
-.pv-card, .pv-block { min-width: 0; overflow-wrap: anywhere; }
-.pv-summary, .pv-block .bc { max-height: none; overflow: visible; }
-.pv-tech span { max-width: 100%; overflow-wrap: anywhere; }
+.preview-inner article { min-width: 0; overflow-wrap: anywhere; }
 
 /* 編集欄 ⇄ プレビューの同期ハイライト */
 .pv-sync {
