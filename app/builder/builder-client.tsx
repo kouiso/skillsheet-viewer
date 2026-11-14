@@ -319,7 +319,7 @@ const BuilderClient = ({
     profileCustomDraftsRef.current.set(id, rows);
   }, []);
   // 手動保存の直近の失敗が「送り直しても直らない」種類かを履歴オープン側へ伝える。
-  const saveFailureRef = useRef<'conflict' | 'invalid' | 'not-found' | 'precondition' | null>(null);
+  const saveFailureRef = useRef<'conflict' | 'invalid' | 'invalid-period' | 'not-found' | 'precondition' | null>(null);
   const hasBlockedDraft = () =>
     blockedItemIdsRef.current.size > 0 || [...profileCustomDraftsRef.current.values()].some(hasUncommittedProfileRows);
   const blockedProfileIds = items
@@ -903,7 +903,7 @@ const BuilderClient = ({
       expectedRevision: savedRevisionRef.current,
     };
     if (validateDocumentBlocks(payload.blocks).some((issue) => issue.code === 'PERIOD_PROJECTION_MISMATCH')) {
-      saveFailureRef.current = 'invalid';
+      saveFailureRef.current = 'invalid-period';
       toast.error('保存できない入力があります。期間の日付などの診断を確認してください。');
       return;
     }
@@ -1037,11 +1037,15 @@ const BuilderClient = ({
         // 直らない失敗は送り直しても同じ結果になるので、確認を往復させず理由を出して抜ける。
         // 競合は handleSave が理由と次の操作（最新を読み込む／あとで）を出し終えている。
         if (saveFailureRef.current === 'conflict') return;
-        if (saveFailureRef.current === 'invalid') {
+        if (saveFailureRef.current === 'invalid' || saveFailureRef.current === 'invalid-period') {
+          // 手元で原因が分かる時（期間の不一致）はそれを名指しする。サーバの BAD_REQUEST は原因が分からないので汎用文。
+          const cause =
+            saveFailureRef.current === 'invalid-period'
+              ? '案件の期間の入力に、保存できないものがあります（開始・終了の日付が期間の表記と合っていません）。'
+              : '入力内容に、保存できない箇所があります。';
           const discard = await confirm({
             title: '未保存の変更を保存できません。',
-            description:
-              '入力内容に保存できない箇所があります（期間の日付など）。同じ内容で送り直しても保存できません。このまま履歴を開くと、未保存の変更は失われます。',
+            description: `${cause}同じ内容で送り直しても保存できません。このまま履歴を開くと、未保存の変更は失われます。`,
             confirmLabel: '変更を捨てて履歴を開く',
             cancelLabel: '編集に戻る',
             danger: true,

@@ -456,6 +456,7 @@ describe('BuilderClient', () => {
     const reason = await screen.findByRole('alertdialog');
     expect(within(reason).getByText('未保存の変更を保存できません。')).toBeInTheDocument();
     expect(within(reason).getByText(/このまま履歴を開くと、未保存の変更は失われます。/)).toBeInTheDocument();
+    expect(within(reason).getByText(/入力内容に、保存できない箇所があります/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
     await user.click(within(reason).getByRole('button', { name: '編集に戻る' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
@@ -566,6 +567,7 @@ describe('BuilderClient', () => {
     );
     const reason = await screen.findByRole('alertdialog');
     expect(within(reason).getByText('未保存の変更を保存できません。')).toBeInTheDocument();
+    expect(within(reason).getByText(/案件の期間の入力に、保存できないものがあります/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
     expect(mockSave).not.toHaveBeenCalled();
   });
