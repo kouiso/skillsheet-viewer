@@ -153,6 +153,15 @@ const RASTER_TOOLS_HINT =
   '必要な外部コマンド: Ghostscript (gs)・ImageMagick (identify / convert)・poppler (poppler-utils)。' +
   'macOS: brew install ghostscript imagemagick poppler / Ubuntu: sudo apt-get install -y ghostscript imagemagick poppler-utils';
 
+/**
+ * 外部コマンドの失敗を文にする。入れ方の案内は「コマンドが無い（ENOENT）」時だけ付ける。
+ * maxBuffer 超過や MAGICK_TIME_LIMIT の打ち切りで案内を出すと、入っている道具を入れ直させる誤誘導になる。
+ */
+export function toolFailure(error: unknown, what: string): Error {
+  const missing = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT';
+  return new Error(missing ? `${RASTER_TOOLS_HINT}（${what}）: ${error}` : `${what}: ${error}`);
+}
+
 /** gs で 1 ページ 1 PNG に展開する。一時ディレクトリごと呼び出し側が削除すること。 */
 function rasterizePdfPages(pdfBuffer: Buffer, dpi: number): { dir: string; pngPaths: string[] } {
   const dir = mkdtempSync(path.join(tmpdir(), 'pdf-raster-'));
@@ -167,7 +176,7 @@ function rasterizePdfPages(pdfBuffer: Buffer, dpi: number): { dir: string; pngPa
     );
   } catch (error) {
     rmSync(dir, { recursive: true, force: true });
-    throw new Error(`${RASTER_TOOLS_HINT}（Ghostscript (gs) でのラスタライズに失敗した）: ${error}`);
+    throw toolFailure(error, 'Ghostscript (gs) でのラスタライズに失敗した');
   }
   const pngPaths = readdirSync(dir)
     .filter((f) => f.startsWith('page-') && f.endsWith('.png'))
@@ -194,7 +203,7 @@ function readPageGray(pngPath: string): { width: number; height: number; data: B
     });
     return { width, height, data };
   } catch (error) {
-    throw new Error(`${RASTER_TOOLS_HINT}（ImageMagick の identify / convert が失敗した）: ${error}`);
+    throw toolFailure(error, 'ImageMagick の identify / convert が失敗した');
   }
 }
 

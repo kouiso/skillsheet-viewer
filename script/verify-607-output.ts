@@ -17,7 +17,7 @@
  * 結果は .evidence/607-output/ へ JSON・画像・出力ファイルを書く。
  */
 import assert from 'node:assert/strict';
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { createHmac, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -35,6 +35,10 @@ import { d1Timestamp } from '../src/db/d1/value';
 import { createDocumentService } from '../src/db/document-service';
 import { buildConsoleDemoBlocks } from '../src/db/fixture/fictional-demo';
 import { createD1Transport } from '../src/server/d1-transport';
+import { capTime, createChildRegistry, createSignalHandler, waitReady } from './verify-607-lifecycle';
+
+const GATEWAY_STOP_CAP_MS = 4_000;
+const CLEANUP_CAP_MS = 5_000;
 
 const ONLY = process.argv[2]; // 'next' | 'worker' | undefined
 // 打ち間違いで何も検査せず ALL OK になるのを防ぐため、setup より前に弾く
@@ -205,55 +209,22 @@ const viewerCookie = (() => {
 })();
 
 const results: Record<string, unknown> = {};
-const children: ChildProcess[] = [];
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const groupAlive = (pid: number) => {
-  try {
-    process.kill(-pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
-// wrangler は workerd を子に持つ。親だけ SIGKILL すると workerd が残り、workerd は SIGTERM でも止まらないことがある。
-// detached で起動して自分のプロセスグループを作り、グループごと SIGTERM → 残れば SIGKILL で止める。
-// 親が先に死んでもグループに子が残る場合があるので、親の終了状態ではなくグループの生死を見る。
-async function stopTree(c: ChildProcess, graceMs = 3000): Promise<void> {
-  const pid = c.pid;
-  if (pid === undefined) return;
-  try {
-    process.kill(-pid, 'SIGTERM');
-  } catch {}
-  for (let waited = 0; waited < graceMs && groupAlive(pid); waited += 100) await sleep(100);
-  if (groupAlive(pid)) {
-    try {
-      process.kill(-pid, 'SIGKILL');
-    } catch {}
-    for (let waited = 0; waited < 2000 && groupAlive(pid); waited += 100) await sleep(100);
-  }
-}
+const registry = createChildRegistry();
+const stopTree = (c: ChildProcess) => registry.stop(c);
+// unstable_dev の gateway は workerd をこのプロセスの直下の子として持つ。API は stop() しか公開せず pid も取れないため、
+// グループ kill では止められない。stop() が上限内に終わらなかった時は、このプロセスの直下の子（workerd）を
+// pkill で撃って残さない。app 側の子は detached の別グループで、registry が先に止めている。
 const cleanup = async () => {
-  await Promise.allSettled(children.map((c) => stopTree(c)));
-  await gateway.stop().catch(() => {});
+  await registry.stopAll();
+  let stopped = false;
+  const markStopped = () => {
+    stopped = true;
+  };
+  await capTime(gateway.stop().then(markStopped, markStopped), GATEWAY_STOP_CAP_MS);
+  if (!stopped) spawnSync('pkill', ['-KILL', '-P', String(process.pid)], { stdio: 'ignore' });
 };
-for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
-  process.on(sig, () => void cleanup().then(() => process.exit(128 + { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 }[sig])));
-}
-
-// 1 回の fetch は 5 秒、待ち全体は 120 秒で打ち切る。相手が応答しないまま台本ごと止まるのを防ぐ。
-const READY_FETCH_TIMEOUT_MS = 5_000;
-const READY_TOTAL_TIMEOUT_MS = 120_000;
-async function waitReady(url: string, totalMs = READY_TOTAL_TIMEOUT_MS): Promise<void> {
-  const deadline = Date.now() + totalMs;
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch(url, { signal: AbortSignal.timeout(READY_FETCH_TIMEOUT_MS) });
-      if (r.status === 200) return;
-    } catch {}
-    await sleep(500);
-  }
-  throw new Error(`${url} did not become ready within ${totalMs}ms`);
-}
+const onSignal = createSignalHandler({ cleanup, exit: (code) => process.exit(code), capMs: CLEANUP_CAP_MS });
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(sig, () => onSignal(sig));
 
 async function zipText(buf: Buffer): Promise<string> {
   const zip = await JSZip.loadAsync(buf);
@@ -362,7 +333,7 @@ async function verifyRuntime(kind: 'next' | 'worker') {
       },
     );
   }
-  children.push(app);
+  registry.add(app);
   app.stdout?.pipe(log);
   app.stderr?.pipe(log);
   const report: Record<string, unknown> = { origin };
@@ -527,6 +498,6 @@ try {
   console.error('[FAILED] #607 output verification', e);
 } finally {
   // gateway.stop() がハングするケースがあるため終了は打ち切る
-  await Promise.race([cleanup(), new Promise((r) => setTimeout(r, 5000))]);
+  await capTime(cleanup(), CLEANUP_CAP_MS);
   process.exit(failed ? 1 : 0);
 }
