@@ -100,10 +100,10 @@ test('A. rapid edit/save cycles', async ({ page }) => {
   await login(page);
 
   await openCreateSheet(page);
-  await expect(page.getByText('新規シートを作成')).toBeVisible();
+  await expect(page.getByText('新しいシートを作る')).toBeVisible();
   await page.locator('#new-sheet-title').fill(`${SHEET_PREFIX} rapid`);
   await chooseTemplate(page, 'full');
-  await page.getByRole('button', { name: '作成' }).click();
+  await page.getByRole('button', { name: '作る', exact: true }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
   createdSheetIds.push(newId);
@@ -163,7 +163,7 @@ test('B. extreme input edge cases', async ({ page }) => {
   await openCreateSheet(page);
   await page.locator('#new-sheet-title').fill(`${SHEET_PREFIX} extreme`);
   await chooseTemplate(page, 'console-dashboard');
-  await page.getByRole('button', { name: '作成' }).click();
+  await page.getByRole('button', { name: '作る', exact: true }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
   createdSheetIds.push(newId);
@@ -294,7 +294,7 @@ test('D. network throttling and offline', async ({ page }) => {
   await openCreateSheet(page);
   await page.locator('#new-sheet-title').fill(`${SHEET_PREFIX} network`);
   await chooseTemplate(page, 'blank');
-  await page.getByRole('button', { name: '作成' }).click();
+  await page.getByRole('button', { name: '作る', exact: true }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
   createdSheetIds.push(newId);
@@ -545,7 +545,7 @@ test('I. data freshness / revalidate', async ({ page, browser }) => {
   const title = `${SHEET_PREFIX} fresh`;
   await page.locator('#new-sheet-title').fill(title);
   await chooseTemplate(page, 'console-dashboard');
-  await page.getByRole('button', { name: '作成' }).click();
+  await page.getByRole('button', { name: '作る', exact: true }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const newId = new URL(page.url()).searchParams.get('sheet') ?? '';
   createdSheetIds.push(newId);

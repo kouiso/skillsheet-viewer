@@ -56,10 +56,10 @@ test('repro: console-dashboard template should seed profile/stats/project blocks
   await login(page);
 
   await openCreateSheet(page);
-  await expect(page.getByText('新規シートを作成')).toBeVisible();
+  await expect(page.getByText('新しいシートを作る')).toBeVisible();
   await page.locator('#new-sheet-title').fill(`${REPRO_TITLE_PREFIX} ${Date.now()}`);
   await chooseTemplate(page, 'console-dashboard');
-  await page.getByRole('button', { name: '作成' }).click();
+  await page.getByRole('button', { name: '作る', exact: true }).click();
   await page.waitForURL(/\/builder\?sheet=/);
 
   const url = page.url();
@@ -69,7 +69,7 @@ test('repro: console-dashboard template should seed profile/stats/project blocks
   await page.waitForTimeout(1000);
   await page.screenshot({ path: path.join(reportDir, 'Z-repro-console-dashboard-light.png'), fullPage: true });
 
-  // テンプレート「ダッシュボード（プロフィール・統計・案件）」なら
+  // テンプレート「ダッシュボード」なら
   // プロフィール / 統計 / 案件 ブロックが表示されることを期待する
   await expect(page.getByText('プロフィール', { exact: false }).first()).toBeVisible();
   await expect(page.getByText('統計', { exact: false }).first()).toBeVisible();

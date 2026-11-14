@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceTopbar } from './workspace-topbar';
@@ -38,6 +38,62 @@ describe('WorkspaceTopbar', () => {
     expect(data.onSelectSheet).toHaveBeenCalledWith('two');
     await user.click(screen.getByRole('button', { name: '保存' }));
     expect(data.onSave).toHaveBeenCalledOnce();
+  });
+
+  // デザインボード n05-light の「シート切替」メニュー。
+  describe('シート切替メニュー（デザインボード U11）', () => {
+    const open = async () => {
+      const data = props();
+      data.sheets = [
+        { id: 'one', title: '合成シート', updatedAt: new Date('2026-09-24T03:41:00Z') },
+        { id: 'two', title: '別の合成シート', updatedAt: new Date('2026-08-30T02:12:00Z') },
+        { id: 'three', title: '三つ目の合成シート', updatedAt: new Date('2026-09-18T11:05:00Z') },
+      ];
+      const user = userEvent.setup();
+      render(<WorkspaceTopbar {...data} />);
+      await user.click(screen.getByRole('button', { name: 'シートを切り替える: 合成シート' }));
+      return { data, user, menu: screen.getByRole('dialog', { name: 'シートを切り替える' }) };
+    };
+
+    it('最終保存は「9/24 12:41」の月日と時刻だけで、年・秒・曜日は出さない', async () => {
+      const { menu } = await open();
+      expect(within(menu).getByText('最終保存 9/24 12:41')).toBeInTheDocument();
+      expect(within(menu).getByText('最終保存 8/30 11:12')).toBeInTheDocument();
+      expect(within(menu).getByText('最終保存 9/18 20:05')).toBeInTheDocument();
+      expect(menu.textContent).not.toMatch(/2026|:\d\d:\d\d/);
+    });
+
+    it('見出し「シート」、選択中だけチェック印、他はファイル印で並ぶ', async () => {
+      const { menu } = await open();
+      expect(within(menu).getByRole('heading', { name: 'シート' })).toBeInTheDocument();
+      const rows = within(menu).getAllByRole('listitem');
+      expect(rows).toHaveLength(3);
+      expect(rows[0].querySelector('svg.lucide-check')).not.toBeNull();
+      expect(rows[1].querySelector('svg.lucide-check')).toBeNull();
+      expect(rows[1].querySelector('svg.lucide-file-text')).not.toBeNull();
+      expect(within(rows[0]).getByRole('button', { name: '「合成シート」に切り替える' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      );
+    });
+
+    it('削除は行の右端にあり、マウス操作の端末では行に触れるまで見えない', async () => {
+      const { menu } = await open();
+      const remove = within(menu).getByRole('button', { name: '「別の合成シート」を削除' });
+      expect(remove.closest('li')).not.toBeNull();
+      expect(remove.className).toContain('group-hover:opacity-100');
+      expect(remove.className).toContain('group-focus-within:opacity-100');
+      expect(remove.className).toContain('pointer-coarse:opacity-100');
+    });
+
+    it('一覧の下に区切り線を挟んで「新しいシートを作る…」が最後に来る', async () => {
+      const { menu, data, user } = await open();
+      const create = within(menu).getByRole('button', { name: '新しいシートを作る…' });
+      expect(create.previousElementSibling?.tagName).toBe('HR');
+      expect(create.nextElementSibling).toBeNull();
+      await user.click(create);
+      expect(data.onCreateSheet).toHaveBeenCalledOnce();
+    });
   });
 
   it('端末の入力履歴とバックアップはその他から呼び出す', async () => {

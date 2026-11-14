@@ -4,12 +4,12 @@ import { expect, type Page } from '@playwright/test';
 export async function openCreateSheet(page: Page) {
   await page.getByRole('button', { name: /^シートを切り替える:/ }).click();
   await page.getByRole('button', { name: '新しいシートを作る…', exact: true }).click();
-  await expect(page.getByRole('dialog', { name: '新規シートを作成' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '新しいシートを作る' })).toBeVisible();
 }
 
 export async function chooseTemplate(page: Page, id: 'full' | 'console-dashboard' | 'blank') {
   await page
-    .getByRole('dialog', { name: '新規シートを作成' })
+    .getByRole('dialog', { name: '新しいシートを作る' })
     .locator(`input[name="sheet-template"][value="${id}"]`)
     .check();
 }

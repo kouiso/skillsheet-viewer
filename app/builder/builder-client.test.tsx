@@ -209,17 +209,17 @@ describe('BuilderClient', () => {
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
     await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
-    const dialog = screen.getByRole('dialog', { name: '新規シートを作成' });
+    const dialog = screen.getByRole('dialog', { name: '新しいシートを作る' });
     const titleInput = within(dialog).getByRole('textbox', { name: 'タイトル' });
     await user.clear(titleInput);
     await user.type(titleInput, '再試行する合成シート');
     const template = within(dialog).getByDisplayValue('console-dashboard');
     await user.click(template);
-    await user.click(await within(dialog).findByRole('button', { name: '作成' }));
+    await user.click(await within(dialog).findByRole('button', { name: '作る' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('入力内容は保持しています');
     expect(titleInput).toHaveValue('再試行する合成シート');
     expect(template).toBeChecked();
-    await user.click(await within(dialog).findByRole('button', { name: '作成' }));
+    await user.click(await within(dialog).findByRole('button', { name: '作る' }));
     expect(mockCreate).toHaveBeenCalledTimes(2);
     expect(mockCreate.mock.calls[1][0]).toEqual(mockCreate.mock.calls[0][0]);
     expect(mockCreate.mock.calls[0][0].sheetId).toMatch(/^[0-9a-f-]{36}$/);
@@ -240,7 +240,7 @@ describe('BuilderClient', () => {
       if (operation === 'create') {
         await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
         await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
-        await user.click(screen.getByRole('button', { name: '作成' }));
+        await user.click(screen.getByRole('button', { name: '作る' }));
       } else {
         await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
         await user.click(screen.getByRole('button', { name: '「テストシート」を削除' }));
@@ -662,7 +662,7 @@ describe('BuilderClient', () => {
       await act(async () => {
         fireEvent.click(within(confirmation).getByRole('button', { name: '編集に戻る' }));
       });
-      expect(screen.queryByText('新規シートを作成')).not.toBeInTheDocument();
+      expect(screen.queryByText('新しいシートを作る')).not.toBeInTheDocument();
       expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('## A!');
     } finally {
       view.unmount();
@@ -681,7 +681,7 @@ describe('BuilderClient', () => {
       await act(async () => {
         fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: '変更を捨てて移動' }));
       });
-      expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+      expect(screen.getByText('新しいシートを作る')).toBeInTheDocument();
     } finally {
       view.unmount();
       vi.useRealTimers();
@@ -694,7 +694,7 @@ describe('BuilderClient', () => {
     await user.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
     await user.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
-    expect(screen.getByText('新規シートを作成')).toBeInTheDocument();
+    expect(screen.getByText('新しいシートを作る')).toBeInTheDocument();
   });
 
   // プレビューは別ウィンドウに分離済み（builder-client 内には描画しない）ため、

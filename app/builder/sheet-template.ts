@@ -90,7 +90,7 @@ export const TEMPLATES: SheetTemplate[] = [
   },
   {
     id: 'console-dashboard',
-    label: 'ダッシュボード（プロフィール・統計・案件）',
+    label: 'ダッシュボード',
     blocks: [
       {
         type: 'profile',

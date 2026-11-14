@@ -1,7 +1,9 @@
 'use client';
 
 import {
+  Check,
   ChevronDown,
+  ChevronRight,
   Download,
   ExternalLink,
   FileText,
@@ -19,6 +21,23 @@ import { Button } from '@/component/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/component/ui/popover';
 
 type Sheet = { id: string; title: string; updatedAt: Date };
+
+const SAVED_AT_FORMAT = new Intl.DateTimeFormat('ja-JP', {
+  timeZone: 'Asia/Tokyo',
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+// デザインボード（N-05）は「最終保存 9/24 12:41」。年・秒は出さず、月日と時刻だけにする。
+function formatSheetSavedAt(value: Date | string): string {
+  const parts = Object.fromEntries(
+    SAVED_AT_FORMAT.formatToParts(new Date(value)).map((part) => [part.type, part.value]),
+  );
+  return `${parts.month}/${parts.day} ${parts.hour}:${parts.minute}`;
+}
 
 export function WorkspaceTopbar({
   sheets,
@@ -99,65 +118,86 @@ export function WorkspaceTopbar({
             <Button
               data-workspace-focus
               variant="ghost"
-              className="min-w-0 flex-1 justify-start px-2 sm:max-w-80 sm:flex-none"
+              className="min-w-0 flex-1 justify-start gap-2 border border-transparent px-2.5 sm:max-w-[340px] sm:flex-none data-[state=open]:border-border data-[state=open]:bg-muted"
               aria-label={`シートを切り替える: ${title || 'シート未選択'}`}
             >
-              <span className="hidden text-xs text-muted-foreground xl:inline">スキルシートビルダー</span>
-              <span className="truncate font-semibold">{title || 'シート未選択'}</span>
-              <ChevronDown className="size-4 shrink-0" />
+              <span className="hidden items-center gap-2 xl:inline-flex">
+                <span className="text-xs font-semibold text-muted-foreground">スキルシートビルダー</span>
+                <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+              </span>
+              <span className="truncate text-[14.5px] font-bold">{title || 'シート未選択'}</span>
+              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="w-[min(340px,calc(100vw-16px))] p-2" aria-label="シートを切り替える">
-            <h2 className="px-2 py-2 text-xs font-semibold text-muted-foreground">シート</h2>
+          <PopoverContent
+            align="start"
+            className="w-[min(340px,calc(100vw-16px))] min-w-60 rounded-md border-border-strong p-1"
+            aria-label="シートを切り替える"
+          >
+            <h2 className="px-2.5 pb-1 pt-2 text-xs font-bold text-muted-foreground">シート</h2>
             <ul className="max-h-[60dvh] overflow-y-auto">
-              {sheets.map((sheet) => (
-                <li key={sheet.id} className="flex min-w-0 items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    aria-label={`「${sheet.title}」に切り替える`}
-                    aria-current={sheet.id === activeSheetId ? 'true' : undefined}
-                    onClick={() => {
-                      setSheetOpen(false);
-                      onSelectSheet(sheet.id);
-                    }}
-                    className={`flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded px-2 text-left text-sm disabled:opacity-50 ${sheet.id === activeSheetId ? 'bg-primary-dark text-primary-foreground' : 'hover:bg-muted'}`}
+              {sheets.map((sheet) => {
+                const active = sheet.id === activeSheetId;
+                return (
+                  <li
+                    key={sheet.id}
+                    data-sheet-row
+                    className="group relative flex min-w-0 items-center gap-2 rounded hover:bg-muted focus-within:bg-muted"
                   >
-                    <FileText className="size-4 shrink-0" />
-                    <span className="min-w-0">
-                      <span className="block truncate">{sheet.title}</span>
-                      <span className="block text-xs opacity-90">
-                        最終保存 {new Date(sheet.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`「${sheet.title}」に切り替える`}
+                      aria-current={active ? 'true' : undefined}
+                      onClick={() => {
+                        setSheetOpen(false);
+                        onSelectSheet(sheet.id);
+                      }}
+                      className={`flex min-h-12 min-w-0 flex-1 items-center gap-2.5 rounded px-2.5 text-left text-[13px] disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring ${active ? 'font-semibold text-accent-text' : ''}`}
+                    >
+                      {active ? (
+                        <Check className="size-4 shrink-0 text-accent-text" />
+                      ) : (
+                        <FileText className="size-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{sheet.title}</span>
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          最終保存 {formatSheetSavedAt(sheet.updatedAt)}
+                        </span>
                       </span>
-                    </span>
-                  </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    disabled={busy}
-                    aria-label={`「${sheet.title}」を削除`}
-                    onClick={() => {
-                      setSheetOpen(false);
-                      onDeleteSheet(sheet.id, sheet.title);
-                    }}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </li>
-              ))}
+                    </button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={busy}
+                      aria-label={`「${sheet.title}」を削除`}
+                      title={`「${sheet.title}」を削除`}
+                      className="mr-1 size-8 shrink-0 text-muted-foreground opacity-0 pointer-coarse:opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100"
+                      onClick={() => {
+                        setSheetOpen(false);
+                        onDeleteSheet(sheet.id, sheet.title);
+                      }}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </li>
+                );
+              })}
             </ul>
-            <Button
-              variant="ghost"
+            <hr className="my-1 h-px border-0 bg-border" />
+            <button
+              type="button"
               disabled={busy}
               onClick={() => {
                 setSheetOpen(false);
                 onCreateSheet();
               }}
-              className="mt-2 w-full justify-start border-t border-border"
+              className="flex min-h-10 w-full items-center gap-2.5 rounded px-2.5 text-left text-[13px] hover:bg-muted disabled:opacity-50 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
             >
-              <Plus className="size-4" />
-              新しいシートを作る…
-            </Button>
+              <Plus className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate">新しいシートを作る…</span>
+            </button>
           </PopoverContent>
         </Popover>
         {onVersionHistory && (

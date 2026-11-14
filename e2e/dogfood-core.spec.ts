@@ -133,10 +133,10 @@ test('editor: create new sheet from full template and edit blocks', async ({ pag
 
   // 新規シート作成（フルスキルシート）
   await openCreateSheet(page);
-  await expect(page.getByText('新規シートを作成')).toBeVisible();
+  await expect(page.getByText('新しいシートを作る')).toBeVisible();
   await page.locator('#new-sheet-title').fill(FULL_TEMPLATE_TITLE);
   await chooseTemplate(page, 'full');
-  await page.getByRole('button', { name: '作成' }).click();
+  await page.getByRole('button', { name: '作る', exact: true }).click();
   await page.waitForURL(/\/builder\?sheet=/);
   const url = page.url();
   newSheetId = new URL(url).searchParams.get('sheet') ?? '';
