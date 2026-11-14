@@ -4,6 +4,12 @@
  * トークン名だけこのリポジトリの語彙（--background / --primary 等）へ写している。
  */
 
+/*
+ * 寸法・色は Claude Design `builder/pw1〜pw4` の `.syn`（820px 幅の別窓全体の板）に合わせる。
+ * 先に作った部品板 `part/preview-sync-badge`（mono 11px・9px 18px・背景 90% + blur）より
+ * 画面全体の板を優先する、というマネージャーの決まりに従った（#626）。
+ * 板の `--surface` は --card、`--text-2` は --muted-foreground、`--warn-text` は --warn-strong に対応する。
+ */
 .syncbar {
   position: sticky;
   top: 0;
@@ -11,34 +17,34 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 9px;
-  padding: 9px 18px;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--background);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--faint);
+  background: var(--card);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
 }
 .syncbar .dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
+  background: var(--primary);
   flex-shrink: 0;
 }
 .syncbar .grow {
   flex: 1;
 }
 .syncbar .stamp {
+  font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--faint);
+  font-weight: 500;
+  color: var(--muted-foreground);
 }
 
 .syncbar.live .dot {
-  background: var(--primary);
   animation: syncbar-blip 2s ease-in-out infinite;
-}
-.syncbar.live .lbl {
-  color: var(--accent-text);
 }
 
 .syncbar.stale {
@@ -48,18 +54,16 @@
 .syncbar.stale .dot {
   background: var(--warn);
 }
-.syncbar.stale .lbl {
-  color: var(--warn-strong);
-}
 
-.syncbar.closed {
+/* closed（接続後に閉じた）と standalone（直接開いた）は、板どおり同じ灰色。 */
+.syncbar.closed,
+.syncbar.standalone {
   background: var(--muted);
-}
-.syncbar.closed .dot {
-  background: var(--muted-foreground);
-}
-.syncbar.closed .lbl {
   color: var(--muted-foreground);
+}
+.syncbar.closed .dot,
+.syncbar.standalone .dot {
+  background: var(--border-strong);
 }
 
 @keyframes syncbar-blip {
@@ -77,29 +81,42 @@
   }
 }
 
+/*
+ * 形は板の `.b.sm`（枠 1px --border・面 --card・radius 4px・12.5px/600・gap 7px・左右 10px）。
+ * 高さだけは板の 32px ではなく 44px を保つ（押しやすさ。タッチ操作の最小の押せる大きさ）。
+ */
 .syncbar .reconnect {
   min-height: 44px;
   min-width: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-family: var(--font-sans);
-  font-size: 12px;
-  padding: 4px 9px;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  border: 1px solid currentColor;
-  background: transparent;
+  background: var(--card);
   color: inherit;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 .syncbar .reconnect:hover {
   background: var(--surface3);
 }
 
-/* 状態が変わっても本文を薄めない。状態帯の文言と色で識別する。 */
+/*
+ * 板（pw2・pw3）は stale・closed で本文に opacity .62 を掛けるが、実装は薄めない。
+ * 理由は読みやすさ: .62 を掛けると補助文字（--muted-foreground）の対比が AA の 4.5:1 を割る
+ * （2026-11-14 に計算: ライト 9.73 → 3.43、ダーク 9.74 → 4.31。本文の --foreground は 4.96 / 6.67 で足りる）。
+ * 状態は帯の文言と色で識別する。
+ */
 .preview-document {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.syncbar .lbl { min-width: 0; flex: 1 1 220px; overflow-wrap: anywhere; }
+/* 文言は板どおり自然な幅にし、余白は .grow が取る。狭い窓では折り返す。 */
+.syncbar .lbl { min-width: 0; flex: 0 1 auto; overflow-wrap: anywhere; padding-block: 8px; }
 .syncbar .reconnect:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 import './sync-bar.css';
 
@@ -23,6 +24,23 @@ const LABEL: Record<SyncState, string> = {
   // 「最後の内容です」と出て、データを失ったと誤解させていた。
   standalone: '表示できるプレビューがありません。ビルダー画面のプレビューボタンから開いてください。',
 };
+
+// 板（pw2・pw4）の SVG。文字の「↻」をやめ、板と同じ線のアイコンにする。
+const Icon = ({ children }: { children: ReactNode }) => (
+  <svg
+    width="16"
+    height="16"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    {children}
+  </svg>
+);
 
 const formatStamp = (at: number): string => {
   const d = new Date(at);
@@ -50,7 +68,11 @@ export const SyncBar = ({ state, lastUpdatedAt, onReconnect }: SyncBarProps) => 
     {state === 'live' && lastUpdatedAt !== null && <span className="stamp">{formatStamp(lastUpdatedAt)}</span>}
     {state === 'stale' && (
       <button type="button" className="reconnect" onClick={onReconnect}>
-        ↻ 再接続
+        <Icon>
+          <path d="M13 3v3.5H9.5" />
+          <path d="M12.6 6.4A5 5 0 1 0 13 9" />
+        </Icon>
+        再接続
       </button>
     )}
     {/* #201: standalone（編集画面を経由せずこのURLを直接開いた）は再接続しても内容が
@@ -58,6 +80,9 @@ export const SyncBar = ({ state, lastUpdatedAt, onReconnect }: SyncBarProps) => 
         リンクも無く、キーボード操作では Tab で止まる要素が0個で行き止まりだった。 */}
     {state === 'standalone' && (
       <Link href="/builder" className="reconnect">
+        <Icon>
+          <path d="M10 3L5 8l5 5" />
+        </Icon>
         ビルダー画面を開く
       </Link>
     )}
