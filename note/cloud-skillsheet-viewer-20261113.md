@@ -40,6 +40,7 @@ item 668 | new | #626 の子 SBI「共有確認ダイアログの見た目を板
 item 653 | OWNER | REVIEW PASS must 0 want 1 nit 1 https://github.com/kouiso/skillsheet-viewer/pull/653#issuecomment-6877191755 | b32e00e | CI 14 success・1 neutral・1 skipped・0 fail | 認証のサーバ側ファイルは触らない | G5 で取り込み保留（ASK 2）
 DECIDED 2026-11-14T12:26:34Z | #653 の本文の画像リンクを短い SHA に直した（40 桁の SHA を含む URL は、このセッションの道具の読み書きで `[](`` url) ``` に化ける）。中身のコードは変えていないので合格はそのまま | reason 本文と証拠の一致（線 7） | revert 本文の版を戻す
 DECIDED 2026-11-14T12:26:34Z | 失敗: #667 のレビュー役と作業役を同じ作業場（/home/user/wt/633）で同時に動かし、レビュー役の `git checkout --` が作業役の未コミットの直しを消した | reason 私の割り当ての誤り | 対策: 以後レビュー役には必ず別の作業場（git worktree add --detach <head>）を使わせる。作業役にやり直しを頼んだ
+BOARD 2026-11-14T12:29:13Z | 持ち主がデザインボードを渡した: https://claude.ai/artifact/PhnYgucHfef7fkz4Q8nZ2b （Claude Design、ページ #377・#383・11/11 レビュー・ビルダー最終版・部品・PDF）。今までの見比べは #626・#627 の書き写しだけだった。共有確認ダイアログの値はボードで確認: max-width 480px・角丸 8px・余白 24px・間隔 10px・ボタン 36px 高・390px（.rv.m）は余白 20px でボタンを縦（column-reverse）・幅いっぱい、並びは危険側が左・主ボタンが右（#668 の書き写しと一致）。開いている PR 4 本（#664 #665 #653 #667）をボードそのものと見比べる作業役を出した。#632 の作業役にもボードを渡した
 
 ## 2026-11-14T11:45Z（再開後の記録）
 
