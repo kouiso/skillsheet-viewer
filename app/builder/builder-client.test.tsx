@@ -497,6 +497,52 @@ describe('BuilderClient', () => {
     expect(mockSave).toHaveBeenCalledTimes(1);
   });
 
+  it('期間投影の不一致（クライアント側検証）で履歴前の保存が止まった時も、往復せず理由を出す', async () => {
+    const user = userEvent.setup();
+    render(
+      <BuilderClient
+        initialTitle="期間検証"
+        {...defaultProps}
+        initialBlocks={[
+          {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            type: 'project',
+            order: 0,
+            data: {
+              companies: [{ id: 'c1', name: '検証会社', kind: '', period: '', note: '' }],
+              items: [
+                {
+                  id: 'p1',
+                  companyId: 'c1',
+                  title: '案件',
+                  scope: '',
+                  period: '2026.08 — ',
+                  ongoing: true,
+                  role: '',
+                  team: '',
+                  tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+                  process: [],
+                  duties: '',
+                  acquired: '',
+                  comment: '',
+                },
+              ],
+            },
+          },
+        ]}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('タイトル'), { target: { value: '期間不一致の下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    const reason = await screen.findByRole('alertdialog');
+    expect(within(reason).getByText('未保存の変更を保存できません。')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
+    expect(mockSave).not.toHaveBeenCalled();
+  });
+
   it('期間投影が不一致の下書きを保存APIへ送信しない', async () => {
     const user = userEvent.setup();
     render(
