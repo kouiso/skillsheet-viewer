@@ -64,7 +64,7 @@ interface Leaf {
   before: unknown;
   after: unknown;
   /** 並び順の変更のように、場所と値を作ってから渡す項目。 */
-  fixed?: { location: string[]; before: string; after: string };
+  fixed?: { location: string[]; before: string; after: string; companyIds?: unknown[] };
 }
 
 // ブロック・会社・案件は、保存のたびに添字がずれる（先頭を消す・途中に足す）ので、添字でなく id で対にする。
@@ -151,7 +151,12 @@ function collect(
           ap,
           before: undefined,
           after: undefined,
-          fixed: { location: [label], before: names(orderB), after: names(orderA) },
+          fixed: {
+            location: [label],
+            before: names(orderB),
+            after: names(orderA),
+            companyIds: orderA.map((e) => child(e, 'companyId')),
+          },
         });
       }
       return;
@@ -315,7 +320,19 @@ function describeBlock(
 }
 
 function describe(leaf: Leaf, roots: Roots): { location: string[]; before: string; after: string } {
-  if (leaf.fixed) return leaf.fixed;
+  if (leaf.fixed) {
+    const { companyIds, ...fixed } = leaf.fixed;
+    const owner = leaf.ap ?? leaf.bp;
+    // ブロックの並び順は文書全体の話。会社・案件の並び順は、どのブロックか（案件が1社に収まる時は会社名）を頭に付ける。
+    if (!owner || owner.length < 2) return fixed;
+    const ownerSide: Side = leaf.ap ? 'after' : 'before';
+    const block = at(roots[ownerSide], ['blocks', owner[1]]);
+    const list = child(child(block, 'data'), 'companies');
+    const ids = new Set(companyIds);
+    const only = ids.size === 1 && Array.isArray(list) ? list.find((c) => child(c, 'id') === [...ids][0]) : undefined;
+    const head = only ? name(child(only, 'name'), '(会社名未入力)') : entityName(['blocks'], block);
+    return { ...fixed, location: [head, ...fixed.location] };
+  }
   // 値のある側の文書で場所を引く。追加された項目は後、削除された項目は前の文書にしか無い。
   const side: Side = leaf.after !== undefined ? 'after' : 'before';
   const paths: Record<Side, Path | undefined> = { before: leaf.bp, after: leaf.ap };

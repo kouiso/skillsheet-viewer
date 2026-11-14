@@ -253,7 +253,7 @@ describe('版の差分: 並びが変わっても、別の案件の値を取り�
   it('並べ替えだけの変更も「案件の並び順」として出す', () => {
     const result = documentDifferences(doc(projectBlock([a, b, c])), doc(projectBlock([c, a, b])));
     expect(result).toHaveLength(1);
-    expect(loc(result[0])).toBe('案件の並び順');
+    expect(loc(result[0])).toBe('株式会社A › 案件の並び順');
     expect(result[0].before).toBe('案件A\n案件B\n案件C');
     expect(result[0].after).toBe('案件C\n案件A\n案件B');
   });

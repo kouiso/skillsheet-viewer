@@ -9,6 +9,11 @@ import { TECH_CATEGORIES } from './editor-constant';
  * 「どの項目が変わったのか」を読み違える。語を変える時はここだけを直す。
  */
 
+/**
+ * 差分だけで使う語（編集画面に同じ語の欄が無い）には「差分のみ」と書く。
+ * それ以外は編集画面が同じ値を読む。
+ */
+
 /** 案件フォームの項目名。キーは ProjectItem のキー。 */
 export const PROJECT_FIELD_LABELS = {
   title: '案件タイトル',
@@ -25,17 +30,17 @@ export const PROJECT_FIELD_LABELS = {
   acquired: '習得スキル',
   comment: 'コメント',
   summary: '概要',
-  duration: '期間の長さ',
-  hidden: '閲覧側の表示',
+  duration: '期間の長さ', // 差分のみ（編集画面に欄が無い）
+  hidden: '閲覧側の表示', // 差分のみ（編集画面は目のアイコン）
 } as const satisfies Partial<Record<keyof ProjectItem, string>>;
 
 /** 会社バー（CompanyBar）の項目名。キーは CompanyInfo のキー。 */
 export const COMPANY_FIELD_LABELS = {
   name: '会社名',
   kind: '会社の種別',
-  period: '会社の期間',
+  period: '会社の期間', // 編集画面は末尾に「（自動計算）」を足して読む
   note: '会社の説明',
-  hidden: '閲覧側の表示',
+  hidden: '閲覧側の表示', // 差分のみ
 } as const;
 
 /** 技術スタックの項目名。編集画面のカテゴリ定義（TECH_CATEGORIES）をそのまま引く。 */
@@ -59,7 +64,7 @@ export const MARKDOWN_FIELD_LABELS = { markdown: '本文' } as const;
 
 export const SKILL_FIELD_LABELS = {
   category: 'スキルカテゴリ',
-  name: '名称',
+  name: 'スキル',
   years: '経験年数',
   level: '習熟度',
   featured: '推し',
@@ -85,10 +90,13 @@ export const STAT_FIELD_LABELS = {
   value: '数値',
   unit: '単位',
   label: 'ラベル',
-  kind: '種類',
+  kind: '種類', // 差分のみ（編集画面は選択肢で表す）
 } as const;
 
-export const TABLE_FIELD_LABELS = { label: '見出し', align: '列の揃え' } as const;
+export const TABLE_FIELD_LABELS = {
+  label: '見出し',
+  align: '列の揃え', // 差分のみ
+} as const;
 
 /** プロフィールの付随項目の項目名（既知キーは対応表、任意キーはキー自体が項目名）。 */
 export const profileMetaLabel = resolveProfileMetaLabel;

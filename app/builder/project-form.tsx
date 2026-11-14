@@ -125,7 +125,7 @@ export const CompanyBar = ({ company, onPatchCompany, onDeleteCompany }: Company
       tabIndex={-1}
       placeholder="期間：自動計算"
       title="ひもづく案件の期間から自動計算"
-      aria-label="会社の期間（自動計算）"
+      aria-label={`${COMPANY_FIELD_LABELS.period}（自動計算）`}
       className="inp ro"
       style={{ width: 170, flex: '0 0 auto', fontFamily: 'var(--font-mono)', fontSize: 12 }}
     />
@@ -397,7 +397,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
       </Section>
 
       {/* 3. 担当工程 */}
-      <Section num="3" title="担当工程">
+      <Section num="3" title={PROJECT_FIELD_LABELS.process}>
         {/* onFocusCapture は中の button から上がってくるフォーカスを拾うだけで、この div 自体は
             操作対象ではない（クリック用のハンドラも持たない）。 */}
         <div data-sync="process" onFocusCapture={focus('process')}>

@@ -76,7 +76,7 @@ export const SkillsBlockEditor = ({
                     value={s.name}
                     onChange={(e) => setSkill(i, 'name', e.target.value)}
                     placeholder="スキル名（例: TypeScript）"
-                    aria-label={`スキル${i + 1}の${SKILL_FIELD_LABELS.name}`}
+                    aria-label={`スキル${i + 1}の名称`}
                     className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
