@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import type { ProjectItem, ProjectTech } from './block';
+import type { ProjectItem, ProjectTech, StatItem, StatKind } from './block';
 import {
   currentMonthKey,
   deriveSkillExperienceMonths,
+  fillStatKinds,
   normalizeTechnologyCandidates,
   resolveCompanyPeriod,
   resolveDisplayedSkillExperience,
   resolveDisplayedStats,
+  statKindOf,
   technologyNamesMatch,
   technologyNamesRelated,
 } from './derived-display';
@@ -339,4 +341,72 @@ it('表示案件なし・予定のみの総経験0を本人入力へ戻さない
     ]);
   }
   expect(stats[0].value).toBe('8');
+});
+
+describe('数字カードの種類（#638）', () => {
+  const projects = [project('p1', '2020.01 — 2020.12'), project('p2', '2021.01 — 2021.12')];
+  const stat = (label: string, value: string, unit: string, kind?: StatKind): StatItem =>
+    kind === undefined ? { label, value, unit } : { label, value, unit, kind };
+
+  it('ラベルを変えても、種類が案件数なら案件から計算する', () => {
+    const [item] = resolveDisplayedStats([stat('参画数', '99', '件', 'projectCount')], projects, 2025 * 12);
+    expect(item.value).toBe('2');
+  });
+
+  it('ラベルを変えても、種類が経験年数なら案件から計算する', () => {
+    const [item] = resolveDisplayedStats([stat('現場歴', '99', '年', 'experience')], projects, 2025 * 12);
+    expect(item.value).toBe('2');
+  });
+
+  it('種類が自由入力なら、決まった語のラベルでも手入力値を保つ', () => {
+    const items = [stat('案件数', '99', '件', 'free'), stat('経験年数', '99', '年', 'free')];
+    expect(resolveDisplayedStats(items, projects, 2025 * 12)).toEqual(items);
+  });
+
+  it('種類が無い古い保存データは、これまでと同じ値で出る', () => {
+    const legacy = [stat('エンジニア歴', '99', '年'), stat('参画プロジェクト', '99', '件'), stat('資格', '3', '件')];
+    const filled = fillStatKinds(legacy);
+    expect(resolveDisplayedStats(legacy, projects, 2025 * 12)).toEqual(
+      resolveDisplayedStats(filled, projects, 2025 * 12).map(({ kind: _kind, ...rest }) => rest),
+    );
+    expect(resolveDisplayedStats(legacy, projects, 2025 * 12).map((i) => i.value)).toEqual(['2', '2', '3']);
+  });
+
+  it('経験年数の種類でも、単位が年・月以外なら手入力値を保つ（変更前と同じ）', () => {
+    const [item] = resolveDisplayedStats([stat('経験年数', '7', '回', 'experience')], projects, 2025 * 12);
+    expect(item.value).toBe('7');
+  });
+
+  it('既存の9語のラベルから種類を補う', () => {
+    const cases: [string, StatKind][] = [
+      ['エンジニア歴', 'experience'],
+      ['エンジニア経験', 'experience'],
+      ['経験年数', 'experience'],
+      ['実務経験', 'experience'],
+      ['案件数', 'projectCount'],
+      ['プロジェクト数', 'projectCount'],
+      ['参画案件数', 'projectCount'],
+      ['参画プロジェクト数', 'projectCount'],
+      ['参画プロジェクト', 'projectCount'],
+    ];
+    for (const [label, kind] of cases) expect(fillStatKinds([stat(label, '1', '')])[0].kind).toBe(kind);
+    expect(statKindOf(stat(' 案件数 ', '1', '件'))).toBe('projectCount');
+  });
+
+  it('9語に当たらないラベルは自由入力として補う', () => {
+    expect(fillStatKinds([stat('資格', '3', '件'), stat('', '', '')]).map((i) => i.kind)).toEqual(['free', 'free']);
+  });
+
+  it('補いは、すでにある種類を上書きせず、2回かけても同じ', () => {
+    const items = [stat('案件数', '1', '件', 'free'), stat('資格', '3', '件', 'projectCount')];
+    const once = fillStatKinds(items);
+    expect(once.map((i) => i.kind)).toEqual(['free', 'projectCount']);
+    expect(fillStatKinds(once)).toEqual(once);
+  });
+
+  it('補いは入力の配列と項目を書き換えない', () => {
+    const items = [stat('案件数', '1', '件')];
+    fillStatKinds(items);
+    expect(items[0]).toEqual({ label: '案件数', value: '1', unit: '件' });
+  });
 });
