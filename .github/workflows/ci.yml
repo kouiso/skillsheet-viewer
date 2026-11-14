@@ -83,11 +83,7 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         if: ${{ !(matrix.check-type == 'e2e' && needs.changes.outputs.docs_only == 'true') }}
         with:
-          # actions/setup-node の node-version-file は .nvmrc / .node-version /
-          # package.json / .tool-versions(asdf形式) のみ対応で、mise.toml の
-          # TOML 形式は解釈できない（1行目 "[tools]" をバージョン文字列として
-          # 誤読し失敗する）。mise.toml のバージョンと手動で同期させる。
-          node-version: '24.22.1'
+          node-version-file: '.node-version'
           cache: 'pnpm'
 
       - name: Install dependencies

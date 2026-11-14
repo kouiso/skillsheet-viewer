@@ -22,7 +22,7 @@
 - **認証**: Better Auth（編集者ログイン）+ HMAC 署名の閲覧コード（`VIEWER_CODE`）
 - **Lint / Format**: Biome
 - **テスト**: Vitest
-- **ランタイム / パッケージ管理**: mise（Node 22.x）/ pnpm
+- **ランタイム / パッケージ管理**: mise（Node の版は `.node-version` を見る）/ pnpm
 
 ## プロジェクト構成
 
@@ -50,7 +50,7 @@
 すべてのコマンドはリポジトリルートで実行します。
 
 ```bash
-# 1. ランタイムの用意（mise で Node 22.x と pnpm を固定）
+# 1. ランタイムの用意（mise で Node と pnpm を固定）
 mise install
 
 # 2. 依存インストール
