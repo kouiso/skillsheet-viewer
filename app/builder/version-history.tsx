@@ -126,6 +126,8 @@ function groupSpan(versions: readonly VersionSummary[]) {
 }
 const control =
   'min-h-11 rounded border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+// 板「戻した後・空・失敗」の一覧側の箱: 地 card・枠線 1px・角丸 6px・余白 20px・中の間隔 12px。
+const listBox = 'space-y-3 rounded-lg border border-border bg-card p-5';
 const primary = `${control} border-primary bg-primary-dark text-primary-foreground font-semibold disabled:bg-background disabled:border-border`;
 function failed(error: unknown) {
   return (
@@ -469,15 +471,15 @@ export function VersionHistory({
             </p>
           )}
           {listError && (
-            <div role="alert">
-              <p>履歴を読み込めませんでした。</p>
+            <div role="alert" className={listBox}>
+              <p className="text-sm font-semibold">履歴を読み込めませんでした。</p>
               <button type="button" className={control} onClick={() => void load()}>
                 再試行
               </button>
             </div>
           )}
           {!loading && !listError && rows.length === 0 && (
-            <div className="space-y-3 rounded-md border border-border bg-card p-5">
+            <div className={listBox}>
               <p className="text-sm font-semibold">保存された版がありません。</p>
               <p className="text-[13px] text-muted-foreground">編集して保存すると、ここに版が残ります。</p>
             </div>

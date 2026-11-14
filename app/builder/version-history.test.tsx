@@ -81,6 +81,7 @@ describe('シート全体の版の履歴', () => {
       // 一覧の失敗は role=alert を1つだけ出す（比較欄は role を付けない）。
       expect(screen.getAllByRole('alert')).toHaveLength(1);
       expect(screen.getByRole('alert')).toHaveTextContent('履歴を読み込めませんでした。');
+      expect(screen.getByRole('alert')).toHaveClass('rounded-lg', 'p-5', 'space-y-3');
     });
 
     it('失敗 → 再試行 → 回復すると、失敗の文と alert が消えて版が並ぶ', async () => {
@@ -144,7 +145,10 @@ describe('シート全体の版の履歴', () => {
     it('保存された版が0件なら読み込み中を出さず、比べる版がないと伝える', async () => {
       setup({ list: vi.fn().mockResolvedValue([]) });
       await screen.findByText('保存された版がありません。');
-      expect(screen.getByText('編集して保存すると、ここに版が残ります。')).toBeInTheDocument();
+      expect(screen.getByText('編集して保存すると、ここに版が残ります。').parentElement).toHaveClass(
+        'rounded-lg',
+        'p-5',
+      );
       expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(screen.queryByText('差分を読み込み中…')).not.toBeInTheDocument();
