@@ -72,6 +72,29 @@ async function confirmOld() {
   return await screen.findByRole('alertdialog');
 }
 describe('シート全体の版の履歴', () => {
+  describe('比較ペインの状態（一覧の取得状態から決まる）', () => {
+    it('一覧の取得に失敗したら読み込み中を出さず、読み直しを促す', async () => {
+      setup({ list: vi.fn().mockRejectedValue(new Error('失敗')) });
+      await screen.findByText('履歴を読み込めませんでした。');
+      expect(screen.getByText('一覧を読み直してください')).toBeInTheDocument();
+      expect(screen.queryByText('差分を読み込み中…')).not.toBeInTheDocument();
+    });
+
+    it('保存された版が0件なら読み込み中を出さず、比べる版がないと伝える', async () => {
+      setup({ list: vi.fn().mockResolvedValue([]) });
+      await screen.findByText('保存された版がありません。');
+      expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
+      expect(screen.queryByText('差分を読み込み中…')).not.toBeInTheDocument();
+    });
+
+    it('一覧を取得している間だけ差分を読み込み中と出す', async () => {
+      setup({ list: vi.fn().mockReturnValue(new Promise(() => {})) });
+      expect(await screen.findByText('差分を読み込み中…')).toBeInTheDocument();
+      expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
+      expect(screen.queryByText('まだ比べる版がありません')).not.toBeInTheDocument();
+    });
+  });
+
   it('旧版の行選択では現在版との差分へ切り替え、任意比較selectも維持する', async () => {
     setup();
     await selectOld();

@@ -596,9 +596,17 @@ export function VersionHistory({
                 </button>
               </div>
             ) : !pair ? (
-              <p role="status" aria-busy="true">
-                差分を読み込み中…
-              </p>
+              // WHY: pair が無い理由は一覧の失敗・0件・取得中の3つ。一覧の状態から決め、
+              //      失敗と0件で「読み込み中」を出し続けないようにする。
+              listError ? (
+                <p role="alert">一覧を読み直してください</p>
+              ) : !loading && rows.length === 0 ? (
+                <p>まだ比べる版がありません</p>
+              ) : (
+                <p role="status" aria-busy="true">
+                  差分を読み込み中…
+                </p>
+              )
             ) : (
               <>
                 <nav aria-label="版の内容表示" className="flex flex-wrap gap-2">
