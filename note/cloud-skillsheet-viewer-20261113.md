@@ -1,4 +1,4 @@
-IN PROGRESS 2026-11-14T06:55Z（再開。統括の新しい組織の指示でリードとして続行。取り込みは S6 の条件で任された）
+IN PROGRESS 2026-11-14T07:05Z（再開。リードとして続行。取り込みは S6 の条件で任された）
 
 使命（本人の言葉）: 「どのプロジェクトもまず既存のPRを本質的に対処することを作業を優先してください。そうしないと溜まってばっかりなので」
 
@@ -10,6 +10,22 @@ skillsheet-viewer [cloud]
 
 統括セッションからの依頼で、既存 PR を先に片付ける作業の記録。新しい順に書く。
 分類: a = マージ待ちにできた / b = ここで直せる / c = 端末・画面の証拠・本番・本人の判断が要る / d = 不要・置き換え済み
+
+## 2026-11-14T07:05Z（再開後 1 回目の記録）
+
+open PR: 12 → 9（取り込み 3）。
+
+| 番号 | 列 | したこと | head | checks | レビュー | 結果 |
+|---|---|---|---|---|---|---|
+| #650 | LAND | 作者でないレビュー（合格・must 0・should 3） | 121a3c1 | 全緑 | https://github.com/kouiso/skillsheet-viewer/pull/650#issuecomment-6873432884 | 取り込み 4f7be89。#640 は閉じた |
+| #649 | LAND | レビュー（合格・must 0・should 2）。should は本文の書き方で、本文を直した | 4037047 | 全緑 | https://github.com/kouiso/skillsheet-viewer/pull/649#issuecomment-6873430568 | 取り込み 9fe9269。#642 は閉じた |
+| #620 | LAND | レビュー（合格・must 0・should 2・nit 4） | 3e4dace | 全緑 | https://github.com/kouiso/skillsheet-viewer/pull/620#issuecomment-6873434111 | 取り込み 80ca953。#331 は Refs なので開いたまま。11-11 の「マージしない」の書き込みは、11-13 の取り込みの委任（統括経由）で上書きと判断した |
+| #654 | LAND | レビュー中 | ae3cbc7 | 全緑 | — | — |
+| #655 | LAND | レビュー中 | c2109a1 | 全緑 | — | — |
+| #651 | FIX | 作業役が途中作業を仕上げ、main を取り込む（.github/ci/README.md が衝突する見込み） | 259d3da | 赤（命名） | — | — |
+| #656 | FIX | 作業役が途中作業を仕上げる | 37c6905 | 赤（命名） | — | — |
+
+レビューの範囲外の指摘（別の SBI 候補）: doc/01-setup-and-routing.md・doc/d1-migration-codec.md・doc/vercel-prebuilt-deployment-design.md・doc/d1-app-runtime.md に古い Node の版の数字が残る。
 
 ## 2026-11-14T04:06Z（一時停止）
 
