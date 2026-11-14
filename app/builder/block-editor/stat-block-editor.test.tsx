@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectItem, ProjectTech, StatsBlockData } from '@/db/block';
+import { resolveDisplayedStats } from '@/db/derived-display';
 import { itemToBlockInput } from '../serialize';
 import { StatsBlockEditor } from './stat-block-editor';
 
@@ -166,6 +167,79 @@ describe('StatsBlockEditor', () => {
         />,
       );
       expect(screen.getByRole('textbox', { name: '統計項目1の数値' })).toHaveAttribute('readonly');
+    });
+
+    describe('種類の切り替え（#666）', () => {
+      function Harness({ initialData, withContext = true }: { initialData: StatsBlockData; withContext?: boolean }) {
+        const [current, setCurrent] = useState(initialData);
+        return (
+          <>
+            <StatsBlockEditor data={current} onChange={setCurrent} context={withContext ? context : undefined} />
+            <output data-testid="saved">
+              {JSON.stringify(itemToBlockInput({ id: 's', type: 'stats', data: current }))}
+            </output>
+            <output data-testid="viewer">
+              {JSON.stringify(resolveDisplayedStats(current.items, context.projects, context.referenceMonth))}
+            </output>
+          </>
+        );
+      }
+      const kindSelect = (n: number) => screen.getByRole('combobox', { name: `統計項目${n}の種類` });
+
+      it('項目ごとに、いまの種類が選ばれた状態で出る（種類が無い古いデータはラベルから推定）', () => {
+        render(
+          <StatsBlockEditor
+            data={{ items: [...data.items, { value: '1', unit: '件', label: '案件数' }] }}
+            onChange={vi.fn()}
+            context={context}
+          />,
+        );
+        expect(kindSelect(1)).toHaveValue('experience');
+        expect(kindSelect(2)).toHaveValue('projectCount');
+        expect(kindSelect(3)).toHaveValue('free');
+        expect(kindSelect(4)).toHaveValue('projectCount');
+        expect(Array.from((kindSelect(1) as HTMLSelectElement).options).map((o) => o.value)).toEqual([
+          'experience',
+          'projectCount',
+          'free',
+        ]);
+      });
+
+      it('計算 → 自由: 数値欄が編集でき、保存値を出し、保存と閲覧の値も保存値になる', () => {
+        render(<Harness initialData={data} />);
+        expect(screen.getByRole('textbox', { name: '統計項目2の数値' })).toHaveAttribute('readonly');
+        fireEvent.change(kindSelect(2), { target: { value: 'free' } });
+        const value = screen.getByRole('textbox', { name: '統計項目2の数値' });
+        expect(value).not.toHaveAttribute('readonly');
+        expect(value).toHaveValue('99');
+        expect(screen.getAllByText('案件から自動で出します')).toHaveLength(1);
+        fireEvent.change(value, { target: { value: '12' } });
+        expect(screen.getByTestId('saved').textContent).toContain(
+          '"value":"12","unit":"件","label":"参画数","kind":"free"',
+        );
+        expect(JSON.parse(screen.getByTestId('viewer').textContent ?? '[]')[1].value).toBe('12');
+      });
+
+      it('自由 → 計算: 数値欄が読み取り専用になり導出値を出し、保存値は壊さず、閲覧も導出値になる', () => {
+        render(<Harness initialData={data} />);
+        fireEvent.change(kindSelect(3), { target: { value: 'projectCount' } });
+        const value = screen.getByRole('textbox', { name: '統計項目3の数値' });
+        expect(value).toHaveAttribute('readonly');
+        expect(value).toHaveValue('2');
+        expect(screen.getAllByText('案件から自動で出します')).toHaveLength(3);
+        expect(screen.getByTestId('saved').textContent).toContain(
+          '"value":"5","unit":"社","label":"自由な項目","kind":"projectCount"',
+        );
+        expect(JSON.parse(screen.getByTestId('viewer').textContent ?? '[]')[2].value).toBe('2');
+      });
+
+      it('案件ブロックが無いシートでも種類を選べ、数値欄はどの種類でも編集できる', () => {
+        render(<Harness initialData={data} withContext={false} />);
+        fireEvent.change(kindSelect(3), { target: { value: 'experience' } });
+        expect(kindSelect(3)).toHaveValue('experience');
+        expect(screen.getByRole('textbox', { name: '統計項目3の数値' })).not.toHaveAttribute('readonly');
+        expect(screen.queryByText('案件から自動で出します')).toBeNull();
+      });
     });
   });
 });

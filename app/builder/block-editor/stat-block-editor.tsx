@@ -4,15 +4,22 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useId } from 'react';
 import { Button } from '@/component/ui/button';
 import { Input } from '@/component/ui/input';
-import type { StatItem, StatsBlockData } from '@/db/block';
+import type { StatItem, StatKind, StatsBlockData } from '@/db/block';
 import type { MarkdownExperienceContext } from '@/db/block/serialize';
-import { isStatComputed, resolveDisplayedStats } from '@/db/derived-display';
+import { isStatComputed, resolveDisplayedStats, statKindOf } from '@/db/derived-display';
 
 const FIELDS = [
   { key: 'value', label: '数値' },
   { key: 'unit', label: '単位' },
   { key: 'label', label: 'ラベル' },
 ] as const;
+
+// 保存する種類の集合は変えない。「計算」は計算元が 2 つあるので種類をそのまま並べる。
+const KIND_OPTIONS: readonly { value: StatKind; label: string }[] = [
+  { value: 'experience', label: '計算（経験年数）' },
+  { value: 'projectCount', label: '計算（案件数）' },
+  { value: 'free', label: '自由' },
+];
 
 export function StatsBlockEditor({
   data,
@@ -28,7 +35,7 @@ export function StatsBlockEditor({
   context?: Pick<MarkdownExperienceContext, 'projects' | 'referenceMonth'>;
 }) {
   const editorId = useId();
-  const update = (index: number, key: keyof StatItem, value: string) =>
+  const update = (index: number, key: Exclude<keyof StatItem, 'kind'>, value: string) =>
     onChange({ ...data, items: data.items.map((item, i) => (i === index ? { ...item, [key]: value } : item)) });
 
   return (
@@ -91,6 +98,29 @@ export function StatsBlockEditor({
             >
               <Trash2 className="size-4" aria-hidden="true" />
             </Button>
+            <label
+              htmlFor={`${editorId}-${index}-kind`}
+              className="col-span-2 flex min-w-0 items-center gap-3 text-sm sm:col-span-4"
+            >
+              <span className="shrink-0 text-muted-foreground">種類</span>
+              <select
+                id={`${editorId}-${index}-kind`}
+                value={statKindOf(item)}
+                onChange={(event) => {
+                  const kind = KIND_OPTIONS.find((option) => option.value === event.target.value)?.value;
+                  if (kind === undefined) return;
+                  onChange({ ...data, items: data.items.map((it, i) => (i === index ? { ...it, kind } : it)) });
+                }}
+                aria-label={`統計項目${index + 1}の種類`}
+                className="sel min-h-11 min-w-0 flex-1 sm:max-w-60"
+              >
+                {KIND_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             {computed && (
               <p id={noteId} className="col-span-2 text-xs text-muted-foreground sm:col-span-4">
                 案件から自動で出します
