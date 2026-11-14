@@ -963,7 +963,7 @@ const BuilderClient = ({
               description: '最新を読み込むと、この画面でまだ保存していない変更は失われます。自動保存は止めてあります。',
               confirmLabel: '最新を読み込む',
               cancelLabel: 'あとで',
-              icon: 'warn',
+              icon: 'reload',
             });
             // router.refresh() はサーバコンポーネントを再取得するだけで、key={activeSheetId} が
             // 変わらない BuilderClient は再マウントされず古いローカル state が残る。

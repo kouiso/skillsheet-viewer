@@ -358,6 +358,56 @@ describe('BuilderClient', () => {
     expect(mockRouterRefresh).not.toHaveBeenCalled();
   });
 
+  // 確認ダイアログの並び・初期フォーカス・見出しアイコンは呼び出し側の引数（order / icon）で決まる。
+  // 部品単体の試験では呼び出し側が引数を外しても落ちないため、実際の画面操作で開いて確かめる。
+  const footerLabels = (dialog: HTMLElement) =>
+    Array.from(dialog.querySelectorAll<HTMLButtonElement>('[data-confirm-footer] button')).map((b) => b.textContent);
+  const iconKind = (dialog: HTMLElement) =>
+    dialog.querySelector('[data-confirm-icon]')?.getAttribute('data-confirm-icon');
+
+  it('未保存のまま移動の確認は、危険が左・編集に戻るが右で初期フォーカスも編集に戻る、注意アイコン', () => {
+    // 実時間で自動保存が先に走らないよう、既存の未保存ガード試験と同じく timer を止める。
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const view = render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    try {
+      fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '## A!' } });
+      fireEvent.click(screen.getByRole('button', { name: /^シートを切り替える:/ }));
+      fireEvent.click(screen.getByRole('button', { name: '新しいシートを作る…' }));
+      const dialog = screen.getByRole('alertdialog');
+      expect(footerLabels(dialog)).toEqual(['変更を捨てて移動', '編集に戻る']);
+      expect(within(dialog).getByRole('button', { name: '編集に戻る' })).toHaveFocus();
+      expect(within(dialog).getByRole('button', { name: '編集に戻る' })).toHaveClass('bg-primary-dark');
+      expect(iconKind(dialog)).toBe('warn');
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('空のまま保存の確認は、やめるが左・空のまま保存が右で初期フォーカスもやめる、注意アイコン', async () => {
+    const user = userEvent.setup();
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '' } });
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(footerLabels(dialog)).toEqual(['やめる', '空のまま保存']);
+    expect(within(dialog).getByRole('button', { name: 'やめる' })).toHaveFocus();
+    expect(within(dialog).getByRole('button', { name: 'やめる' })).toHaveClass('bg-primary-dark');
+    expect(iconKind(dialog)).toBe('warn');
+  });
+
+  it('競合の確認は、あとでが左・最新を読み込むが右で初期フォーカスはあとで、再読み込みアイコン', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValueOnce(trpcClientError('CONFLICT'));
+    render(<BuilderClient initialBlocks={mdBlocks(['## A'])} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: /保存/ }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(footerLabels(dialog)).toEqual(['あとで', '最新を読み込む']);
+    expect(within(dialog).getByRole('button', { name: 'あとで' })).toHaveFocus();
+    expect(within(dialog).getByRole('button', { name: 'あとで' })).toHaveClass('bg-background');
+    expect(iconKind(dialog)).toBe('reload');
+  });
+
   it('履歴前の保存確認を取り消すと原稿を保持して保存も履歴取得もしない', async () => {
     const user = userEvent.setup();
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);

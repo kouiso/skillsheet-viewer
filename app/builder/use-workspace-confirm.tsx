@@ -18,11 +18,13 @@ export interface WorkspaceConfirmOptions {
   cancelVariant?: 'default' | 'primary';
 }
 
-export type WorkspaceConfirmIcon = 'info' | 'warn' | 'danger';
+/** 'reload' は注意色（warn）のまま形だけ再読み込みの矢印にする。ボードの競合ダイアログ（solo-conflict）の .dlg-ic.warn。 */
+export type WorkspaceConfirmIcon = 'info' | 'warn' | 'danger' | 'reload';
 
 const ICON_STYLE: Record<WorkspaceConfirmIcon, string> = {
   info: 'bg-accent-soft text-accent-text',
   warn: 'bg-warn-soft text-warn-strong',
+  reload: 'bg-warn-soft text-warn-strong',
   danger: 'bg-danger-soft text-danger',
 };
 
@@ -48,6 +50,12 @@ function ConfirmIcon({ kind }: { kind: WorkspaceConfirmIcon }) {
             <path d="M8 1.8l6.6 11.7H1.4z" />
             <path d="M8 6.2v3.6" />
             <path d="M8 11.6v.2" />
+          </>
+        )}
+        {kind === 'reload' && (
+          <>
+            <path d="M13 3v3.5H9.5" />
+            <path d="M12.6 6.4A5 5 0 1 0 13 9" />
           </>
         )}
         {kind === 'danger' && (
