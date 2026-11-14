@@ -139,7 +139,7 @@ Transport `Streamable HTTP`、URL に本番 URL を入れ、Authentication の O
 
 | 項目 | 状態 |
 |------|------|
-| 公開 endpoint（401 / PRM / AS metadata） | 確認済み。2026-11-11 に main `ef07a7f` で再確認（[probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)）。10-14 は [probe-unauth.txt](mcp-evidence-20261014/probe-unauth.txt)、10-20 は [probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt) |
+| 公開 endpoint（401 / PRM / AS metadata） | 確認済み。2026-11-11 に main `ef07a7f` で再確認（[probe-unauth.txt](mcp-evidence-20261111/probe-unauth.txt)）。10-14 は [probe-unauth.txt](mcp-evidence-20261014/probe-unauth.txt)、10-20 は 405 と 401 だけ（[probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt)。PRM と AS metadata は無い） |
 | 認可の入口（Claude Code・claude.ai のクライアント登録、無効スコープ・redirect・client の拒否） | 確認済み。2026-11-11 に再確認（[probe-authorize.txt](mcp-evidence-20261111/probe-authorize.txt)）。10-20 は [probe-authorize.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/probe-authorize.txt) |
 | Fluid compute と実行ログ | 確認済み: Fluid 有効、既定の上限 300 秒、iad1。確認中の要求はすべて info で error 0 件（[vercel-runtime.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261020/vercel-runtime.txt)） |
 | Claude Code の OAuth 認可 → Connected → 切断 | 確認済み。ただしログインと同意は画面を使わず HTTP で送った（[claude-code-oauth.txt](https://github.com/kouiso/skillsheet-viewer/blob/be3512b9e61920b48427397c0d90abfdf700cfd5/doc/mcp-evidence-20261021/claude-code-oauth.txt)） |
