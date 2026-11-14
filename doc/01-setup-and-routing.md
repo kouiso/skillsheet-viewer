@@ -16,7 +16,7 @@
 - **DB / ORM**: Drizzle ORM + Neon serverless Postgres（正本データ源）
 - **認証**: 2 系統（編集者 = Better Auth / 閲覧者 = HMAC 署名 cookie）
 - **PDF**: `@react-pdf/renderer`（クライアントで動的 import）
-- **ランタイム管理**: mise（Node 22.x）、パッケージマネージャは pnpm
+- **ランタイム管理**: mise（Node の版は `.node-version` を見る）、パッケージマネージャは pnpm
 
 ---
 
@@ -24,23 +24,17 @@
 
 ### mise によるツール固定
 
-リポジトリルートの `mise.toml` で Node と pnpm のバージョンを固定している。
-
-```toml
-[tools]
-node = "22.23.4"
-pnpm = "10.33.0"
-```
+リポジトリルートの `mise.toml` で Node と pnpm のバージョンを固定している。版の数字はこの文書に写さない（写すと古くなる）。Node の版の正本は `.node-version` で、`mise.toml`・`package.json` の `engines` / `volta`・CI のワークフローはそれに合わせてある。
 
 mise を導入済みなら、リポジトリに入るだけで指定バージョンが有効になる。
 
 ```bash
 mise install   # mise.toml の指定バージョンを取得
-node --version # v22.x
-pnpm --version # 10.33.0
+node --version # .node-version と同じ版
+pnpm --version # mise.toml と同じ版
 ```
 
-`package.json` でも `engines.node` に `22.x`、`packageManager` に `pnpm@10.33.0` を宣言している。
+`package.json` でも `engines.node`（Node のメジャー版）と `packageManager`（pnpm の版）を宣言している。
 
 ### ディレクトリ構成
 
