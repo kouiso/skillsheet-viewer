@@ -127,3 +127,20 @@ it('締め出しの応答に待ち時間が無い時は、締め出しの長さ�
   expect(screen.getByRole('alert')).toHaveTextContent(LOCKED);
   expect(screen.getByRole('button', { name: 'あと 15分 で入力できます' })).toBeDisabled();
 });
+
+it('締め出し中の入力欄は板 G のとおり薄くならず、画面の準備前だけ薄いまま', async () => {
+  const { container, unmount } = render(<ViewerAuthPage />);
+  // 準備前（#398）の無効状態は共有 Input の disabled:opacity-50 のまま。
+  expect(container.querySelector('input')).toHaveClass('disabled:opacity-50');
+  unmount();
+
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+  mutateAsync.mockRejectedValueOnce(apiError('TOO_MANY_REQUESTS', { 'retry-after': '840' }));
+  render(<ViewerAuthPage />);
+  await submitCode('482915');
+
+  const input = screen.getByLabelText('コード');
+  expect(input).toBeDisabled();
+  expect(input).toHaveClass('disabled:opacity-100');
+  expect(input).not.toHaveClass('disabled:opacity-50');
+});

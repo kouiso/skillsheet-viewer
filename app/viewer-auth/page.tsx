@@ -141,6 +141,9 @@ const ViewerAuthPage = () => {
           className={cn(
             'h-12 rounded-[4px] bg-card px-3.5 font-mono text-lg font-medium tracking-[0.2em] shadow-none',
             notice?.kind === 'invalid' && 'border-[#b64437] dark:border-[#f28b7f]',
+            // 板 G の締め出し中の入力欄は薄くしない（共有 Input の disabled:opacity-50 を、この画面の締め出し中だけ打ち消す）。
+            // hydration 前の無効状態（#398）は従来どおり薄いまま。
+            locked && 'disabled:opacity-100',
           )}
         />
         <Button
