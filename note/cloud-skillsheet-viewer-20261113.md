@@ -66,6 +66,8 @@ DECIDED 2026-11-14T13:17:51Z | main への取り込みを、Vercel の配信が�
 DECIDED 2026-11-14T13:17:51Z | 作業役の push を減らす（直しはまとめて 1 回で push）| reason push ごとにプレビューの配信を 1 回使っていた（今日 100 回を超えた原因） | revert 上限が戻ったら元に戻す
 OWNER-RULING 2026-11-14 2026-11-14T13:24:25Z | 「CIはローカルで通れば通ったものとみなしていいよ」（統括経由）。関門の checks は、取り込む head でリポジトリの CI と同じ検査（lint・type-check・test・build・check-naming）を手元で回して通り、LOCAL-CHECK（コマンド・head・pass/fail・時刻）を PR に残せば満たす。手元で落ちたら関門は不合格。hosted CI が緑でない時に緑と書かない。後で hosted CI がその head で本当に落ちたら、すぐ直しの PR を出す。ほかの関門（head を名指しする独立レビュー・証拠画像・除外の種類）は変わらない。
 - 当てはめ: Vercel の commit status の failure（配信回数の上限）は、この裁定で関門を止めない。ただし取り込み後に本番の配信を確かめる条件（D1 の答え）は残るので、取り込みは Vercel の配信が戻るまで止めたまま。
+OWNER-INSTRUCTION 2026-11-14 2026-11-14T13:29:09Z | 「あと全セッションにdesignartifactを配ったけど（Horsemanager以外）、デザイン通りになるように全部作ること」（統括経由）。この案件のデザインページ: https://claude.ai/artifact/PhnYgucHfef7fkz4Q8nZ2b （持ち主が 12:2x にこの会話で渡した物。開けて、ファイルを取り込めている）。手順: (1) 全ボードと製品の画面・状態の対応表 (2) デザインの大きさで並べて違いを書く (3) 違いが無くなるまで PR で直す（並べた画像を証拠に）。順番は今の open PR の後。デザインは画面の正、書かれた仕様は項目の有無・順・料金の正。
+- 対応表と作業の単位分けを作業役（Sonnet、読むだけ）に出した。出力 scratchpad/design-inventory.md
 
 ## 2026-11-14T11:45Z（再開後の記録）
 
