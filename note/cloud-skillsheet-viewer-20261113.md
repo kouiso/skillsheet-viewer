@@ -1,4 +1,4 @@
-STATE RUNNING 2026-11-14T11:41:10Z | counts pending (第2版の初回)
+STATE RUNNING 2026-11-14T12:05:14Z | merged 1 (第1版) closed 1 | OWNER 待ち: #664 #665 | 作業中: #653 #633 #632
 mission: それぞれのプロジェクトに書いてあるプランに書いてある作業をやること / どのプロジェクトもまず既存のPRを本質的に対処することを作業を優先してください。そうしないと溜まってばっかりなので
 model claude-opus-5-5 (lead) | advisor present | github via connector (gh 認証失敗) | push via git | png ok (Playwright で PNG 作成済み: doc/version-compare-evidence/)
 goal: unknown（第2版の文面では見えない）| DONE-WAITING satisfies it: unknown
@@ -20,6 +20,14 @@ item 651 | LAND | merged (第1版) | abc7cd0 | rollup 全部 success/skipped/neu
 item 664 | OWNER | G5（main=production）で取り込み保留 | e7029d5 | rollup green 11:40Z | review 済み (0 件) | 本人の ASK 待ち
 item 665 | FIX->review | must 2 件を直した | c2e9b04 | 未確認 | 再レビュー中 | -
 
+item 664 | OWNER | main 取り込み・本文直し | 87679ff | CI 12 success・1 neutral・2 in progress（12:02Z） | REVIEW base update only https://github.com/kouiso/skillsheet-viewer/pull/664#issuecomment-6876950281 | LOCAL-CHECK pass 2546 fail 0 | G5 で取り込み保留（ASK 1）
+item 665 | OWNER | must 直し 2 回 → PASS | 1d514ab | CI 14 success・1 skipped・1 neutral | REVIEW PASS must 0 https://github.com/kouiso/skillsheet-viewer/pull/665#issuecomment-6876990442 | LOCAL-CHECK pass 2544 fail 0 | G5 で取り込み保留（ASK 2）
+item 653 | FIX | main 8242d36 を取り込み 137b085（lead が push）、板 G はコード上全一致、実画面撮影中 | 137b085 | - | - | -
+item 633 | FINISH | 新規実装中（main から） | - | - | - | -
+item 632 | FINISH | 新規実装中（#665 の上、base は fix/631） | - | - | - | -
+item 666 | new | #628 の子 SBI「種類を選ぶ欄」を起票（マネージャーの判断）| - | - | - | 順は #632 の後
+DECIDED | #653 の作業役の git fetch が権限判定で拒否 → lead が fetch・merge・push した | reason 作業役への最初の指示「ネットワーク git なし」に判定が合わせた。fetch は非破壊で lead の通常手順 | revert 不要
+DECIDED | /home/user/wt/639 の古い作業場所を e7029d5 の detached に（中身は e7029d5 と一致、捨てた物なし） | reason 同じブランチを 664b が進めたため逆差分が見えていた | revert git checkout feat/639-stat-computed-readonly
 
 ## 2026-11-14T11:45Z（再開後の記録）
 
