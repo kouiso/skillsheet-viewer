@@ -137,8 +137,8 @@ describe('デザインボードの並び・フォーカス・縦積み', () => {
         extra={{
           details: (
             <ul data-testid="long-details">
-              {Array.from({ length: 60 }, (_, i) => (
-                <li key={i}>案件 {i}</li>
+              {Array.from({ length: 60 }, (_, i) => `案件 ${i}`).map((label) => (
+                <li key={label}>{label}</li>
               ))}
             </ul>
           ),
