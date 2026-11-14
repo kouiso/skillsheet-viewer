@@ -97,3 +97,67 @@ it('起点が消えた場合は指定した代替操作へフォーカスを戻�
   fireEvent.click(screen.getByRole('button', { name: 'やめる' }));
   await waitFor(() => expect(screen.getByRole('button', { name: '代替操作' })).toHaveFocus());
 });
+
+describe('デザインボードの並び・フォーカス・縦積み', () => {
+  function Open({ extra }: { extra: object }) {
+    const { confirm, dialog } = useWorkspaceConfirm();
+    return (
+      <>
+        <button type="button" onClick={() => void confirm({ ...options, cancelLabel: '戻る', ...extra })}>
+          開く
+        </button>
+        {dialog}
+      </>
+    );
+  }
+  const footerLabels = () =>
+    Array.from(document.querySelectorAll('[data-confirm-footer] button')).map((node) => node.textContent);
+
+  it('既定は取消が左・確認が右で、取消にフォーカスする（削除系・ボードに無い確認）', async () => {
+    render(<Open extra={{}} />);
+    fireEvent.click(screen.getByRole('button', { name: '開く' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '戻る' })).toHaveFocus());
+    expect(footerLabels()).toEqual(['戻る', '削除する']);
+    expect(document.querySelector('[data-confirm-icon="danger"]')).not.toBeNull();
+  });
+
+  it('danger-first は危険が左・主の取消側が右で、安全側（取消）にフォーカスする', async () => {
+    render(<Open extra={{ order: 'danger-first', cancelVariant: 'primary', icon: 'warn' }} />);
+    fireEvent.click(screen.getByRole('button', { name: '開く' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '戻る' })).toHaveFocus());
+    expect(footerLabels()).toEqual(['削除する', '戻る']);
+    expect(screen.getByRole('button', { name: '戻る' }).className).toContain('bg-primary-dark');
+    expect(screen.getByRole('button', { name: '削除する' }).className).toContain('text-destructive');
+    expect(document.querySelector('[data-confirm-icon="warn"]')).not.toBeNull();
+  });
+
+  it('危険でない確認は info アイコンで、確認が主ボタンになる', async () => {
+    render(<Open extra={{ danger: false }} />);
+    fireEvent.click(screen.getByRole('button', { name: '開く' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '戻る' })).toHaveFocus());
+    expect(document.querySelector('[data-confirm-icon="info"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: '削除する' }).className).toContain('bg-primary-dark');
+  });
+
+  it('390px 相当の縦積み（column-reverse・全幅・高さ44px）と広い幅の寸法クラスを持つ', async () => {
+    render(<Open extra={{}} />);
+    fireEvent.click(screen.getByRole('button', { name: '開く' }));
+    const footer = await waitFor(() => {
+      const node = document.querySelector('[data-confirm-footer]');
+      if (!node) throw new Error('footer');
+      return node;
+    });
+    expect(footer.className).toContain('flex-col-reverse');
+    expect(footer.className).toContain('sm:flex-row');
+    for (const button of Array.from(footer.querySelectorAll('button'))) {
+      expect(button.className).toContain('w-full');
+      expect(button.className).toContain('h-11');
+      expect(button.className).toContain('sm:h-9');
+      expect(button.className).toContain('sm:w-auto');
+    }
+    const content = screen.getByRole('alertdialog');
+    expect(content.className).toContain('max-w-[480px]');
+    expect(content.className).toContain('p-5');
+    expect(content.className).toContain('sm:p-6');
+  });
+});

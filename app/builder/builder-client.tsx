@@ -249,6 +249,9 @@ const BuilderClient = ({
       confirmLabel: '変更を捨てて移動',
       cancelLabel: '編集に戻る',
       danger: true,
+      icon: 'warn',
+      order: 'danger-first',
+      cancelVariant: 'primary',
     }));
 
   // --- 自動保存（Phase 3） ---
@@ -881,6 +884,8 @@ const BuilderClient = ({
         description: '保存済みの内容は版の履歴に残ります。',
         confirmLabel: '空のまま保存',
         danger: true,
+        icon: 'warn',
+        cancelVariant: 'primary',
       });
       if (!confirmed) return;
     }
@@ -951,6 +956,7 @@ const BuilderClient = ({
               description: '最新を読み込むと、この画面でまだ保存していない変更は失われます。自動保存は止めてあります。',
               confirmLabel: '最新を読み込む',
               cancelLabel: 'あとで',
+              icon: 'warn',
             });
             // router.refresh() はサーバコンポーネントを再取得するだけで、key={activeSheetId} が
             // 変わらない BuilderClient は再マウントされず古いローカル state が残る。
