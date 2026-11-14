@@ -58,6 +58,9 @@ export function StatsBlockEditor({
             ? (resolveDisplayedStats([item], context.projects, context.referenceMonth)[0]?.value ?? item.value)
             : item.value;
         const noteId = `${editorId}-${index}-auto`;
+        // 「計算（経験年数）」を選んでも単位が年・ヶ月でなければ #664 の規則で計算されない。理由を画面に出す。
+        const experienceNotComputable = context !== undefined && statKindOf(item) === 'experience' && !computed;
+        const hintId = `${editorId}-${index}-kind-hint`;
         return (
           <fieldset
             // biome-ignore lint/suspicious/noArrayIndexKey: 既存保存形式の統計項目は順序で管理し ID を持たない
@@ -112,6 +115,7 @@ export function StatsBlockEditor({
                   onChange({ ...data, items: data.items.map((it, i) => (i === index ? { ...it, kind } : it)) });
                 }}
                 aria-label={`統計項目${index + 1}の種類`}
+                aria-describedby={experienceNotComputable ? hintId : undefined}
                 className="sel min-h-11 min-w-0 flex-1 sm:max-w-60"
               >
                 {KIND_OPTIONS.map(({ value, label }) => (
@@ -121,6 +125,11 @@ export function StatsBlockEditor({
                 ))}
               </select>
             </label>
+            {experienceNotComputable && (
+              <p id={hintId} className="col-span-2 text-xs text-muted-foreground sm:col-span-4">
+                単位を「年」か「ヶ月」にすると案件から計算します
+              </p>
+            )}
             {computed && (
               <p id={noteId} className="col-span-2 text-xs text-muted-foreground sm:col-span-4">
                 案件から自動で出します

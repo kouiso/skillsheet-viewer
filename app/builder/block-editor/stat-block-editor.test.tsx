@@ -233,6 +233,54 @@ describe('StatsBlockEditor', () => {
         expect(JSON.parse(screen.getByTestId('viewer').textContent ?? '[]')[2].value).toBe('2');
       });
 
+      describe('計算（経験年数）を選んだのに単位が年・ヶ月でない時の説明', () => {
+        const HINT = '単位を「年」か「ヶ月」にすると案件から計算します';
+
+        it('経験年数 + 社: 計算されない理由の1行が出て、種類の選択欄につながる', () => {
+          render(
+            <StatsBlockEditor
+              data={{ items: [{ value: '5', unit: '社', label: '担当した会社数', kind: 'experience' }] }}
+              onChange={vi.fn()}
+              context={context}
+            />,
+          );
+          const hint = screen.getByText(HINT);
+          expect(kindSelect(1)).toHaveAttribute('aria-describedby', hint.id);
+          expect(screen.getByRole('textbox', { name: '統計項目1の数値' })).not.toHaveAttribute('readonly');
+        });
+
+        it('自由 → 計算（経験年数）に切り替えた直後も、単位が社なら1行が出る', () => {
+          render(<Harness initialData={data} />);
+          expect(screen.queryByText(HINT)).toBeNull();
+          fireEvent.change(kindSelect(3), { target: { value: 'experience' } });
+          expect(screen.getByText(HINT)).toBeInTheDocument();
+          expect(JSON.parse(screen.getByTestId('viewer').textContent ?? '[]')[2].value).toBe('5');
+        });
+
+        it('経験年数 + 年: 計算されるので1行は出ない', () => {
+          render(<Harness initialData={data} />);
+          expect(kindSelect(1)).toHaveValue('experience');
+          expect(screen.queryByText(HINT)).toBeNull();
+          expect(kindSelect(1)).not.toHaveAttribute('aria-describedby');
+        });
+
+        it('自由: 単位が社でも1行は出ない', () => {
+          render(<Harness initialData={data} />);
+          expect(kindSelect(3)).toHaveValue('free');
+          expect(screen.queryByText(HINT)).toBeNull();
+        });
+
+        it('案件ブロックが無いシートでは計算しない設計なので1行は出ない', () => {
+          render(
+            <StatsBlockEditor
+              data={{ items: [{ value: '5', unit: '社', label: '担当した会社数', kind: 'experience' }] }}
+              onChange={vi.fn()}
+            />,
+          );
+          expect(screen.queryByText(HINT)).toBeNull();
+        });
+      });
+
       it('案件ブロックが無いシートでも種類を選べ、数値欄はどの種類でも編集できる', () => {
         render(<Harness initialData={data} withContext={false} />);
         fireEvent.change(kindSelect(3), { target: { value: 'experience' } });
