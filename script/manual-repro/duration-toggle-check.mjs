@@ -11,7 +11,7 @@ const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 
 await page.goto(`${BASE}/viewer-auth?next=${encodeURIComponent(ROUTE)}`, { waitUntil: 'domcontentloaded' });
-await page.getByLabel('認証コード').fill(CODE);
+await page.getByLabel('コード').fill(CODE);
 await page.getByRole('button', { name: '認証' }).click();
 await page.waitForURL(`**${ROUTE}`, { timeout: 30000 });
 // シート本文（期間表記の「〜」を含む要素）が描画されるまで待つ — networkidle では遅延描画を拾えない。
@@ -49,7 +49,7 @@ await page.screenshot({ path: '/tmp/shots-i288/toggle-on-desktop1280.png', fullP
 const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
 const page2 = await ctx2.newPage();
 await page2.goto(`${BASE}/viewer-auth?next=${encodeURIComponent(ROUTE)}`, { waitUntil: 'domcontentloaded' });
-await page2.getByLabel('認証コード').fill(CODE);
+await page2.getByLabel('コード').fill(CODE);
 await page2.getByRole('button', { name: '認証' }).click();
 await page2.waitForURL(`**${ROUTE}`, { timeout: 30000 });
 await page2.waitForSelector('text=/〜/', { timeout: 30000 });

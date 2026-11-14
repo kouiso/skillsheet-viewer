@@ -174,6 +174,21 @@ REVOKE skillsheet_document_reader, skillsheet_document_writer FROM CURRENT_USER;
 SQL
 }
 
+# 版の履歴の関数（skillsheet_private.history_*）と snapshot trigger は、境界とは別の installer。
+# 入れないと /builder の「版の履歴」が「履歴を読み込めませんでした」になる（#644）。
+# 2本の順序は script/e2e-isolated-db.sh と同じにする（install → grant）。
+# 変えるときは両方を直す。ズレは script/dev-local-stack.test.ts が落とす。
+# install-document-history.sql は CREATE FUNCTION が非冪等なので、関数の有無で判定して
+# 二度目の up では流さない。grant は GRANT だけなので毎回流してよい。
+ensure_history() {
+  local psql_db=(psql_admin -d "$DB_NAME")
+  if ! "${psql_db[@]}" -tAc "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname='skillsheet_private' AND p.proname='history_list'" | grep -q 1; then
+    log "installing document history"
+    "${psql_db[@]}" -q -v ON_ERROR_STOP=1 -f "$REPO_ROOT/script/sql/install-document-history.sql" >/dev/null
+  fi
+  "${psql_db[@]}" -q -v ON_ERROR_STOP=1 -f "$REPO_ROOT/script/sql/grant-e2e-history.sql" >/dev/null
+}
+
 ensure_cert() {
   mkdir -p "$CERT_DIR"
   if [ ! -f "$CERT_DIR/cert.pem" ]; then
@@ -241,6 +256,7 @@ case "${1:-up}" in
   up)
     ensure_postgres
     ensure_boundary
+    ensure_history
     ensure_cert
     ensure_proxy
     write_env

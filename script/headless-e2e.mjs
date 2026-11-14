@@ -224,8 +224,8 @@ try {
     {
       name: 'viewer-auth-mobile',
       path: '/viewer-auth',
-      title: 'エンジニアスキルシート閲覧',
-      labels: ['認証コード'],
+      title: 'スキルシートを見る',
+      labels: ['コード'],
       button: '認証',
       width: 390,
       height: 844,
