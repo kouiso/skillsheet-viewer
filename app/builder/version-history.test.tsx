@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentSnapshot } from '@/db/document-service';
 import { documentDifferences, VersionHistory, type VersionHistoryApi } from './version-history';
@@ -78,12 +78,75 @@ describe('シート全体の版の履歴', () => {
       await screen.findByText('履歴を読み込めませんでした。');
       expect(screen.getByText('一覧を読み直してください')).toBeInTheDocument();
       expect(screen.queryByText('差分を読み込み中…')).not.toBeInTheDocument();
+      // 一覧の失敗は role=alert を1つだけ出す（比較欄は role を付けない）。
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      expect(screen.getByRole('alert')).toHaveTextContent('履歴を読み込めませんでした。');
+    });
+
+    it('失敗 → 再試行 → 回復すると、失敗の文と alert が消えて版が並ぶ', async () => {
+      const rows = [
+        {
+          revision: '2',
+          title: '合成',
+          recordedAt: '2026-10-06T00:10:00Z',
+          action: 'save',
+          restoredFrom: null,
+          restoredBefore: null,
+        },
+        {
+          revision: '1',
+          title: '合成',
+          recordedAt: '2026-10-06T00:00:00Z',
+          action: 'save',
+          restoredFrom: null,
+          restoredBefore: null,
+        },
+      ];
+      const list = vi.fn().mockRejectedValueOnce(new Error('失敗')).mockResolvedValue(rows);
+      setup({ list });
+      fireEvent.click(await screen.findByRole('button', { name: '再試行' }));
+      await screen.findByRole('button', { name: /版 1/ });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
+    });
+
+    it('版が残っているまま追加読み込みが失敗し別の版を選んでも、取得中は alert でなく読み込み中を出す', async () => {
+      // 20件そろえると「前の版を読み込む」が出る。2分以上あけて自動保存のまとまりにたたまれない。
+      const page = Array.from({ length: 20 }, (_, i) => ({
+        revision: String(40 - i),
+        title: '合成',
+        recordedAt: new Date(Date.UTC(2026, 9, 6, 12, 0) - i * 600_000).toISOString(),
+        action: 'save',
+        restoredFrom: null,
+        restoredBefore: null,
+      }));
+      const list = vi.fn().mockResolvedValueOnce(page).mockRejectedValue(new Error('失敗'));
+      let finish!: (v: DocumentSnapshot) => void;
+      setup({
+        list,
+        read: vi.fn().mockImplementation(async (rev) =>
+          rev === '21'
+            ? new Promise<DocumentSnapshot>((resolve) => {
+                finish = resolve;
+              })
+            : snapshot(rev),
+        ),
+      });
+      fireEvent.click(await screen.findByRole('button', { name: /前の版を読み込む/ }));
+      await screen.findByText('履歴を読み込めませんでした。');
+      fireEvent.click(screen.getByRole('button', { name: /版 21/ }));
+      expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('差分を読み込み中…');
+      expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      await act(async () => finish(snapshot('21')));
     });
 
     it('保存された版が0件なら読み込み中を出さず、比べる版がないと伝える', async () => {
       setup({ list: vi.fn().mockResolvedValue([]) });
       await screen.findByText('保存された版がありません。');
+      expect(screen.getByText('編集して保存すると、ここに版が残ります。')).toBeInTheDocument();
       expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(screen.queryByText('差分を読み込み中…')).not.toBeInTheDocument();
     });
 
@@ -323,7 +386,7 @@ describe('シート全体の版の履歴', () => {
         },
       ]);
     setup({ list });
-    fireEvent.click(await screen.findByRole('button', { name: '履歴を再読み込み' }));
+    fireEvent.click(await screen.findByRole('button', { name: '再試行' }));
     await screen.findByText(/版が1つしかありません/);
     expect(screen.getByRole('combobox', { name: '比較元' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeDisabled();

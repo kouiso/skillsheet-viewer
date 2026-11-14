@@ -472,11 +472,16 @@ export function VersionHistory({
             <div role="alert">
               <p>履歴を読み込めませんでした。</p>
               <button type="button" className={control} onClick={() => void load()}>
-                履歴を再読み込み
+                再試行
               </button>
             </div>
           )}
-          {!loading && !listError && rows.length === 0 && <p>保存された版がありません。</p>}
+          {!loading && !listError && rows.length === 0 && (
+            <div className="space-y-3 rounded-md border border-border bg-card p-5">
+              <p className="text-sm font-semibold">保存された版がありません。</p>
+              <p className="text-[13px] text-muted-foreground">編集して保存すると、ここに版が残ります。</p>
+            </div>
+          )}
           <ol className="space-y-2">
             {groupVersions(rows).map((group) => {
               if (group.kind === 'single') return <li key={group.version.revision}>{versionEntry(group.version)}</li>;
@@ -598,8 +603,11 @@ export function VersionHistory({
             ) : !pair ? (
               // WHY: pair が無い理由は一覧の失敗・0件・取得中の3つ。一覧の状態から決め、
               //      失敗と0件で「読み込み中」を出し続けないようにする。
-              listError ? (
-                <p role="alert">一覧を読み直してください</p>
+              //      失敗は rows が空の時だけ。rows が残っていれば一覧は使えるので、
+              //      版を選び直した直後の取得中は「読み込み中」を出す。
+              //      一覧側の role=alert が既に読み上げるため、ここは role を付けない。
+              listError && rows.length === 0 ? (
+                <p>一覧を読み直してください</p>
               ) : !loading && rows.length === 0 ? (
                 <p>まだ比べる版がありません</p>
               ) : (
