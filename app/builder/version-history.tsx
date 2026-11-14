@@ -126,6 +126,8 @@ function groupSpan(versions: readonly VersionSummary[]) {
 }
 const control =
   'min-h-11 rounded border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+// 板「戻した後・空・失敗」の一覧側の箱: 地 card・枠線 1px・角丸 6px・余白 20px・中の間隔 12px。
+const listBox = 'space-y-3 rounded-lg border border-border bg-card p-5';
 const primary = `${control} border-primary bg-primary-dark text-primary-foreground font-semibold disabled:bg-background disabled:border-border`;
 function failed(error: unknown) {
   return (
@@ -469,14 +471,19 @@ export function VersionHistory({
             </p>
           )}
           {listError && (
-            <div role="alert">
-              <p>履歴を読み込めませんでした。</p>
+            <div role="alert" className={listBox}>
+              <p className="text-sm font-semibold">履歴を読み込めませんでした。</p>
               <button type="button" className={control} onClick={() => void load()}>
-                履歴を再読み込み
+                再試行
               </button>
             </div>
           )}
-          {!loading && !listError && rows.length === 0 && <p>保存された版がありません。</p>}
+          {!loading && !listError && rows.length === 0 && (
+            <div className={listBox}>
+              <p className="text-sm font-semibold">保存された版がありません。</p>
+              <p className="text-[13px] text-muted-foreground">編集して保存すると、ここに版が残ります。</p>
+            </div>
+          )}
           <ol className="space-y-2">
             {groupVersions(rows).map((group) => {
               if (group.kind === 'single') return <li key={group.version.revision}>{versionEntry(group.version)}</li>;
@@ -596,9 +603,20 @@ export function VersionHistory({
                 </button>
               </div>
             ) : !pair ? (
-              <p role="status" aria-busy="true">
-                差分を読み込み中…
-              </p>
+              // WHY: pair が無い理由は一覧の失敗・0件・取得中の3つ。一覧の状態から決め、
+              //      失敗と0件で「読み込み中」を出し続けないようにする。
+              //      失敗は rows が空の時だけ。rows が残っていれば一覧は使えるので、
+              //      版を選び直した直後の取得中は「読み込み中」を出す。
+              //      一覧側の role=alert が既に読み上げるため、ここは role を付けない。
+              listError && rows.length === 0 ? (
+                <p>一覧を読み直してください</p>
+              ) : !loading && rows.length === 0 ? (
+                <p>まだ比べる版がありません</p>
+              ) : (
+                <p role="status" aria-busy="true">
+                  差分を読み込み中…
+                </p>
+              )
             ) : (
               <>
                 <nav aria-label="版の内容表示" className="flex flex-wrap gap-2">

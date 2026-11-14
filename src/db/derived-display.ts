@@ -25,6 +25,18 @@ export function statKindOf(item: StatItem): StatKind {
   return item.kind ?? inferStatKind(item.label);
 }
 
+/** 経験年数を計算で出せる単位か。年・月以外の単位は手入力値をそのまま出す。 */
+function isExperienceUnit(unit: string): boolean {
+  const trimmed = unit.trim();
+  return trimmed === '年' || /^(?:ヶ|か|ケ)月$/.test(trimmed);
+}
+
+/** 表示時に案件から値を差し替える項目か。編集欄で数値欄を読み取り専用にする判断の元。 */
+export function isStatComputed(item: StatItem): boolean {
+  const kind = statKindOf(item);
+  return kind === 'projectCount' || (kind === 'experience' && isExperienceUnit(item.unit));
+}
+
 /** 保存時に、種類の無い項目へ種類を補う。すでにある種類は変えない。 */
 export function fillStatKinds(items: readonly StatItem[]): StatItem[] {
   return items.map((item) => (item.kind === undefined ? { ...item, kind: inferStatKind(item.label) } : item));
@@ -99,7 +111,7 @@ export function resolveDisplayedStats(
     const kind = statKindOf(item);
     if (kind === 'experience') {
       const unit = item.unit.trim();
-      if (unit === '年' || /^(?:ヶ|か|ケ)月$/.test(unit)) {
+      if (isExperienceUnit(unit)) {
         return {
           ...item,
           value:
