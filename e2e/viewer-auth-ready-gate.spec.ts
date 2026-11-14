@@ -35,7 +35,9 @@ test.describe('/viewer-auth 初期化ゲート (#398)', () => {
       await page.goto('/viewer-auth', { waitUntil: 'domcontentloaded' });
 
       await expect(page.getByLabel('コード')).toBeDisabled();
-      await expect(page.getByRole('button', { name: '認証' })).toBeDisabled();
+      // 準備前のボタンは「準備しています…」と名乗る（認証ボタンとしてはまだ存在しない）。
+      await expect(page.getByRole('button', { name: '準備しています…' })).toBeDisabled();
+      await expect(page.getByRole('button', { name: '認証', exact: true })).toHaveCount(0);
 
       // disabled なボタンの押下に頼らないプログラマティックな submit
       // （requestSubmit / Enter 相当）でも、初期化前に認証リクエストが発行されないこと。
