@@ -340,12 +340,12 @@ test('E. auth edge cases', async ({ browser }) => {
   await page.goto('/viewer-auth');
   await page.getByLabel('コード').fill('wrong-code');
   await page.getByRole('button', { name: '認証' }).click();
-  await expect(page.getByText('認証コードが正しくありません')).toBeVisible();
+  await expect(page.getByText('コードが違います。共有した人に確かめてください。')).toBeVisible();
   await capture(page, 'E-invalid-code.png');
 
   // reload should clear error
   await page.reload({ waitUntil: 'networkidle' });
-  await expect(page.getByText('認証コードが正しくありません')).not.toBeVisible();
+  await expect(page.getByText('コードが違います。共有した人に確かめてください。')).not.toBeVisible();
 
   // empty code
   await page.getByLabel('コード').fill('');
