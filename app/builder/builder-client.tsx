@@ -316,6 +316,8 @@ const BuilderClient = ({
   const setProfileCustomDraft = useCallback((id: string, rows: CustomMetaRow[]) => {
     profileCustomDraftsRef.current.set(id, rows);
   }, []);
+  // 手動保存の直近の失敗が「送り直しても直らない」種類かを履歴オープン側へ伝える。
+  const saveFailureRef = useRef<'conflict' | 'invalid' | null>(null);
   const hasBlockedDraft = () =>
     blockedItemIdsRef.current.size > 0 || [...profileCustomDraftsRef.current.values()].some(hasUncommittedProfileRows);
   const blockedProfileIds = items
@@ -849,6 +851,7 @@ const BuilderClient = ({
   };
 
   const handleSave = async () => {
+    saveFailureRef.current = null;
     if (!mountedRef.current) return false;
     if (loadFailure !== null || !activeSheetId) {
       toast.error('読み込みに失敗したままなので保存できません。ページを再読み込みしてください。');
@@ -867,6 +870,7 @@ const BuilderClient = ({
       // ここで「重複」と断定すると、原因が未入力の場合に誤った診断になる
       // （chatgpt-codex-connector レビュー指摘）。行単位のエラー表示（ProfileBlockEditor）
       // が実際の原因を示すので、ここでは理由を特定しない案内にとどめる。
+      saveFailureRef.current = 'invalid';
       toast.error(
         'プロフィールの項目名を確認してください（重複または未入力があります）。解消してから保存してください。',
       );
@@ -896,6 +900,7 @@ const BuilderClient = ({
       expectedRevision: savedRevisionRef.current,
     };
     if (validateDocumentBlocks(payload.blocks).some((issue) => issue.code === 'PERIOD_PROJECTION_MISMATCH')) {
+      saveFailureRef.current = 'invalid';
       toast.error('保存できない入力があります。期間の日付などの診断を確認してください。');
       return;
     }
@@ -945,6 +950,7 @@ const BuilderClient = ({
             // （直後の自動保存が同じ競合を繰り返し踏むのを防ぐ）。
             autosaveStoppedRef.current = true;
             followUpRef.current = false;
+            saveFailureRef.current = 'conflict';
             setAutosaveStatus('conflict');
             const reload = await confirm({
               title: 'このシートはほかの画面で更新されています。',
@@ -957,6 +963,8 @@ const BuilderClient = ({
             // 競合インジケータの再読み込みボタンと同じくフルリロードで最新版を反映する。
             if (reload) window.location.reload();
           } else {
+            // 入力エラー（BAD_REQUEST）は同じ内容で送り直しても直らない。通信などは直りうる。
+            if (err instanceof TRPCClientError && err.data?.code === 'BAD_REQUEST') saveFailureRef.current = 'invalid';
             toast.error('保存に失敗しました');
           }
         } finally {
@@ -998,6 +1006,20 @@ const BuilderClient = ({
         if (!mountedRef.current || hasBlockedDraft()) return;
         const saved = await handleSave();
         if (saved && snapshot(itemsRef.current, titleRef.current) === lastSavedSnapshotRef.current) break;
+        // 直らない失敗は送り直しても同じ結果になるので、確認を往復させず理由を出して抜ける。
+        // 競合は handleSave が理由と次の操作（最新を読み込む／あとで）を出し終えている。
+        if (saveFailureRef.current === 'conflict') return;
+        if (saveFailureRef.current === 'invalid') {
+          const discard = await confirm({
+            title: '未保存の変更を保存できません。',
+            description:
+              '入力内容に保存できない箇所があります（期間の日付など）。同じ内容で送り直しても保存できません。このまま履歴を開くと、未保存の変更は失われます。',
+            confirmLabel: '変更を捨てて履歴を開く',
+            cancelLabel: '編集に戻る',
+          });
+          if (!discard) return;
+          break;
+        }
         if (
           !(await confirm({
             title: '履歴を開く前の保存を完了できませんでした。',
