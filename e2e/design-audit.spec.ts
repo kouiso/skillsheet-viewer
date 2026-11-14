@@ -56,7 +56,7 @@ async function applyTheme(page: Page, theme: Theme) {
 
 async function authViewer(page: Page, route: string) {
   await page.goto(`/viewer-auth?next=${encodeURIComponent(route)}`);
-  await page.getByLabel('認証コード').fill(process.env.VIEWER_CODE ?? 'viewer-code-local');
+  await page.getByLabel('コード').fill(process.env.VIEWER_CODE ?? 'viewer-code-local');
   await page.getByRole('button', { name: '認証' }).click();
   await page.waitForURL(route);
 }

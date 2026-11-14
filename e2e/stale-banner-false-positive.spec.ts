@@ -41,7 +41,7 @@ test.describe('stale banner: healthy sheet must not scare a first-time viewer', 
 
     // recruiter 相当の閲覧者として、閲覧コードで認証してから開く。
     await page.goto('/viewer-auth', { waitUntil: 'networkidle' });
-    await page.getByLabel('認証コード').fill(viewerCode);
+    await page.getByLabel('コード').fill(viewerCode);
     await page.getByRole('button', { name: '認証' }).click();
     await page.waitForURL('/view');
 

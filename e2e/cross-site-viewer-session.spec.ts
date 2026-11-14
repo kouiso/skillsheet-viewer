@@ -56,7 +56,7 @@ test.describe('viewer session cookie survives a link click from another site', (
   test('メールに貼られた共有リンクを別サイトから踏んでも、有効なセッションなら再認証を求めない', async ({ page }) => {
     // 1. 通常どおり自サイトで認証コードを入力し、7日間の閲覧セッションを確立する。
     await page.goto('/viewer-auth', { waitUntil: 'networkidle' });
-    await page.getByLabel('認証コード').fill(viewerCode);
+    await page.getByLabel('コード').fill(viewerCode);
     await page.getByRole('button', { name: '認証' }).click();
     await page.waitForURL('/view');
 
