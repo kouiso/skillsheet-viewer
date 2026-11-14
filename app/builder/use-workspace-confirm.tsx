@@ -178,7 +178,7 @@ export function useWorkspaceConfirm({ fallbackFocus }: { fallbackFocus?: () => H
               {options?.title}
             </Dialog.Title>
           </div>
-          <div className="flex flex-col gap-2.5 pl-0 sm:pl-11">
+          <div className="flex min-h-0 flex-col gap-2.5 pl-0 sm:pl-11">
             <Dialog.Description className="break-words text-[13.5px] leading-[1.8] text-muted-foreground">
               {options?.description}
             </Dialog.Description>

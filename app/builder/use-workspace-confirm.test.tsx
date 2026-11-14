@@ -131,6 +131,27 @@ describe('デザインボードの並び・フォーカス・縦積み', () => {
     expect(document.querySelector('[data-confirm-icon="warn"]')).not.toBeNull();
   });
 
+  it('details が長いとき、一覧を包む要素が縮めるよう min-h-0 を持つ（ボタンを画面の外へ押し出さない）', async () => {
+    render(
+      <Open
+        extra={{
+          details: (
+            <ul data-testid="long-details">
+              {Array.from({ length: 60 }, (_, i) => (
+                <li key={i}>案件 {i}</li>
+              ))}
+            </ul>
+          ),
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '開く' }));
+    const list = await screen.findByTestId('long-details');
+    const scroller = list.parentElement;
+    expect(scroller).toHaveClass('min-h-0', 'overflow-y-auto');
+    expect(scroller?.parentElement).toHaveClass('min-h-0', 'flex-col');
+  });
+
   it('危険でない確認は info アイコンで、確認が主ボタンになる', async () => {
     render(<Open extra={{ danger: false }} />);
     fireEvent.click(screen.getByRole('button', { name: '開く' }));
