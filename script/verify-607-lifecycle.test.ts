@@ -1,6 +1,17 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
-import { capTime, createChildRegistry, createSignalHandler, stopTree, waitReady } from './verify-607-lifecycle';
+import {
+  CLEANUP_CAP_MS,
+  capTime,
+  createChildRegistry,
+  createCleanup,
+  createSignalHandler,
+  GATEWAY_STOP_CAP_MS,
+  STOP_ALL_WORST_MS,
+  sleep,
+  stopTree,
+  waitReady,
+} from './verify-607-lifecycle';
 
 describe('createSignalHandler', () => {
   it('後片付けがハングしても上限で諦めて終了する', async () => {
@@ -82,5 +93,56 @@ describe('waitReady', () => {
     await expect(waitReady('http://example.invalid/', 100, fetchImpl as unknown as typeof fetch)).rejects.toThrow(
       /did not become ready/,
     );
+  });
+});
+
+describe('createCleanup（verify-607-output の後片付けの組み立て）', () => {
+  // 実時間を縮めた再現: stopAll 300ms（SIGTERM→SIGKILL 待ち）、gateway は永久ハング、gateway 上限 400ms、全体上限 600ms。
+  const run = async () => {
+    const calls: string[] = [];
+    const cleanup = createCleanup({
+      stopAll: async () => {
+        await sleep(300);
+        calls.push('stopAll');
+      },
+      gatewayStop: () => new Promise(() => {}),
+      killChildren: () => calls.push('killChildren'),
+      gatewayCapMs: 400,
+    });
+    const exit = vi.fn(() => calls.push('exit'));
+    createSignalHandler({ cleanup, exit, capMs: 600 })('SIGTERM');
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(143), { timeout: 3000 });
+    return calls;
+  };
+
+  it('gateway がハングし stopAll が遅くても、全体上限内に killChildren が exit より前に呼ばれる', async () => {
+    expect(await run()).toEqual(['stopAll', 'killChildren', 'exit']);
+  });
+
+  it('gateway が上限内に止まれば killChildren は呼ばない', async () => {
+    const killChildren = vi.fn();
+    await createCleanup({
+      stopAll: async () => {},
+      gatewayStop: async () => {},
+      killChildren,
+      gatewayCapMs: 400,
+    })();
+    expect(killChildren).not.toHaveBeenCalled();
+  });
+
+  it('gateway.stop() が reject しても停止済みとみなす（pkill を撃たない）', async () => {
+    const killChildren = vi.fn();
+    await createCleanup({
+      stopAll: async () => {},
+      gatewayStop: () => Promise.reject(new Error('x')),
+      killChildren,
+      gatewayCapMs: 400,
+    })();
+    expect(killChildren).not.toHaveBeenCalled();
+  });
+
+  it('全体上限は stopAll の最悪値と gateway 上限のどちらよりも大きい', () => {
+    expect(CLEANUP_CAP_MS).toBeGreaterThan(STOP_ALL_WORST_MS);
+    expect(CLEANUP_CAP_MS).toBeGreaterThan(GATEWAY_STOP_CAP_MS);
   });
 });

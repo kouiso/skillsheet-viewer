@@ -64,6 +64,36 @@ export async function capTime(work: Promise<unknown>, ms: number): Promise<void>
   }
 }
 
+export const GATEWAY_STOP_CAP_MS = 4_000;
+// stopAll の最悪値は SIGTERM 3s + SIGKILL 後 2s。全体の上限はこれより厳密に大きくしないと、
+// 直列でも並列でも pkill の退路まで届かず打ち切られる。
+export const STOP_ALL_WORST_MS = 5_000;
+export const CLEANUP_CAP_MS = 8_000;
+
+/**
+ * 後片付けの組み立て。stopAll と gateway.stop() は並列に走らせ、gateway が上限内に止まらなかった時だけ
+ * 最後に killChildren（workerd 直撃の pkill）を必ず走らせる。直列にすると stopAll の待ちで
+ * gateway の持ち時間が削られ、ハング時に pkill へ届かなかった。
+ */
+export function createCleanup(opts: {
+  stopAll: () => Promise<unknown>;
+  gatewayStop: () => Promise<unknown>;
+  killChildren: () => void;
+  gatewayCapMs?: number;
+}) {
+  return async () => {
+    let stopped = false;
+    const markStopped = () => {
+      stopped = true;
+    };
+    await Promise.all([
+      opts.stopAll().catch(() => {}),
+      capTime(opts.gatewayStop().then(markStopped, markStopped), opts.gatewayCapMs ?? GATEWAY_STOP_CAP_MS),
+    ]);
+    if (!stopped) opts.killChildren();
+  };
+}
+
 const SIGNAL_NUMBER = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
 export type HandledSignal = keyof typeof SIGNAL_NUMBER;
 

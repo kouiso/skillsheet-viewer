@@ -35,10 +35,14 @@ import { d1Timestamp } from '../src/db/d1/value';
 import { createDocumentService } from '../src/db/document-service';
 import { buildConsoleDemoBlocks } from '../src/db/fixture/fictional-demo';
 import { createD1Transport } from '../src/server/d1-transport';
-import { capTime, createChildRegistry, createSignalHandler, waitReady } from './verify-607-lifecycle';
-
-const GATEWAY_STOP_CAP_MS = 4_000;
-const CLEANUP_CAP_MS = 5_000;
+import {
+  CLEANUP_CAP_MS,
+  capTime,
+  createChildRegistry,
+  createCleanup,
+  createSignalHandler,
+  waitReady,
+} from './verify-607-lifecycle';
 
 const ONLY = process.argv[2]; // 'next' | 'worker' | undefined
 // 打ち間違いで何も検査せず ALL OK になるのを防ぐため、setup より前に弾く
@@ -214,15 +218,11 @@ const stopTree = (c: ChildProcess) => registry.stop(c);
 // unstable_dev の gateway は workerd をこのプロセスの直下の子として持つ。API は stop() しか公開せず pid も取れないため、
 // グループ kill では止められない。stop() が上限内に終わらなかった時は、このプロセスの直下の子（workerd）を
 // pkill で撃って残さない。app 側の子は detached の別グループで、registry が先に止めている。
-const cleanup = async () => {
-  await registry.stopAll();
-  let stopped = false;
-  const markStopped = () => {
-    stopped = true;
-  };
-  await capTime(gateway.stop().then(markStopped, markStopped), GATEWAY_STOP_CAP_MS);
-  if (!stopped) spawnSync('pkill', ['-KILL', '-P', String(process.pid)], { stdio: 'ignore' });
-};
+const cleanup = createCleanup({
+  stopAll: () => registry.stopAll(),
+  gatewayStop: () => gateway.stop(),
+  killChildren: () => spawnSync('pkill', ['-KILL', '-P', String(process.pid)], { stdio: 'ignore' }),
+});
 const onSignal = createSignalHandler({ cleanup, exit: (code) => process.exit(code), capMs: CLEANUP_CAP_MS });
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(sig, () => onSignal(sig));
 
