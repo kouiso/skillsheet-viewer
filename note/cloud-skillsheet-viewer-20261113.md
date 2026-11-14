@@ -37,6 +37,9 @@ RULES+4 2026-11-14T12:14:26Z 統括の追加 4 つを当てた:
 item 664 | FIX | CI の e2e が 1 件失敗（document-history.spec.ts:160、fetch の 60 秒切れ）。main 8242d36 の push の CI は成功、この試験は待ちを 3 回延ばした履歴あり、PR はそこに触らない。CI のやり直しは 403。PR に 1 回だけ説明 https://github.com/kouiso/skillsheet-viewer/pull/664#issuecomment-6877101747 、手元で 3 回回して LOCAL-CHECK を残す作業役を出した
 item 667 | FIX | REVIEW FAIL must 2（暗い配色の証拠が明るい方と同じファイル・CI 途中）https://github.com/kouiso/skillsheet-viewer/pull/667#issuecomment-6877090856 ＋マネージャーの must（捨てて開くが下書きを捨てない）→ 作業役が直し中
 item 668 | new | #626 の子 SBI「共有確認ダイアログの見た目を板に」（マネージャーの判断 (b)）
+item 653 | OWNER | REVIEW PASS must 0 want 1 nit 1 https://github.com/kouiso/skillsheet-viewer/pull/653#issuecomment-6877191755 | b32e00e | CI 14 success・1 neutral・1 skipped・0 fail | 認証のサーバ側ファイルは触らない | G5 で取り込み保留（ASK 2）
+DECIDED 2026-11-14T12:26:34Z | #653 の本文の画像リンクを短い SHA に直した（40 桁の SHA を含む URL は、このセッションの道具の読み書きで `[](`` url) ``` に化ける）。中身のコードは変えていないので合格はそのまま | reason 本文と証拠の一致（線 7） | revert 本文の版を戻す
+DECIDED 2026-11-14T12:26:34Z | 失敗: #667 のレビュー役と作業役を同じ作業場（/home/user/wt/633）で同時に動かし、レビュー役の `git checkout --` が作業役の未コミットの直しを消した | reason 私の割り当ての誤り | 対策: 以後レビュー役には必ず別の作業場（git worktree add --detach <head>）を使わせる。作業役にやり直しを頼んだ
 
 ## 2026-11-14T11:45Z（再開後の記録）
 
