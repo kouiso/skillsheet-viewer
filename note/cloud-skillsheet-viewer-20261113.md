@@ -28,6 +28,15 @@ item 632 | FINISH | 新規実装中（#665 の上、base は fix/631） | - | - 
 item 666 | new | #628 の子 SBI「種類を選ぶ欄」を起票（マネージャーの判断）| - | - | - | 順は #632 の後
 DECIDED | #653 の作業役の git fetch が権限判定で拒否 → lead が fetch・merge・push した | reason 作業役への最初の指示「ネットワーク git なし」に判定が合わせた。fetch は非破壊で lead の通常手順 | revert 不要
 DECIDED | /home/user/wt/639 の古い作業場所を e7029d5 の detached に（中身は e7029d5 と一致、捨てた物なし） | reason 同じブランチを 664b が進めたため逆差分が見えていた | revert git checkout feat/639-stat-computed-readonly
+RULES+4 2026-11-14T12:14:26Z 統括の追加 4 つを当てた:
+- 1(a) 今週・来週の Iteration: 読めない。GitHub の Projects は connector に道具が無く、gh の GraphQL と /users/.../projectsV2 は「このセッションでは使えない」（403）。前に出した件数 0。→ for main session
+- 1(b) claude-cloud ラベル無しの issue を先に: 開いている無ラベル（または claude-cloud 以外）の issue は #647 #646 #645 #641 #629 #628 #627 #626 #625 #615 #606 #598 #597 #596 #590 #383 #377 #331 #305。どれも OWNER・範囲外・親 PBI で、レーンが今すぐ手を付けられる物は無い。前に出した件数 0。
+- 2 -ux: 開いている PR・issue の作者と担当に i4zhdk-ux は 0 件（全部 kouiso・担当なし）。skipped 0。
+- 3 並行: 作業役は最大 4 で回している（今 #667・#632・#664 の手元 e2e）。
+- 4 goal: このセッションの goal は「RESUME (owner, 2026-11-14 18:45 JST: produce output and finish ...)」が見えている。統括が新しく設定した goal はまだ見えていない。
+item 664 | FIX | CI の e2e が 1 件失敗（document-history.spec.ts:160、fetch の 60 秒切れ）。main 8242d36 の push の CI は成功、この試験は待ちを 3 回延ばした履歴あり、PR はそこに触らない。CI のやり直しは 403。PR に 1 回だけ説明 https://github.com/kouiso/skillsheet-viewer/pull/664#issuecomment-6877101747 、手元で 3 回回して LOCAL-CHECK を残す作業役を出した
+item 667 | FIX | REVIEW FAIL must 2（暗い配色の証拠が明るい方と同じファイル・CI 途中）https://github.com/kouiso/skillsheet-viewer/pull/667#issuecomment-6877090856 ＋マネージャーの must（捨てて開くが下書きを捨てない）→ 作業役が直し中
+item 668 | new | #626 の子 SBI「共有確認ダイアログの見た目を板に」（マネージャーの判断 (b)）
 
 ## 2026-11-14T11:45Z（再開後の記録）
 
@@ -229,5 +238,7 @@ main（625d5ab）の検査: lint 0 / type-check 0 / test 0（Ghostscript を入�
 - OWNER の issue: #625 (a)(b) / #645・#646（#625 待ち）/ #615（#621 の 3 問）/ #606 保留 / #598 D1 移行 / #383 版の履歴の本番適用 / #590 role とキー / #331 コネクタ（#305 はその後）/ #629 Vercel 設定（#641）。
 
 ## for main session
+- 2026-11-14 時点: GitHub Project（kouiso の project 2）の Iteration を読む道が無い。connector に Projects の道具が無く、GraphQL とユーザーの projectsV2 は 403。決まり 1(a) を当てられない。読めるようにするか、今週・来週の Iteration の issue 番号を NOTES に貼ってほしい。
+- CI の失敗ジョブのやり直し（rerun_failed_jobs）は 403。決まりの「1 回だけやり直す」が出来ないので、手元の LOCAL-CHECK で代える。
 - 第2版 G5 で、この案件は main への取り込みが全部止まる（main=production、ほかの出口なし）。1 時間 5 件の目標は閉じる件数だけになる。
 - gh は GH_TOKEN でログイン失敗。GitHub は connector を使う。
