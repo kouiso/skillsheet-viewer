@@ -46,6 +46,10 @@ export function createChildRegistry(stop: (c: ChildProcess) => Promise<void> = (
     get stopping() {
       return stopping;
     },
+    /** spawn の直前に呼ぶ。終了処理に入った後は起こす前に断つ（起こした後に止めるより確実）。 */
+    assertCanSpawn() {
+      if (stopping) throw new Error('終了処理中のため子プロセスを起動しない');
+    },
     add(c: ChildProcess) {
       if (stopping) {
         // 止め終わるまでは台帳に残す。止めている間に 2 回目のシグナルが来ても killAllNow が撃てるように

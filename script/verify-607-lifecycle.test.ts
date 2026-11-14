@@ -104,6 +104,16 @@ describe('createChildRegistry', () => {
     await vi.waitFor(() => expect(registry.children.has(late)).toBe(false));
   });
 
+  it('止め始めた後は assertCanSpawn が例外を出し、起こす前に断てる', async () => {
+    const registry = createChildRegistry(vi.fn(async (_c: ChildProcess) => {}));
+    expect(() => registry.assertCanSpawn()).not.toThrow();
+    await registry.stopAll();
+    expect(() => registry.assertCanSpawn()).toThrow();
+    const other = createChildRegistry(vi.fn(async (_c: ChildProcess) => {}));
+    other.killAllNow();
+    expect(() => other.assertCanSpawn()).toThrow();
+  });
+
   it('止め始めた後に起こした子は、止め終わるまで台帳に残り、killAllNow の対象になる', async () => {
     let finish = () => {};
     const stop = vi.fn((_c: ChildProcess) => new Promise<void>((r) => (finish = r)));

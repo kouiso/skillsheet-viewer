@@ -283,6 +283,8 @@ async function verifyRuntime(kind: 'next' | 'worker') {
   const logPath = path.join(OUT, `${kind}-server.log`);
   const log = createWriteStream(logPath);
   let app: ChildProcess;
+  // シグナルを受けた後に新しい子を起こさない。起こしてから止めると、止め終わる前に終了して子が残り得る
+  registry.assertCanSpawn();
   if (kind === 'next') {
     app = spawn(
       process.execPath,
@@ -319,6 +321,8 @@ async function verifyRuntime(kind: 'next' | 'worker') {
         .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
         .join('\n'),
     );
+    // writeFile を待つ間にシグナルが来ていることがある
+    registry.assertCanSpawn();
     app = spawn(
       'node_modules/.bin/wrangler',
       [
