@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest';
 
 import PDF_FONT_FAMILY from './constant';
 import { extractQualityPages } from './print-quality-extract.node';
-import { DEFAULT_RASTER_OPTIONS, runRasterQualityChecks } from './print-quality-raster.node';
+import { DEFAULT_RASTER_OPTIONS, runRasterQualityChecks, toolFailure } from './print-quality-raster.node';
 
 const FONTS_DIR = path.resolve(process.cwd(), 'public', 'font');
 const REGULAR_TTF = path.join(FONTS_DIR, 'noto-sans-jp-regular.ttf');
@@ -84,4 +84,18 @@ describe('print-quality-raster: textPadding.bottom を広げても本物の孤�
       expect(orphanFindings.length, `bottom=${bottom} で孤立図形を検出できていない`).toBeGreaterThan(0);
     }
   }, 60_000);
+});
+
+describe('print-quality-raster: 外部コマンド失敗の文面', () => {
+  it('コマンドが無い（ENOENT）時だけ道具の入れ方を出す', () => {
+    const error = Object.assign(new Error('spawnSync gs ENOENT'), { code: 'ENOENT' });
+    expect(toolFailure(error, 'gs 失敗').message).toContain('必要な外部コマンド');
+  });
+
+  it.each(['ENOBUFS', 'ETIMEDOUT', undefined])('%s の失敗では入れ方を出さず実際のエラーを出す', (code) => {
+    const error = Object.assign(new Error('maxBuffer exceeded'), { code });
+    const message = toolFailure(error, 'convert 失敗').message;
+    expect(message).not.toContain('必要な外部コマンド');
+    expect(message).toContain('maxBuffer exceeded');
+  });
 });
