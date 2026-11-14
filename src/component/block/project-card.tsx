@@ -61,7 +61,10 @@ interface ProjectCardProps {
    * 「クリックで編集欄へ飛ぶ」を足すために使う。閲覧画面は渡さない（そのまま描く）。
    */
   wrapRegion?: (region: ProjectCardRegion, node: ReactNode) => ReactNode;
-  /** 本文中のリンクを tab で止まらせるか。プレビュー列は1箇所だけ止まる作りなので false にする。 */
+  /**
+   * 本文中のリンクと「続きを読む」ボタンを tab で止まらせるか。プレビュー列は1箇所だけ
+   * 止まる作りなので false にする（押せば動くが、tab の停止位置には数えない）。
+   */
   linksTabbable?: boolean;
 }
 
@@ -231,6 +234,7 @@ export const ProjectCard = ({
                   type="button"
                   className="softbtn compact self-start"
                   aria-expanded={commentOpen}
+                  tabIndex={linksTabbable ? undefined : -1}
                   onClick={() => setCommentOpen((open) => !open)}
                 >
                   {commentOpen ? '閉じる' : `続きを読む（残り ${remainingParas}）`}
