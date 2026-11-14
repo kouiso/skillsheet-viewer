@@ -40,6 +40,23 @@ describe('createSignalHandler', () => {
   });
 });
 
+describe('createSignalHandler の既定の上限', () => {
+  it('既定は CLEANUP_CAP_MS で、stopAll の最悪値より大きい', async () => {
+    expect(CLEANUP_CAP_MS).toBeGreaterThan(STOP_ALL_WORST_MS);
+    vi.useFakeTimers();
+    try {
+      const exit = vi.fn();
+      createSignalHandler({ cleanup: () => new Promise(() => {}), exit })('SIGTERM');
+      await vi.advanceTimersByTimeAsync(STOP_ALL_WORST_MS + 1);
+      expect(exit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(CLEANUP_CAP_MS - STOP_ALL_WORST_MS);
+      expect(exit).toHaveBeenCalledWith(143);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('capTime', () => {
   it('ハングする処理でも上限で返る', async () => {
     const started = Date.now();
@@ -61,6 +78,16 @@ describe('createChildRegistry', () => {
     await registry.stopAll();
     expect(stop.mock.calls.map(([c]) => c.pid)).toEqual([111, 222]);
     expect(registry.children.size).toBe(0);
+  });
+
+  it('stopAll の後に add された子は台帳に入らず、即座に止められて throw する', async () => {
+    const stop = vi.fn(async (_c: ChildProcess) => {});
+    const registry = createChildRegistry(stop);
+    await registry.stopAll();
+    const late = { pid: 333 } as ChildProcess;
+    expect(() => registry.add(late)).toThrow();
+    expect(registry.children.has(late)).toBe(false);
+    expect(stop).toHaveBeenCalledWith(late);
   });
 
   it('実プロセスのグループを止め、止めたあとの pid へ kill を送らない', async () => {
@@ -93,6 +120,13 @@ describe('waitReady', () => {
     await expect(waitReady('http://example.invalid/', 100, fetchImpl as unknown as typeof fetch)).rejects.toThrow(
       /did not become ready/,
     );
+  });
+
+  it('期限が短ければ再試行待ちも残り時間で切り、500ms まで延ばさない', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({ status: 404, body: null });
+    const started = Date.now();
+    await expect(waitReady('http://example.invalid/', 100, fetchImpl as unknown as typeof fetch)).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(400);
   });
 });
 
@@ -130,7 +164,7 @@ describe('createCleanup（verify-607-output の後片付けの組み立て）', 
     expect(killChildren).not.toHaveBeenCalled();
   });
 
-  it('gateway.stop() が reject しても停止済みとみなす（pkill を撃たない）', async () => {
+  it('gateway.stop() が reject したら停止済みとみなさず killChildren を呼ぶ', async () => {
     const killChildren = vi.fn();
     await createCleanup({
       stopAll: async () => {},
@@ -138,7 +172,19 @@ describe('createCleanup（verify-607-output の後片付けの組み立て）', 
       killChildren,
       gatewayCapMs: 400,
     })();
-    expect(killChildren).not.toHaveBeenCalled();
+    expect(killChildren).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleanup を 2 回呼んでも stopAll / gatewayStop / killChildren は 1 回だけ走る', async () => {
+    const stopAll = vi.fn(async () => {});
+    const gatewayStop = vi.fn(() => Promise.reject(new Error('x')));
+    const killChildren = vi.fn();
+    const cleanup = createCleanup({ stopAll, gatewayStop, killChildren, gatewayCapMs: 400 });
+    await Promise.all([cleanup(), cleanup()]);
+    await cleanup();
+    expect(stopAll).toHaveBeenCalledTimes(1);
+    expect(gatewayStop).toHaveBeenCalledTimes(1);
+    expect(killChildren).toHaveBeenCalledTimes(1);
   });
 
   it('全体上限は stopAll の最悪値と gateway 上限のどちらよりも大きい', () => {

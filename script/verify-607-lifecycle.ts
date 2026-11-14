@@ -39,9 +39,18 @@ export async function stopTree(c: ChildProcess, graceMs = 3000): Promise<void> {
  */
 export function createChildRegistry(stop: (c: ChildProcess) => Promise<void> = (c) => stopTree(c)) {
   const children = new Set<ChildProcess>();
+  // 終了処理に入った後に起動した子は、stopAll の対象から漏れて誰にも止められず残る。入口で断つ。
+  let stopping = false;
   return {
     children,
+    get stopping() {
+      return stopping;
+    },
     add(c: ChildProcess) {
+      if (stopping) {
+        void stop(c).catch(() => {});
+        throw new Error('終了処理中のため子プロセスの起動を拒否した');
+      }
       children.add(c);
     },
     async stop(c: ChildProcess) {
@@ -49,6 +58,7 @@ export function createChildRegistry(stop: (c: ChildProcess) => Promise<void> = (
       children.delete(c);
     },
     async stopAll() {
+      stopping = true;
       await Promise.allSettled([...children].map((c) => this.stop(c)));
     },
   };
@@ -81,16 +91,25 @@ export function createCleanup(opts: {
   killChildren: () => void;
   gatewayCapMs?: number;
 }) {
-  return async () => {
+  // シグナル経路と finally 経路の両方から呼ばれる。2 本目が gateway.stop() を重ねて呼ばないよう 1 つの Promise を共有する。
+  let running: Promise<void> | undefined;
+  const run = async () => {
     let stopped = false;
-    const markStopped = () => {
-      stopped = true;
-    };
     await Promise.all([
       opts.stopAll().catch(() => {}),
-      capTime(opts.gatewayStop().then(markStopped, markStopped), opts.gatewayCapMs ?? GATEWAY_STOP_CAP_MS),
+      // reject は workerd が消えた証拠にならない。正常に resolve した時だけ停止済みとみなす
+      capTime(
+        opts.gatewayStop().then(() => {
+          stopped = true;
+        }),
+        opts.gatewayCapMs ?? GATEWAY_STOP_CAP_MS,
+      ),
     ]);
     if (!stopped) opts.killChildren();
+  };
+  return () => {
+    running ??= run();
+    return running;
   };
 }
 
@@ -114,7 +133,7 @@ export function createSignalHandler(opts: {
       return;
     }
     received = true;
-    void capTime(opts.cleanup(), opts.capMs ?? 5000).then(() => opts.exit(code));
+    void capTime(opts.cleanup(), opts.capMs ?? CLEANUP_CAP_MS).then(() => opts.exit(code));
   };
 }
 
@@ -127,14 +146,15 @@ export async function waitReady(
   fetchImpl: typeof fetch = fetch,
 ): Promise<void> {
   const deadline = Date.now() + totalMs;
-  while (Date.now() < deadline) {
+  for (let remaining = totalMs; remaining > 0; remaining = deadline - Date.now()) {
     try {
-      const r = await fetchImpl(url, { signal: AbortSignal.timeout(READY_FETCH_TIMEOUT_MS) });
+      // 期限直前の 1 回が全体の上限を超えないよう、残り時間でも打ち切る
+      const r = await fetchImpl(url, { signal: AbortSignal.timeout(Math.min(READY_FETCH_TIMEOUT_MS, remaining)) });
       if (r.status === 200) return;
       // 本文を読まずに放置すると接続が解放されず、再試行のたびにソケットが溜まる
       await r.body?.cancel();
     } catch {}
-    await sleep(500);
+    await sleep(Math.min(500, Math.max(0, deadline - Date.now())));
   }
   throw new Error(`${url} did not become ready within ${totalMs}ms`);
 }
