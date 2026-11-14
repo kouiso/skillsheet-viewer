@@ -61,6 +61,17 @@ export function createChildRegistry(stop: (c: ChildProcess) => Promise<void> = (
       stopping = true;
       await Promise.allSettled([...children].map((c) => this.stop(c)));
     },
+    /** 待たずに全グループへ SIGKILL を送る。2 回目のシグナルで即終了する前に、子を残さないため。 */
+    killAllNow() {
+      stopping = true;
+      for (const c of children) {
+        if (c.pid === undefined) continue;
+        try {
+          process.kill(-c.pid, 'SIGKILL');
+        } catch {}
+      }
+      children.clear();
+    },
   };
 }
 
@@ -119,16 +130,21 @@ export type HandledSignal = keyof typeof SIGNAL_NUMBER;
 /**
  * シグナル受信時の終了処理。後片付け（gateway.stop() など）がハングしても上限で諦めて終了し、
  * 2 回目のシグナルは待たずに即終了する（Ctrl-C を連打した人を待たせない）。
+ * 即終了すると途中の後片付けは SIGKILL まで届かないので、その前に forceKill で全部を同期で撃つ。
  */
 export function createSignalHandler(opts: {
   cleanup: () => Promise<unknown>;
   exit: (code: number) => void;
+  forceKill?: () => void;
   capMs?: number;
 }) {
   let received = false;
   return (sig: HandledSignal) => {
     const code = 128 + SIGNAL_NUMBER[sig];
     if (received) {
+      try {
+        opts.forceKill?.();
+      } catch {}
       opts.exit(code);
       return;
     }

@@ -223,7 +223,16 @@ const cleanup = createCleanup({
   gatewayStop: () => gateway.stop(),
   killChildren: () => spawnSync('pkill', ['-KILL', '-P', String(process.pid)], { stdio: 'ignore' }),
 });
-const onSignal = createSignalHandler({ cleanup, exit: (code) => process.exit(code), capMs: CLEANUP_CAP_MS });
+const onSignal = createSignalHandler({
+  cleanup,
+  exit: (code) => process.exit(code),
+  // 2 回目のシグナルでは待たずに終わるので、台帳の全グループと直接の子（gateway の workerd）を先に撃つ
+  forceKill: () => {
+    registry.killAllNow();
+    spawnSync('pkill', ['-KILL', '-P', String(process.pid)], { stdio: 'ignore' });
+  },
+  capMs: CLEANUP_CAP_MS,
+});
 for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(sig, () => onSignal(sig));
 
 async function zipText(buf: Buffer): Promise<string> {

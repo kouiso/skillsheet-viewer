@@ -30,6 +30,20 @@ describe('createSignalHandler', () => {
     expect(exit).toHaveBeenCalledWith(130);
   });
 
+  it('2 回目のシグナルでは、終了する前に forceKill で残りを撃つ', () => {
+    const order: string[] = [];
+    const handler = createSignalHandler({
+      cleanup: () => new Promise(() => {}),
+      exit: () => order.push('exit'),
+      forceKill: () => order.push('forceKill'),
+      capMs: 60_000,
+    });
+    handler('SIGINT');
+    expect(order).toEqual([]);
+    handler('SIGINT');
+    expect(order).toEqual(['forceKill', 'exit']);
+  });
+
   it('後片付けが終われば待たずに終了コードを返し、後片付けは 1 回だけ走る', async () => {
     const exit = vi.fn();
     const cleanup = vi.fn(async () => {});
@@ -88,6 +102,43 @@ describe('createChildRegistry', () => {
     expect(() => registry.add(late)).toThrow();
     expect(registry.children.has(late)).toBe(false);
     expect(stop).toHaveBeenCalledWith(late);
+  });
+
+  it('子孫を持つ実プロセスのグループを止めると、子孫ごと消える', async () => {
+    // 親の sh が孫の sleep を持つ形。wrangler が workerd を持つのと同じ形で、孫まで消えることを見る
+    const child = spawn('sh', ['-c', 'sleep 30 & sleep 30; wait'], { detached: true, stdio: 'ignore' });
+    const pid = child.pid as number;
+    try {
+      await new Promise((r) => setTimeout(r, 200));
+      const registry = createChildRegistry();
+      registry.add(child);
+      await registry.stop(child);
+      expect(() => process.kill(-pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' }));
+    } finally {
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {}
+    }
+  });
+
+  it('killAllNow は待たずに子孫ごとグループを止め、台帳を空にする', async () => {
+    const child = spawn('sh', ['-c', 'trap "" TERM; sleep 30 & sleep 30; wait'], { detached: true, stdio: 'ignore' });
+    const pid = child.pid as number;
+    try {
+      await new Promise((r) => setTimeout(r, 200));
+      const registry = createChildRegistry();
+      registry.add(child);
+      registry.killAllNow();
+      expect(registry.children.size).toBe(0);
+      expect(registry.stopping).toBe(true);
+      await vi.waitFor(() => expect(() => process.kill(-pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' })), {
+        timeout: 2000,
+      });
+    } finally {
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {}
+    }
   });
 
   it('実プロセスのグループを止め、止めたあとの pid へ kill を送らない', async () => {
