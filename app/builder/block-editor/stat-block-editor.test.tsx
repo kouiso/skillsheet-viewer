@@ -33,7 +33,13 @@ describe('StatsBlockEditor', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '統計項目1のラベル' }), { target: { value: '更新した項目' } });
     expect(onChange).toHaveBeenLastCalledWith({
       type: 'stats',
-      data: { items: [{ value: '4〜5', unit: '年間', label: '更新した項目' }, initial.items[1]] },
+      // 保存時に種類が補われる（9語に当たらないラベルは自由入力）。
+      data: {
+        items: [
+          { value: '4〜5', unit: '年間', label: '更新した項目', kind: 'free' },
+          { ...initial.items[1], kind: 'free' },
+        ],
+      },
     });
     expect(initial.items[0].value).toBe('3.5');
   });

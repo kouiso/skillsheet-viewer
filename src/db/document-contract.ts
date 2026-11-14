@@ -56,7 +56,7 @@ const shapes: Record<string, Shape> = {
   skills: { category: true, skills: [{ name: true, years: true, level: true, featured: true }] },
   experience: { company: true, startDate: true, endDate: true, role: true, description: true },
   profile: { name: true, title: true, pr: true, strengths: true, meta: true, company: true },
-  stats: { items: [{ value: true, unit: true, label: true }] },
+  stats: { items: [{ value: true, unit: true, label: true, kind: true }] },
   project: {
     companies: [{ id: true, name: true, kind: true, period: true, note: true, hidden: true }],
     items: [
