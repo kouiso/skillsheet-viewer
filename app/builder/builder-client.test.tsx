@@ -476,6 +476,25 @@ describe('BuilderClient', () => {
     );
     expect(await screen.findByRole('region', { name: '版の履歴' })).toBeInTheDocument();
     expect(mockSave).toHaveBeenCalledTimes(1);
+    // 下書きを捨てて保存済みに戻っているので、復元は止められていない。
+    expect(screen.queryByText(/未保存の入力があります/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '編集画面へ' }));
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('原文');
+  });
+
+  it('履歴前の保存が NOT_FOUND でも確認を往復させず、理由を出して編集に戻る', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValueOnce(trpcClientError('NOT_FOUND'));
+    render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '行き先の無い下書き' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Markdown を入力...')).toHaveValue('行き先の無い下書き');
+    expect(mockSave).toHaveBeenCalledTimes(1);
   });
 
   it('期間投影が不一致の下書きを保存APIへ送信しない', async () => {

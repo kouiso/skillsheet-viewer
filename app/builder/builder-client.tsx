@@ -237,6 +237,8 @@ const BuilderClient = ({
   // 未保存変更の検知。最後に保存成功した時点のスナップショット（タイトル＋構造化ブロック）を
   // 保持し、現在の内容と差分があれば dirty とみなす（保存成功で更新）。
   const lastSavedSnapshotRef = useRef<string>(snapshot(initialBlocks.map(blockToItem), initialTitle));
+  // 「変更を捨てて履歴を開く」で編集欄を戻す先。lastSavedSnapshotRef は文字列で復元できないため、中身も持つ。
+  const lastSavedStateRef = useRef({ items: initialBlocks.map(blockToItem), title: initialTitle });
   const [isDirty, setIsDirty] = useState(false);
 
   // SPA 内遷移（シート切替・閲覧へ等）は beforeunload が発火せず、key={activeSheetId} の
@@ -317,7 +319,7 @@ const BuilderClient = ({
     profileCustomDraftsRef.current.set(id, rows);
   }, []);
   // 手動保存の直近の失敗が「送り直しても直らない」種類かを履歴オープン側へ伝える。
-  const saveFailureRef = useRef<'conflict' | 'invalid' | null>(null);
+  const saveFailureRef = useRef<'conflict' | 'invalid' | 'not-found' | 'precondition' | null>(null);
   const hasBlockedDraft = () =>
     blockedItemIdsRef.current.size > 0 || [...profileCustomDraftsRef.current.values()].some(hasUncommittedProfileRows);
   const blockedProfileIds = items
@@ -511,6 +513,7 @@ const BuilderClient = ({
         void utils.sheet.list.invalidate().catch(() => undefined);
       }
       lastSavedSnapshotRef.current = savedSnapshot;
+      lastSavedStateRef.current = { items: currentItems, title: currentTitle };
       failedSnapshotRef.current = null;
       // 保存中に入った編集分が残っていれば dirty のまま（追撃保存が拾う）。
       setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
@@ -930,6 +933,7 @@ const BuilderClient = ({
           // 保存成功した内容をスナップショットとして記録し、dirty を解除する
           // （保存中に編集が入っていた場合は dirty のままにする）。
           lastSavedSnapshotRef.current = savedSnapshot;
+          lastSavedStateRef.current = { items: currentItems, title: currentTitle };
           setIsDirty(snapshot(itemsRef.current, titleRef.current) !== savedSnapshot);
           setAutosaveStatus('saved');
           setLastSaveKind('manual');
@@ -965,6 +969,9 @@ const BuilderClient = ({
           } else {
             // 入力エラー（BAD_REQUEST）は同じ内容で送り直しても直らない。通信などは直りうる。
             if (err instanceof TRPCClientError && err.data?.code === 'BAD_REQUEST') saveFailureRef.current = 'invalid';
+            if (err instanceof TRPCClientError && err.data?.code === 'NOT_FOUND') saveFailureRef.current = 'not-found';
+            if (err instanceof TRPCClientError && err.data?.code === 'PRECONDITION_FAILED')
+              saveFailureRef.current = 'precondition';
             toast.error('保存に失敗しました');
           }
         } finally {
@@ -981,6 +988,23 @@ const BuilderClient = ({
         () => resolve(false),
       ),
     );
+  };
+
+  // 未保存の編集を捨て、編集欄を最後に保存した内容へ戻す（履歴の復元ボタンを止める isDirty も偽にする）。
+  const discardUnsavedEdits = () => {
+    const { items: savedItems, title: savedTitle } = lastSavedStateRef.current;
+    itemsRef.current = savedItems;
+    setItems(savedItems);
+    titleRef.current = savedTitle;
+    setTitle(savedTitle);
+    setBlockedItemIds(new Set());
+    blockedItemIdsRef.current = new Set();
+    profileCustomDraftsRef.current.clear();
+    setIsDirty(false);
+    failedSnapshotRef.current = null;
+    followUpRef.current = false;
+    setAutosaveStatus('idle');
+    if (!savedItems.some((item) => item.id === selectedBlockId)) setSelectedBlockId(savedItems[0]?.id ?? 'new-project');
   };
 
   const openHistoryAfterSave = async () => {
@@ -1016,9 +1040,20 @@ const BuilderClient = ({
               '入力内容に保存できない箇所があります（期間の日付など）。同じ内容で送り直しても保存できません。このまま履歴を開くと、未保存の変更は失われます。',
             confirmLabel: '変更を捨てて履歴を開く',
             cancelLabel: '編集に戻る',
+            danger: true,
           });
           if (!discard) return;
+          discardUnsavedEdits();
           break;
+        }
+        // 見つからない・前提が変わった場合も送り直しでは直らない。短い理由を出して往復を抜ける。
+        if (saveFailureRef.current === 'not-found') {
+          toast.error('このシートが見つからないため保存できません。再読み込みして確認してください。');
+          return;
+        }
+        if (saveFailureRef.current === 'precondition') {
+          toast.error('保存の前提が変わったため保存できません。再読み込みして最新を確認してください。');
+          return;
         }
         if (
           !(await confirm({
@@ -1351,6 +1386,7 @@ const BuilderClient = ({
             savedTitleRef.current = result.snapshot.title;
             savedRevisionRef.current = result.snapshot.revision;
             lastSavedSnapshotRef.current = snapshot(restored, result.snapshot.title);
+            lastSavedStateRef.current = { items: restored, title: result.snapshot.title };
             setIsDirty(false);
             failedSnapshotRef.current = null;
             followUpRef.current = false;
