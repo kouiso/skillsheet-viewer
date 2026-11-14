@@ -262,7 +262,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             <ScopePicker value={p.scope} onChange={(v) => set('scope', v)} />
           </Field>
 
-          <Field label="所属会社" required hint="companyId で会社に紐づく">
+          <Field label="所属会社" required hint="会社を変えると、この案件がその会社の下に移ります">
             <select
               value={p.companyId}
               onChange={(e) => onMoveCompany(e.target.value)}
@@ -368,7 +368,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             <div key={cat.key} className="techrow">
               <div className="cat">
                 {cat.label}
-                <small>tech.{cat.key}</small>
+                <small>{cat.hint}</small>
               </div>
               <TagInput
                 value={p.tech[cat.key] ?? []}
@@ -467,10 +467,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
       </Section>
 
       {/* 危険操作 */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <span className="font-mono text-[12px] text-faint">
-          id: {p.id} · company_id: {p.companyId}
-        </span>
+      <div className="flex flex-wrap items-center justify-end gap-3 border-t border-border pt-4">
         <button type="button" onClick={onDelete} className="btn sm danger">
           この案件を削除
         </button>
