@@ -1,7 +1,7 @@
 STATE RUNNING 2026-11-14T12:05:14Z | merged 1 (第1版) closed 1 | OWNER 待ち: #664 #665 | 作業中: #653 #633 #632
 mission: それぞれのプロジェクトに書いてあるプランに書いてある作業をやること / どのプロジェクトもまず既存のPRを本質的に対処することを作業を優先してください。そうしないと溜まってばっかりなので
 model claude-opus-5-5 (lead) | advisor present | github via connector (gh 認証失敗) | push via git | png ok (Playwright で PNG 作成済み: doc/version-compare-evidence/)
-goal: unknown（第2版の文面では見えない）| DONE-WAITING satisfies it: unknown
+goal: この周回を第2版の決まりで DONE か DONE-WAITING まで進め、一覧を書いて止まる | DONE-WAITING satisfies it: yes
 repo rules: AGENTS.md（日本語・分類を一言・doc 前提・テスト 3 設定・Skill 正本は .agents/skills）、.github テンプレート、script/check-naming.sh（単数・kebab-case）。厳しい側: 未解決のレビュースレッド 0（G4b）
 DEPLOY | merge to main -> production | evidence doc/onboarding.md:36「main へのマージがそのまま本番に出る」, .github/workflows/deploy-smoke.yml:7-8
 DEPLOY | merge to develop -> unknown, production 扱い | evidence なし（Vercel の git 連携はファイルに残らない。本番の Vercel connector は使わない決まり）→ ASK 済み
