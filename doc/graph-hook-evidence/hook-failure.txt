@@ -2,9 +2,9 @@
 $ echo {} | PATH=/usr/bin:/bin sh .claude/hooks/code-review-graph-hook.sh update
 {"systemMessage":"code-review-graph コマンドが見つからないため、グラフのupdateを飛ばした（クラウドの作業場では必須ではない）"}
 exit=0
-## case 2: コマンドはあるが失敗する (status, 偽コマンドで再現)
+## case 2: コマンドはあるが失敗する (status, 偽コマンドが "graph.db is locked" を出して exit 1 で再現)
 $ echo {} | PATH=/tmp/fakebin:/usr/bin:/bin sh .claude/hooks/code-review-graph-hook.sh status
-{"systemMessage":"code-review-graph status が失敗した: graph.db is locked"}
+{"systemMessage":"code-review-graph status が失敗した（exit 1）: graph.db is locked"}
 exit=0
 ## case 3: 成功時は黙る (update, 偽コマンドが成功)
 exit=0 (出力なし)
