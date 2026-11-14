@@ -94,14 +94,37 @@ describe('createChildRegistry', () => {
     expect(registry.children.size).toBe(0);
   });
 
-  it('stopAll の後に add された子は台帳に入らず、即座に止められて throw する', async () => {
+  it('stopAll の後に add された子は即座に止められて throw し、止め終われば台帳から外れる', async () => {
     const stop = vi.fn(async (_c: ChildProcess) => {});
     const registry = createChildRegistry(stop);
     await registry.stopAll();
     const late = { pid: 333 } as ChildProcess;
     expect(() => registry.add(late)).toThrow();
-    expect(registry.children.has(late)).toBe(false);
     expect(stop).toHaveBeenCalledWith(late);
+    await vi.waitFor(() => expect(registry.children.has(late)).toBe(false));
+  });
+
+  it('止め始めた後に起こした子は、止め終わるまで台帳に残り、killAllNow の対象になる', async () => {
+    let finish = () => {};
+    const stop = vi.fn((_c: ChildProcess) => new Promise<void>((r) => (finish = r)));
+    const registry = createChildRegistry(stop);
+    await registry.stopAll();
+    const child = spawn('sh', ['-c', 'trap "" TERM; sleep 30 & sleep 30; wait'], { detached: true, stdio: 'ignore' });
+    const pid = child.pid as number;
+    try {
+      await new Promise((r) => setTimeout(r, 200));
+      expect(() => registry.add(child)).toThrow();
+      expect(registry.children.has(child)).toBe(true);
+      registry.killAllNow();
+      await vi.waitFor(() => expect(() => process.kill(-pid, 0)).toThrow(expect.objectContaining({ code: 'ESRCH' })), {
+        timeout: 2000,
+      });
+    } finally {
+      finish();
+      try {
+        process.kill(-pid, 'SIGKILL');
+      } catch {}
+    }
   });
 
   it('子孫を持つ実プロセスのグループを止めると、子孫ごと消える', async () => {

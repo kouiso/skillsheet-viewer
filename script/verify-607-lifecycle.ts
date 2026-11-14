@@ -48,7 +48,11 @@ export function createChildRegistry(stop: (c: ChildProcess) => Promise<void> = (
     },
     add(c: ChildProcess) {
       if (stopping) {
-        void stop(c).catch(() => {});
+        // 止め終わるまでは台帳に残す。止めている間に 2 回目のシグナルが来ても killAllNow が撃てるように
+        children.add(c);
+        void stop(c)
+          .catch(() => {})
+          .finally(() => children.delete(c));
         throw new Error('終了処理中のため子プロセスの起動を拒否した');
       }
       children.add(c);
