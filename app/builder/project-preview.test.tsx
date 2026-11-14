@@ -300,7 +300,7 @@ describe('ProjectPreview の tab 停止位置（#658）', () => {
     expect(onJump).not.toHaveBeenCalled();
   });
 
-  it('空の項目には飛び先を出さない（プレースホルダを足さない）', () => {
+  it('空の区画に飛び先が出ない（プレースホルダを足さない）', () => {
     const { container } = render(
       <ProjectPreview
         project={project({
