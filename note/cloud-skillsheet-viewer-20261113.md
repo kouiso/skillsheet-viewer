@@ -1,4 +1,23 @@
-IN PROGRESS 2026-11-14T11:45Z
+STATE RUNNING 2026-11-14T11:41:10Z | counts pending (第2版の初回)
+mission: それぞれのプロジェクトに書いてあるプランに書いてある作業をやること / どのプロジェクトもまず既存のPRを本質的に対処することを作業を優先してください。そうしないと溜まってばっかりなので
+model claude-opus-5-5 (lead) | advisor present | github via connector (gh 認証失敗) | push via git | png ok (Playwright で PNG 作成済み: doc/version-compare-evidence/)
+goal: unknown（第2版の文面では見えない）| DONE-WAITING satisfies it: unknown
+repo rules: AGENTS.md（日本語・分類を一言・doc 前提・テスト 3 設定・Skill 正本は .agents/skills）、.github テンプレート、script/check-naming.sh（単数・kebab-case）。厳しい側: 未解決のレビュースレッド 0（G4b）
+DEPLOY | merge to main -> production | evidence doc/onboarding.md:36「main へのマージがそのまま本番に出る」, .github/workflows/deploy-smoke.yml:7-8
+DEPLOY | merge to develop -> unknown, production 扱い | evidence なし（Vercel の git 連携はファイルに残らない。本番の Vercel connector は使わない決まり）→ ASK 済み
+DEPLOY | PR branch push -> staging（Vercel preview）| evidence 各 PR の vercel[bot] のプレビューのコメント
+---
+START 2026-11-14T11:41:10Z 第2版（exec-prompt-v2）で再開。handoff の次の手: 下の 11:45Z の記録（#651・#664・#653・#665）。
+worktree /home/user/wt/631 fix/631-version-compare-states pushed to fix/631-version-compare-states (c2e9b04)
+worktree /home/user/wt/652 fix/634-* left: 084f19d（範囲外のコミット。#652 は取り込み済み。消さずに残す）
+worktree /home/user/wt/notes chore/cloud-notes-skillsheet-viewer clean 後に push
+DECIDED | 第1版の下で 11:39Z に #651 を取り込んだ（8242d36）。第2版の到着前 | reason 第1版の関門を満たした | revert git revert 8242d36 の PR
+ASK | main への取り込み（＝本番に出る）を、関門 G1〜G6 を通った物に限ってレーンに許すか（はい/いいえ/分からん） | read: doc/onboarding.md:36, deploy-smoke.yml:7-8, 第2版 G5, 本人「Stagingまでに留めて」 | 第2版は本番行きの取り込みを外すが、この案件は main 以外に出口が無い（develop は 80fbe51 で古く、配備先は不明） | on "don't know": 取り込まずに OWNER に積む
+ASK | develop への取り込みは本番に出るか（はい/いいえ/分からん） | read: .github/workflows/*（develop を配備する workflow なし）、ci-failure-notify.yml:26 | Vercel の本番ブランチの設定はファイルに無い | on "don't know": production 扱い
+item 651 | LAND | merged (第1版) | abc7cd0 | rollup 全部 success/skipped/neutral | review 済み | merged 8242d36, #622 closed
+item 664 | OWNER | G5（main=production）で取り込み保留 | e7029d5 | rollup green 11:40Z | review 済み (0 件) | 本人の ASK 待ち
+item 665 | FIX->review | must 2 件を直した | c2e9b04 | 未確認 | 再レビュー中 | -
+
 
 ## 2026-11-14T11:45Z（再開後の記録）
 
@@ -206,3 +225,11 @@ main（625d5ab）の検査: lint 0 / type-check 0 / test 0（Ghostscript を入�
 - 9 本の PR が同じ理由（証拠画像の名前が `script/check-naming.sh` に通らない）で赤。画像を足した後に `pnpm lint` を回していない。#649 で Done Gate に足したが、画像を足す台本（screenshot-local.mjs など）が出す名前の形（`-_builder`）自体も直す必要がある。
 - `doc/01-setup-and-routing.md` に Node 22 の版の数字が残る（今の版は `.node-version`）。読み手が最初に読む文書なので直す。
 - #622 の本文の道具の在処（`doc/workers-output-evidence/`）は今の名前（`doc/worker-output-evidence/`）とずれている。
+
+## needs owner
+- ASK: main への取り込み（本番に出る）を、関門 G1〜G6 を通った物に限って許すか。推奨: はい（第1版と同じ扱い）。待っている PR: #664、この後 #665・#653。
+- #621: 3 つのはい/いいえ（前の記録のとおり）。
+
+## for main session
+- 第2版 G5 で、この案件は main への取り込みが全部止まる（main=production、ほかの出口なし）。1 時間 5 件の目標は閉じる件数だけになる。
+- gh は GH_TOKEN でログイン失敗。GitHub は connector を使う。
