@@ -1,11 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { InlineMarkdown } from '@/component/inline-markdown';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { ProjectCard, type ProjectCardRegion } from '@/component/block/project-card';
 import type { CompanyInfo, ProjectItem } from '@/db/block';
-import { flattenTech, normalizeProcess, PROCESS_LABELS } from '@/db/process';
-import { projectAreaText } from '@/db/tech-area';
-import { formatTeamSize } from '@/util/format-team-size';
+import { currentMonthKey } from '@/db/derived-display';
+import { flattenTech } from '@/db/process';
 
 interface ProjectPreviewProps {
   project: ProjectItem;
@@ -22,9 +21,6 @@ interface ProjectPreviewProps {
   onJump?: (syncKey: string) => void;
 }
 
-/** 技術チップは初期表示をこの件数に抑え、展開操作で全件を確認できるようにする。 */
-const MAX_TECH_CHIPS = 16;
-
 /** イベント発生元が sync() 要素自身ではなく、内側のリンク等インタラクティブ要素かどうか。 */
 const isInteractiveDescendant = (currentTarget: EventTarget, target: EventTarget | null): boolean =>
   target instanceof Element &&
@@ -34,8 +30,10 @@ const isInteractiveDescendant = (currentTarget: EventTarget, target: EventTarget
 /**
  * 右ペイン：ライブプレビュー。
  *
- * 閲覧側の案件カードと同じ情報を、エディタ幅（396px）に収まる密度で再構成したもの。
- * 各ブロックはクリックでフォームの対応欄へ飛び、逆にフォームを編集すると光る（同期ジャンプ）。
+ * 閲覧画面と同じ案件カード（ProjectCard）をそのまま描く。別に描き直すと、月数の出し方や
+ * 技術の並びが閲覧結果とずれる（編集者が確かめたつもりの画面と、相手が見る画面が違ってしまう）。
+ * プレビューだけの機能（クリックで編集欄へ飛ぶ・編集中の欄を光らせる）は、カードの区画を
+ * wrapRegion で外側から包んで足す。カード本体には閲覧画面向けの描画しか持たせない。
  * hidden（案件自身 or 所属会社）の場合は「閲覧側では非表示」バッジを添える。
  *
  * 同期ブロックは全体で1つの toolbar として扱う（roving tabindex）。
@@ -46,45 +44,18 @@ const isInteractiveDescendant = (currentTarget: EventTarget, target: EventTarget
 export const ProjectPreview = ({ project, company, no, syncKey, onJump }: ProjectPreviewProps) => {
   const hidden = Boolean(project.hidden || company?.hidden);
   const tech = flattenTech(project.tech);
-  const [expandedProject, setExpandedProject] = useState<string | null>(null);
-  const expanded = expandedProject === project.id;
-  const shownTech = expanded ? tech : tech.slice(0, MAX_TECH_CHIPS);
-  const process = normalizeProcess(project.process);
-  const summary = project.summary?.trim();
-  /** スコープ欄の値そのままか、空なら技術スタックからの導出値（由来を添える）。 */
-  const ownScope = project.scope.trim();
-  const derivedArea = ownScope ? '' : projectAreaText('', project.tech);
-  const scopePreview = ownScope || (derivedArea ? `${derivedArea}（技術スタックから導出）` : 'スコープ未入力');
 
   const toolbarRef = useRef<HTMLDivElement>(null);
-  /** 上下キー移動でいま tab の受け口になっているスロット。null なら先頭。 */
+  /** 上下キー移動でいま tab の受け口になっているスロット。null なら先頭（期間は常に描かれる）。 */
   const [focusSlot, setFocusSlot] = useState<string | null>(null);
+  const activeSlot = focusSlot ?? 'period';
 
-  const textBlocks = (
-    [
-      ['duties', '≪担当業務≫', project.duties],
-      ['acquired', '≪習得スキル≫', project.acquired],
-      ['comment', '≪コメント≫', project.comment],
-    ] as const
-  ).filter(([, , body]) => body.trim());
-
-  /**
-   * 上下キーで巡る順序。DOM の並びと一致させる。
-   * 飛び先キー（data-sync-pv）とは別に「スロット」を持たせているのは、
-   * 飛び先が同じでも移動先としては別物として数える必要があるため。
-   */
-  const slots = [
-    'period',
-    'title',
-    'scope',
-    'meta',
-    ...(summary ? ['summary'] : []),
-    ...(shownTech.length > 0 ? ['tech'] : []),
-    'process',
-    ...textBlocks.map(([key]) => key as string),
-  ];
-
-  const activeSlot = focusSlot && slots.includes(focusSlot) ? focusSlot : slots[0];
+  // 受け口にしていたブロックが消えた（例: 概要を空にした）ら先頭へ戻す。
+  // 受け口が無いと、プレビュー列に tab で入れなくなる。
+  useEffect(() => {
+    const el = toolbarRef.current;
+    if (el && focusSlot && !el.querySelector(`[data-pv-slot="${focusSlot}"]`)) setFocusSlot(null);
+  });
 
   /** クリックとキーボードの両方で飛べる同期ブロック。 */
   const sync = (key: string, slot: string = key) => ({
@@ -111,13 +82,23 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
     },
   });
 
+  /** カードの区画を、編集欄への飛び先として包む。期間はカードの1行に収まるよう span にする。 */
+  const wrapRegion = (region: ProjectCardRegion, node: ReactNode) =>
+    region === 'period' ? <span {...sync(region)}>{node}</span> : <div {...sync(region)}>{node}</div>;
+
+  /** 上下キーで巡る順序は、いま描かれている飛び先の DOM の並び（カードの描画順）そのもの。 */
   const moveFocus = (from: string, delta: number | 'first' | 'last') => {
-    const at = slots.indexOf(from);
+    const targets = Array.from(toolbarRef.current?.querySelectorAll<HTMLElement>('[data-pv-slot]') ?? []);
+    const at = targets.findIndex((el) => el.dataset.pvSlot === from);
     const next =
-      delta === 'first' ? 0 : delta === 'last' ? slots.length - 1 : Math.min(Math.max(at + delta, 0), slots.length - 1);
-    const target = toolbarRef.current?.querySelector<HTMLElement>(`[data-pv-slot="${slots[next]}"]`);
+      delta === 'first'
+        ? 0
+        : delta === 'last'
+          ? targets.length - 1
+          : Math.min(Math.max(at + delta, 0), targets.length - 1);
+    const target = targets[next];
     if (!target) return;
-    setFocusSlot(slots[next]);
+    setFocusSlot(target.dataset.pvSlot ?? null);
     target.focus();
   };
 
@@ -149,101 +130,21 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
         aria-label="プレビューの項目（Enter で編集欄へ移動）"
         onKeyDown={handleToolbarKeyDown}
       >
-        <div className={`pv-card${hidden ? ' pv-card-hidden' : ''}`}>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="pv-no">{no > 0 ? String(no).padStart(2, '0') : '––'}</span>
-              <span {...sync('period')}>
-                <span className="pv-period">{project.period || '期間未入力'}</span>
-              </span>
-            </div>
-            <div {...sync('title')}>
-              <h3 className="pv-title">{project.title || '（無題の案件）'}</h3>
-            </div>
-            <div {...sync('scope')}>
-              {/* 閲覧側と同じ導出を通す。編集画面のプレビューが閲覧結果と食い違うと、
-                  未入力のまま公開して初めて表示が変わることに気づく（WYSIWYG を崩さない）。
-                  ただし導出値には由来を添える。添えんと「入力欄は空やのに値が見える」状態になり、
-                  クリックして飛んだ先の空欄との対応が分からん。 */}
-              <div className="pv-scope">{scopePreview}</div>
-            </div>
-            <div {...sync('meta')}>
-              {/* 閲覧側の案件カード（project-card.tsx）と同じく、役割を会社・人数・期間と
-                  同じ1行に畳む（#289/#290）。ここが旧レイアウト（見出し右枠の役割）のままだと
-                  編集者に閲覧結果と違う見え方を見せる。役割が空でも編集欄への飛び先を
-                  残すため「役割未設定」を表示し、「役割」ラベルは閲覧側と同じく値がある
-                  ときだけ出す。 */}
-              <div className="pv-meta">
-                {project.role?.trim() ? <span className="kicker mr-1.5">役割</span> : null}
-                {[
-                  project.role?.trim() || '役割未設定',
-                  company?.name,
-                  project.team && formatTeamSize(project.team),
-                  project.duration,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </div>
-            </div>
-            {/* 会社概要文（#139）。閲覧側の project-card.tsx と同じ位置づけで出す。
-                空白のみの値は block.ts の projectBlockToMarkdown と同じく trim() 後に判定する。 */}
-            {company?.note?.trim() && <div className="pv-company-note">{company.note.trim()}</div>}
-          </div>
-
-          {/* 実出力3種（画面/PDF/Excel）と同じく、summary が空のとき「概要」節は出さない
-              （#390 でフォールバックは廃止済み）。 */}
-          {summary && (
-            <div {...sync('summary')}>
-              <InlineMarkdown content={summary} className="pv-summary" linksTabbable={false} />
-            </div>
-          )}
-
-          {shownTech.length > 0 && (
-            <div {...sync('tech')}>
-              <div className="pv-tech">
-                {shownTech.map((t) => (
-                  <span key={t}>{t}</span>
-                ))}
-                {tech.length > shownTech.length && <span>+{tech.length - shownTech.length}</span>}
-              </div>
-            </div>
-          )}
-
-          {tech.length > MAX_TECH_CHIPS && (
-            <button
-              type="button"
-              className="pv-expand"
-              aria-expanded={expanded}
-              onClick={() => setExpandedProject(expanded ? null : project.id)}
-            >
-              {expanded ? '技術一覧を折りたたむ' : `すべての技術を表示（${tech.length}件）`}
-            </button>
-          )}
-
-          <div className="pv-proc-wrap">
-            <div {...sync('process')}>
-              <div className="pv-proc">
-                {PROCESS_LABELS.map((label, i) => (
-                  <div key={label} className="pp">
-                    <span className="lbl" style={{ color: process.done[i] ? 'var(--accent-text)' : 'var(--faint)' }}>
-                      {label}
-                    </span>
-                    <span className="bar" style={{ background: process.done[i] ? 'var(--primary)' : 'var(--track)' }} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+        <div className={`pv-card-host${hidden ? ' pv-card-hidden' : ''}`}>
+          <ProjectCard
+            item={project}
+            no={no}
+            companyName={company?.name}
+            activeTech={[]}
+            tech={tech}
+            // 閲覧画面の案件カードと同じく、手入力が無ければ期間から月数を出す。
+            // 基準月が無いと「現在」終わりの案件が「未確定」になるので、フォームの期間横の
+            // 月数バッジ（durationFromRange）と同じ現在月で固定する。
+            referenceMonth={currentMonthKey()}
+            linksTabbable={false}
+            wrapRegion={wrapRegion}
+          />
         </div>
-
-        {textBlocks.map(([key, heading, body]) => (
-          <div key={key} className="pv-block">
-            <div {...sync(key)}>
-              <div className="bt">{heading}</div>
-              <InlineMarkdown content={body} className="bc" linksTabbable={false} />
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );

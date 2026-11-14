@@ -199,3 +199,39 @@ describe('案件フォームの確認案内', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('保存できません');
   });
 });
+
+describe('案件フォームの補足文（#637）', () => {
+  const renderForm = () => {
+    const item = { ...project, companyId: 'company-1' };
+    return render(
+      <ProjectForm
+        project={item}
+        data={{ companies: [{ id: 'company-1', name: 'A社', kind: '', period: '', note: '' }], items: [item] }}
+        onPatch={vi.fn()}
+        onMoveCompany={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+  };
+
+  it('プログラム内部の項目名（companyId・company_id・tech.lang など）を画面に出さない', () => {
+    const { container } = renderForm();
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/company_?id/i);
+    expect(text).not.toMatch(/tech\.(lang|fw|db|infra|tools|collab)/);
+    // 案件の内部 ID も持ち主には意味が無い。
+    expect(text).not.toContain(project.id);
+  });
+
+  it('所属会社の補足は、変えたときに何が起きるかを伝える', () => {
+    renderForm();
+    expect(screen.getByText('会社を変えると、この案件がその会社の下に移ります')).toBeInTheDocument();
+  });
+
+  it('技術スタックの各欄に、何を入れる欄かが分かる補足が付く', () => {
+    renderForm();
+    for (const hint of ['例：Java、TypeScript', '例：Spring、React', '例：MySQL、PostgreSQL', '例：AWS、Docker']) {
+      expect(screen.getByText(hint)).toBeInTheDocument();
+    }
+  });
+});

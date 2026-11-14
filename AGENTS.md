@@ -33,7 +33,7 @@ PDF をローカルで出す手順と本番 DB のブロックを直す手順は
 - **Markdownレンダリング**: react-markdown
 - **DB/ORM**: Drizzle ORM + Neon serverless Postgres（正本データ源）
 - **PDF**: @react-pdf/renderer（クライアント動的 import）
-- **バージョン管理**: mise（Node 22.x）/ パッケージマネージャ: pnpm
+- **バージョン管理**: mise（Node の版は `.node-version` を見る）/ パッケージマネージャ: pnpm
 
 ### Setup
 ```bash
