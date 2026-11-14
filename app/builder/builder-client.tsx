@@ -15,7 +15,7 @@ import {
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { TRPCClientError } from '@trpc/client';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/component/ui/button';
 import { useThemeMode } from '@/context/theme-context';
@@ -32,6 +32,7 @@ import {
   type StatsBlockData,
   type TableColumn,
 } from '@/db/block';
+import { markdownExperienceContext } from '@/db/block/serialize';
 import { currentMonthKey } from '@/db/derived-display';
 import { isRevision, validateDocumentBlocks } from '@/db/document-contract';
 import type { DocumentSnapshot } from '@/db/document-service';
@@ -343,6 +344,12 @@ const BuilderClient = ({
   // プレビューは重い（Markdown パース＋ハイライト）ため、入力のたびではなく
   // デバウンスして更新し、タイピングのラグを防ぐ。初期値・初回レンダリングは即時反映。
   const [referenceMonth] = useState(() => currentMonthKey(new Date()));
+  // 数字カードの編集欄に出す「いまの値」。プレビュー・閲覧と同じ表示対象の案件から出す。
+  // 案件ブロックが無いシートは閲覧画面・PDF が保存値をそのまま出すので、context を渡さず編集可にする。
+  const statContext = useMemo(() => {
+    const projectData = items.flatMap((item) => (item?.type === 'project' ? [item.data] : []));
+    return projectData.length > 0 ? markdownExperienceContext(projectData, referenceMonth) : undefined;
+  }, [items, referenceMonth]);
   const [previewContent, setPreviewContent] = useState(() => assembleMarkdown(items, { referenceMonth }));
   const previewContentRef = useRef(previewContent);
   const isFirstPreviewRender = useRef(true);
@@ -1525,6 +1532,7 @@ const BuilderClient = ({
                                 onCustomDraftChange={(rows) => setProfileCustomDraft(selectedItem.id, rows)}
                                 onDelete={deleteBlock}
                                 onMoveBlock={moveBlock}
+                                statContext={statContext}
                               />
                             ) : (
                               <p className="p-6">目次からブロックを選んでください。</p>
