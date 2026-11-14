@@ -1,4 +1,5 @@
 import { type ChildProcess, spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 import {
   CLEANUP_CAP_MS,
@@ -10,6 +11,7 @@ import {
   STOP_ALL_WORST_MS,
   sleep,
   stopTree,
+  takeOverSignals,
   waitReady,
 } from './verify-607-lifecycle';
 
@@ -274,5 +276,52 @@ describe('createCleanup（verify-607-output の後片付けの組み立て）', 
   it('全体上限は stopAll の最悪値と gateway 上限のどちらよりも大きい', () => {
     expect(CLEANUP_CAP_MS).toBeGreaterThan(STOP_ALL_WORST_MS);
     expect(CLEANUP_CAP_MS).toBeGreaterThan(GATEWAY_STOP_CAP_MS);
+  });
+});
+
+describe('takeOverSignals（miniflare が先に登録した exit する listener を外す）', () => {
+  it('先に登録された listener が同期で exit しても、後片付けが終わるまで終了しない', async () => {
+    const proc = new EventEmitter();
+    const exit = vi.fn();
+    // unstable_dev の miniflare が行う登録: シグナルで同期的に process.exit する
+    proc.on('SIGTERM', () => exit(143));
+    let cleaned = false;
+    const handler = createSignalHandler({
+      cleanup: async () => {
+        await sleep(50);
+        cleaned = true;
+      },
+      exit: (code) => {
+        expect(cleaned).toBe(true);
+        exit(code);
+      },
+    });
+    takeOverSignals(proc, handler);
+    proc.emit('SIGTERM');
+    expect(exit).not.toHaveBeenCalled();
+    await sleep(120);
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(143);
+  });
+
+  it('SIGINT・SIGHUP でも自分の listener だけが残る', () => {
+    const proc = new EventEmitter();
+    for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) proc.on(s, () => {});
+    takeOverSignals(proc, () => {});
+    for (const s of ['SIGINT', 'SIGTERM', 'SIGHUP']) expect(proc.listenerCount(s)).toBe(1);
+  });
+});
+
+describe('createCleanup の gateway.stop 失敗ログ', () => {
+  it('reject の理由を console.error に残す', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const boom = new Error('boom');
+    await createCleanup({
+      stopAll: async () => {},
+      gatewayStop: () => Promise.reject(boom),
+      killChildren: () => {},
+    })();
+    expect(err).toHaveBeenCalledWith('[cleanup] gateway.stop が失敗:', boom);
+    err.mockRestore();
   });
 });

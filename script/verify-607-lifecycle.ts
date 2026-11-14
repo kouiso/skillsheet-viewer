@@ -118,9 +118,15 @@ export function createCleanup(opts: {
       opts.stopAll().catch(() => {}),
       // reject は workerd が消えた証拠にならない。正常に resolve した時だけ停止済みとみなす
       capTime(
-        opts.gatewayStop().then(() => {
-          stopped = true;
-        }),
+        opts
+          .gatewayStop()
+          .then(() => {
+            stopped = true;
+          })
+          .catch((error: unknown) => {
+            console.error('[cleanup] gateway.stop が失敗:', error);
+            throw error;
+          }),
         opts.gatewayCapMs ?? GATEWAY_STOP_CAP_MS,
       ),
     ]);
@@ -159,6 +165,25 @@ export function createSignalHandler(opts: {
     received = true;
     void capTime(opts.cleanup(), opts.capMs ?? CLEANUP_CAP_MS).then(() => opts.exit(code));
   };
+}
+
+const HANDLED_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+
+/**
+ * シグナルの受け口を自分だけにする。unstable_dev が中で起こす miniflare は、先に
+ * SIGINT/SIGTERM/SIGHUP の listener を登録し、その中で同期的に process.exit(128+n) を呼ぶ。
+ * 自分の listener を足しただけでは、先に登録された向こうが先に走って即終了し、
+ * 後片付け（detached の wrangler dev グループの停止）に一度も届かない。
+ * 向こうの後片付けは gateway.stop()（cleanup 内）が担うので、先に外して自分の listener だけにする。
+ */
+export function takeOverSignals(
+  proc: { removeAllListeners(event: HandledSignal): unknown; on(event: HandledSignal, listener: () => void): unknown },
+  handler: (sig: HandledSignal) => void,
+) {
+  for (const sig of HANDLED_SIGNALS) {
+    proc.removeAllListeners(sig);
+    proc.on(sig, () => handler(sig));
+  }
 }
 
 // 1 回の fetch は 5 秒、待ち全体は 120 秒で打ち切る。相手が応答しないまま台本ごと止まるのを防ぐ。

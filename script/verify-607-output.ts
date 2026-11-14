@@ -41,6 +41,7 @@ import {
   createChildRegistry,
   createCleanup,
   createSignalHandler,
+  takeOverSignals,
   waitReady,
 } from './verify-607-lifecycle';
 
@@ -233,7 +234,7 @@ const onSignal = createSignalHandler({
   },
   capMs: CLEANUP_CAP_MS,
 });
-for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) process.on(sig, () => onSignal(sig));
+takeOverSignals(process, onSignal);
 
 async function zipText(buf: Buffer): Promise<string> {
   const zip = await JSZip.loadAsync(buf);
