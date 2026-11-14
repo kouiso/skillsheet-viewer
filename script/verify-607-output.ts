@@ -17,7 +17,7 @@
  * 結果は .evidence/607-output/ へ JSON・画像・出力ファイルを書く。
  */
 import assert from 'node:assert/strict';
-import { type ChildProcess, spawn } from 'node:child_process';
+import { type ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { createHmac, generateKeyPairSync, randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { access, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -35,6 +35,15 @@ import { d1Timestamp } from '../src/db/d1/value';
 import { createDocumentService } from '../src/db/document-service';
 import { buildConsoleDemoBlocks } from '../src/db/fixture/fictional-demo';
 import { createD1Transport } from '../src/server/d1-transport';
+import {
+  CLEANUP_CAP_MS,
+  capTime,
+  createChildRegistry,
+  createCleanup,
+  createSignalHandler,
+  takeOverSignals,
+  waitReady,
+} from './verify-607-lifecycle';
 
 const ONLY = process.argv[2]; // 'next' | 'worker' | undefined
 // 打ち間違いで何も検査せず ALL OK になるのを防ぐため、setup より前に弾く
@@ -205,23 +214,27 @@ const viewerCookie = (() => {
 })();
 
 const results: Record<string, unknown> = {};
-const children: ChildProcess[] = [];
-const cleanup = async () => {
-  for (const c of children) c.kill('SIGKILL');
-  await gateway.stop().catch(() => {});
-};
-process.on('SIGINT', () => void cleanup().then(() => process.exit(130)));
-
-async function waitReady(url: string, tries = 120): Promise<void> {
-  for (let i = 0; i < tries; i++) {
-    try {
-      const r = await fetch(url);
-      if (r.status === 200) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`${url} did not become ready`);
-}
+const registry = createChildRegistry();
+const stopTree = (c: ChildProcess) => registry.stop(c);
+// unstable_dev の gateway は workerd をこのプロセスの直下の子として持つ。API は stop() しか公開せず pid も取れないため、
+// グループ kill では止められない。stop() が上限内に終わらなかった時は、このプロセスの直下の子（workerd）を
+// pkill で撃って残さない。app 側の子は detached の別グループで、registry が先に止めている。
+const cleanup = createCleanup({
+  stopAll: () => registry.stopAll(),
+  gatewayStop: () => gateway.stop(),
+  killChildren: () => spawnSync('pkill', ['-KILL', '-P', String(process.pid)], { stdio: 'ignore' }),
+});
+const onSignal = createSignalHandler({
+  cleanup,
+  exit: (code) => process.exit(code),
+  // 2 回目のシグナルでは待たずに終わるので、台帳の全グループと直接の子（gateway の workerd）を先に撃つ
+  forceKill: () => {
+    registry.killAllNow();
+    spawnSync('pkill', ['-KILL', '-P', String(process.pid)], { stdio: 'ignore' });
+  },
+  capMs: CLEANUP_CAP_MS,
+});
+takeOverSignals(process, onSignal);
 
 async function zipText(buf: Buffer): Promise<string> {
   const zip = await JSZip.loadAsync(buf);
@@ -271,6 +284,8 @@ async function verifyRuntime(kind: 'next' | 'worker') {
   const logPath = path.join(OUT, `${kind}-server.log`);
   const log = createWriteStream(logPath);
   let app: ChildProcess;
+  // シグナルを受けた後に新しい子を起こさない。起こしてから止めると、止め終わる前に終了して子が残り得る
+  registry.assertCanSpawn();
   if (kind === 'next') {
     app = spawn(
       process.execPath,
@@ -289,6 +304,7 @@ async function verifyRuntime(kind: 'next' | 'worker') {
           REVALIDATE_SECRET: 'synthetic-revalidate-placeholder',
         },
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
       },
     );
   } else {
@@ -306,6 +322,8 @@ async function verifyRuntime(kind: 'next' | 'worker') {
         .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
         .join('\n'),
     );
+    // writeFile を待つ間にシグナルが来ていることがある
+    registry.assertCanSpawn();
     app = spawn(
       'node_modules/.bin/wrangler',
       [
@@ -325,10 +343,11 @@ async function verifyRuntime(kind: 'next' | 'worker') {
         cwd: process.cwd(),
         env: { PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'production' },
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true,
       },
     );
   }
-  children.push(app);
+  registry.add(app);
   app.stdout?.pipe(log);
   app.stderr?.pipe(log);
   const report: Record<string, unknown> = { origin };
@@ -467,7 +486,7 @@ async function verifyRuntime(kind: 'next' | 'worker') {
     );
     report.revision = (revAfter as { snapshot: { revision: string } }).snapshot.revision;
   } finally {
-    app.kill('SIGKILL');
+    await stopTree(app);
     log.end();
   }
   // 診断に本文を含まないこと
@@ -493,6 +512,6 @@ try {
   console.error('[FAILED] #607 output verification', e);
 } finally {
   // gateway.stop() がハングするケースがあるため終了は打ち切る
-  await Promise.race([cleanup(), new Promise((r) => setTimeout(r, 5000))]);
+  await capTime(cleanup(), CLEANUP_CAP_MS);
   process.exit(failed ? 1 : 0);
 }

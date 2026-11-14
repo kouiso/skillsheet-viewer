@@ -8,6 +8,7 @@
 - Machine: macOS or Windows WSL2
 - Node.js: 版は `.node-version` を見る（[mise](https://mise.jdx.dev/) が `mise.toml` で固定）
 - パッケージマネージャ: pnpm（mise が導入）
+- PDF の試験（`pnpm test`）に要る外部コマンド: Ghostscript・ImageMagick・poppler（入れ方は [setup.md](../setup.md) の「前提」）。無いと PDF のラスタ検査が落ちる
 
 ## 手順
 
