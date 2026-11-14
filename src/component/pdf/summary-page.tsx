@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   // letterSpacing は pt で指定する（デザインの 0.12em × 11pt = 1.32pt）。
   kicker: {
     ...PRINT_TYPE.meta,
-    fontWeight: PRINT_WEIGHT.medium,
+    fontWeight: PRINT_WEIGHT.normal,
     color: PRINT_COLOR.label,
     letterSpacing: 1.32,
   },

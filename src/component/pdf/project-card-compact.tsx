@@ -85,10 +85,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   main: { flex: 1 },
-  // 11.5pt はトークンの本文サイズ。ウェイトと行間だけデザイン（500 / 1.5）に寄せる。
+  // 11.5pt はトークンの本文サイズ。行間だけデザイン（1.5）に寄せる。ウェイト 500 は埋め込みが Regular と Bold だけなので 400 のまま。
   title: {
     ...PRINT_TYPE.body,
-    fontWeight: PRINT_WEIGHT.medium,
+    fontWeight: PRINT_WEIGHT.normal,
     lineHeight: 1.5,
     color: PRINT_COLOR.heading,
   },

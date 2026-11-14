@@ -202,6 +202,6 @@ describe('continuationHeadingFor', () => {
     expect(continuationHeadingFor(page(heading), 1)).toBe('');
     expect(continuationHeadingFor(page(header), 1)).toContain('A 社');
     expect(continuationHeadingFor(page(header), 1)).not.toContain('案件タイトル');
-    expect(continuationHeadingFor(page(paragraph), 1)).toContain('案件タイトル（続き）');
+    expect(continuationHeadingFor(page(paragraph), 1)).toContain('案件タイトル （続き）');
   });
 });

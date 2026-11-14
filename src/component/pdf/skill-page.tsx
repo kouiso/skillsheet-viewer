@@ -66,7 +66,7 @@ const styles = StyleSheet.create({
 
 const LEGEND = {
   featured: '塗り = 主に使う技術 ／ 枠線 = その他。カッコ内は経験年数。',
-  level: '塗り = 上級 ／ 枠線 = 中級・初級。カッコ内は経験年数。',
+  level: '塗り = 上級 ／ 枠線太 = 中級 ／ 枠線細 = 初級。カッコ内は経験年数。',
 } as const;
 
 function toChip(skill: PrintSkill, mode: 'featured' | 'level'): PrintChip {

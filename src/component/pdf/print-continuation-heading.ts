@@ -16,7 +16,22 @@ function estimateTextWidth(text: string, fontSizePt: number): number {
 }
 
 /**
- * ページ跨ぎの継続見出し（「A 社（つづき）　案件名（続き）」）を **1 行に収める**。
+ * 継続見出しの 1 片。tone が色と太さを決める（デザイン 1e の 3 トーン）。
+ * - `company`: 会社名（accent / 700）
+ * - `separator` / `mark`: 「／」と「（続き）」（label 色 / 400）
+ * - `project`: 案件名（text 色 / 400）
+ */
+export interface ContinuationHeadingPart {
+  text: string;
+  tone: 'company' | 'separator' | 'project' | 'mark';
+}
+
+/** 案件が続くときの印。会社だけが続くときの印（`COMPANY_CONTINUATION_MARK`）と字を分け、案件カードの続きかを機械が見分けられるようにする。 */
+export const PROJECT_CONTINUATION_MARK = '（続き）';
+export const COMPANY_CONTINUATION_MARK = '（つづき）';
+
+/**
+ * ページ跨ぎの継続見出し（デザイン 1e の「Q 社 ／ 案件名 （続き）」）を **1 行に収める**。
  *
  * この見出しは Page 直下の絶対配置（`position:absolute`, top 16pt）で描いており、
  * 本文の流れに高さとして寄与しない。本文が始まるのはページ余白 `padTop` = 42pt からで、
@@ -28,24 +43,56 @@ function estimateTextWidth(text: string, fontSizePt: number): number {
  * 落とす順番は「読み手にとっての必要度が低い方から」。会社名は直前のページで必ず見えて
  * いるが、案件名は跨いだ先で初めて必要になるので、**会社名を先に捨てて案件名を残す**。
  * それでも収まらないときだけ案件名を末尾から詰める。
+ *
+ * 会社だけが続くとき（案件カードの途中ではない）は「Q 社 （つづき）」。案件が続くときの
+ * 「（続き）」とは字を分ける（print-quality.ts の `continuesPreviousCard` が案件側の字だけを探す）。
  */
-export function fitContinuationHeading(companyLabel: string | undefined, projectLabel: string | undefined): string {
+export function fitContinuationHeadingParts(
+  companyLabel: string | undefined,
+  projectLabel: string | undefined,
+): ContinuationHeadingPart[] {
   const company = (companyLabel ?? '').trim();
   const project = (projectLabel ?? '').trim();
-  if (!company && !project) return '';
+  if (!company && !project) return [];
   // 見積り幅は概算（全角 1em / 半角 0.55em）で、実フォントの太字はこれよりやや広い。
   // 折り返しは即座に本文への重なりになるので、9 割で切って安全側に倒す。
   const budget = PRINT_SIZE.contentWidth * 0.9;
   const fontSize = PRINT_TYPE.meta.fontSize;
-  const fits = (text: string) => estimateTextWidth(text, fontSize) <= budget;
+  const widthOf = (parts: ContinuationHeadingPart[]) =>
+    estimateTextWidth(parts.map((part) => part.text).join(''), fontSize);
+  const fits = (parts: ContinuationHeadingPart[]) => widthOf(parts) <= budget;
 
-  const projectPart = project ? `${project}（続き）` : '';
-  const companyPart = company ? `${company}（つづき）` : '';
-  const both = projectPart && companyPart ? `${companyPart}　${projectPart}` : projectPart || companyPart;
+  const projectParts: ContinuationHeadingPart[] = project
+    ? [
+        { text: project, tone: 'project' },
+        { text: ` ${PROJECT_CONTINUATION_MARK}`, tone: 'mark' },
+      ]
+    : [];
+  const companyParts: ContinuationHeadingPart[] = company ? [{ text: company, tone: 'company' }] : [];
+  if (!project) {
+    const companyOnly: ContinuationHeadingPart[] = [
+      ...companyParts,
+      { text: ` ${COMPANY_CONTINUATION_MARK}`, tone: 'mark' },
+    ];
+    if (fits(companyOnly)) return companyOnly;
+    return [
+      { text: truncateToWidth(companyOnly.map((part) => part.text).join(''), budget, fontSize), tone: 'company' },
+    ];
+  }
+  const both: ContinuationHeadingPart[] = company
+    ? [...companyParts, { text: ' ／ ', tone: 'separator' }, ...projectParts]
+    : projectParts;
   if (fits(both)) return both;
   // 会社名を落として案件名だけにする。
-  if (projectPart && fits(projectPart)) return projectPart;
-  return truncateToWidth(projectPart || companyPart, budget, fontSize);
+  if (fits(projectParts)) return projectParts;
+  return [{ text: truncateToWidth(projectParts.map((part) => part.text).join(''), budget, fontSize), tone: 'project' }];
+}
+
+/** 継続見出しの文字列（片をつなげたもの）。 */
+export function fitContinuationHeading(companyLabel: string | undefined, projectLabel: string | undefined): string {
+  return fitContinuationHeadingParts(companyLabel, projectLabel)
+    .map((part) => part.text)
+    .join('');
 }
 
 /** 末尾を `…` に置き換えて見積り幅へ収める。1 文字も入らない場合でも空文字は返さない。 */

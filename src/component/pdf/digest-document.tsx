@@ -17,7 +17,7 @@ import { digestTitle } from '@/lib/export/edition';
 import { PROJECT_CONTENT_HEIGHT } from './print-document';
 import type { Leaf, MeasuredLeaf } from './print-leaf';
 import { frameLeaf, NO_FRAME } from './print-leaf-frame';
-import { continuationHeadingFor, splitLeaf } from './print-leaf-list';
+import { continuationHeadingPartsFor, splitLeaf } from './print-leaf-list';
 import { measureLeaf, measureLeaves } from './print-measure';
 import { ContinuationHeading, continuationStyles } from './print-page';
 import { type PaginateOptions, type PrintPage, paginate } from './print-paginate';
@@ -157,7 +157,7 @@ const digestStyles = StyleSheet.create({
   },
   rowTitle: {
     ...PRINT_TYPE.body,
-    fontWeight: PRINT_WEIGHT.medium,
+    fontWeight: PRINT_WEIGHT.normal,
     lineHeight: 1.5,
     color: PRINT_COLOR.heading,
   },
@@ -297,7 +297,7 @@ export function PrintDigestDocument({ title, vm, pages }: PrintDigestDocumentPro
       {pages.map((page, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: ページは順序そのものが identity
         <Page key={index} size="A4" style={printStyles.page}>
-          <ContinuationHeading text={continuationHeadingFor(page, index)} />
+          <ContinuationHeading parts={continuationHeadingPartsFor(page, index)} />
           {page.leaves.map((placed) => frameLeaf(placed.leaf))}
           {footer}
         </Page>

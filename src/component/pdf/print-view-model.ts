@@ -60,7 +60,8 @@ export function rendersProjectCards(views: PrintViewKey[] | undefined): boolean 
 /** チップ 1 個。塗り（その分類の主役）と枠線（それ以外）の 2 種だけ。 */
 export interface PrintChip {
   label: string;
-  emphasis: 'solid' | 'outline';
+  /** solid = 塗り、strong-outline = accent の太い枠、outline = 灰の細い枠。 */
+  emphasis: 'solid' | 'strong-outline' | 'outline';
 }
 
 /**
@@ -244,15 +245,18 @@ function markdownText(value: string | undefined): string {
   return typeof value === 'string' ? sanitizeMarkdown(value).trim() : '';
 }
 
-/** 習熟度から強調を決める。上級だけ塗り、それ以外は枠線。 */
+/** 習熟度から強調を決める（level モード）。上級は塗り、中級は accent の太枠、それ以外（初級）は灰の細枠。 */
 const SOLID_LEVELS = new Set(['上級', '★★★']);
+const STRONG_OUTLINE_LEVELS = new Set(['中級', '★★']);
 
 export function chipEmphasis(
   skill: Pick<PrintSkill, 'level' | 'featured'>,
   mode: PrintViewModel['skillEmphasisMode'],
 ): PrintChip['emphasis'] {
   if (mode === 'featured') return skill.featured ? 'solid' : 'outline';
-  return SOLID_LEVELS.has(trimmed(skill.level)) ? 'solid' : 'outline';
+  const level = trimmed(skill.level);
+  if (SOLID_LEVELS.has(level)) return 'solid';
+  return STRONG_OUTLINE_LEVELS.has(level) ? 'strong-outline' : 'outline';
 }
 
 /**

@@ -4,6 +4,7 @@ import type { Block, ProjectTech } from '@/db/block';
 import {
   buildPrintViewModel,
   buildTechGroups,
+  chipEmphasis,
   compactPeriod,
   companyLabelOf,
   dedupeRoles,
@@ -67,6 +68,24 @@ describe('formatProcessForPrint', () => {
 
   it('空なら空文字', () => {
     expect(formatProcessForPrint([])).toBe('');
+  });
+});
+
+describe('chipEmphasis', () => {
+  it('level モードは 上級=塗り / 中級=太枠 / 初級=細枠 の 3 段', () => {
+    const emphasis = (level: string) => chipEmphasis({ level, featured: false }, 'level');
+    expect(emphasis('上級')).toBe('solid');
+    expect(emphasis('★★★')).toBe('solid');
+    expect(emphasis('中級')).toBe('strong-outline');
+    expect(emphasis('★★')).toBe('strong-outline');
+    expect(emphasis('初級')).toBe('outline');
+    expect(emphasis('')).toBe('outline');
+  });
+
+  it('featured モードは level を見ず、推しだけ塗る（2 段のまま）', () => {
+    expect(chipEmphasis({ level: '初級', featured: true }, 'featured')).toBe('solid');
+    expect(chipEmphasis({ level: '上級', featured: false }, 'featured')).toBe('outline');
+    expect(chipEmphasis({ level: '中級', featured: false }, 'featured')).toBe('outline');
   });
 });
 
@@ -250,10 +269,10 @@ describe('buildPrintViewModel', () => {
     expect(buildPrintViewModel('シート', blocksFixture()).summary.title).toBe('');
   });
 
-  it('主力スタックは案件から導出した経験年月の降順で、上級だけ塗りにする', () => {
+  it('主力スタックは案件から導出した経験年月の降順で、上級は塗り・中級は太枠にする', () => {
     const vm = buildPrintViewModel('シート', blocksFixture());
     expect(vm.summary.topSkills).toEqual([
-      { label: 'Python 4 年 本人入力', emphasis: 'outline' },
+      { label: 'Python 4 年 本人入力', emphasis: 'strong-outline' },
       { label: 'TypeScript 0 年 9 ヶ月 案件算出', emphasis: 'solid' },
     ]);
   });

@@ -53,8 +53,11 @@ export const PRINT_TYPE = {
   meta: { fontSize: 11, fontWeight: 400, lineHeight: 1.55 },
 } as const;
 
-/** 使うウェイトは 400 / 500 / 700 の 3 つだけ。 */
-export const PRINT_WEIGHT = { normal: 400, medium: 500, bold: 700 } as const;
+/**
+ * 使うウェイトは 400 / 700 の 2 つだけ。埋め込むフォントが Regular と Bold の 2 本しかないため、
+ * 500 を指定しても 400 で描かれる（デザイン spec の 500 は 400 に寄せた）。
+ */
+export const PRINT_WEIGHT = { normal: 400, bold: 700 } as const;
 
 /** 最小フォントサイズ。検証スクリプトがこの値未満の描画を弾く。 */
 export const PRINT_MIN_FONT_SIZE = 11;
@@ -105,6 +108,8 @@ export const PRINT_SIZE = {
   teamColCompact: 44,
   ruleStrong: 1.5,
   ruleThin: 0.75,
+  /** 習熟度「中級」のチップ枠（デザイン 1g の 1.25px）。強 1.5 と並 0.75 の間。 */
+  ruleMedium: 1.25,
   cardRadius: 3,
 } as const;
 

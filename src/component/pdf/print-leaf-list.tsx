@@ -16,7 +16,7 @@
 import type { ReactElement } from 'react';
 
 import { CompanyHeadingBand, CompanyNote } from './company-heading';
-import { fitContinuationHeading } from './print-continuation-heading';
+import { type ContinuationHeadingPart, fitContinuationHeadingParts } from './print-continuation-heading';
 import type { FrameSpec, Leaf, MeasuredLeaf, MeasuredLine } from './print-leaf';
 import { markdownPieces } from './print-markdown';
 import type { PrintPage } from './print-paginate';
@@ -397,11 +397,18 @@ export const COMPACT_HEADER_TEMPLATE: Leaf = {
  * 会社の途中（見出しでない）なら会社名、詳細版カードの途中ならその案件名も添える。
  * 案件は会社をまたがないので、両方が続いているときは 1 行にまとめる。
  */
-export function continuationHeadingFor(page: PrintPage, pageIndex: number): string {
-  if (pageIndex === 0) return '';
+export function continuationHeadingPartsFor(page: PrintPage, pageIndex: number): ContinuationHeadingPart[] {
+  if (pageIndex === 0) return [];
   const first = page.leaves.find((placed) => !placed.leadIn)?.leaf ?? page.leaves[0]?.leaf;
-  if (!first) return '';
+  if (!first) return [];
   const companyLabel = first.kind === 'company-heading' ? undefined : first.companyLabel;
   const projectLabel = first.cardLevel === 'detail' && first.kind !== 'card-header' ? first.cardLabel : undefined;
-  return fitContinuationHeading(companyLabel, projectLabel);
+  return fitContinuationHeadingParts(companyLabel, projectLabel);
+}
+
+/** 継続見出しの文字列（片をつなげたもの）。 */
+export function continuationHeadingFor(page: PrintPage, pageIndex: number): string {
+  return continuationHeadingPartsFor(page, pageIndex)
+    .map((part) => part.text)
+    .join('');
 }

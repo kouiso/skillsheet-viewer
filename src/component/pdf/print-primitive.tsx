@@ -133,6 +133,15 @@ const styles = StyleSheet.create({
     paddingVertical: PRINT_SIZE.chipPadVertical,
     paddingHorizontal: PRINT_SIZE.chipPadHorizontal,
   },
+  chipOutlineStrong: {
+    ...PRINT_TYPE.meta,
+    color: PRINT_COLOR.heading,
+    borderWidth: PRINT_SIZE.ruleMedium,
+    borderColor: PRINT_COLOR.accent,
+    borderRadius: PRINT_SIZE.chipRadius,
+    paddingVertical: PRINT_SIZE.chipPadVertical,
+    paddingHorizontal: PRINT_SIZE.chipPadHorizontal,
+  },
   chipBand: {
     ...PRINT_TYPE.meta,
     color: PRINT_COLOR.heading,
@@ -211,9 +220,15 @@ export function SectionLabel({ children }: { children: ReactNode }) {
   return <PrintText style={styles.sectionLabel}>{children}</PrintText>;
 }
 
+const CHIP_STYLE = {
+  solid: styles.chipSolid,
+  'strong-outline': styles.chipOutlineStrong,
+  outline: styles.chipOutline,
+} as const;
+
 export function Chip({ chip }: { chip: PrintChip }) {
   return (
-    <PrintText wrap={false} style={chip.emphasis === 'solid' ? styles.chipSolid : styles.chipOutline}>
+    <PrintText wrap={false} style={CHIP_STYLE[chip.emphasis]}>
       {chip.label}
     </PrintText>
   );
