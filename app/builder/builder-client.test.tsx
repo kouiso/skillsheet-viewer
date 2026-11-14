@@ -497,6 +497,32 @@ describe('BuilderClient', () => {
     expect(mockSave).toHaveBeenCalledTimes(1);
   });
 
+  it('捨てて履歴を開いた後は、未保存の案件ブロックの選択が残らず、再入力で復活もしない', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValueOnce(trpcClientError('BAD_REQUEST'));
+    render(<BuilderClient initialBlocks={mdBlocks(['既存本文'])} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '＋ 会社' }));
+    fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '未保存の会社' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて履歴を開く' }),
+    );
+    await user.click(await screen.findByRole('button', { name: '編集画面へ' }));
+    expect(screen.queryByDisplayValue('未保存の会社')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '＋ 会社' }));
+    fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '入れ直した会社' } });
+    mockSave.mockResolvedValueOnce({ revision: '6' });
+    await user.click(screen.getByRole('button', { name: '保存' }));
+    const saved = mockSave.mock.calls[1][0].blocks;
+    const projects = saved.filter((b: Block) => b.type === 'project');
+    expect(projects).toHaveLength(1);
+    expect(projects[0].data.companies).toHaveLength(1);
+    expect(projects[0].data.companies[0]).toMatchObject({ name: '入れ直した会社' });
+  });
+
   it('期間投影の不一致（クライアント側検証）で履歴前の保存が止まった時も、往復せず理由を出す', async () => {
     const user = userEvent.setup();
     render(
