@@ -6,6 +6,7 @@ import { GripVertical, Trash2 } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { Button } from '@/component/ui/button';
 import type { ExperienceBlockData, ProfileBlockData, SkillEntry, StatsBlockData, TableColumn } from '@/db/block';
+import type { MarkdownExperienceContext } from '@/db/block/serialize';
 
 import { ExperienceBlockEditor } from '../block-editor/experience-block-editor';
 import { type CustomMetaRow, ProfileBlockEditor } from '../block-editor/profile-block-editor';
@@ -27,6 +28,7 @@ export const SortableBlock = ({
   onCustomDraftChange,
   onDelete,
   onMoveBlock,
+  statContext,
 }: {
   item: EditorItem;
   onMarkdownChange: (id: string, markdown: string) => void;
@@ -40,6 +42,7 @@ export const SortableBlock = ({
   onCustomDraftChange?: (rows: CustomMetaRow[]) => void;
   onDelete: (id: string) => void;
   onMoveBlock: (id: string, direction: -1 | 1) => void;
+  statContext?: Pick<MarkdownExperienceContext, 'projects' | 'referenceMonth'>;
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
 
@@ -129,7 +132,7 @@ export const SortableBlock = ({
             onCustomDraftChange={onCustomDraftChange}
           />
         ) : item.type === 'stats' ? (
-          <StatsBlockEditor data={item.data} onChange={(data) => onStatsChange(item.id, data)} />
+          <StatsBlockEditor data={item.data} onChange={(data) => onStatsChange(item.id, data)} context={statContext} />
         ) : item.type === 'project' ? (
           <div className="min-w-0 flex-1 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
             <span className="font-medium">案件:</span> {item.data.companies.length} 社 / {item.data.items.length} 件

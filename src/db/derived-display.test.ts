@@ -4,6 +4,7 @@ import {
   currentMonthKey,
   deriveSkillExperienceMonths,
   fillStatKinds,
+  isStatComputed,
   normalizeTechnologyCandidates,
   resolveCompanyPeriod,
   resolveDisplayedSkillExperience,
@@ -408,5 +409,17 @@ describe('数字カードの種類（#638）', () => {
     const items = [stat('案件数', '1', '件')];
     fillStatKinds(items);
     expect(items[0]).toEqual({ label: '案件数', value: '1', unit: '件' });
+  });
+});
+
+describe('isStatComputed', () => {
+  it('案件数と、単位が年・月の経験年数だけが計算される', () => {
+    expect(isStatComputed({ value: '', unit: '件', label: 'x', kind: 'projectCount' })).toBe(true);
+    expect(isStatComputed({ value: '', unit: '年', label: 'x', kind: 'experience' })).toBe(true);
+    expect(isStatComputed({ value: '', unit: 'ヶ月', label: 'x', kind: 'experience' })).toBe(true);
+    expect(isStatComputed({ value: '', unit: '社', label: 'x', kind: 'experience' })).toBe(false);
+    expect(isStatComputed({ value: '', unit: '年', label: 'エンジニア歴', kind: 'free' })).toBe(false);
+    // 種類が無い古いデータはラベルから推定する。
+    expect(isStatComputed({ value: '', unit: '年', label: 'エンジニア歴' })).toBe(true);
   });
 });
