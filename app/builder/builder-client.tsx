@@ -1011,6 +1011,8 @@ const BuilderClient = ({
     failedSnapshotRef.current = null;
     followUpRef.current = false;
     setAutosaveStatus('idle');
+    // 捨てた未保存ブロックの「削除を取り消す」が残ると、捨てたはずのブロックが戻る（onRestored と同じく消す）。
+    setDeletedBlock(null);
     // 捨てた未保存ブロックを選んだままにしない。選択ブロックと選択案件を、保存済みの中から揃えて選び直す
     // （onRestored と同じ流儀。案件だけ古い id が残ると、入力した時に捨てたはずの案件が再追加される）。
     if (!savedItems.some((item) => item.id === selectedBlockId)) setSelectedBlockId(savedItems[0]?.id ?? 'new-project');

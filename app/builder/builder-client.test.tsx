@@ -457,6 +457,10 @@ describe('BuilderClient', () => {
     expect(within(reason).getByText(/このまま履歴を開くと、未保存の変更は失われます。/)).toBeInTheDocument();
     expect(within(reason).getByText(/入力内容に、保存できない箇所があります/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
+    // 変更が失われる操作なので、確認ボタンは danger（破壊的な見た目）で出す。
+    const discardButton = within(reason).getByRole('button', { name: '変更を捨てて履歴を開く' });
+    expect(discardButton).toHaveClass('border-destructive', 'text-destructive');
+    expect(within(reason).getByRole('button', { name: '編集に戻る' })).not.toHaveClass('text-destructive');
     await user.click(within(reason).getByRole('button', { name: '編集に戻る' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
@@ -520,6 +524,69 @@ describe('BuilderClient', () => {
     expect(projects).toHaveLength(1);
     expect(projects[0].data.companies).toHaveLength(1);
     expect(projects[0].data.companies[0]).toMatchObject({ name: '入れ直した会社' });
+  });
+
+  it('捨てて履歴を開いた後、保存済みに案件があるのに未保存の案件を選んでいた場合は、保存済みの案件を選び直す', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
+    render(
+      <BuilderClient
+        initialTitle="t"
+        {...defaultProps}
+        initialBlocks={[
+          {
+            id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            type: 'project',
+            order: 0,
+            data: {
+              companies: [{ id: 'c1', name: '保存済みの会社', kind: '', period: '', note: '' }],
+              items: [],
+            },
+          },
+          { id: 'block-1', type: 'markdown', order: 1, data: { markdown: '補足' } },
+        ]}
+      />,
+    );
+    // 補足ブロックを選んで案件ブロックを足し、足した案件ブロックに入力する（選択中の案件が未保存になる）。
+    await user.click(screen.getByRole('button', { name: 'テキスト: 補足' }));
+    await user.click(screen.getByRole('button', { name: 'ブロックを追加' }));
+    await user.click(screen.getAllByRole('button', { name: '案件' })[0]);
+    await user.click(screen.getByRole('button', { name: '＋ 会社' }));
+    fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '未保存の会社' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて履歴を開く' }),
+    );
+    await user.click(await screen.findByRole('button', { name: '編集画面へ' }));
+    expect(screen.queryByDisplayValue('未保存の会社')).not.toBeInTheDocument();
+    // 選択案件が保存済みの案件に戻っているので、編集欄は保存済みの会社を出す。
+    expect(screen.getByLabelText('会社名')).toHaveValue('保存済みの会社');
+  });
+
+  it('捨てて履歴を開いた後は、捨てたブロックの「削除を取り消す」が残らない', async () => {
+    const user = userEvent.setup();
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
+    render(<BuilderClient initialBlocks={mdBlocks(['既存本文'])} initialTitle="t" {...defaultProps} />);
+    // 未保存のテキストブロックを足して削除すると「削除を取り消す」が出る。その後も未保存の編集が残る状態にする。
+    await user.click(screen.getByRole('button', { name: 'ブロックを追加' }));
+    await user.click(screen.getAllByRole('button', { name: 'テキスト' })[0]);
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '未保存のブロック' } });
+    await user.click(screen.getByLabelText('ブロックを削除'));
+    expect(screen.getByRole('button', { name: '削除を取り消す' })).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '捨てる編集' } });
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '保存して履歴を開く' }),
+    );
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて履歴を開く' }),
+    );
+    await user.click(await screen.findByRole('button', { name: '編集画面へ' }));
+    expect(screen.queryByRole('button', { name: '削除を取り消す' })).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('未保存のブロック')).not.toBeInTheDocument();
   });
 
   it('期間投影の不一致（クライアント側検証）で履歴前の保存が止まった時も、往復せず理由を出す', async () => {
