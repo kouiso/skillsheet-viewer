@@ -1,6 +1,7 @@
-import type { CompanyInfo, ProjectItem, SkillEntry, StatItem } from './block';
+import type { CompanyInfo, ProjectItem, SkillEntry, StatItem, StatKind } from './block';
 import { classifyPeriod, deriveCompanyPeriod, flattenTech } from './process';
 
+// 種類が無い古い保存データのためだけの語彙。保存時に種類へ補った後は、計算の判断に使わない。
 const ENGINEER_EXPERIENCE_LABELS = new Set(['エンジニア歴', 'エンジニア経験', '経験年数', '実務経験']);
 // 「参画プロジェクト」は末尾に「数」が無い実データの表記（fixture の数字カードが使う）。
 const PROJECT_COUNT_LABELS = new Set([
@@ -10,6 +11,24 @@ const PROJECT_COUNT_LABELS = new Set([
   '参画プロジェクト数',
   '参画プロジェクト',
 ]);
+
+/** ラベルから種類を推定する。既存の9語だけが計算対象で、それ以外は自由入力。 */
+function inferStatKind(label: string): StatKind {
+  const trimmed = label.trim();
+  if (ENGINEER_EXPERIENCE_LABELS.has(trimmed)) return 'experience';
+  if (PROJECT_COUNT_LABELS.has(trimmed)) return 'projectCount';
+  return 'free';
+}
+
+/** 項目の種類。保存済みの種類を優先し、無い古いデータだけラベルから推定する。 */
+export function statKindOf(item: StatItem): StatKind {
+  return item.kind ?? inferStatKind(item.label);
+}
+
+/** 保存時に、種類の無い項目へ種類を補う。すでにある種類は変えない。 */
+export function fillStatKinds(items: readonly StatItem[]): StatItem[] {
+  return items.map((item) => (item.kind === undefined ? { ...item, kind: inferStatKind(item.label) } : item));
+}
 
 /** サーバーからクライアントへ渡す、月初基準の固定月キー。 */
 export function currentMonthKey(date = new Date()): number {
@@ -77,7 +96,8 @@ export function resolveDisplayedStats(
   });
   return items.map((item) => {
     const label = item.label.trim();
-    if (ENGINEER_EXPERIENCE_LABELS.has(label)) {
+    const kind = statKindOf(item);
+    if (kind === 'experience') {
       const unit = item.unit.trim();
       if (unit === '年' || /^(?:ヶ|か|ケ)月$/.test(unit)) {
         return {
@@ -90,7 +110,7 @@ export function resolveDisplayedStats(
         };
       }
     }
-    if (PROJECT_COUNT_LABELS.has(label)) {
+    if (kind === 'projectCount') {
       return { ...item, value: String(visibleProjects.length) };
     }
     return item;

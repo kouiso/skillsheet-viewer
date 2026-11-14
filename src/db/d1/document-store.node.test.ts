@@ -86,6 +86,22 @@ beforeEach(async () => {
 });
 
 describe('ローカルworkerd D1の文書契約（実DB・Neon不使用）', () => {
+  it('数字カードの種類（kind）を保存・読取・版履歴で落とさず、種類の無い古い項目もそのまま読める', async () => {
+    const statsBlock = (items: unknown[]) => ({ id: blockId, type: 'stats', order: 0, data: { items } });
+    const legacy = { value: '10', unit: '年', label: 'エンジニア歴' };
+    const kinded = { value: '3', unit: '件', label: '参画数', kind: 'projectCount' };
+    const created = await service.create(sheet, '合成', [statsBlock([legacy])]);
+    expect(created.blocks).toEqual([statsBlock([legacy])]);
+    const replaced = await service.replace(sheet, '0', '合成', [
+      statsBlock([{ ...legacy, kind: 'experience' }, kinded]),
+    ]);
+    const current = await service.read(sheet);
+    if (current.status !== 'OK') throw new Error('missing snapshot');
+    expect(current.snapshot.validation.editable).toBe(true);
+    expect(current.snapshot.blocks).toEqual(replaced.blocks);
+    expect(current.snapshot.blocks).toEqual([statsBlock([{ ...legacy, kind: 'experience' }, kinded])]);
+    expect(await history.list(sheet)).toHaveLength(2);
+  });
   it('空状態、作成、同内容再送、別内容の競合、単一snapshot読取', async () => {
     expect(await service.read()).toEqual({ status: 'EMPTY' });
     const saved = await service.create(sheet, '合成', blocks);

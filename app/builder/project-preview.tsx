@@ -121,7 +121,9 @@ export const ProjectPreview = ({ project, company, no, syncKey, onJump }: Projec
         <span className="kicker">Live Preview · 閲覧時の見え方</span>
         {hidden && <span className="pv-hidden">閲覧側では非表示</span>}
       </div>
-      <p className="pv-hint">各ブロックをクリックすると、その項目の編集欄へ移動します（上下キーでも選べます）。</p>
+      <p className="pv-hint">
+        表示されている項目をクリックすると、その項目の編集欄へ移動します（上下キーでも選べます）。
+      </p>
       <div
         ref={toolbarRef}
         role="toolbar"

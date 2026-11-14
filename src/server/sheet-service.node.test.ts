@@ -251,6 +251,19 @@ describe('updateStatsItem', () => {
     expect(saved.data.items[0].value).toBe('11');
   });
 
+  it('保存時に、種類の無い項目へ種類を補い、ラベルが変わっても既存の種類は保つ', async () => {
+    await updateStatsItem({
+      sheetId: SHEET_ID,
+      index: 0,
+      expectedLabel: '経験年数',
+      expectedRevision: REVISION,
+      fields: { label: '現場歴' },
+    });
+    const saved = serviceMock.replace.mock.calls[0][3].find((b: { type: string }) => b.type === 'stats');
+    expect(saved.data.items[0]).toMatchObject({ label: '現場歴', kind: 'experience' });
+    expect(saved.data.items.every((i: { kind?: string }) => i.kind !== undefined)).toBe(true);
+  });
+
   it('expectedLabel が一致しない場合は NOT_FOUND で保存しない', async () => {
     await expect(
       updateStatsItem({

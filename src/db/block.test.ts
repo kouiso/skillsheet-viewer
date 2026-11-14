@@ -612,6 +612,14 @@ describe('isStatsBlockData', () => {
   it('空の items 配列は有効', () => {
     expect(isStatsBlockData({ items: [] })).toBe(true);
   });
+
+  it('kind は既知の種類だけ受け入れ、無くてもよい（古い保存データ）', () => {
+    for (const kind of ['experience', 'projectCount', 'free']) {
+      expect(isStatsBlockData({ items: [{ value: '1', unit: '年', label: 'x', kind }] })).toBe(true);
+    }
+    expect(isStatsBlockData({ items: [{ value: '1', unit: '年', label: 'x', kind: 'other' }] })).toBe(false);
+    expect(isStatsBlockData({ items: [{ value: '1', unit: '年', label: 'x', kind: 1 }] })).toBe(false);
+  });
 });
 
 describe('isProjectBlockData', () => {
