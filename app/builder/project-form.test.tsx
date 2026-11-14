@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectItem } from '@/db/block';
+import { PROJECT_FIELD_LABELS, TECH_FIELD_LABELS } from './field-label';
 import { ProjectForm } from './project-form';
 
 const project: ProjectItem = {
@@ -233,5 +234,38 @@ describe('案件フォームの補足文（#637）', () => {
     for (const hint of ['例：Java、TypeScript', '例：Spring、React', '例：MySQL、PostgreSQL', '例：AWS、Docker']) {
       expect(screen.getByText(hint)).toBeInTheDocument();
     }
+  });
+});
+
+describe('項目名の対応表', () => {
+  it('編集画面の項目名は、版の差分と共有する対応表の語そのもの', () => {
+    render(
+      <ProjectForm
+        project={project}
+        data={{ companies: [{ id: 'company-1', name: '株式会社A', kind: '', period: '', note: '' }], items: [project] }}
+        onPatch={vi.fn()}
+        onMoveCompany={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const shown = [
+      'title',
+      'scope',
+      'companyId',
+      'role',
+      'period',
+      'team',
+      'duties',
+      'acquired',
+      'comment',
+      'summary',
+    ] as const;
+    for (const key of shown) {
+      // 概要だけは編集画面で「（任意）」を添える。語の本体は対応表と同じ。
+      expect(
+        screen.getAllByText(new RegExp(`^${PROJECT_FIELD_LABELS[key].replace(/[/]/g, '\\/')}`)).length,
+      ).toBeGreaterThan(0);
+    }
+    for (const label of Object.values(TECH_FIELD_LABELS)) expect(screen.getByText(label)).toBeInTheDocument();
   });
 });
