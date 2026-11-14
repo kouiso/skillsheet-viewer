@@ -39,9 +39,18 @@ export async function stopTree(c: ChildProcess, graceMs = 3000): Promise<void> {
  */
 export function createChildRegistry(stop: (c: ChildProcess) => Promise<void> = (c) => stopTree(c)) {
   const children = new Set<ChildProcess>();
+  // 終了処理に入った後に起動した子は、stopAll の対象から漏れて誰にも止められず残る。入口で断つ。
+  let stopping = false;
   return {
     children,
+    get stopping() {
+      return stopping;
+    },
     add(c: ChildProcess) {
+      if (stopping) {
+        void stop(c).catch(() => {});
+        throw new Error('終了処理中のため子プロセスの起動を拒否した');
+      }
       children.add(c);
     },
     async stop(c: ChildProcess) {
@@ -49,6 +58,7 @@ export function createChildRegistry(stop: (c: ChildProcess) => Promise<void> = (
       children.delete(c);
     },
     async stopAll() {
+      stopping = true;
       await Promise.allSettled([...children].map((c) => this.stop(c)));
     },
   };
@@ -81,16 +91,25 @@ export function createCleanup(opts: {
   killChildren: () => void;
   gatewayCapMs?: number;
 }) {
-  return async () => {
+  // シグナル経路と finally 経路の両方から呼ばれる。2 本目が gateway.stop() を重ねて呼ばないよう 1 つの Promise を共有する。
+  let running: Promise<void> | undefined;
+  const run = async () => {
     let stopped = false;
-    const markStopped = () => {
-      stopped = true;
-    };
     await Promise.all([
       opts.stopAll().catch(() => {}),
-      capTime(opts.gatewayStop().then(markStopped, markStopped), opts.gatewayCapMs ?? GATEWAY_STOP_CAP_MS),
+      // reject は workerd が消えた証拠にならない。正常に resolve した時だけ停止済みとみなす
+      capTime(
+        opts.gatewayStop().then(() => {
+          stopped = true;
+        }),
+        opts.gatewayCapMs ?? GATEWAY_STOP_CAP_MS,
+      ),
     ]);
     if (!stopped) opts.killChildren();
+  };
+  return () => {
+    running ??= run();
+    return running;
   };
 }
 
@@ -114,7 +133,7 @@ export function createSignalHandler(opts: {
       return;
     }
     received = true;
-    void capTime(opts.cleanup(), opts.capMs ?? 5000).then(() => opts.exit(code));
+    void capTime(opts.cleanup(), opts.capMs ?? CLEANUP_CAP_MS).then(() => opts.exit(code));
   };
 }
 
