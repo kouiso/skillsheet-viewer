@@ -272,12 +272,12 @@ export const ProfileBlockEditor = ({
                 </div>
                 {isConflicting && (
                   <p id={errorId} className="text-xs text-destructive">
-                    項目名が他の項目と重複しているため、この項目は保存されません。項目名を変更してください。
+                    項目名を入れてください。入れるまで、シート全体の保存を止めています（重複した項目名も同じ扱い）。
                   </p>
                 )}
                 {!isConflicting && isEmptyLabelWithValue && (
                   <p id={errorId} className="text-xs text-destructive">
-                    項目名が未入力のため、この項目は保存されません。項目名を入力してください。
+                    項目名を入れてください。入れるまで、シート全体の保存を止めています（重複した項目名も同じ扱い）。
                   </p>
                 )}
               </div>

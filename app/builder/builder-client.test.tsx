@@ -898,9 +898,14 @@ describe('BuilderClient', () => {
     await user.click(screen.getByRole('button', { name: '項目を追加' }));
     await user.type(screen.getByLabelText('値'), 'A型');
 
+    // S-06: 保存の停止はシート全体に及ぶ（hasBlockedDraft が手動保存・自動保存を止める）ので、
+    // 欄下の文も「この項目だけ」ではなく「シート全体の保存を止めている」と言う。
     expect(
-      screen.getByText('項目名が未入力のため、この項目は保存されません。項目名を入力してください。'),
+      screen.getByText(
+        '項目名を入れてください。入れるまで、シート全体の保存を止めています（重複した項目名も同じ扱い）。',
+      ),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/この項目は保存されません/)).not.toBeInTheDocument();
     expect(screen.queryByText(/項目名が他の項目と重複しているため/)).not.toBeInTheDocument();
     expect(screen.getByTestId('input-issues')).toHaveClass('text-danger');
     expect(screen.getByTestId('input-issues')).toHaveTextContent('保存を止めています：1か所');
