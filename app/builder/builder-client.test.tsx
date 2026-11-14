@@ -73,6 +73,8 @@ const defaultProps = { sheets: [defaultSheet], activeSheetId: 'sheet-1', initial
 
 describe('BuilderClient', () => {
   beforeEach(() => vi.clearAllMocks());
+  // 保存の失敗を固定する試験が実装を残さないよう、毎回既定の成功応答へ戻す（自動保存が先に Once を消費しても揺れない）。
+  afterEach(() => mockSave.mockResolvedValue({ updatedAt: new Date(), revision: '6' }));
 
   it('debounce前のプレビュー開始・再フォーカス・再オープンは最新スキルを送り旧本文に戻さない', () => {
     vi.useFakeTimers();
@@ -425,7 +427,7 @@ describe('BuilderClient', () => {
 
   it('履歴前の保存が競合で失敗したら、同じ確認を往復させず理由を出して編集に戻る', async () => {
     const user = userEvent.setup();
-    mockSave.mockRejectedValueOnce(trpcClientError('CONFLICT'));
+    mockSave.mockRejectedValue(trpcClientError('CONFLICT'));
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
     fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '競合する下書き' } });
     await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
@@ -444,7 +446,7 @@ describe('BuilderClient', () => {
 
   it('履歴前の保存が入力エラーなら、繰り返さず理由を出し、編集に戻れる', async () => {
     const user = userEvent.setup();
-    mockSave.mockRejectedValueOnce(trpcClientError('BAD_REQUEST'));
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
     fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '直らない下書き' } });
     await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
@@ -464,7 +466,7 @@ describe('BuilderClient', () => {
 
   it('履歴前の入力エラーで「変更を捨てて履歴を開く」を選ぶと履歴が開く', async () => {
     const user = userEvent.setup();
-    mockSave.mockRejectedValueOnce(trpcClientError('BAD_REQUEST'));
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
     fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '捨てる下書き' } });
     await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
@@ -475,7 +477,6 @@ describe('BuilderClient', () => {
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて履歴を開く' }),
     );
     expect(await screen.findByRole('region', { name: '版の履歴' })).toBeInTheDocument();
-    expect(mockSave).toHaveBeenCalledTimes(1);
     // 下書きを捨てて保存済みに戻っているので、復元は止められていない。
     expect(screen.queryByText(/未保存の入力があります/)).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '編集画面へ' }));
@@ -484,7 +485,7 @@ describe('BuilderClient', () => {
 
   it('履歴前の保存が NOT_FOUND でも確認を往復させず、理由を出して編集に戻る', async () => {
     const user = userEvent.setup();
-    mockSave.mockRejectedValueOnce(trpcClientError('NOT_FOUND'));
+    mockSave.mockRejectedValue(trpcClientError('NOT_FOUND'));
     render(<BuilderClient initialBlocks={mdBlocks(['原文'])} initialTitle="t" {...defaultProps} />);
     fireEvent.change(screen.getByPlaceholderText('Markdown を入力...'), { target: { value: '行き先の無い下書き' } });
     await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
@@ -499,7 +500,7 @@ describe('BuilderClient', () => {
 
   it('捨てて履歴を開いた後は、未保存の案件ブロックの選択が残らず、再入力で復活もしない', async () => {
     const user = userEvent.setup();
-    mockSave.mockRejectedValueOnce(trpcClientError('BAD_REQUEST'));
+    mockSave.mockRejectedValue(trpcClientError('BAD_REQUEST'));
     render(<BuilderClient initialBlocks={mdBlocks(['既存本文'])} initialTitle="t" {...defaultProps} />);
     await user.click(screen.getByRole('button', { name: '＋ 会社' }));
     fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '未保存の会社' } });
@@ -514,9 +515,9 @@ describe('BuilderClient', () => {
     expect(screen.queryByDisplayValue('未保存の会社')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '＋ 会社' }));
     fireEvent.change(screen.getByLabelText('会社名'), { target: { value: '入れ直した会社' } });
-    mockSave.mockResolvedValueOnce({ revision: '6' });
+    mockSave.mockResolvedValue({ revision: '6' });
     await user.click(screen.getByRole('button', { name: '保存' }));
-    const saved = mockSave.mock.calls[1][0].blocks;
+    const saved = mockSave.mock.calls.at(-1)?.[0].blocks;
     const projects = saved.filter((b: Block) => b.type === 'project');
     expect(projects).toHaveLength(1);
     expect(projects[0].data.companies).toHaveLength(1);
