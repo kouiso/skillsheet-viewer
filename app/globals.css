@@ -43,12 +43,15 @@
   /* ボード（デザインボード 2026-11-14）の danger に合わせた。#b64437×白 5.42:1・背景 5.09:1（#671）。 */
   --destructive: #b64437;
   --destructive-foreground: #ffffff;
-  /* エラーバナー（bg-destructive/10 の上に text-destructive）は 3.88:1 で WCAG AA(4.5:1)
-     未達だった（#152 S-4）。ティント背景上でも AA を満たす濃い赤。 */
+  /* エラーバナー（bg-destructive/10 の上に text-destructive）は、旧 --destructive（#dc2626）で 3.88:1 と
+     WCAG AA(4.5:1) 未達だった（#152 S-4）。いまの --destructive（#b64437）でも背景上の
+     destructive/10（#f0e6e5）では 4.43:1 で届かないため、ティント背景上でも AA を満たす濃い赤を
+     別に持つ（#b91c1c は同じ背景上で 5.29:1）。#671 でもこの値は据え置き。 */
   --destructive-strong: #b91c1c;
-  /* destructive ボタンの hover も同じ opacity-90 問題があったため、既存の
-     --destructive-strong をそのまま流用する（新規の色を増やさない）。 */
-  --destructive-hover: #9f3a2f; /* #b64437 と同じ色相の濃色。白文字 6.73:1（#671） */
+  /* destructive ボタンの hover も同じ opacity-90 問題があったため、不透明な専用トークンにする。
+     #671 で --destructive を #b64437 に変えたので、hover は同じ色相の濃色 #9f3a2f（白文字 6.73:1）。
+     --destructive-strong（#b91c1c）はもう流用していない。 */
+  --destructive-hover: #9f3a2f;
   /* #dce3e4 は白カード上で ~1.3:1 と輪郭が知覚できなかった（#347）。
      カード・レーン・入力欄の境界線として認識できる 3:1 前後の濃さへ引き上げる。 */
   --border: #c4cdce;
@@ -105,8 +108,9 @@
   --warn: #d4a017;
   --warn-soft: #fdf6e6;
   /* text-warn(#d4a017) は bg-warn-soft(#fdf6e6) 上で 2.21:1 しかなく AA(4.5:1) 未達
-     （鮮度バナー #204 で発覚、Codex レビュー指摘）。本文用に濃くした値（7.95:1）。 */
-  --warn-strong: #6b4400;
+     （鮮度バナー #204 で発覚、Codex レビュー指摘）。本文用に濃くした値。#671 でボードの warn-text に
+     合わせて #6b4400 から #6b4e00 に変えた（warn-soft 上 7.18:1・背景上 7.26:1・card 上 7.74:1・muted 上 6.93:1）。 */
+  --warn-strong: #6b4e00;
   /* Console は影なしだが、浮くもの（サジェスト・プレビューカード）だけ例外的に持つ。 */
   --shadow-editor: 0 10px 30px -16px rgba(16, 23, 26, 0.18);
 }
