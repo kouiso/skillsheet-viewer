@@ -26,13 +26,13 @@ GitHub Private Repository（Markdown シード元）
 ## 前提
 
 - Machine: macOS または Windows WSL2
-- Node.js: v22.x（`mise` で固定。`mise.toml` = Node 22.23.4 / pnpm 10.33.0）
+- Node.js: 版は `.node-version` を見る（`mise` で固定。pnpm の版は `mise.toml`）
 - パッケージマネージャ: pnpm（mise が導入）
 - **Neon Postgres が必須**（`DATABASE_URL`）。ローカルでも接続先の Postgres が必要です
 
 ```bash
 # mise をインストール後（https://mise.jdx.dev/）、リポジトリ直下で
-mise install       # mise.toml に従って Node 22.x と pnpm を導入
+mise install       # mise.toml に従って Node と pnpm を導入
 ```
 
 ## セットアップ手順

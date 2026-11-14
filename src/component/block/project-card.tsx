@@ -27,6 +27,19 @@ export function splitCommentParagraphs(comment: string): string[] {
     .filter(Boolean);
 }
 
+/** カードの中で編集画面のプレビューが「飛び先」として包める区画。 */
+export type ProjectCardRegion =
+  | 'period'
+  | 'title'
+  | 'scope'
+  | 'meta'
+  | 'summary'
+  | 'duties'
+  | 'acquired'
+  | 'comment'
+  | 'process'
+  | 'tech';
+
 interface ProjectCardProps {
   item: ProjectItem;
   /** 稼働月数の基準月（YYYY*12+M-1 の連番）。呼出側で固定して描画を決定的にする。 */
@@ -43,7 +56,19 @@ interface ProjectCardProps {
   queryTerms?: string[];
   /** 稼働月数（メタ行の末尾要素）を出すか。ビュートグル「稼働月数」に従う。既定 true。 */
   showDuration?: boolean;
+  /**
+   * 区画ごとに外側から包む口。編集画面のプレビューが、カードの描画を変えずに
+   * 「クリックで編集欄へ飛ぶ」を足すために使う。閲覧画面は渡さない（そのまま描く）。
+   */
+  wrapRegion?: (region: ProjectCardRegion, node: ReactNode) => ReactNode;
+  /**
+   * 本文中のリンクと「続きを読む」ボタンを tab で止まらせるか。プレビュー列は1箇所だけ
+   * 止まる作りなので false にする（押せば動くが、tab の停止位置には数えない）。
+   */
+  linksTabbable?: boolean;
 }
+
+const passThrough = (_region: ProjectCardRegion, node: ReactNode) => node;
 
 function CardBlock({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -65,6 +90,8 @@ export const ProjectCard = ({
   queryTerms = [],
   showDuration = true,
   referenceMonth,
+  wrapRegion: wrap = passThrough,
+  linksTabbable = true,
 }: ProjectCardProps) => {
   const [commentOpen, setCommentOpen] = useState(false);
   const normalized = normalizeProcess(item.process);
@@ -113,128 +140,166 @@ export const ProjectCard = ({
             <span className="rounded-[var(--radius)] bg-primary-dark px-1.5 py-px font-mono text-[12px] text-on-accent">
               {String(no).padStart(2, '0')}
             </span>
-            <span className="font-mono text-[12px] text-muted-foreground">{periodDisplay || '—'}</span>
+            {wrap(
+              'period',
+              <span className="font-mono text-[12px] text-muted-foreground">{periodDisplay || '—'}</span>,
+            )}
           </div>
-          <h3 className="text-[17px] leading-snug text-foreground">{sanitizeHtml(item.title) || '(タイトル未入力)'}</h3>
-          {area.text && (
-            <p className="text-[12px] text-muted-foreground">
-              {area.derived && <span className="kicker mr-1.5">技術領域</span>}
-              {sanitizeHtml(area.text)}
-            </p>
+          {wrap(
+            'title',
+            <h3 className="text-[17px] leading-snug text-foreground">
+              {sanitizeHtml(item.title) || '(タイトル未入力)'}
+            </h3>,
           )}
+          {area.text &&
+            wrap(
+              'scope',
+              <p className="text-[12px] text-muted-foreground">
+                {area.derived && <span className="kicker mr-1.5">技術領域</span>}
+                {sanitizeHtml(area.text)}
+              </p>,
+            )}
         </div>
         {/* 役割が空の案件では「役割」ラベル自体を出さない（#289 完了条件）。
             他の項目が空ならその部分だけを落とし、全部空なら行ごと出さない。 */}
-        {metaParts.length > 0 && (
-          <p className="m-0 font-mono text-[12px] leading-normal text-muted-foreground [overflow-wrap:anywhere]">
-            {roleText && <span className="kicker mr-1.5">役割</span>}
-            {/* 採用側が最重視する「この案件で何をしたか（役割）」をメタ行で最も弱い
-                階層にしない。役割部分だけ前景色で示す（#355）。 */}
-            {roleText ? (
-              <>
-                <span className="font-medium text-foreground">{roleText}</span>
-                {metaParts.length > 1 && ` · ${metaParts.slice(1).join(' · ')}`}
-              </>
-            ) : (
-              metaParts.join(' · ')
-            )}
-          </p>
-        )}
+        {metaParts.length > 0 &&
+          wrap(
+            'meta',
+            <p className="m-0 font-mono text-[12px] leading-normal text-muted-foreground [overflow-wrap:anywhere]">
+              {roleText && <span className="kicker mr-1.5">役割</span>}
+              {/* 採用側が最重視する「この案件で何をしたか（役割）」をメタ行で最も弱い
+                  階層にしない。役割部分だけ前景色で示す（#355）。 */}
+              {roleText ? (
+                <>
+                  <span className="font-medium text-foreground">{roleText}</span>
+                  {metaParts.length > 1 && ` · ${metaParts.slice(1).join(' · ')}`}
+                </>
+              ) : (
+                metaParts.join(' · ')
+              )}
+            </p>,
+          )}
       </div>
 
-      {summary ? (
-        <CardBlock label="概要">
-          <InlineMarkdown
-            content={collapseSoftBreaks(summary)}
-            className="break-words text-[13.5px] leading-[1.85] text-foreground"
-          />
-        </CardBlock>
-      ) : null}
+      {summary
+        ? wrap(
+            'summary',
+            <CardBlock label="概要">
+              <InlineMarkdown
+                content={collapseSoftBreaks(summary)}
+                className="break-words text-[13.5px] leading-[1.85] text-foreground"
+                linksTabbable={linksTabbable}
+              />
+            </CardBlock>,
+          )
+        : null}
 
-      {duties ? (
-        <CardBlock label="担当業務">
-          <InlineMarkdown
-            content={collapseSoftBreaks(duties)}
-            className="break-words text-[13.5px] leading-[1.85] text-foreground"
-          />
-        </CardBlock>
-      ) : null}
+      {duties
+        ? wrap(
+            'duties',
+            <CardBlock label="担当業務">
+              <InlineMarkdown
+                content={collapseSoftBreaks(duties)}
+                className="break-words text-[13.5px] leading-[1.85] text-foreground"
+                linksTabbable={linksTabbable}
+              />
+            </CardBlock>,
+          )
+        : null}
 
-      {item.acquired ? (
-        <CardBlock label="習得スキル">
-          <InlineMarkdown
-            content={collapseSoftBreaks(item.acquired)}
-            className="break-words text-[13.5px] leading-relaxed text-foreground"
-          />
-        </CardBlock>
-      ) : null}
+      {item.acquired
+        ? wrap(
+            'acquired',
+            <CardBlock label="習得スキル">
+              <InlineMarkdown
+                content={collapseSoftBreaks(item.acquired)}
+                className="break-words text-[13.5px] leading-relaxed text-foreground"
+                linksTabbable={linksTabbable}
+              />
+            </CardBlock>,
+          )
+        : null}
 
-      {item.comment ? (
-        <CardBlock label="コメント">
-          <InlineMarkdown
-            content={collapseSoftBreaks(commentBody)}
-            className="whitespace-pre-line break-words text-[13.5px] leading-relaxed text-foreground"
-          />
-          {hasMoreComment ? (
-            <button
-              type="button"
-              className="softbtn compact self-start"
-              aria-expanded={commentOpen}
-              onClick={() => setCommentOpen((open) => !open)}
-            >
-              {commentOpen ? '閉じる' : `続きを読む（残り ${remainingParas}）`}
-            </button>
-          ) : null}
-        </CardBlock>
-      ) : null}
+      {item.comment
+        ? wrap(
+            'comment',
+            <CardBlock label="コメント">
+              <InlineMarkdown
+                content={collapseSoftBreaks(commentBody)}
+                className="whitespace-pre-line break-words text-[13.5px] leading-relaxed text-foreground"
+                linksTabbable={linksTabbable}
+              />
+              {hasMoreComment ? (
+                <button
+                  type="button"
+                  className="softbtn compact self-start"
+                  aria-expanded={commentOpen}
+                  tabIndex={linksTabbable ? undefined : -1}
+                  onClick={() => setCommentOpen((open) => !open)}
+                >
+                  {commentOpen ? '閉じる' : `続きを読む（残り ${remainingParas}）`}
+                </button>
+              ) : null}
+            </CardBlock>,
+          )
+        : null}
 
-      {processOn ? (
-        <CardBlock label="担当工程">
-          <ProcessStepper done={normalized.done} />
-          {normalized.other.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              <span className="kicker self-center">その他の役割</span>
-              {normalized.other.map((role) => (
-                <span key={role} className="techtag">
-                  {role}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </CardBlock>
-      ) : null}
+      {processOn
+        ? wrap(
+            'process',
+            <CardBlock label="担当工程">
+              <ProcessStepper done={normalized.done} />
+              {normalized.other.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="kicker self-center">その他の役割</span>
+                  {normalized.other.map((role) => (
+                    <span key={role} className="techtag">
+                      {role}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </CardBlock>,
+          )
+        : null}
 
-      {techGroups.length > 0 ? (
-        <CardBlock label="技術スタック">
-          <div className="flex flex-col gap-2.5">
-            {techGroups.map((group) => (
-              <div
-                key={group.key}
-                className="grid grid-cols-1 items-baseline gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-x-3.5"
-              >
-                <span className="text-[12px] leading-normal text-muted-foreground">{group.label}</span>
-                <div className="flex min-w-0 flex-wrap gap-1.5">
-                  {group.values.map((name) => (
+      {techGroups.length > 0
+        ? wrap(
+            'tech',
+            <CardBlock label="技術スタック">
+              <div className="flex flex-col gap-2.5">
+                {techGroups.map((group) => (
+                  <div
+                    key={group.key}
+                    className="grid grid-cols-1 items-baseline gap-1.5 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-x-3.5"
+                  >
+                    <span className="text-[12px] leading-normal text-muted-foreground">{group.label}</span>
+                    <div className="flex min-w-0 flex-wrap gap-1.5">
+                      {group.values.map((name) => (
+                        <span key={name} className={`techtag ${chipHit(name) ? 'hit' : ''}`}>
+                          {name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardBlock>,
+          )
+        : flatTech.length > 0
+          ? wrap(
+              'tech',
+              <CardBlock label="技術スタック">
+                <div className="flex flex-wrap gap-1.5">
+                  {flatTech.map((name) => (
                     <span key={name} className={`techtag ${chipHit(name) ? 'hit' : ''}`}>
                       {name}
                     </span>
                   ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        </CardBlock>
-      ) : flatTech.length > 0 ? (
-        <CardBlock label="技術スタック">
-          <div className="flex flex-wrap gap-1.5">
-            {flatTech.map((name) => (
-              <span key={name} className={`techtag ${chipHit(name) ? 'hit' : ''}`}>
-                {name}
-              </span>
-            ))}
-          </div>
-        </CardBlock>
-      ) : null}
+              </CardBlock>,
+            )
+          : null}
     </article>
   );
 };

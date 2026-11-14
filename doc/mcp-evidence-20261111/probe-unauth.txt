@@ -1,0 +1,18 @@
+# 07 の 1章 事前確認（トークン不要・読み取りのみ）
+取得: 2026-11-11T02:55:31Z (UTC) / main ef07a7f
+
+## GET /api/mcp（期待 405）
+405
+
+## POST tools/list 認証なし（期待 401 + WWW-Authenticate）
+HTTP/2 401 
+www-authenticate: Bearer resource_metadata="https://skill-sheet-snowy.vercel.app/.well-known/oauth-protected-resource/api/mcp", scope="skillsheet:read skillsheet:write"
+
+## GET /.well-known/oauth-protected-resource/api/mcp（期待 200）
+{"resource":"https://skill-sheet-snowy.vercel.app/api/mcp","authorization_servers":["https://skill-sheet-snowy.vercel.app/api/auth"],"bearer_methods_supported":["header"],"dpop_signing_alg_values_supported":["EdDSA","ES256","ES512","PS256","RS256"],"scopes_supported":["skillsheet:read","skillsheet:write"]}
+HTTP 200
+
+## GET /.well-known/oauth-authorization-server/api/auth（期待 200, client_id_metadata_document_supported: true）
+HTTP 200
+client_id_metadata_document_supported: True
+scopes_supported: ['skillsheet:read', 'skillsheet:write']
