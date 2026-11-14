@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { SelectOrCustom } from '@/component/select-or-custom';
 import type { SkillEntry } from '@/db/block';
+import { SKILL_FIELD_LABELS } from '../field-labels';
 
 const LEVEL_OPTIONS = ['実務経験あり', '設計可能', '指導可能', '基礎知識のみ'];
 
@@ -41,7 +42,7 @@ export const SkillsBlockEditor = ({
         value={category}
         onChange={(e) => setCategory(e.target.value)}
         placeholder="カテゴリ（例: プログラミング言語）"
-        aria-label="スキルカテゴリ"
+        aria-label={SKILL_FIELD_LABELS.category}
         className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-sm font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
       {/* w-full だけだと table-layout:auto がコンテナ幅に収めようと各列を圧縮し、320px では
@@ -51,12 +52,18 @@ export const SkillsBlockEditor = ({
         <table className="w-full min-w-[560px] border-collapse text-sm">
           <thead>
             <tr>
-              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">スキル</th>
-              <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-20">
-                経験年数
+              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">
+                {SKILL_FIELD_LABELS.name}
               </th>
-              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">習熟度</th>
-              <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-16">推し</th>
+              <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-20">
+                {SKILL_FIELD_LABELS.years}
+              </th>
+              <th className="border border-border px-2 py-1 text-left text-xs text-muted-foreground">
+                {SKILL_FIELD_LABELS.level}
+              </th>
+              <th className="border border-border px-2 py-1 text-center text-xs text-muted-foreground w-16">
+                {SKILL_FIELD_LABELS.featured}
+              </th>
               <th className="border border-border px-1 py-1 w-8" />
             </tr>
           </thead>
@@ -69,7 +76,7 @@ export const SkillsBlockEditor = ({
                     value={s.name}
                     onChange={(e) => setSkill(i, 'name', e.target.value)}
                     placeholder="スキル名（例: TypeScript）"
-                    aria-label={`スキル${i + 1}の名称`}
+                    aria-label={`スキル${i + 1}の${SKILL_FIELD_LABELS.name}`}
                     className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
@@ -80,7 +87,7 @@ export const SkillsBlockEditor = ({
                     max={50}
                     value={s.years}
                     onChange={(e) => setSkill(i, 'years', Math.min(50, Math.max(0, Number(e.target.value) || 0)))}
-                    aria-label={`スキル${i + 1}の経験年数`}
+                    aria-label={`スキル${i + 1}の${SKILL_FIELD_LABELS.years}`}
                     className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 text-center focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 </td>
@@ -89,8 +96,8 @@ export const SkillsBlockEditor = ({
                     value={s.level}
                     options={LEVEL_OPTIONS}
                     onChange={(v) => setSkill(i, 'level', v)}
-                    placeholder="習熟度"
-                    label={`スキル${i + 1}の習熟度`}
+                    placeholder={SKILL_FIELD_LABELS.level}
+                    label={`スキル${i + 1}の${SKILL_FIELD_LABELS.level}`}
                   />
                 </td>
                 <td className="border border-border p-1 text-center">

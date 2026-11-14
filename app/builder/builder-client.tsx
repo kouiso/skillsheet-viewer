@@ -42,6 +42,7 @@ import { CanvasDroppable } from './canvas/canvas-droppable';
 import { createPaletteItem, DragPreview, PALETTE_ITEMS, type PaletteBlockType, PaletteChip } from './canvas/palette';
 import { SortableBlock } from './canvas/sortable-block';
 import { CreateSheetDialog } from './create-sheet-dialog';
+import { BLOCK_TYPE_LABELS } from './field-labels';
 import { type HistoryEntry, loadHistory, pushHistory } from './history';
 import { HistoryDrawer } from './history-drawer';
 import { ProjectEditor } from './project-editor';
@@ -1364,15 +1365,7 @@ const BuilderClient = ({
           const selectedItem = items.find((item) => item.id === selectedBlockId);
           const projectMode = selectedBlockId === selectedProjectId || selectedItem?.type === 'project';
           const projectIndex = projectItem ? items.indexOf(projectItem) : items.length - 1;
-          const names = {
-            markdown: 'テキスト',
-            table: 'テーブル',
-            skills: 'スキル',
-            experience: '職務経歴（簡易）',
-            profile: 'プロフィール',
-            stats: '統計',
-            project: '経歴（案件）',
-          };
+          const names = BLOCK_TYPE_LABELS;
           const outlineItems = items.map((item, index) => ({
             id: item.id,
             canMoveUp: index > 0,

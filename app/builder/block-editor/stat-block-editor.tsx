@@ -5,11 +5,12 @@ import { useId } from 'react';
 import { Button } from '@/component/ui/button';
 import { Input } from '@/component/ui/input';
 import type { StatItem, StatsBlockData } from '@/db/block';
+import { STAT_FIELD_LABELS } from '../field-labels';
 
 const FIELDS = [
-  { key: 'value', label: '数値' },
-  { key: 'unit', label: '単位' },
-  { key: 'label', label: 'ラベル' },
+  { key: 'value', label: STAT_FIELD_LABELS.value },
+  { key: 'unit', label: STAT_FIELD_LABELS.unit },
+  { key: 'label', label: STAT_FIELD_LABELS.label },
 ] as const;
 
 export function StatsBlockEditor({
@@ -29,9 +30,9 @@ export function StatsBlockEditor({
         className="hidden grid-cols-[6rem_5rem_minmax(0,1fr)_2.75rem] gap-3 text-sm font-medium text-muted-foreground sm:grid"
         aria-hidden="true"
       >
-        <span>数値</span>
-        <span>単位</span>
-        <span>ラベル</span>
+        <span>{STAT_FIELD_LABELS.value}</span>
+        <span>{STAT_FIELD_LABELS.unit}</span>
+        <span>{STAT_FIELD_LABELS.label}</span>
         <span />
       </div>
       {data.items.map((item, index) => (

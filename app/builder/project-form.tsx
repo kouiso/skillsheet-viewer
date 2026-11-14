@@ -12,6 +12,7 @@ import {
 } from '@/db/process';
 
 import { KIND_OPTIONS, ROLE_OPTIONS, TECH_CATEGORIES, TECH_SUGGESTIONS } from './editor-constant';
+import { COMPANY_FIELD_LABELS, PROJECT_FIELD_LABELS } from './field-labels';
 import { GrowTextarea } from './grow-textarea';
 import { MonthDatePicker } from './month-date-picker';
 import { projectHasBlockingPeriod } from './project-warning';
@@ -97,14 +98,14 @@ export const CompanyBar = ({ company, onPatchCompany, onDeleteCompany }: Company
       value={company.name}
       onChange={(e) => onPatchCompany({ name: e.target.value })}
       placeholder="会社名"
-      aria-label="会社名"
+      aria-label={COMPANY_FIELD_LABELS.name}
       className="inp"
       style={{ width: 220, flex: '0 0 auto' }}
     />
     <select
       value={company.kind}
       onChange={(e) => onPatchCompany({ kind: e.target.value })}
-      aria-label="会社の種別"
+      aria-label={COMPANY_FIELD_LABELS.kind}
       className="sel"
       style={{ width: 130, flex: '0 0 auto' }}
     >
@@ -132,7 +133,7 @@ export const CompanyBar = ({ company, onPatchCompany, onDeleteCompany }: Company
       value={company.note}
       onChange={(e) => onPatchCompany({ note: e.target.value })}
       placeholder="会社・経歴の説明（任意）"
-      aria-label="会社の説明"
+      aria-label={COMPANY_FIELD_LABELS.note}
       className="inp"
       style={{ flex: '1 1 160px', minWidth: 160 }}
     />
@@ -234,7 +235,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
       <Section num="1" title="基本情報">
         <div className="fgrid">
           <Field
-            label="案件タイトル"
+            label={PROJECT_FIELD_LABELS.title}
             required
             col2
             syncKey="title"
@@ -247,13 +248,13 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               value={p.title}
               onChange={(e) => set('title', e.target.value)}
               placeholder="例：架空案件10の開発"
-              aria-label="案件タイトル"
+              aria-label={PROJECT_FIELD_LABELS.title}
               className={`inp${!p.title.trim() ? ' err' : ''}`}
             />
           </Field>
 
           <Field
-            label="スコープ / 担当領域"
+            label={PROJECT_FIELD_LABELS.scope}
             col2
             syncKey="scope"
             onFocus={focus('scope')}
@@ -262,11 +263,15 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             <ScopePicker value={p.scope} onChange={(v) => set('scope', v)} />
           </Field>
 
-          <Field label="所属会社" required hint="会社を変えると、この案件がその会社の下に移ります">
+          <Field
+            label={PROJECT_FIELD_LABELS.companyId}
+            required
+            hint="会社を変えると、この案件がその会社の下に移ります"
+          >
             <select
               value={p.companyId}
               onChange={(e) => onMoveCompany(e.target.value)}
-              aria-label="所属会社"
+              aria-label={PROJECT_FIELD_LABELS.companyId}
               className="sel"
             >
               {data.companies.map((c) => (
@@ -277,8 +282,13 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             </select>
           </Field>
 
-          <Field label="役割" syncKey="meta" onFocus={focus('meta')}>
-            <select value={p.role} onChange={(e) => set('role', e.target.value)} aria-label="役割" className="sel">
+          <Field label={PROJECT_FIELD_LABELS.role} syncKey="meta" onFocus={focus('meta')}>
+            <select
+              value={p.role}
+              onChange={(e) => set('role', e.target.value)}
+              aria-label={PROJECT_FIELD_LABELS.role}
+              className="sel"
+            >
               {/* 既存データの未知の役割は温存表示する */}
               {!(ROLE_OPTIONS as readonly string[]).includes(p.role) && (
                 <option value={p.role}>{p.role || '（役割未設定）'}</option>
@@ -292,13 +302,17 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
           </Field>
 
           <Field
-            label="期間"
+            label={PROJECT_FIELD_LABELS.period}
             required
             col2
             syncKey="period"
             onFocus={focus('period')}
             hint="月数・並び順は自動計算"
-            warningTarget={orderError || endMissing ? 'input[aria-label="終了月"]' : 'input[aria-label="開始月"]'}
+            warningTarget={
+              orderError || endMissing
+                ? `input[aria-label="${PROJECT_FIELD_LABELS.periodEnd}"]`
+                : `input[aria-label="${PROJECT_FIELD_LABELS.periodStart}"]`
+            }
             error={
               orderError
                 ? '終了月が開始月より前になっています'
@@ -313,18 +327,18 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
               <MonthDatePicker
                 value={start}
                 onChange={(v) => commitPeriod(v, end, ongoing)}
-                label="開始月"
-                placeholder="開始月"
+                label={PROJECT_FIELD_LABELS.periodStart}
+                placeholder={PROJECT_FIELD_LABELS.periodStart}
                 error={!start && !legacyUnparsable}
               />
               <span className="sep">—</span>
               <MonthDatePicker
                 value={ongoing ? '' : end}
                 onChange={(v) => commitPeriod(start, v, ongoing)}
-                label="終了月"
+                label={PROJECT_FIELD_LABELS.periodEnd}
                 // 「継続中」がチェックボックスラベル・期間バッジと合わせて3箇所に重複していた
                 // （#152 S-5）。終了月欄は無効化された時点で理由が伝わるため空にする。
-                placeholder={ongoing ? '' : '終了月'}
+                placeholder={ongoing ? '' : PROJECT_FIELD_LABELS.periodEnd}
                 disabled={ongoing}
                 error={orderError}
               />
@@ -334,7 +348,7 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
                   checked={ongoing}
                   onChange={(e) => commitPeriod(start, e.target.checked ? '' : end, e.target.checked)}
                 />
-                継続中
+                {PROJECT_FIELD_LABELS.ongoing}
               </label>
               {durationBadge && <span className={`dur-badge${ongoing ? ' live' : ''}`}>{durationBadge}</span>}
             </div>
@@ -348,12 +362,12 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
             )}
           </Field>
 
-          <Field label="チーム規模" syncKey="meta" onFocus={focus('meta')}>
+          <Field label={PROJECT_FIELD_LABELS.team} syncKey="meta" onFocus={focus('meta')}>
             <input
               value={p.team}
               onChange={(e) => set('team', e.target.value)}
               placeholder="例：13"
-              aria-label="チーム規模"
+              aria-label={PROJECT_FIELD_LABELS.team}
               className="inp"
               style={{ fontFamily: 'var(--font-mono)' }}
             />
@@ -423,41 +437,41 @@ export const ProjectForm = ({ project: p, data, onPatch, onMoveCompany, onDelete
       {/* 4. コメント */}
       <Section num="4" title="コメント">
         <div className="fgrid">
-          <Field label="担当業務" col2 hint="≪担当業務≫ — 箇条書きは改行で">
+          <Field label={PROJECT_FIELD_LABELS.duties} col2 hint="≪担当業務≫ — 箇条書きは改行で">
             <GrowTextarea
               value={p.duties}
               onChange={(v) => set('duties', v)}
-              label="担当業務"
+              label={PROJECT_FIELD_LABELS.duties}
               placeholder={'・〇〇の機能開発\n・△△の実装'}
               syncKey="duties"
               onFocus={focus('duties')}
             />
           </Field>
-          <Field label="習得スキル" col2 hint="≪習得スキル≫">
+          <Field label={PROJECT_FIELD_LABELS.acquired} col2 hint="≪習得スキル≫">
             <GrowTextarea
               value={p.acquired}
               onChange={(v) => set('acquired', v)}
-              label="習得スキル"
+              label={PROJECT_FIELD_LABELS.acquired}
               placeholder="・〇〇による△△の開発"
               syncKey="acquired"
               onFocus={focus('acquired')}
             />
           </Field>
-          <Field label="コメント" col2 hint="≪コメント≫ — 取り組みの背景・工夫・成果">
+          <Field label={PROJECT_FIELD_LABELS.comment} col2 hint="≪コメント≫ — 取り組みの背景・工夫・成果">
             <GrowTextarea
               value={p.comment}
               onChange={(v) => set('comment', v)}
-              label="コメント"
+              label={PROJECT_FIELD_LABELS.comment}
               placeholder="工夫した点や成果を記述…"
               syncKey="comment"
               onFocus={focus('comment')}
             />
           </Field>
-          <Field label="概要（任意）" col2 hint="案件カードの「概要」節に表示">
+          <Field label={`${PROJECT_FIELD_LABELS.summary}（任意）`} col2 hint="案件カードの「概要」節に表示">
             <GrowTextarea
               value={p.summary ?? ''}
               onChange={(v) => set('summary', v)}
-              label="概要"
+              label={PROJECT_FIELD_LABELS.summary}
               placeholder="案件の概要を1〜3文で記載"
               syncKey="summary"
               onFocus={focus('summary')}

@@ -3,13 +3,14 @@
 import { useDraggable } from '@dnd-kit/core';
 import { Plus, Table } from 'lucide-react';
 
+import { BLOCK_TYPE_LABELS } from '../field-labels';
 import { type EditorItem, newId } from '../serialize';
 
 export type PaletteBlockType = 'markdown' | 'table';
 
 export const PALETTE_ITEMS: { blockType: PaletteBlockType; label: string; icon: React.ReactNode }[] = [
-  { blockType: 'markdown', label: 'テキスト', icon: <Plus className="size-3.5" /> },
-  { blockType: 'table', label: 'テーブル', icon: <Table className="size-3.5" /> },
+  { blockType: 'markdown', label: BLOCK_TYPE_LABELS.markdown, icon: <Plus className="size-3.5" /> },
+  { blockType: 'table', label: BLOCK_TYPE_LABELS.table, icon: <Table className="size-3.5" /> },
 ];
 
 /** パレット上のドラッグ可能チップ。canvas へドロップすると対応ブロックを挿入する。 */

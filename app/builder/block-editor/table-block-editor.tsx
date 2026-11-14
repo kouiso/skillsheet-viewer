@@ -2,6 +2,7 @@
 
 import { AlignCenter, AlignLeft, AlignRight, Plus, Trash2 } from 'lucide-react';
 import type { TableAlign, TableColumn } from '@/db/block';
+import { TABLE_FIELD_LABELS } from '../field-labels';
 
 const ALIGN_OPTIONS: { value: TableAlign; Icon: typeof AlignLeft; label: string }[] = [
   { value: 'left', Icon: AlignLeft, label: '左揃え' },
@@ -68,7 +69,7 @@ export const TableBlockEditor = ({
                     value={col.label}
                     onChange={(e) => setLabel(ci, e.target.value)}
                     placeholder={`列${ci + 1}`}
-                    aria-label={`列${ci + 1}の見出し`}
+                    aria-label={`列${ci + 1}の${TABLE_FIELD_LABELS.label}`}
                     className="w-full min-h-11 min-w-24 rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                   <div className="flex items-center gap-2">
