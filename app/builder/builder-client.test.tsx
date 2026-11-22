@@ -589,6 +589,84 @@ describe('BuilderClient', () => {
     expect(screen.queryByDisplayValue('未保存のブロック')).not.toBeInTheDocument();
   });
 
+  it('プロフィールの項目名が空のまま履歴を開こうとすると、S-11b の確認が出る（往復なし）', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('値'), 'A型');
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    // 板 S-11b: 題名・本文・ボタンが出る。「保存して履歴を開く」の確認は挟まない（保存できないので）。
+    const reason = await screen.findByRole('alertdialog');
+    expect(within(reason).getByText('未保存の変更を保存できません。')).toBeInTheDocument();
+    expect(within(reason).getByText(/プロフィールに、項目名が空の行があります。/)).toBeInTheDocument();
+    expect(within(reason).getByText(/このまま履歴を開くと、未保存の変更は失われます。/)).toBeInTheDocument();
+    expect(within(reason).getByRole('button', { name: '変更を捨てて履歴を開く' })).toBeInTheDocument();
+    expect(within(reason).getByRole('button', { name: '編集に戻る' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '保存して履歴を開く' })).not.toBeInTheDocument();
+    expect(mockSave).not.toHaveBeenCalled();
+    await user.click(within(reason).getByRole('button', { name: '編集に戻る' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
+    // 戻ると下書き（空ラベルの行）は残る。
+    expect(screen.getByLabelText('値')).toHaveValue('A型');
+  });
+
+  it('S-11b で「変更を捨てて履歴を開く」を選ぶと、プロフィールの下書きも保存済みに戻り履歴が開く', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    await user.type(screen.getByLabelText('値'), 'A型');
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: '変更を捨てて履歴を開く' }),
+    );
+    expect(await screen.findByRole('region', { name: '版の履歴' })).toBeInTheDocument();
+    // 下書きを捨てて保存済みに戻っているので、復元は止められていない。
+    expect(screen.queryByText(/未保存の入力があります/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '編集画面へ' }));
+    // 編集中エディタのローカルな空ラベル行も消え、保存済み（その他の項目なし）に戻る。
+    expect(screen.queryByLabelText('値')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'この項目を削除' })).not.toBeInTheDocument();
+  });
+
+  it('項目名の重複だけの未確定では、従来の案内のまま（S-11b は出さない）', async () => {
+    const user = userEvent.setup();
+    const profileBlock: Block[] = [
+      {
+        id: 'profile-1',
+        type: 'profile',
+        order: 0,
+        data: { name: 'テスト太郎', title: 'エンジニア', pr: '', strengths: [], meta: {} },
+      },
+    ];
+    render(<BuilderClient initialBlocks={profileBlock} initialTitle="t" {...defaultProps} />);
+    await user.click(screen.getByRole('button', { name: '項目を追加' }));
+    // 「年齢」は既知項目の予約ラベルなので、任意項目のラベルに使うと衝突になる。
+    await user.type(screen.getByLabelText('項目名'), '年齢');
+    // 固定項目側にも aria-label「年齢」の入力があるので、任意行側（末尾）を選ぶ。
+    await user.type(screen.getAllByLabelText('年齢').at(-1) as HTMLElement, '30');
+    await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('項目名')).toHaveAttribute('aria-invalid', 'true');
+  });
+
   it('期間投影の不一致（クライアント側検証）で履歴前の保存が止まった時も、往復せず理由を出す', async () => {
     const user = userEvent.setup();
     render(

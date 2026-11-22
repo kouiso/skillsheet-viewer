@@ -63,6 +63,10 @@ const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
 export const hasUncommittedProfileRows = (rows: CustomMetaRow[]): boolean =>
   findConflictingRowIds(rows).size > 0 || rows.some((row) => !row.label.trim() && Boolean(row.value.trim()));
 
+/** ラベルが空で値だけ入った行があるか（S-11b「項目名が空」の理由を出す判定に使う。重複の衝突は含めない）。 */
+export const hasEmptyLabelProfileRows = (rows: CustomMetaRow[]): boolean =>
+  rows.some((row) => !row.label.trim() && Boolean(row.value.trim()));
+
 /**
  * プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。
  *
