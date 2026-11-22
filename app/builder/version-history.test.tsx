@@ -72,6 +72,39 @@ async function confirmOld() {
   return await screen.findByRole('alertdialog');
 }
 describe('シート全体の版の履歴', () => {
+  describe('板どおりの配置（#674）', () => {
+    it('1280 の列幅は一覧 360px・比較 440px', async () => {
+      setup();
+      const aside = await screen.findByRole('complementary', { name: '保存された版' });
+      expect(aside.parentElement).toHaveClass('md:grid-cols-[minmax(0,360px)_minmax(0,440px)]');
+    });
+    it('390 の一覧画面の下には主ボタン「変更を見る（時刻 → 現在）」があって、押すと比較画面に切り替わる', async () => {
+      setup();
+      const aside = await screen.findByRole('complementary', { name: '保存された版' });
+      // 比較先は既定で現在の版なので、板どおり「（時刻 → 現在）」の名札になる。
+      const cta = within(aside).getByRole('button', { name: /変更を見る（.+ → 現在）/ });
+      expect(cta).toBeEnabled();
+      fireEvent.click(cta);
+      // jsdom では画面の出し分けは class で確かめる（390 では一覧が隠れて比較だけの画面になる）。
+      await waitFor(() => expect(aside).toHaveClass('hidden'));
+      // 比較画面の帯には一覧へ戻るボタンが出る。
+      fireEvent.click(screen.getByRole('button', { name: '一覧へ' }));
+      await waitFor(() => expect(aside).not.toHaveClass('hidden'));
+    });
+    it('比べられる版が無い時は「変更を見る」を押せない', async () => {
+      setup({ list: vi.fn().mockResolvedValue([]) });
+      const aside = await screen.findByRole('complementary', { name: '保存された版' });
+      expect(within(aside).getByRole('button', { name: /変更を見る/ })).toBeDisabled();
+    });
+    it('戻す前の確認は板のダイアログの寸法（最大 480px・ボタン 36px・390 では主ボタンが上）', async () => {
+      setup();
+      const dialog = await confirmOld();
+      expect(dialog).toHaveClass('max-w-[480px]');
+      const restore = within(dialog).getByRole('button', { name: '戻す' });
+      expect(restore).toHaveClass('h-9');
+      expect(restore).toHaveClass('max-sm:order-first');
+    });
+  });
   describe('比較ペインの状態（一覧の取得状態から決まる）', () => {
     it('一覧の取得に失敗したら読み込み中を出さず、読み直しを促す', async () => {
       setup({ list: vi.fn().mockRejectedValue(new Error('失敗')) });

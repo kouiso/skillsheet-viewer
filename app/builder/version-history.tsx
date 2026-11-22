@@ -1,6 +1,7 @@
 'use client';
 
 import * as AlertDialog from '@radix-ui/react-dialog';
+import { Info, TriangleAlert } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import type { Block } from '@/db/block';
@@ -62,8 +63,15 @@ function groupSpan(versions: readonly VersionSummary[]) {
   const last = versions.reduce((a, b) => (time(b) > time(a) ? b : a));
   return { first: first.recordedAt, last: last.recordedAt };
 }
+// 板のボタンは .btn2（高さ 40px）。この画面のボタン・選択欄はこれに揃える（#674）。
+// 共有部品の 44px とは変え方が別になるため、この画面だけの寸法として持つ。
 const control =
-  'min-h-11 rounded border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+  'min-h-10 rounded border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+/* ダイアログのボタンは板どおり 高さ 36px（390px では 44px・幅いっぱい）。use-workspace-confirm と同じ寸法 */
+const dialogButton =
+  'h-9 rounded-[4px] border px-3 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground max-sm:h-11 max-sm:w-full';
+const dialogPrimary = `${dialogButton} border-primary-dark bg-primary-dark text-primary-foreground disabled:bg-background disabled:border-border`;
+const dialogNormal = `${dialogButton} border-input bg-background text-foreground`;
 // 板「戻した後・空・失敗」の一覧側の箱: 地 card・枠線 1px・角丸 6px・余白 20px・中の間隔 12px。
 const listBox = 'space-y-3 rounded-lg border border-border bg-card p-5';
 const primary = `${control} border-primary bg-primary-dark text-primary-foreground font-semibold disabled:bg-background disabled:border-border`;
@@ -285,7 +293,8 @@ export function VersionHistory({
   function selectVersion(target: string) {
     setFrom(revision);
     setTo(target);
-    setMobileTab('compare');
+    // 390 では一覧と比較は別画面。行の選択は比較先を決めるだけで、
+    // 画面の移動は下の主ボタン「変更を見る」が担う（板どおり）。
   }
   function versionEntry(row: VersionSummary) {
     return (
@@ -342,14 +351,28 @@ export function VersionHistory({
   const single = rows.length === 1 && !more;
   return (
     <section aria-label="版の履歴" className="min-h-screen min-w-0 bg-background text-foreground">
-      <header className="flex flex-wrap items-center gap-3 border-b border-border bg-card p-4">
-        <button type="button" className={control} onClick={onClose} disabled={busy}>
+      {/* 板（390）: 上の帯は高さ 56px。比較画面では戻り先が一覧になる別画面なので、
+          390 では帯の左を「一覧へ」に切り替える（編集画面へは一覧画面から行く）。 */}
+      <header className="flex items-center gap-3 border-b border-border bg-card p-4 max-sm:h-14 max-sm:gap-2 max-sm:px-4 max-sm:py-0">
+        <button
+          type="button"
+          className={`${control} ${mobileTab === 'compare' ? 'max-sm:hidden' : ''}`}
+          onClick={onClose}
+          disabled={busy}
+        >
           編集画面へ
         </button>
-        <h1 ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+        <button
+          type="button"
+          className={`${control} ${mobileTab === 'compare' ? 'md:hidden' : 'hidden'}`}
+          onClick={() => setMobileTab('list')}
+        >
+          一覧へ
+        </button>
+        <h1 ref={headingRef} tabIndex={-1} className="shrink-0 text-xl font-semibold">
           版の履歴
         </h1>
-        <span className="break-all text-sm text-muted-foreground">{title}</span>
+        <span className="min-w-0 break-all text-sm text-muted-foreground max-sm:truncate">{title}</span>
       </header>
       {restoreBlockedReason && (
         <p role="alert" className="border-b border-border bg-muted p-4">
@@ -383,29 +406,11 @@ export function VersionHistory({
           <progress className="h-1 w-full" aria-label="復元通知の残り時間" max={10} value={noticeSeconds} />
         </div>
       )}
-      <nav aria-label="履歴の表示切替" className="grid grid-cols-2 border-b border-border md:hidden">
-        <button
-          type="button"
-          className={control}
-          aria-pressed={mobileTab === 'list'}
-          onClick={() => setMobileTab('list')}
-        >
-          一覧
-        </button>
-        <button
-          type="button"
-          className={control}
-          disabled={single || rows.length === 0}
-          aria-pressed={mobileTab === 'compare'}
-          onClick={() => setMobileTab('compare')}
-        >
-          比較
-        </button>
-      </nav>
-      <div className="grid min-w-0 md:grid-cols-[280px_minmax(0,1fr)]">
+      {/* 板（1280）: 一覧の欄 360px・比較の欄 440px。390 では別画面にして mobileTab で行き来する */}
+      <div className="grid min-w-0 md:grid-cols-[minmax(0,360px)_minmax(0,440px)]">
         <aside
           aria-label="保存された版"
-          className={`${mobileTab === 'list' ? 'block' : 'hidden'} min-w-0 border-r border-border bg-card p-4 md:block`}
+          className={`${mobileTab === 'list' ? 'flex' : 'hidden'} min-w-0 flex-col border-border bg-card p-4 pb-0 max-sm:min-h-[calc(100dvh-56px)] md:flex md:border-r md:pb-4`}
         >
           {loading && (
             <p role="status" aria-busy="true" className="rounded bg-muted p-6">
@@ -519,9 +524,20 @@ export function VersionHistory({
               復元前の版 {undo.target} を確認
             </button>
           )}
+          {/* 板（390）: 一覧画面の下に高さ 48px・幅いっぱいの主ボタン「変更を見る（時刻 → 現在）」 */}
+          <div className="sticky bottom-0 -mx-4 mt-auto border-t border-border bg-card p-4 md:hidden">
+            <button
+              type="button"
+              className={`${primary} min-h-12 w-full`}
+              disabled={busy || rows.length < 2 || !from || !to}
+              onClick={() => setMobileTab('compare')}
+            >
+              変更を見る（{from ? timeOf(from) : '—'} → {to === revision ? '現在' : to ? timeOf(to) : '—'}）
+            </button>
+          </div>
         </aside>
         <div
-          className={`${mobileTab === 'compare' ? 'flex' : 'hidden'} min-h-[calc(100dvh-140px)] min-w-0 flex-col md:flex md:min-h-[calc(100dvh-80px)]`}
+          className={`${mobileTab === 'compare' ? 'flex' : 'hidden'} min-h-[calc(100dvh-56px)] min-w-0 flex-col md:flex md:min-h-[calc(100dvh-80px)]`}
         >
           <div className="grid gap-3 border-b border-border bg-card p-4 sm:grid-cols-2">
             {(['from', 'to'] as const).map((side) => (
@@ -616,15 +632,23 @@ export function VersionHistory({
               <p role="alert">復元の確認を取得できませんでした。内容は変更していません。もう一度お試しください。</p>
             )}
           </div>
-          <footer className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card p-4">
-            <span className="text-sm text-muted-foreground">いまの内容も履歴に残ります。</span>
-            <div className="flex flex-wrap justify-end gap-2">
-              <button type="button" className={control} disabled={!pair} onClick={() => setView('preview')}>
+          {/* 板（390）: 比較画面の下は高さ 48px・幅いっぱいの主ボタンだけ。「全項目の原文を確認」は
+              欄内の「選択した版の全体プレビュー」と同じ動きなので 390 では畳む。1280 では右寄せの2ボタン。
+              比較の欄は 440px で注記と2ボタンが1行に収まらないため、注記は独立行にしてボタン行は右寄せにする */}
+          <footer className="sticky bottom-0 mt-auto border-t border-border bg-card p-4">
+            <span className="block text-sm text-muted-foreground max-sm:hidden">いまの内容も履歴に残ります。</span>
+            <div className="mt-2 flex flex-wrap items-center justify-end gap-2 max-sm:mt-0">
+              <button
+                type="button"
+                className={`${control} max-sm:hidden`}
+                disabled={!pair}
+                onClick={() => setView('preview')}
+              >
                 全項目の原文を確認
               </button>
               <button
                 type="button"
-                className={primary}
+                className={`${primary} max-sm:min-h-12 max-sm:w-full`}
                 disabled={
                   busy ||
                   Boolean(restoreBlockedReason) ||
@@ -651,7 +675,9 @@ export function VersionHistory({
         }}
       >
         <AlertDialog.Portal>
-          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+          {/* 板のダイアログ: オーバーレイ rgba(16,23,26,.45)（暗い配色は .66 の黒）、
+              最大幅 480px・角丸 8px・内側 24px（390px では 20px）・中の間隔 10px */}
+          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-[rgba(16,23,26,.45)] dark:bg-[rgba(0,0,0,.66)]" />
           <AlertDialog.Content
             role="alertdialog"
             onCloseAutoFocus={(event) => {
@@ -665,29 +691,39 @@ export function VersionHistory({
                 cancelRef.current.focus();
               }
             }}
-            className="fixed left-1/2 top-1/2 z-50 max-h-[90dvh] w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded border border-border bg-card p-5 text-foreground shadow-xl"
+            className="fixed left-1/2 top-1/2 z-50 flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 flex-col gap-2.5 overflow-y-auto rounded-xl border border-border bg-card p-6 text-foreground shadow-[0_18px_44px_-18px_rgba(16,23,26,.38)] max-sm:p-5 dark:shadow-[0_18px_44px_-18px_rgba(0,0,0,.66)]"
           >
-            <AlertDialog.Title className="text-lg font-semibold">
-              版 {confirmation?.target.revision} の状態に戻します。
-            </AlertDialog.Title>
-            <AlertDialog.Description className="my-3 text-sm">
+            <div className="flex items-start gap-3">
+              <span
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text"
+                aria-hidden="true"
+              >
+                <Info className="h-4 w-4" />
+              </span>
+              {/* 板の題名: 16px・太さ 700・行高 1.6 */}
+              <AlertDialog.Title className="min-w-0 break-words text-base font-bold leading-[1.6]">
+                版 {confirmation?.target.revision} の状態に戻します。
+              </AlertDialog.Title>
+            </div>
+            {/* 板の本文: 13.5px・行高 1.8・左 44px（390px では 0）。以降の内容も同じ段に揃える */}
+            <AlertDialog.Description className="break-words pl-11 text-[13.5px] leading-[1.8] text-muted-foreground max-sm:pl-0">
               {confirmation?.current.validation.editable
                 ? 'いまの内容も履歴に残るので、あとから戻せます。'
                 : '復元前の内容は履歴に残りますが、現在の入力ルールでは戻せません。'}
             </AlertDialog.Description>
             {confirmation && confirmation.laterRevisionCount !== '0' && (
-              <p className="mb-3 rounded border border-border bg-muted p-3 text-sm">
+              <p className="ml-11 rounded border border-border bg-muted p-3 text-sm max-sm:ml-0">
                 この版のあとに {confirmation.laterRevisionCount}
                 件の記録があります。それらの変更も今の内容から消えます（履歴には残ります）。
               </p>
             )}
             {confirmation?.visibilityUncertain && (
-              <p role="alert" className="mb-3 font-semibold">
+              <p role="alert" className="ml-11 font-semibold max-sm:ml-0">
                 現在の内容が編集不能のため、公開範囲の差を完全には確認できません。選択した版の全内容を確認してください。
               </p>
             )}
             {Boolean(confirmation?.newlyVisible.length) && (
-              <div className="mb-3">
+              <div className="ml-11 max-sm:ml-0">
                 <h2 className="font-semibold">次の内容が閲覧者の画面に表示されるようになります</h2>
                 <ul className="mt-2 list-disc space-y-2 pl-5">
                   {confirmation?.newlyVisible.map((item, i) => (
@@ -701,7 +737,7 @@ export function VersionHistory({
             )}
             {confirmation && (
               <details
-                className="my-3 min-w-0 rounded border border-border p-3"
+                className="ml-11 min-w-0 rounded border border-border p-3 max-sm:ml-0"
                 open={confirmationReviewOpen}
                 onToggle={(event) => setConfirmationReviewOpen(event.currentTarget.open)}
               >
@@ -721,26 +757,27 @@ export function VersionHistory({
               </details>
             )}
             {confirmation && !confirmation.canRestore && (
-              <p role="alert">
+              <p role="alert" className="ml-11 max-sm:ml-0">
                 {confirmation.sameContent
                   ? 'いまの内容と同じため戻す必要はありません。'
                   : 'この版は今の入力ルールに合わないため戻せません。'}
               </p>
             )}
             {restoreError && (
-              <p role="alert" className="my-3">
+              <p role="alert" className="ml-11 max-sm:ml-0">
                 復元の完了を確認できませんでした。再試行するか、やめるを選んでください。
               </p>
             )}
-            <div className="mt-5 flex flex-wrap justify-end gap-3">
+            {/* 板: ボタンは右寄せで間隔 8px。390 では縦に並べて幅いっぱい・主ボタンが上 */}
+            <div className="flex flex-wrap justify-end gap-2 max-sm:flex-col">
               <AlertDialog.Close asChild>
-                <button ref={cancelRef} type="button" className={control} disabled={busy}>
+                <button ref={cancelRef} type="button" className={dialogNormal} disabled={busy}>
                   やめる
                 </button>
               </AlertDialog.Close>
               <button
                 type="button"
-                className={primary}
+                className={`${dialogPrimary} max-sm:order-first`}
                 disabled={busy || Boolean(restoreBlockedReason) || !confirmation?.canRestore}
                 onClick={() => void restore()}
               >
@@ -752,7 +789,8 @@ export function VersionHistory({
       </AlertDialog.Root>
       <AlertDialog.Root open={conflict}>
         <AlertDialog.Portal>
-          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+          {/* 板のダイアログと同じ寸法（戻す前の確認と揃える）。競合は注意の丸アイコン */}
+          <AlertDialog.Overlay className="fixed inset-0 z-50 bg-[rgba(16,23,26,.45)] dark:bg-[rgba(0,0,0,.66)]" />
           <AlertDialog.Content
             role="alertdialog"
             onCloseAutoFocus={(event) => {
@@ -766,27 +804,37 @@ export function VersionHistory({
                 cancelRef.current.focus();
               }
             }}
-            className="fixed left-1/2 top-1/2 z-50 w-[min(520px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded border border-border bg-card p-5 text-foreground"
+            className="fixed left-1/2 top-1/2 z-50 flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-[480px] -translate-x-1/2 -translate-y-1/2 flex-col gap-2.5 overflow-y-auto rounded-xl border border-border bg-card p-6 text-foreground shadow-[0_18px_44px_-18px_rgba(16,23,26,.38)] max-sm:p-5 dark:shadow-[0_18px_44px_-18px_rgba(0,0,0,.66)]"
           >
-            <AlertDialog.Title className="text-lg font-semibold">
-              ほかの画面かツールで更新されました。
-            </AlertDialog.Title>
-            <AlertDialog.Description className="my-4">
+            <div className="flex items-start gap-3">
+              <span
+                className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn-soft text-warn-strong"
+                aria-hidden="true"
+              >
+                <TriangleAlert className="h-4 w-4" />
+              </span>
+              <AlertDialog.Title className="min-w-0 break-words text-base font-bold leading-[1.6]">
+                ほかの画面かツールで更新されました。
+              </AlertDialog.Title>
+            </div>
+            <AlertDialog.Description className="break-words pl-11 text-[13.5px] leading-[1.8] text-muted-foreground max-sm:pl-0">
               最新の履歴を読み込んでから、もう一度選んでください。
             </AlertDialog.Description>
-            <AlertDialog.Close asChild>
-              <button
-                type="button"
-                className={primary}
-                onClick={() => {
-                  setConflict(false);
-                  setConfirmation(null);
-                  onReload();
-                }}
-              >
-                最新を読み込む
-              </button>
-            </AlertDialog.Close>
+            <div className="flex flex-wrap justify-end gap-2 max-sm:flex-col">
+              <AlertDialog.Close asChild>
+                <button
+                  type="button"
+                  className={`${dialogPrimary} max-sm:order-first`}
+                  onClick={() => {
+                    setConflict(false);
+                    setConfirmation(null);
+                    onReload();
+                  }}
+                >
+                  最新を読み込む
+                </button>
+              </AlertDialog.Close>
+            </div>
           </AlertDialog.Content>
         </AlertDialog.Portal>
       </AlertDialog.Root>
