@@ -660,7 +660,9 @@ describe('BuilderClient', () => {
     // 「年齢」は既知項目の予約ラベルなので、任意項目のラベルに使うと衝突になる。
     await user.type(screen.getByLabelText('項目名'), '年齢');
     // 固定項目側にも aria-label「年齢」の入力があるので、任意行側（末尾）を選ぶ。
-    await user.type(screen.getAllByLabelText('年齢').at(-1) as HTMLElement, '30');
+    const valueInput = screen.getAllByLabelText('年齢').at(-1);
+    if (!valueInput) throw new Error('任意項目の値入力欄がありません');
+    await user.type(valueInput, '30');
     await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
