@@ -1,7 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentSnapshot } from '@/db/document-service';
-import { documentDifferences, VersionHistory, type VersionHistoryApi } from './version-history';
+import { VersionHistory, type VersionHistoryApi } from './version-history';
 
 vi.mock('@/component/skill-sheet-viewer', () => ({ default: () => <p>全シート描画</p> }));
 const snapshot = (revision: string, editable = true): DocumentSnapshot => ({
@@ -72,15 +72,131 @@ async function confirmOld() {
   return await screen.findByRole('alertdialog');
 }
 describe('シート全体の版の履歴', () => {
+  describe('比較ペインの状態（一覧の取得状態から決まる）', () => {
+    it('一覧の取得に失敗したら読み込み中を出さず、読み直しを促す', async () => {
+      setup({ list: vi.fn().mockRejectedValue(new Error('失敗')) });
+      await screen.findByText('履歴を読み込めませんでした。');
+      expect(screen.getByText('一覧を読み直してください')).toBeInTheDocument();
+      expect(screen.queryByText('差分を読み込み中…')).not.toBeInTheDocument();
+      // 一覧の失敗は role=alert を1つだけ出す（比較欄は role を付けない）。
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      expect(screen.getByRole('alert')).toHaveTextContent('履歴を読み込めませんでした。');
+      expect(screen.getByRole('alert')).toHaveClass('rounded-lg', 'p-5', 'space-y-3');
+    });
+
+    it('失敗 → 再試行 → 回復すると、失敗の文と alert が消えて版が並ぶ', async () => {
+      const rows = [
+        {
+          revision: '2',
+          title: '合成',
+          recordedAt: '2026-10-06T00:10:00Z',
+          action: 'save',
+          restoredFrom: null,
+          restoredBefore: null,
+        },
+        {
+          revision: '1',
+          title: '合成',
+          recordedAt: '2026-10-06T00:00:00Z',
+          action: 'save',
+          restoredFrom: null,
+          restoredBefore: null,
+        },
+      ];
+      const list = vi.fn().mockRejectedValueOnce(new Error('失敗')).mockResolvedValue(rows);
+      setup({ list });
+      fireEvent.click(await screen.findByRole('button', { name: '再試行' }));
+      await screen.findByRole('button', { name: /版 1/ });
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
+    });
+
+    it('版が残っているまま追加読み込みが失敗し別の版を選んでも、取得中は alert でなく読み込み中を出す', async () => {
+      // 20件そろえると「前の版を読み込む」が出る。2分以上あけて自動保存のまとまりにたたまれない。
+      const page = Array.from({ length: 20 }, (_, i) => ({
+        revision: String(40 - i),
+        title: '合成',
+        recordedAt: new Date(Date.UTC(2026, 9, 6, 12, 0) - i * 600_000).toISOString(),
+        action: 'save',
+        restoredFrom: null,
+        restoredBefore: null,
+      }));
+      const list = vi.fn().mockResolvedValueOnce(page).mockRejectedValue(new Error('失敗'));
+      let finish!: (v: DocumentSnapshot) => void;
+      setup({
+        list,
+        read: vi.fn().mockImplementation(async (rev) =>
+          rev === '21'
+            ? new Promise<DocumentSnapshot>((resolve) => {
+                finish = resolve;
+              })
+            : snapshot(rev),
+        ),
+      });
+      fireEvent.click(await screen.findByRole('button', { name: /前の版を読み込む/ }));
+      await screen.findByText('履歴を読み込めませんでした。');
+      fireEvent.click(screen.getByRole('button', { name: /版 21/ }));
+      expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('差分を読み込み中…');
+      expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
+      expect(screen.getAllByRole('alert')).toHaveLength(1);
+      await act(async () => finish(snapshot('21')));
+    });
+
+    it('保存された版が0件なら読み込み中を出さず、比べる版がないと伝える', async () => {
+      setup({ list: vi.fn().mockResolvedValue([]) });
+      await screen.findByText('保存された版がありません。');
+      expect(screen.getByText('編集して保存すると、ここに版が残ります。').parentElement).toHaveClass(
+        'rounded-lg',
+        'p-5',
+      );
+      expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(screen.queryByText('差分を読み込み中…')).not.toBeInTheDocument();
+    });
+
+    it('一覧を取得している間だけ差分を読み込み中と出す', async () => {
+      setup({ list: vi.fn().mockReturnValue(new Promise(() => {})) });
+      expect(await screen.findByText('差分を読み込み中…')).toBeInTheDocument();
+      expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
+      expect(screen.queryByText('まだ比べる版がありません')).not.toBeInTheDocument();
+    });
+  });
+
   it('旧版の行選択では現在版との差分へ切り替え、任意比較selectも維持する', async () => {
     setup();
     await selectOld();
     expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('2');
     expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1');
-    expect(screen.getByText(/差分 1項目/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
+    expect(screen.getByText('省略せず、変わった項目は全部並べます。')).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: '比較元' }), { target: { value: '1' } });
     await screen.findByText('内容は同じです。');
     expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('1');
+  });
+
+  it('差分は場所を語で示し、前を「−」・後を「＋」で、引用符なし・改行ありで出す', async () => {
+    const withText = (revision: string, text: string): DocumentSnapshot => ({
+      ...snapshot(revision),
+      blocks: [{ id: 'b', type: 'markdown', order: 0, data: { markdown: text } }],
+    });
+    setup({
+      read: vi
+        .fn()
+        .mockImplementation(async (revision) => withText(revision, revision === '1' ? '前の行\n二行目' : '後の行')),
+    });
+    await selectOld();
+    const frame = screen.getByRole('heading', { name: /本文$/ }).closest('section') as HTMLElement;
+    expect(within(frame).getByRole('heading')).toHaveTextContent('テキスト › 前の行 › 本文');
+    // 比較元は版2（現在）、比較先は版1。前の値は引用符なしで、改行を保ったまま出る。
+    const del = frame.querySelector('del') as HTMLElement;
+    const ins = frame.querySelector('ins') as HTMLElement;
+    expect(del.textContent).toBe('後の行');
+    expect(ins.textContent).toBe('前の行\n二行目');
+    expect(del).toHaveClass('whitespace-pre-wrap');
+    expect(frame.textContent).not.toContain('"');
+    expect(frame.textContent).toContain('−');
+    expect(frame.textContent).toContain('＋');
+    expect(screen.getByRole('button', { name: '全項目の原文を確認' })).toBeEnabled();
   });
 
   it('ブロック描画でも選択した版のシートタイトルを明示する', async () => {
@@ -213,11 +329,6 @@ describe('シート全体の版の履歴', () => {
     );
   });
 
-  it('順序・未知項目・空白の差分を隠さない', () => {
-    const result = documentDifferences({ items: ['A', 'B'], future: 'x\n' }, { items: ['B', 'A'], future: 'x\n\n' });
-    expect(result.map((x) => x.path)).toEqual(['文書.items.0', '文書.items.1', '文書.future']);
-    expect(result[2].after).toBe(JSON.stringify('x\n\n'));
-  });
   it('確認前に復元せず、全公開対象・巨大件数と安全側の初期focusを表示する', async () => {
     const { api } = setup();
     const dialog = await confirmOld();
@@ -300,7 +411,7 @@ describe('シート全体の版の履歴', () => {
         },
       ]);
     setup({ list });
-    fireEvent.click(await screen.findByRole('button', { name: '履歴を再読み込み' }));
+    fireEvent.click(await screen.findByRole('button', { name: '再試行' }));
     await screen.findByText(/版が1つしかありません/);
     expect(screen.getByRole('combobox', { name: '比較元' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeDisabled();

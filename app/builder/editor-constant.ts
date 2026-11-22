@@ -52,13 +52,13 @@ export const SCOPE_OPTIONS = [
 export const SCOPE_SEPARATOR = ' / ';
 
 /** 技術スタックのカテゴリ（md の技術スタック表と同じ区分）。 */
-export const TECH_CATEGORIES: { key: keyof ProjectTech; label: string }[] = [
-  { key: 'lang', label: '使用言語' },
-  { key: 'fw', label: 'フレームワーク・ライブラリ' },
-  { key: 'db', label: 'データベース' },
-  { key: 'infra', label: 'クラウド・インフラ' },
-  { key: 'tools', label: '開発ツール' },
-  { key: 'collab', label: 'コラボレーションツール' },
+export const TECH_CATEGORIES: { key: keyof ProjectTech; label: string; hint: string }[] = [
+  { key: 'lang', label: '使用言語', hint: '例：Java、TypeScript' },
+  { key: 'fw', label: 'フレームワーク・ライブラリ', hint: '例：Spring、React' },
+  { key: 'db', label: 'データベース', hint: '例：MySQL、PostgreSQL' },
+  { key: 'infra', label: 'クラウド・インフラ', hint: '例：AWS、Docker' },
+  { key: 'tools', label: '開発ツール', hint: '例：Git、Jira' },
+  { key: 'collab', label: 'コラボレーションツール', hint: '例：Slack、Notion' },
 ];
 
 /** 技術スタックのサジェスト候補（カテゴリ別マスタ。入力済みの値は呼び出し側で合流させる）。 */

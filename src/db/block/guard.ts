@@ -15,12 +15,14 @@ import type {
   SkillEntry,
   SkillsBlockData,
   StatItem,
+  StatKind,
   StatsBlockData,
   TableAlign,
   TableBlockData,
   TableColumn,
 } from './index';
 
+const STAT_KINDS: readonly StatKind[] = ['experience', 'projectCount', 'free'];
 const TABLE_ALIGNS: readonly TableAlign[] = ['left', 'center', 'right'];
 
 function isTableAlign(value: unknown): value is TableAlign {
@@ -100,7 +102,8 @@ export function isStatsBlockData(data: unknown): data is StatsBlockData {
       item !== null &&
       typeof (item as StatItem).value === 'string' &&
       typeof (item as StatItem).unit === 'string' &&
-      typeof (item as StatItem).label === 'string',
+      typeof (item as StatItem).label === 'string' &&
+      ((item as StatItem).kind === undefined || STAT_KINDS.includes((item as StatItem).kind as StatKind)),
   );
 }
 

@@ -296,4 +296,21 @@ describe('ProjectCard', () => {
     expect(ts.className).toContain('hit');
     expect(go.className).not.toContain('hit');
   });
+
+  describe('「続きを読む」の tab 停止（#658）', () => {
+    const comment = '1段落目。\n\n2段落目。\n\n3段落目。';
+
+    it('閲覧画面（既定）では tab で止まる', () => {
+      render(<ProjectCard item={buildItem({ comment })} no={1} activeTech={[]} tech={[]} />);
+      expect(screen.getByRole('button', { name: /続きを読む/ }).tabIndex).toBe(0);
+    });
+
+    it('linksTabbable=false（編集画面のプレビュー）では止まらず、押せば展開される', async () => {
+      render(<ProjectCard item={buildItem({ comment })} no={1} activeTech={[]} tech={[]} linksTabbable={false} />);
+      const more = screen.getByRole('button', { name: /続きを読む/ });
+      expect(more.tabIndex).toBe(-1);
+      await userEvent.click(more);
+      expect(screen.getByText(/3段落目/)).toBeInTheDocument();
+    });
+  });
 });

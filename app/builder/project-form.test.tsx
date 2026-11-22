@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProjectItem } from '@/db/block';
+import { PROJECT_FIELD_LABELS, TECH_FIELD_LABELS } from './field-label';
 import { ProjectForm } from './project-form';
 
 const project: ProjectItem = {
@@ -197,5 +198,74 @@ describe('案件フォームの確認案内', () => {
     fireEvent.click(screen.getByRole('button', { name: '確認する（期間）' }));
     expect(screen.getByLabelText('終了月', { selector: 'input' })).toHaveFocus();
     expect(screen.getByRole('alert')).toHaveTextContent('保存できません');
+  });
+});
+
+describe('案件フォームの補足文（#637）', () => {
+  const renderForm = () => {
+    const item = { ...project, companyId: 'company-1' };
+    return render(
+      <ProjectForm
+        project={item}
+        data={{ companies: [{ id: 'company-1', name: 'A社', kind: '', period: '', note: '' }], items: [item] }}
+        onPatch={vi.fn()}
+        onMoveCompany={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+  };
+
+  it('プログラム内部の項目名（companyId・company_id・tech.lang など）を画面に出さない', () => {
+    const { container } = renderForm();
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/company_?id/i);
+    expect(text).not.toMatch(/tech\.(lang|fw|db|infra|tools|collab)/);
+    // 案件の内部 ID も持ち主には意味が無い。
+    expect(text).not.toContain(project.id);
+  });
+
+  it('所属会社の補足は、変えたときに何が起きるかを伝える', () => {
+    renderForm();
+    expect(screen.getByText('会社を変えると、この案件がその会社の下に移ります')).toBeInTheDocument();
+  });
+
+  it('技術スタックの各欄に、何を入れる欄かが分かる補足が付く', () => {
+    renderForm();
+    for (const hint of ['例：Java、TypeScript', '例：Spring、React', '例：MySQL、PostgreSQL', '例：AWS、Docker']) {
+      expect(screen.getByText(hint)).toBeInTheDocument();
+    }
+  });
+});
+
+describe('項目名の対応表', () => {
+  it('編集画面の項目名は、版の差分と共有する対応表の語そのもの', () => {
+    render(
+      <ProjectForm
+        project={project}
+        data={{ companies: [{ id: 'company-1', name: '株式会社A', kind: '', period: '', note: '' }], items: [project] }}
+        onPatch={vi.fn()}
+        onMoveCompany={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+    const shown = [
+      'title',
+      'scope',
+      'companyId',
+      'role',
+      'period',
+      'team',
+      'duties',
+      'acquired',
+      'comment',
+      'summary',
+    ] as const;
+    for (const key of shown) {
+      // 概要だけは編集画面で「（任意）」を添える。語の本体は対応表と同じ。
+      expect(
+        screen.getAllByText(new RegExp(`^${PROJECT_FIELD_LABELS[key].replace(/[/]/g, '\\/')}`)).length,
+      ).toBeGreaterThan(0);
+    }
+    for (const label of Object.values(TECH_FIELD_LABELS)) expect(screen.getByText(label)).toBeInTheDocument();
   });
 });

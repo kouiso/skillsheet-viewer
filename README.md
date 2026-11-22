@@ -22,7 +22,7 @@
 - **認証**: Better Auth（編集者ログイン）+ HMAC 署名の閲覧コード（`VIEWER_CODE`）
 - **Lint / Format**: Biome
 - **テスト**: Vitest
-- **ランタイム / パッケージ管理**: mise（Node 22.x）/ pnpm
+- **ランタイム / パッケージ管理**: mise（Node の版は `.node-version` を見る）/ pnpm
 
 ## プロジェクト構成
 
@@ -50,11 +50,15 @@
 すべてのコマンドはリポジトリルートで実行します。
 
 ```bash
-# 1. ランタイムの用意（mise で Node 22.x と pnpm を固定）
+# 1. ランタイムの用意（mise で Node と pnpm を固定）
 mise install
 
 # 2. 依存インストール
 pnpm install
+
+# 2'. PDF の試験（pnpm test）に要る外部コマンド: Ghostscript・ImageMagick・poppler
+#     macOS: brew install ghostscript imagemagick poppler
+#     Ubuntu / WSL2: sudo apt-get install -y ghostscript imagemagick poppler-utils
 
 # 3. DB を用意する（下の A または B。詳細は setup.md）
 

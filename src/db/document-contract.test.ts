@@ -48,6 +48,14 @@ describe('raw block validation', () => {
       code: 'UNKNOWN_FIELD',
     });
   });
+  it('数字カードの種類（kind）は既知の項目として受け入れ、不正な値は拒否する', () => {
+    const item = { value: '1', unit: '年', label: '経験年数' };
+    expect(validateDocumentBlocks([block({ items: [{ ...item, kind: 'experience' }] }, 'stats')])).toEqual([]);
+    expect(validateDocumentBlocks([block({ items: [{ ...item, kind: 'nope' }] }, 'stats')])[0].code).toBe(
+      'INVALID_DATA',
+    );
+    expect(validateDocumentBlocks([block({ items: [{ ...item, extra: 1 }] }, 'stats')])[0].code).toBe('UNKNOWN_FIELD');
+  });
   it('allows arbitrary profile meta labels supported by the editor', () => {
     expect(
       validateDocumentBlocks([

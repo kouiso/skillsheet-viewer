@@ -24,6 +24,7 @@ import {
   tableBlockToMarkdown,
 } from '@/db/block';
 import { type MarkdownExperienceContext, markdownExperienceContext } from '@/db/block/serialize';
+import { fillStatKinds } from '@/db/derived-display';
 import type { RawDocumentBlock } from '@/db/document-contract';
 import { sanitizeHtml, sanitizeMarkdown } from '@/db/sanitize-html';
 
@@ -61,7 +62,8 @@ export const blockToItem = (block: Block): EditorItem => {
     case 'profile':
       return { id, type: 'profile', ...block.data };
     case 'stats':
-      return { id, type: 'stats', data: block.data };
+      // 読み込み時に、元のラベルで種類を決める。編集でラベルを変えても計算するかが変わらない。
+      return { id, type: 'stats', data: { ...block.data, items: fillStatKinds(block.data.items) } };
     case 'project':
       return { id, type: 'project', data: block.data };
   }
@@ -88,7 +90,8 @@ export const itemToBlockInput = (item: EditorItem): BlockInput => {
       };
     }
     case 'stats':
-      return { type: 'stats', data: item.data };
+      // 保存時に種類を補う。本番の既存データはこの保存で埋まり、別の移行作業は要らない。
+      return { type: 'stats', data: { ...item.data, items: fillStatKinds(item.data.items) } };
     case 'project':
       return { type: 'project', data: item.data };
   }

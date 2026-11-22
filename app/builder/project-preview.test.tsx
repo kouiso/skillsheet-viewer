@@ -34,23 +34,79 @@ describe('ProjectPreview のメタ行', () => {
       />,
     );
 
-    const meta = container.querySelector('.pv-meta');
+    const meta = container.querySelector('[data-pv-slot="meta"]');
     expect(meta?.textContent).toContain('SE · D社 · 9名 · 9ヶ月');
     expect(meta?.textContent).toContain('役割');
     // 見出しの左右2枠（.pv-top）が残っていると役割の位置が案件ごとにずれる（#289）。
     expect(container.querySelector('.pv-top')).toBeNull();
   });
 
-  it('役割が空でも編集欄への飛び先として「役割未設定」を残し、「役割」ラベルは出さない', () => {
+  it('役割が空なら、閲覧画面の案件カードと同じく「役割」ラベルを出さない', () => {
     const { container } = render(<ProjectPreview project={project({ role: '' })} company={undefined} no={1} />);
     const meta = container.querySelector('[data-pv-slot="meta"]');
-    expect(meta?.textContent).toContain('役割未設定');
-    expect(container.querySelector('.pv-meta .kicker')).toBeNull();
+    expect(meta?.textContent).not.toContain('役割');
+    expect(meta?.textContent).toContain('6名');
+  });
+});
+
+describe('ProjectPreview は閲覧画面の案件カードと同じ出方をする（#636）', () => {
+  const periodItem = { period: '2024.04 — 2025.03', duration: '' };
+
+  it('手入力の月数が無くても、期間から計算した月数が出る', () => {
+    const { container } = render(<ProjectPreview project={project(periodItem)} company={undefined} no={1} />);
+    expect(container.querySelector('[data-pv-slot="meta"]')?.textContent).toContain('1年');
+  });
+
+  it('「現在」終わりの案件でも、月数が「未確定」にならない', () => {
+    const { container } = render(
+      <ProjectPreview project={project({ period: '2024.04 — 現在', duration: '' })} company={undefined} no={1} />,
+    );
+    const meta = container.querySelector('[data-pv-slot="meta"]')?.textContent ?? '';
+    expect(meta).not.toContain('未確定');
+    expect(meta).toMatch(/ヶ月|年/);
+  });
+
+  it('技術は分類ごとに全部出て、「+N」で切らず、展開ボタンも出ない', () => {
+    const lang = Array.from({ length: 20 }, (_, i) => `技術${i + 1}`);
+    const { container, queryByRole, getByText } = render(
+      <ProjectPreview
+        project={project({ tech: { lang, fw: ['Next.js'], db: [], infra: [], tools: [], collab: [] } })}
+        company={undefined}
+        no={1}
+      />,
+    );
+    expect(getByText('技術20')).toBeVisible();
+    expect(container.textContent).not.toMatch(/\+\d+/);
+    expect(queryByRole('button', { name: /すべての技術を表示/ })).toBeNull();
+    // 分類名（使用言語など）が閲覧画面と同じく見出しとして出る。
+    expect(container.querySelector('[data-pv-slot="tech"]')?.textContent).toContain('Next.js');
+  });
+
+  it('概要・担当業務・習得スキル・コメント・担当工程・技術の全部が編集欄への飛び先になる', () => {
+    const { container } = render(<ProjectPreview project={project()} company={undefined} no={1} />);
+    expect(slotsOf(container)).toEqual([
+      'period',
+      'title',
+      'scope',
+      'meta',
+      'summary',
+      'duties',
+      'acquired',
+      'comment',
+      'process',
+      'tech',
+    ]);
   });
 });
 
 const tabbable = (container: HTMLElement) =>
   Array.from(container.querySelectorAll<HTMLElement>('[data-pv-slot]')).filter((el) => el.tabIndex === 0);
+
+/** タブで止まる要素を種類によらず全部数える（[data-pv-slot] だけだと、中のボタンやリンクを見落とす）。 */
+const focusStops = (container: HTMLElement) =>
+  Array.from(
+    container.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, summary, [tabindex]'),
+  ).filter((el) => el.tabIndex === 0);
 
 describe('ProjectPreview のキーボード移動', () => {
   it('プレビュー列全体で tab の止まり先は1箇所だけ', () => {
@@ -157,28 +213,120 @@ describe('ProjectPreview のキーボード移動', () => {
   });
 });
 
-describe('非表示案件と技術の全文確認', () => {
-  it('非表示でも本文を薄めず、展開操作は編集ジャンプを起こさない', () => {
-    const onJump = vi.fn();
-    const item = project({
-      hidden: true,
-      tech: {
-        lang: Array.from({ length: 20 }, (_, i) => `技術${i + 1}`),
-        fw: [],
-        db: [],
-        infra: [],
-        tools: [],
-        collab: [],
-      },
-    });
-    const view = render(<ProjectPreview project={item} company={undefined} no={1} onJump={onJump} />);
+describe('非表示案件・リンク・受け口の維持', () => {
+  it('非表示でも本文を薄めず、破線の枠とバッジで示す', () => {
+    const view = render(<ProjectPreview project={project({ hidden: true })} company={undefined} no={1} />);
     expect(view.container.querySelector('.opacity-60')).toBeNull();
     expect(view.container.querySelector('.pv-card-hidden')).not.toBeNull();
-    expect(view.queryByText('技術20')).toBeNull();
-    fireEvent.click(view.getByRole('button', { name: 'すべての技術を表示（20件）' }));
-    expect(view.getByText('技術20')).toBeVisible();
+    expect(view.getByText('閲覧側では非表示')).toBeInTheDocument();
+  });
+
+  it('本文中のリンクは tab の止まり先にならず、押しても編集欄へは飛ばない（#138）', () => {
+    const onJump = vi.fn();
+    const { container } = render(
+      <ProjectPreview
+        project={project({ summary: '詳細は[こちら](https://example.com/spec)。' })}
+        company={undefined}
+        no={1}
+        onJump={onJump}
+      />,
+    );
+    const link = container.querySelector<HTMLAnchorElement>('[data-pv-slot="summary"] a');
+    if (!link) throw new Error('リンクが無い');
+    expect(link.tabIndex).toBe(-1);
+    expect(tabbable(container)).toHaveLength(1);
+    // jsdom は画面遷移を実装しておらず、リンクを押すと警告を出すので、遷移だけ止める。
+    link.addEventListener('click', (e) => e.preventDefault());
+    fireEvent.click(link);
     expect(onJump).not.toHaveBeenCalled();
-    view.rerender(<ProjectPreview project={{ ...item, id: 'p2' }} company={undefined} no={2} onJump={onJump} />);
-    expect(view.queryByText('技術20')).toBeNull();
+  });
+
+  it('受け口にしていたブロックが消えても、tab の止まり先が先頭へ戻る', () => {
+    const view = render(<ProjectPreview project={project()} company={undefined} no={1} />);
+    const summary = view.container.querySelector<HTMLElement>('[data-pv-slot="summary"]');
+    if (!summary) throw new Error('概要ブロックが無い');
+    act(() => summary.focus());
+    expect(tabbable(view.container)[0].dataset.pvSlot).toBe('summary');
+
+    view.rerender(<ProjectPreview project={project({ summary: '' })} company={undefined} no={1} />);
+    expect(tabbable(view.container)).toHaveLength(1);
+    expect(tabbable(view.container)[0].dataset.pvSlot).toBe('period');
+  });
+});
+
+describe('ProjectPreview の tab 停止位置（#658）', () => {
+  // 飛び先ブロック自体も role=button で名前に同じ文字が入るため、getByRole では本物の <button> を特定できない。
+  const readMore = (container: HTMLElement) => {
+    const el = container.querySelector<HTMLButtonElement>('button[aria-expanded]');
+    if (!el) throw new Error('続きを読むボタンが無い');
+    return el;
+  };
+
+  const longComment = '1段落目。\n\n2段落目。\n\n3段落目。詳細は[こちら](https://example.com/spec)。\n\n4段落目。';
+
+  it('プレビュー列の tabindex=0 は 1 つだけ', () => {
+    const { container } = render(
+      <ProjectPreview
+        project={project({ comment: longComment, summary: '概要は[ここ](https://example.com/a)。' })}
+        company={undefined}
+        no={1}
+      />,
+    );
+    // 「続きを読む」が出ている（3段落以上）ことを前提にしている。
+    expect(readMore(container).textContent).toContain('続きを読む');
+    expect(container.querySelectorAll('a[href]').length).toBeGreaterThan(0);
+    expect(focusStops(container)).toHaveLength(1);
+    expect(focusStops(container)[0].dataset.pvSlot).toBe('period');
+  });
+
+  it('「続きを読む」は tab で止まらないが、押せば展開される', () => {
+    const { container } = render(
+      <ProjectPreview project={project({ comment: longComment })} company={undefined} no={1} />,
+    );
+    const more = readMore(container);
+    expect(more.tabIndex).toBe(-1);
+    fireEvent.click(more);
+    expect(container.textContent).toContain('4段落目。');
+    expect(readMore(container).tabIndex).toBe(-1);
+    expect(readMore(container).textContent).toBe('閉じる');
+  });
+
+  it('「続きを読む」を押しても編集欄へは飛ばない', () => {
+    const onJump = vi.fn();
+    const { container } = render(
+      <ProjectPreview project={project({ comment: longComment })} company={undefined} no={1} onJump={onJump} />,
+    );
+    fireEvent.click(readMore(container));
+    expect(onJump).not.toHaveBeenCalled();
+  });
+
+  it('空の区画に飛び先が出ない（プレースホルダを足さない）', () => {
+    const { container } = render(
+      <ProjectPreview
+        project={project({
+          scope: '',
+          summary: '',
+          duties: '',
+          acquired: '',
+          comment: '',
+          process: [],
+          tech: { lang: [], fw: [], db: [], infra: [], tools: [], collab: [] },
+        })}
+        company={undefined}
+        no={1}
+      />,
+    );
+    const slots = slotsOf(container);
+    for (const empty of ['scope', 'summary', 'duties', 'acquired', 'comment', 'process', 'tech']) {
+      expect(slots).not.toContain(empty);
+    }
+    expect(slots).toEqual(['period', 'title', 'meta']);
+  });
+
+  it('案内文は「表示されている項目をクリックすると…」で始まる', () => {
+    const { container } = render(<ProjectPreview project={project()} company={undefined} no={1} />);
+    expect(container.querySelector('.pv-hint')?.textContent?.startsWith('表示されている項目をクリックすると')).toBe(
+      true,
+    );
   });
 });

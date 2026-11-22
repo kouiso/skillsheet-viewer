@@ -143,3 +143,42 @@ it.each([
   expect(() => blocksToMarkdown([], referenceMonth)).toThrow('INVALID_REFERENCE_MONTH');
   expect(() => assembleMarkdown([], { referenceMonth })).toThrow('INVALID_REFERENCE_MONTH');
 });
+
+describe('stats の保存時の種類補い（#638）', () => {
+  it('itemsToDocumentBlocks が、種類の無い項目へ種類を補い、あるものは保つ', () => {
+    const blocks = itemsToDocumentBlocks([
+      {
+        id: '30000000-0000-4000-8000-000000000001',
+        type: 'stats',
+        data: {
+          items: [
+            { label: '案件数', value: '9', unit: '件' },
+            { label: '資格', value: '2', unit: '件' },
+            { label: '案件数', value: '5', unit: '件', kind: 'free' },
+          ],
+        },
+      },
+    ]);
+    expect(blocks[0].data).toEqual({
+      items: [
+        { label: '案件数', value: '9', unit: '件', kind: 'projectCount' },
+        { label: '資格', value: '2', unit: '件', kind: 'free' },
+        { label: '案件数', value: '5', unit: '件', kind: 'free' },
+      ],
+    });
+  });
+
+  it('古い保存データを読み込んだ後にラベルを変えても、元のラベルの種類で保存する', () => {
+    const item = blockToItem({
+      id: '30000000-0000-4000-8000-000000000002',
+      order: 0,
+      type: 'stats',
+      data: { items: [{ label: '案件数', value: '9', unit: '件' }] },
+    });
+    if (item.type !== 'stats') throw new Error('stats expected');
+    const renamed = { ...item, data: { items: [{ ...item.data.items[0], label: '参画数' }] } };
+    expect(itemsToDocumentBlocks([renamed])[0].data).toEqual({
+      items: [{ label: '参画数', value: '9', unit: '件', kind: 'projectCount' }],
+    });
+  });
+});

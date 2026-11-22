@@ -49,7 +49,7 @@ for (const theme of ['light', 'dark'] as const) {
         const page = await context.newPage();
         const route = `/view/db/${sheetId}`;
         await page.goto(`/viewer-auth?next=${encodeURIComponent(route)}`);
-        await page.getByLabel('認証コード').fill(process.env.VIEWER_CODE ?? 'viewer-code-local');
+        await page.getByLabel('コード').fill(process.env.VIEWER_CODE ?? 'viewer-code-local');
         await page.getByRole('button', { name: '認証' }).click();
         await page.waitForURL(route);
         await expect

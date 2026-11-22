@@ -135,11 +135,19 @@ export interface ProfileBlockData {
   company?: string;
 }
 
-/** 統計ブロックの 1 アイテム（数値・単位・ラベル）。 */
+/**
+ * 数字カード項目の種類。計算するかどうかはラベルの文字ではなく種類で決める。
+ * experience = 案件から経験年数を計算 / projectCount = 案件数を計算 / free = 手入力のまま。
+ */
+export type StatKind = 'experience' | 'projectCount' | 'free';
+
+/** 統計ブロックの 1 アイテム（数値・単位・ラベル・種類）。 */
 export interface StatItem {
   value: string;
   unit: string;
   label: string;
+  /** 種類。古い保存データには無く、保存時に補う。無い間は表示時にラベルから推定する。 */
+  kind?: StatKind;
 }
 
 /** 4 枠統計ブロックの構造化データ。 */

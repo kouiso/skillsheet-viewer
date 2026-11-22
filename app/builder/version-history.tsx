@@ -7,6 +7,8 @@ import type { Block } from '@/db/block';
 import type { createDocumentHistory, VersionSummary } from '@/db/document-history';
 import type { DocumentSnapshot } from '@/db/document-service';
 import { assembleMarkdown, blockToItem } from './serialize';
+import { documentDifferences } from './version-diff';
+import { DiffFrames } from './version-diff-view';
 import { groupVersions } from './version-group';
 
 type HistoryService = ReturnType<typeof createDocumentHistory>;
@@ -34,70 +36,6 @@ export interface VersionHistoryProps {
   onRestored: (result: RestoreResult) => void;
 }
 
-// 原文を変換せず各パスを比較する。配列の添字も比較対象にして順序変更を隠さない。
-export function documentDifferences(
-  before: unknown,
-  after: unknown,
-  path = '文書',
-): { path: string; before: string; after: string }[] {
-  if (JSON.stringify(before) === JSON.stringify(after)) return [];
-  const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object';
-  if (object(before) && object(after) && Array.isArray(before) === Array.isArray(after)) {
-    return [...new Set([...Object.keys(before), ...Object.keys(after)])].flatMap((key) =>
-      documentDifferences(before[key], after[key], `${path}.${key}`),
-    );
-  }
-  const text = (value: unknown) => (value === undefined ? '（項目なし）' : JSON.stringify(value, null, 2));
-  return [{ path, before: text(before), after: text(after) }];
-}
-function fieldLabel(path: string) {
-  const labels: Record<string, string> = {
-    title: 'タイトル',
-    blocks: 'ブロック',
-    data: '内容',
-    companies: '会社',
-    items: '項目',
-    name: '名称',
-    period: '期間',
-    periodStart: '開始月',
-    periodEnd: '終了月',
-    ongoing: '継続中',
-    role: '担当',
-    team: 'チーム',
-    tech: '技術',
-    lang: '言語',
-    fw: 'フレームワーク',
-    db: 'データベース',
-    infra: '基盤',
-    tools: 'ツール',
-    collab: '共同作業',
-    duties: '担当業務',
-    acquired: '習得内容',
-    comment: '備考',
-    summary: '要約',
-    hidden: '非表示',
-    note: '説明',
-    markdown: '本文',
-    order: '順序',
-    strengths: '強み',
-    pr: '自己PR',
-    meta: 'プロフィール項目',
-    columns: '列',
-    rows: '行',
-    skills: 'スキル',
-    category: '分類',
-    label: '項目名',
-    value: '値',
-    unit: '単位',
-    years: '経験年数',
-    level: '習熟度',
-    featured: '強調表示',
-  };
-  return path
-    .split('.')
-    .map((part) => (/^\d+$/.test(part) ? `${Number(part) + 1}番目` : (labels[part] ?? part)))
-    .join(' › ');
-}
 function groupStart(recordedAt: string) {
   return new Date(recordedAt).toLocaleString('ja-JP', {
     month: 'numeric',
@@ -126,6 +64,8 @@ function groupSpan(versions: readonly VersionSummary[]) {
 }
 const control =
   'min-h-11 rounded border border-input bg-background px-3 py-2 text-sm text-foreground disabled:cursor-not-allowed disabled:border-dashed disabled:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
+// 板「戻した後・空・失敗」の一覧側の箱: 地 card・枠線 1px・角丸 6px・余白 20px・中の間隔 12px。
+const listBox = 'space-y-3 rounded-lg border border-border bg-card p-5';
 const primary = `${control} border-primary bg-primary-dark text-primary-foreground font-semibold disabled:bg-background disabled:border-border`;
 function failed(error: unknown) {
   return (
@@ -395,6 +335,10 @@ export function VersionHistory({
         { title: pair.to.title, blocks: pair.to.blocks },
       )
     : [];
+  const timeOf = (rev: string) => {
+    const row = rows.find((r) => r.revision === rev);
+    return row ? new Date(row.recordedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '';
+  };
   const single = rows.length === 1 && !more;
   return (
     <section aria-label="版の履歴" className="min-h-screen min-w-0 bg-background text-foreground">
@@ -469,14 +413,19 @@ export function VersionHistory({
             </p>
           )}
           {listError && (
-            <div role="alert">
-              <p>履歴を読み込めませんでした。</p>
+            <div role="alert" className={listBox}>
+              <p className="text-sm font-semibold">履歴を読み込めませんでした。</p>
               <button type="button" className={control} onClick={() => void load()}>
-                履歴を再読み込み
+                再試行
               </button>
             </div>
           )}
-          {!loading && !listError && rows.length === 0 && <p>保存された版がありません。</p>}
+          {!loading && !listError && rows.length === 0 && (
+            <div className={listBox}>
+              <p className="text-sm font-semibold">保存された版がありません。</p>
+              <p className="text-[13px] text-muted-foreground">編集して保存すると、ここに版が残ります。</p>
+            </div>
+          )}
           <ol className="space-y-2">
             {groupVersions(rows).map((group) => {
               if (group.kind === 'single') return <li key={group.version.revision}>{versionEntry(group.version)}</li>;
@@ -596,9 +545,20 @@ export function VersionHistory({
                 </button>
               </div>
             ) : !pair ? (
-              <p role="status" aria-busy="true">
-                差分を読み込み中…
-              </p>
+              // WHY: pair が無い理由は一覧の失敗・0件・取得中の3つ。一覧の状態から決め、
+              //      失敗と0件で「読み込み中」を出し続けないようにする。
+              //      失敗は rows が空の時だけ。rows が残っていれば一覧は使えるので、
+              //      版を選び直した直後の取得中は「読み込み中」を出す。
+              //      一覧側の role=alert が既に読み上げるため、ここは role を付けない。
+              listError && rows.length === 0 ? (
+                <p>一覧を読み直してください</p>
+              ) : !loading && rows.length === 0 ? (
+                <p>まだ比べる版がありません</p>
+              ) : (
+                <p role="status" aria-busy="true">
+                  差分を読み込み中…
+                </p>
+              )
             ) : (
               <>
                 <nav aria-label="版の内容表示" className="flex flex-wrap gap-2">
@@ -628,25 +588,17 @@ export function VersionHistory({
                   <SnapshotPreview snapshot={pair.to} referenceMonth={referenceMonth} />
                 ) : (
                   <>
-                    <p className="text-sm text-muted-foreground">
-                      差分 {differences.length}項目 · 削除は取り消し線、追加は下線
+                    <h2 className="text-base font-semibold">いまの内容から変わる項目</h2>
+                    <p className="text-xs">
+                      <span className="font-semibold text-danger">比較元 · 削除 {timeOf(from)}</span>
+                      {' → '}
+                      <span className="font-semibold text-accent-text">
+                        比較先 · 追加 {timeOf(to)}
+                        {to === revision ? '（現在）' : ''}
+                      </span>
                     </p>
-                    {differences.length === 0 && <p>内容は同じです。</p>}
-                    {differences.map((d) => (
-                      <section key={d.path} className="min-w-0 rounded border border-border bg-card p-3">
-                        <h2 className="mb-3 break-all text-sm font-semibold">{fieldLabel(d.path)}</h2>
-                        <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-                          <div className="min-w-0">
-                            <h3 className="text-xs text-muted-foreground">比較元 · 削除</h3>
-                            <del className="block whitespace-pre-wrap break-all text-sm">{d.before}</del>
-                          </div>
-                          <div className="min-w-0">
-                            <h3 className="text-xs text-muted-foreground">比較先 · 追加</h3>
-                            <ins className="block whitespace-pre-wrap break-all text-sm">{d.after}</ins>
-                          </div>
-                        </div>
-                      </section>
-                    ))}
+                    {differences.length === 0 ? <p>内容は同じです。</p> : <DiffFrames differences={differences} />}
+                    <p className="text-xs text-muted-foreground">省略せず、変わった項目は全部並べます。</p>
                   </>
                 )}
               </>
@@ -657,24 +609,29 @@ export function VersionHistory({
           </div>
           <footer className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card p-4">
             <span className="text-sm text-muted-foreground">いまの内容も履歴に残ります。</span>
-            <button
-              type="button"
-              className={primary}
-              disabled={
-                busy ||
-                Boolean(restoreBlockedReason) ||
-                !pair ||
-                !pair.to.validation.editable ||
-                to === revision ||
-                !currentSnapshot ||
-                JSON.stringify({ title: currentSnapshot.title, blocks: currentSnapshot.blocks }) ===
-                  JSON.stringify({ title: pair.to.title, blocks: pair.to.blocks }) ||
-                conflict
-              }
-              onClick={() => void prepare()}
-            >
-              {busy ? '処理中…' : 'この版に戻す'}
-            </button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <button type="button" className={control} disabled={!pair} onClick={() => setView('preview')}>
+                全項目の原文を確認
+              </button>
+              <button
+                type="button"
+                className={primary}
+                disabled={
+                  busy ||
+                  Boolean(restoreBlockedReason) ||
+                  !pair ||
+                  !pair.to.validation.editable ||
+                  to === revision ||
+                  !currentSnapshot ||
+                  JSON.stringify({ title: currentSnapshot.title, blocks: currentSnapshot.blocks }) ===
+                    JSON.stringify({ title: pair.to.title, blocks: pair.to.blocks }) ||
+                  conflict
+                }
+                onClick={() => void prepare()}
+              >
+                {busy ? '処理中…' : 'この版に戻す'}
+              </button>
+            </div>
           </footer>
         </div>
       </div>
@@ -743,18 +700,13 @@ export function VersionHistory({
                 <div className="mt-3 min-w-0 space-y-4">
                   <SnapshotPreview snapshot={confirmation.target} referenceMonth={referenceMonth} />
                   <h3 className="text-sm font-semibold">いまの内容から変わる項目</h3>
-                  {documentDifferences(
-                    { title: confirmation.current.title, blocks: confirmation.current.blocks },
-                    { title: confirmation.target.title, blocks: confirmation.target.blocks },
-                  ).map((difference) => (
-                    <section key={difference.path} className="min-w-0 rounded border border-border p-3 text-sm">
-                      <h4 className="break-all font-semibold">{fieldLabel(difference.path)}</h4>
-                      <p className="mt-2 text-xs text-muted-foreground">現在の内容</p>
-                      <del className="block whitespace-pre-wrap break-all">{difference.before}</del>
-                      <p className="mt-2 text-xs text-muted-foreground">戻した後の内容</p>
-                      <ins className="block whitespace-pre-wrap break-all">{difference.after}</ins>
-                    </section>
-                  ))}
+                  <DiffFrames
+                    headingLevel={4}
+                    differences={documentDifferences(
+                      { title: confirmation.current.title, blocks: confirmation.current.blocks },
+                      { title: confirmation.target.title, blocks: confirmation.target.blocks },
+                    )}
+                  />
                   {confirmation.sameContent && <p className="text-sm">いまの内容と同じです。</p>}
                 </div>
               </details>

@@ -246,7 +246,7 @@ test('C. viewport sweep builder and viewer', async ({ browser }) => {
   const viewerPage = await viewerContext.newPage();
   const { errors: vErrors, warnings: vWarnings, off: vOff } = collectErrors(viewerPage);
   await viewerPage.goto('/viewer-auth', { waitUntil: 'networkidle' });
-  await viewerPage.getByLabel('認証コード').fill(viewerCode);
+  await viewerPage.getByLabel('コード').fill(viewerCode);
   await viewerPage.getByRole('button', { name: '認証' }).click();
   await viewerPage.waitForURL('/view');
 
@@ -338,7 +338,7 @@ test('E. auth edge cases', async ({ browser }) => {
 
   // invalid code
   await page.goto('/viewer-auth');
-  await page.getByLabel('認証コード').fill('wrong-code');
+  await page.getByLabel('コード').fill('wrong-code');
   await page.getByRole('button', { name: '認証' }).click();
   await expect(page.getByText('認証コードが正しくありません')).toBeVisible();
   await capture(page, 'E-invalid-code.png');
@@ -348,7 +348,7 @@ test('E. auth edge cases', async ({ browser }) => {
   await expect(page.getByText('認証コードが正しくありません')).not.toBeVisible();
 
   // empty code
-  await page.getByLabel('認証コード').fill('');
+  await page.getByLabel('コード').fill('');
   await page.getByRole('button', { name: '認証' }).click();
   // html5 required prevents submit
   await expect(page).toHaveURL(/viewer-auth/);
@@ -360,7 +360,7 @@ test('E. auth edge cases', async ({ browser }) => {
 
   // viewer authed trying /builder
   await page.goto('/viewer-auth');
-  await page.getByLabel('認証コード').fill(viewerCode);
+  await page.getByLabel('コード').fill(viewerCode);
   await page.getByRole('button', { name: '認証' }).click();
   await page.waitForURL(/\/(view|view\/db)/);
   await page.waitForLoadState('networkidle');
@@ -392,7 +392,7 @@ test('F. PDF stress', async ({ browser }) => {
   const { errors, warnings, off } = collectErrors(page);
 
   await page.goto('/viewer-auth');
-  await page.getByLabel('認証コード').fill(viewerCode);
+  await page.getByLabel('コード').fill(viewerCode);
   await page.getByRole('button', { name: '認証' }).click();
   await page.waitForURL('/view');
 
@@ -450,7 +450,7 @@ test('G. dark mode visual regression', async ({ browser }) => {
   const page = await context.newPage();
 
   await page.goto('/viewer-auth');
-  await page.getByLabel('認証コード').fill(viewerCode);
+  await page.getByLabel('コード').fill(viewerCode);
   await page.getByRole('button', { name: '認証' }).click();
   await page.waitForURL('/view');
   await page.goto(`/view/db/${richSheetId}`, { waitUntil: 'networkidle' });
@@ -485,7 +485,7 @@ test('H. mobile tap target verification', async ({ browser }) => {
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       if (route.auth) {
         await page.goto('/viewer-auth', { waitUntil: 'networkidle' });
-        await page.getByLabel('認証コード').fill(viewerCode);
+        await page.getByLabel('コード').fill(viewerCode);
         await page.getByRole('button', { name: '認証' }).click();
         await page.waitForURL('/view');
       }
@@ -572,7 +572,7 @@ test('I. data freshness / revalidate', async ({ page, browser }) => {
   const viewerContext = await browser.newContext();
   const vPage = await viewerContext.newPage();
   await vPage.goto('/viewer-auth');
-  await vPage.getByLabel('認証コード').fill(viewerCode);
+  await vPage.getByLabel('コード').fill(viewerCode);
   await vPage.getByRole('button', { name: '認証' }).click();
   await vPage.waitForURL('/view');
   await expect(vPage.getByRole('button', { name: updatedTitle })).toBeVisible({ timeout: 30_000 });

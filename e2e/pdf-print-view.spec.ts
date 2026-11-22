@@ -79,7 +79,7 @@ function buildExpertiseFallbackBlocks(): BlockInput[] {
 
 async function authenticateViewer(page: Page) {
   await page.goto('/viewer-auth', { waitUntil: 'networkidle' });
-  await page.getByLabel('認証コード').fill(viewerCode);
+  await page.getByLabel('コード').fill(viewerCode);
   await page.getByRole('button', { name: '認証' }).click();
   // 注意: /\/(view|view\/db)/ は「/viewer-auth」自体にも部分一致してしまい
   // （"/view" が "/viewer-auth" の先頭に含まれる）、遷移を待たずに即座に解決していた

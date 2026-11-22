@@ -1,5 +1,6 @@
 /** Next.jsと接続先に依存しない業務操作。認証済み呼出元が固定ownerと文書接続を注入する。 */
 import type { CompanyInfo, ProjectBlockData, ProjectItem, ProjectTech, StatItem } from '../db/block';
+import { fillStatKinds } from '../db/derived-display';
 import type { RawDocumentBlock } from '../db/document-contract';
 import type { DocumentConnection } from '../db/document-operation';
 import { createDocumentService, DocumentError, type DocumentSnapshot } from '../db/document-service';
@@ -442,7 +443,9 @@ export function createSheetService(connection: DocumentConnection, owner: string
 
     return mutateOwnerSheet(input.sheetId, input.expectedRevision, (sheet) => {
       const statsBlock = findStatsBlockByIndex(sheet, input.index, input.expectedLabel);
-      const target = statsBlock.data.items[input.index] as StatItem;
+      // 種類は編集前のラベルで補う。先にラベルを変えてから補うと、計算される項目が自由入力になる。
+      const filledItems = fillStatKinds(statsBlock.data.items);
+      const target = filledItems[input.index] as StatItem;
 
       const next: StatItem = { ...target };
       for (const key of patchKeys) {
@@ -452,7 +455,7 @@ export function createSheetService(connection: DocumentConnection, owner: string
         .filter((key) => target[key] !== next[key])
         .map((field) => ({ field, before: target[field], after: next[field] }));
 
-      const nextData = { items: statsBlock.data.items.map((i, idx) => (idx === input.index ? next : i)) };
+      const nextData = { items: filledItems.map((i, idx) => (idx === input.index ? next : i)) };
       return {
         blocks: replaceBlockData(sheet.blocks, statsBlock.id, nextData),
         targetId: `stats:${input.index}`,

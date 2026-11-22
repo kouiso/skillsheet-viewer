@@ -240,7 +240,7 @@ test('viewer: auth, list, detail, PDF download, theme and viewports', async ({ b
 
   // 閲覧者認証
   await page.goto('/viewer-auth');
-  await page.getByLabel('認証コード').fill(viewerCode);
+  await page.getByLabel('コード').fill(viewerCode);
   await page.getByRole('button', { name: '認証' }).click();
   await page.waitForURL('/view');
   await expect(page.getByRole('button', { name: new RegExp(richSheetTitle) }).first()).toBeVisible();
