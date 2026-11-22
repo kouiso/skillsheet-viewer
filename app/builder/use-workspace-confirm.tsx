@@ -36,7 +36,8 @@ const BUTTON_BASE =
 const BUTTON_STYLES = {
   primary: 'border-primary-dark bg-primary-dark text-primary-foreground',
   normal: 'border-border bg-background text-foreground',
-  danger: 'border-destructive bg-background text-destructive',
+  // 板の danger ボタンは「枠はその色の 60%」（#671 の色の表より）
+  danger: 'border-destructive/60 bg-background text-destructive',
 } as const;
 
 /** 同時要求は後発を取消扱いにし、先に表示した確認を置き換えない。 */
