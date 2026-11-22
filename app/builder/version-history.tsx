@@ -426,6 +426,13 @@ export function VersionHistory({
               <p className="text-[13px] text-muted-foreground">編集して保存すると、ここに版が残ります。</p>
             </div>
           )}
+          {/* 板「戻した後・空・失敗」: 版が1つの時も一覧側の箱で理由を出し、その下に版を並べる（比較欄には同じ文を出さない）。 */}
+          {!loading && !listError && single && (
+            <div className={`${listBox} mb-2`}>
+              <p className="text-sm font-semibold">版が1つしかありません。</p>
+              <p className="text-[13px] text-muted-foreground">保存すると変更を比べられます。</p>
+            </div>
+          )}
           <ol className="space-y-2">
             {groupVersions(rows).map((group) => {
               if (group.kind === 'single') return <li key={group.version.revision}>{versionEntry(group.version)}</li>;
@@ -536,7 +543,6 @@ export function VersionHistory({
             ))}
           </div>
           <div className="flex-1 space-y-4 p-4">
-            {single && <p>版が1つしかありません。保存すると変更を比べられます。</p>}
             {compareError ? (
               <div role="alert">
                 差分を読み込めませんでした。
@@ -544,6 +550,9 @@ export function VersionHistory({
                   差分を再読み込み
                 </button>
               </div>
+            ) : single ? (
+              // 板「戻した後・空・失敗」: 比較できる版が無い時は、一覧側の箱と同じく比較欄にも理由を出す。
+              <p>まだ比べる版がありません</p>
             ) : !pair ? (
               // WHY: pair が無い理由は一覧の失敗・0件・取得中の3つ。一覧の状態から決め、
               //      失敗と0件で「読み込み中」を出し続けないようにする。
