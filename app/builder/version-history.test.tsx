@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentSnapshot } from '@/db/document-service';
-import { documentDifferences, VersionHistory, type VersionHistoryApi } from './version-history';
+import { VersionHistory, type VersionHistoryApi } from './version-history';
 
 vi.mock('@/component/skill-sheet-viewer', () => ({ default: () => <p>全シート描画</p> }));
 const snapshot = (revision: string, editable = true): DocumentSnapshot => ({
@@ -167,10 +167,36 @@ describe('シート全体の版の履歴', () => {
     await selectOld();
     expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('2');
     expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1');
-    expect(screen.getByText(/差分 1項目/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
+    expect(screen.getByText('省略せず、変わった項目は全部並べます。')).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: '比較元' }), { target: { value: '1' } });
     await screen.findByText('内容は同じです。');
     expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('1');
+  });
+
+  it('差分は場所を語で示し、前を「−」・後を「＋」で、引用符なし・改行ありで出す', async () => {
+    const withText = (revision: string, text: string): DocumentSnapshot => ({
+      ...snapshot(revision),
+      blocks: [{ id: 'b', type: 'markdown', order: 0, data: { markdown: text } }],
+    });
+    setup({
+      read: vi
+        .fn()
+        .mockImplementation(async (revision) => withText(revision, revision === '1' ? '前の行\n二行目' : '後の行')),
+    });
+    await selectOld();
+    const frame = screen.getByRole('heading', { name: /本文$/ }).closest('section') as HTMLElement;
+    expect(within(frame).getByRole('heading')).toHaveTextContent('テキスト › 前の行 › 本文');
+    // 比較元は版2（現在）、比較先は版1。前の値は引用符なしで、改行を保ったまま出る。
+    const del = frame.querySelector('del') as HTMLElement;
+    const ins = frame.querySelector('ins') as HTMLElement;
+    expect(del.textContent).toBe('後の行');
+    expect(ins.textContent).toBe('前の行\n二行目');
+    expect(del).toHaveClass('whitespace-pre-wrap');
+    expect(frame.textContent).not.toContain('"');
+    expect(frame.textContent).toContain('−');
+    expect(frame.textContent).toContain('＋');
+    expect(screen.getByRole('button', { name: '全項目の原文を確認' })).toBeEnabled();
   });
 
   it('ブロック描画でも選択した版のシートタイトルを明示する', async () => {
@@ -303,11 +329,6 @@ describe('シート全体の版の履歴', () => {
     );
   });
 
-  it('順序・未知項目・空白の差分を隠さない', () => {
-    const result = documentDifferences({ items: ['A', 'B'], future: 'x\n' }, { items: ['B', 'A'], future: 'x\n\n' });
-    expect(result.map((x) => x.path)).toEqual(['文書.items.0', '文書.items.1', '文書.future']);
-    expect(result[2].after).toBe(JSON.stringify('x\n\n'));
-  });
   it('確認前に復元せず、全公開対象・巨大件数と安全側の初期focusを表示する', async () => {
     const { api } = setup();
     const dialog = await confirmOld();
