@@ -228,11 +228,18 @@ describe('共通ワークスペースのブロック帰属回帰', () => {
     expect(screen.getByRole('textbox', { name: '項目名' })).toHaveValue('');
     expect(screen.getByRole('textbox', { name: '項目名' })).toHaveAttribute('aria-invalid', 'true');
     await user.click(screen.getByRole('button', { name: '版の履歴を開く' }));
+    // S-11b: 項目名が空の行があると、履歴を開く前に理由つきの確認が出る（板どおりの往復なし）。
+    // ダイアログが出ている間は履歴も保存も動かない。
+    const reason = await screen.findByRole('alertdialog');
+    expect(within(reason).getByText('未保存の変更を保存できません。')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: '版の履歴' })).not.toBeInTheDocument();
     expect(mockHistoryList).not.toHaveBeenCalled();
     expect(mockHistoryPreview).not.toHaveBeenCalled();
     expect(mockHistoryRestore).not.toHaveBeenCalled();
     expect(mockSave).not.toHaveBeenCalled();
+    // 編集へ戻るを選ぶと下書きは残る。
+    await user.click(within(reason).getByRole('button', { name: '編集に戻る' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
     expect(screen.getByRole('textbox', { name: '項目名' })).toHaveValue('');
     expect(screen.getByRole('textbox', { name: '値' })).toHaveValue('文書データにはまだ反映していない合成入力');
   });

@@ -38,7 +38,11 @@ import { isRevision, validateDocumentBlocks } from '@/db/document-contract';
 import type { DocumentSnapshot } from '@/db/document-service';
 import { trpc } from '@/lib/trpc-client';
 import { BlockAddMenu } from './block-add-menu';
-import { type CustomMetaRow, hasUncommittedProfileRows } from './block-editor/profile-block-editor';
+import {
+  type CustomMetaRow,
+  hasEmptyLabelProfileRows,
+  hasUncommittedProfileRows,
+} from './block-editor/profile-block-editor';
 import { CanvasDroppable } from './canvas/canvas-droppable';
 import { createPaletteItem, DragPreview, PALETTE_ITEMS, type PaletteBlockType, PaletteChip } from './canvas/palette';
 import { SortableBlock } from './canvas/sortable-block';
@@ -242,6 +246,8 @@ const BuilderClient = ({
   // 「変更を捨てて履歴を開く」で編集欄を戻す先。lastSavedSnapshotRef は文字列で復元できないため、中身も持つ。
   const lastSavedStateRef = useRef({ items: initialBlocks.map(blockToItem), title: initialTitle });
   const [isDirty, setIsDirty] = useState(false);
+  // 「変更を捨てる」で編集中エディタを再マウントするための世代番号（SortableBlock の key に入れる）。
+  const [discardSerial, setDiscardSerial] = useState(0);
 
   // SPA 内遷移（シート切替・閲覧へ等）は beforeunload が発火せず、key={activeSheetId} の
   // 再マウントで編集中 state が黙って破棄されるため、dirty 時は明示的に確認を取る。
@@ -326,6 +332,8 @@ const BuilderClient = ({
   const saveFailureRef = useRef<'conflict' | 'invalid' | 'invalid-period' | 'not-found' | 'precondition' | null>(null);
   const hasBlockedDraft = () =>
     blockedItemIdsRef.current.size > 0 || [...profileCustomDraftsRef.current.values()].some(hasUncommittedProfileRows);
+  // 未確定の原因が「項目名が空の行」か（S-11b の理由判定に使う。重複・予約語の衝突は含めない）。
+  const hasEmptyLabelDraft = () => [...profileCustomDraftsRef.current.values()].some(hasEmptyLabelProfileRows);
   const blockedProfileIds = items
     .filter((item) => item.type === 'profile' && blockedItemIds.has(item.id))
     .map((item) => item.id);
@@ -1018,6 +1026,9 @@ const BuilderClient = ({
     setAutosaveStatus('idle');
     // 捨てた未保存ブロックの「削除を取り消す」が残ると、捨てたはずのブロックが戻る（onRestored と同じく消す）。
     setDeletedBlock(null);
+    // 編集中ブロックのエディタを再マウントする。プロフィールの項目名が空の行のようなローカル state の
+    // 下書きは items の復元だけでは消えず、画面に残ると「捨てた」約束に反するため（S-11b）。
+    setDiscardSerial((n) => n + 1);
     // 捨てた未保存ブロックを選んだままにしない。選択ブロックと選択案件を、保存済みの中から揃えて選び直す
     // （onRestored と同じ流儀。案件だけ古い id が残ると、入力した時に捨てたはずの案件が再追加される）。
     if (!savedItems.some((item) => item.id === selectedBlockId)) setSelectedBlockId(savedItems[0]?.id ?? 'new-project');
@@ -1031,6 +1042,22 @@ const BuilderClient = ({
       return;
     }
     if (hasBlockedDraft()) {
+      // 項目名が空の行は、このままでは保存できない。板 S-11b: 往復させず理由を出し、
+      // 捨てるなら下書きも保存済みに戻してから開く。重複など他の未確定だけの時は、
+      // ボードに文が無いので従来の案内のまま。
+      if (hasEmptyLabelDraft()) {
+        const discard = await confirm({
+          title: '未保存の変更を保存できません。',
+          description: 'プロフィールに、項目名が空の行があります。このまま履歴を開くと、未保存の変更は失われます。',
+          confirmLabel: '変更を捨てて履歴を開く',
+          cancelLabel: '編集に戻る',
+          danger: true,
+        });
+        if (!discard) return;
+        discardUnsavedEdits();
+        if (mountedRef.current) setVersionHistoryOpen(true);
+        return;
+      }
       toast.error('未確定の項目名を確認してください。入力はこの画面に保持しています。');
       return;
     }
@@ -1586,7 +1613,7 @@ const BuilderClient = ({
                         : {
                             editor: selectedItem ? (
                               <SortableBlock
-                                key={selectedItem.id}
+                                key={`${selectedItem.id}:${discardSerial}`}
                                 item={selectedItem}
                                 onMarkdownChange={updateMarkdown}
                                 onTableChange={updateTable}
