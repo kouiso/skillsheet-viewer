@@ -77,7 +77,12 @@ export function StatsBlockEditor({
                       ? { readOnly: true, 'aria-describedby': noteId }
                       : { onChange: (event) => update(index, key, event.target.value) })}
                     aria-label={`統計項目${index + 1}の${label}`}
-                    className={`min-h-11 w-full min-w-0 ${key === 'value' ? 'font-mono' : ''} ${readOnly ? 'bg-muted text-muted-foreground' : ''}`}
+                    className={`min-h-11 w-full min-w-0 ${key === 'value' ? 'font-mono' : ''} ${
+                      readOnly
+                        ? // 板の読み取り専用欄（会社バーの .inp.ro）: 地 #e6ebeb/#1a2228・文字 #46525a/#a3aeb4・mono 12px。
+                          'bg-[#e6ebeb] text-xs text-[#46525a] dark:bg-[#1a2228] dark:text-[#a3aeb4]'
+                        : ''
+                    }`}
                   />
                 </label>
               );
@@ -87,7 +92,8 @@ export function StatsBlockEditor({
               variant="ghost"
               size="icon"
               className="h-11 w-11 text-muted-foreground hover:text-destructive"
-              aria-label={`統計項目${index + 1}を削除`}
+              // ボードは「{ラベル}を削除」。ラベルが空の時だけ番号で読む（読み上げで何を消すか分かるように）。
+              aria-label={item.label.trim() ? `${item.label.trim()}を削除` : `統計項目${index + 1}を削除`}
               onClick={() => onChange({ ...data, items: data.items.filter((_, i) => i !== index) })}
             >
               <Trash2 className="size-4" aria-hidden="true" />
