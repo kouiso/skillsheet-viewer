@@ -155,6 +155,11 @@ export function VersionHistory({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // 390px の画面切替で hidden 側にフォーカスが残るとキーボード操作が見失われるので、
+  // 遷移先の操作へ移し替える。初期表示では動かさないよう、切替操作の時だけ立てる。
+  const mobileFocusRef = useRef(false);
+  const showCompareRef = useRef<HTMLButtonElement>(null);
+  const backToListRef = useRef<HTMLButtonElement>(null);
   const [returnFocusRequested, setReturnFocusRequested] = useState(false);
   const [restoreError, setRestoreError] = useState(false);
   const [conflict, setConflict] = useState(false);
@@ -172,6 +177,11 @@ export function VersionHistory({
     else headingRef.current?.focus();
     setReturnFocusRequested(false);
   }, [returnFocusRequested, busy, confirmation, conflict]);
+  useEffect(() => {
+    if (!mobileFocusRef.current) return;
+    mobileFocusRef.current = false;
+    (mobileTab === 'compare' ? backToListRef : showCompareRef).current?.focus();
+  }, [mobileTab]);
   useEffect(() => {
     setRevision(currentRevision);
   }, [currentRevision]);
@@ -364,8 +374,12 @@ export function VersionHistory({
         </button>
         <button
           type="button"
+          ref={backToListRef}
           className={`${control} ${mobileTab === 'compare' ? 'md:hidden' : 'hidden'}`}
-          onClick={() => setMobileTab('list')}
+          onClick={() => {
+            mobileFocusRef.current = true;
+            setMobileTab('list');
+          }}
         >
           一覧へ
         </button>
@@ -529,8 +543,12 @@ export function VersionHistory({
             <button
               type="button"
               className={`${primary} min-h-12 w-full`}
+              ref={showCompareRef}
               disabled={busy || rows.length < 2 || !from || !to}
-              onClick={() => setMobileTab('compare')}
+              onClick={() => {
+                mobileFocusRef.current = true;
+                setMobileTab('compare');
+              }}
             >
               変更を見る（{from ? timeOf(from) : '—'} → {to === revision ? '現在' : to ? timeOf(to) : '—'}）
             </button>

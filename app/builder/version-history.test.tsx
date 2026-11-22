@@ -87,9 +87,13 @@ describe('シート全体の版の履歴', () => {
       fireEvent.click(cta);
       // jsdom では画面の出し分けは class で確かめる（390 では一覧が隠れて比較だけの画面になる）。
       await waitFor(() => expect(aside).toHaveClass('hidden'));
+      // hidden 側にフォーカスを残さないよう、遷移先の操作へ移す（板: 別画面の切替）。
+      const back = screen.getByRole('button', { name: '一覧へ' });
+      await waitFor(() => expect(back).toHaveFocus());
       // 比較画面の帯には一覧へ戻るボタンが出る。
-      fireEvent.click(screen.getByRole('button', { name: '一覧へ' }));
+      fireEvent.click(back);
       await waitFor(() => expect(aside).not.toHaveClass('hidden'));
+      await waitFor(() => expect(cta).toHaveFocus());
     });
     it('比べられる版が無い時は「変更を見る」を押せない', async () => {
       setup({ list: vi.fn().mockResolvedValue([]) });
