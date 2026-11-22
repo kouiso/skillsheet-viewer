@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+import { SKILL_FIELD_LABELS } from '../field-label';
 import { SkillsBlockEditor } from './skill-block-editor';
 
 describe('SkillsBlockEditor', () => {
@@ -19,5 +20,17 @@ describe('SkillsBlockEditor', () => {
     expect(label).not.toBeNull();
     fireEvent.click(label as HTMLLabelElement);
     expect(onChange).toHaveBeenCalledWith('言語', [{ name: 'TypeScript', years: 3, level: '実務経験あり' }]);
+  });
+
+  it('表の見出しは「スキル」「経験年数」「習熟度」「推し」で、差分と同じ対応表を読む', () => {
+    render(<SkillsBlockEditor category="言語" skills={[]} onChange={vi.fn()} />);
+    expect(screen.getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
+      'スキル',
+      '経験年数',
+      '習熟度',
+      '推し',
+      '',
+    ]);
+    expect(SKILL_FIELD_LABELS.name).toBe('スキル');
   });
 });
