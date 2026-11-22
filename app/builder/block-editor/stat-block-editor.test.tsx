@@ -60,16 +60,41 @@ describe('StatsBlockEditor', () => {
       );
     }
     render(<Harness />);
-    fireEvent.click(screen.getByRole('button', { name: '統計項目1を削除' }));
+    fireEvent.click(screen.getByRole('button', { name: '検証経験を削除' }));
     expect(screen.getByRole('textbox', { name: '統計項目1の数値' })).toHaveValue('10+');
     fireEvent.change(screen.getByRole('textbox', { name: '統計項目1のラベル' }), { target: { value: '残った項目' } });
     expect(onChange).toHaveBeenLastCalledWith({ items: [{ value: '10+', unit: '件', label: '残った項目' }] });
-    fireEvent.click(screen.getByRole('button', { name: '統計項目1を削除' }));
+    fireEvent.click(screen.getByRole('button', { name: '残った項目を削除' }));
     expect(onChange).toHaveBeenLastCalledWith({ items: [] });
     expect(screen.queryAllByRole('textbox')).toHaveLength(0);
     fireEvent.click(screen.getByRole('button', { name: '項目を追加' }));
     expect(onChange).toHaveBeenLastCalledWith({ items: [{ value: '', unit: '', label: '' }] });
     expect(screen.getAllByRole('textbox')).toHaveLength(3);
+  });
+
+  describe('削除ボタンの読み上げ名（#669）', () => {
+    it('ラベルがある項目は「{ラベル}を削除」で読み上げる', () => {
+      render(<StatsBlockEditor data={initial} onChange={vi.fn()} />);
+      expect(screen.getByRole('button', { name: '検証経験を削除' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '合成項目を削除' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '統計項目1を削除' })).toBeNull();
+    });
+
+    it('ラベルが空・空白だけの項目は「統計項目{n}を削除」に戻る', () => {
+      render(
+        <StatsBlockEditor
+          data={{
+            items: [
+              { value: '1', unit: '件', label: '　' },
+              { value: '2', unit: '件', label: '稼働年数' },
+            ],
+          }}
+          onChange={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole('button', { name: '統計項目1を削除' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '稼働年数を削除' })).toBeInTheDocument();
+    });
   });
 
   describe('計算される項目の読み取り専用表示（#639）', () => {
@@ -110,6 +135,9 @@ describe('StatsBlockEditor', () => {
       expect(experience).toHaveValue('2');
       expect(count).toHaveAttribute('readonly');
       expect(count).toHaveValue('2');
+      // 読み取り専用の欄は板の .inp.ro と同じ色（明 #e6ebeb/#46525a・暗 #1a2228/#a3aeb4）と mono 12px。
+      expect(experience).toHaveClass('bg-[#e6ebeb]', 'text-[#46525a]', 'dark:bg-[#1a2228]', 'dark:text-[#a3aeb4]');
+      expect(experience).toHaveClass('font-mono', 'text-xs');
       expect(screen.getAllByText('案件から自動で出します')).toHaveLength(2);
       expect(experience).toHaveAccessibleDescription('案件から自動で出します');
     });

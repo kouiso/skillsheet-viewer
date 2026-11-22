@@ -3,6 +3,7 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { PROFILE_META_LABELS, type ProfileBlockData, type ProfileMeta } from '@/db/block';
+import { PROFILE_FIELD_LABELS } from '../field-label';
 
 // よく使う既知8項目の入力欄（プレースホルダ）。PROFILE_META_LABELS（src/db）と
 // キーを揃えること。並び順もここが基準になる。
@@ -61,6 +62,10 @@ const findConflictingRowIds = (rows: CustomMetaRow[]): Set<string> => {
 /** 保存に反映できない自由項目があるか。非表示の編集ブロックでも親が保持する。 */
 export const hasUncommittedProfileRows = (rows: CustomMetaRow[]): boolean =>
   findConflictingRowIds(rows).size > 0 || rows.some((row) => !row.label.trim() && Boolean(row.value.trim()));
+
+/** ラベルが空で値だけ入った行があるか（S-11b「項目名が空」の理由を出す判定に使う。重複の衝突は含めない）。 */
+export const hasEmptyLabelProfileRows = (rows: CustomMetaRow[]): boolean =>
+  rows.some((row) => !row.label.trim() && Boolean(row.value.trim()));
 
 /**
  * プロフィールブロックのインライン編集（name/title/company/pr/strengths/meta）。
@@ -175,14 +180,14 @@ export const ProfileBlockEditor = ({
           value={data.name}
           onChange={(e) => set('name', e.target.value)}
           placeholder="名前（例: 見本 花子（架空））"
-          aria-label="名前"
+          aria-label={PROFILE_FIELD_LABELS.name}
           className="min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
         <input
           value={data.company ?? ''}
           onChange={(e) => set('company', e.target.value)}
           placeholder="所属会社（例: 株式会社 RITMO）"
-          aria-label="所属会社"
+          aria-label={PROFILE_FIELD_LABELS.company}
           className="min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
@@ -190,15 +195,15 @@ export const ProfileBlockEditor = ({
         value={data.title}
         onChange={(e) => set('title', e.target.value)}
         placeholder="肩書き（例: フルスタックエンジニア / EM）"
-        aria-label="肩書き"
+        aria-label={PROFILE_FIELD_LABELS.title}
         className="w-full min-h-11 rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <textarea
         value={data.pr}
         onChange={(e) => set('pr', e.target.value)}
         rows={3}
-        placeholder="自己PR"
-        aria-label="自己PR"
+        placeholder={PROFILE_FIELD_LABELS.pr}
+        aria-label={PROFILE_FIELD_LABELS.pr}
         className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <div>
@@ -208,7 +213,7 @@ export const ProfileBlockEditor = ({
           onChange={(e) => set('strengths', e.target.value.split('\n'))}
           rows={3}
           placeholder={'計測ベースのパフォーマンス改善\n開発基盤づくり'}
-          aria-label="強み"
+          aria-label={PROFILE_FIELD_LABELS.strengths}
           className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring"
         />
       </div>
