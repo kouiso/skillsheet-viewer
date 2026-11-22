@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentSnapshot } from '@/db/document-service';
-import { documentDifferences, VersionHistory, type VersionHistoryApi } from './version-history';
+import { VersionHistory, type VersionHistoryApi } from './version-history';
 
 vi.mock('@/component/skill-sheet-viewer', () => ({ default: () => <p>全シート描画</p> }));
 const snapshot = (revision: string, editable = true): DocumentSnapshot => ({
@@ -160,6 +160,41 @@ describe('シート全体の版の履歴', () => {
       expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
       expect(screen.queryByText('まだ比べる版がありません')).not.toBeInTheDocument();
     });
+
+    it('版が1つなら一覧側の箱に理由を出し、その下に版を1行出す。比較欄は「まだ比べる版がありません」', async () => {
+      setup({
+        list: vi.fn().mockResolvedValue([
+          {
+            revision: '1',
+            title: '合成',
+            recordedAt: '2026-10-06T00:00:00Z',
+            action: 'save',
+            restoredFrom: null,
+            restoredBefore: null,
+          },
+        ]),
+      });
+      // 一覧側: ボードの箱（card・1px 枠・角丸・余白・間隔）に理由を出し、その下に版の行が残る。
+      const aside = screen.getByRole('complementary', { name: '保存された版' });
+      const box = await within(aside).findByText('版が1つしかありません。');
+      expect(box.parentElement).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5', 'space-y-3');
+      expect(within(aside).getByText('保存すると変更を比べられます。')).toBeInTheDocument();
+      expect(within(aside).getByRole('button', { name: /版 1/ })).toBeInTheDocument();
+      // 同じ文を2か所に出さない: 比較欄は「まだ比べる版がありません」だけ。
+      expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
+      const compare = screen.getByText('まだ比べる版がありません').parentElement as HTMLElement;
+      expect(within(compare).queryByText(/版が1つしかありません/)).not.toBeInTheDocument();
+      expect(screen.queryByText('いまの内容から変わる項目')).not.toBeInTheDocument();
+    });
+
+    it('版が2つなら一覧側の箱も「まだ比べる版がありません」も出さず、差分を出す', async () => {
+      setup();
+      const aside = screen.getByRole('complementary', { name: '保存された版' });
+      await within(aside).findByRole('button', { name: /版 1/ });
+      expect(within(aside).queryByText(/版が1つしかありません/)).not.toBeInTheDocument();
+      expect(screen.queryByText('まだ比べる版がありません')).not.toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
+    });
   });
 
   it('旧版の行選択では現在版との差分へ切り替え、任意比較selectも維持する', async () => {
@@ -167,10 +202,36 @@ describe('シート全体の版の履歴', () => {
     await selectOld();
     expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('2');
     expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1');
-    expect(screen.getByText(/差分 1項目/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
+    expect(screen.getByText('省略せず、変わった項目は全部並べます。')).toBeInTheDocument();
     fireEvent.change(screen.getByRole('combobox', { name: '比較元' }), { target: { value: '1' } });
     await screen.findByText('内容は同じです。');
     expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('1');
+  });
+
+  it('差分は場所を語で示し、前を「−」・後を「＋」で、引用符なし・改行ありで出す', async () => {
+    const withText = (revision: string, text: string): DocumentSnapshot => ({
+      ...snapshot(revision),
+      blocks: [{ id: 'b', type: 'markdown', order: 0, data: { markdown: text } }],
+    });
+    setup({
+      read: vi
+        .fn()
+        .mockImplementation(async (revision) => withText(revision, revision === '1' ? '前の行\n二行目' : '後の行')),
+    });
+    await selectOld();
+    const frame = screen.getByRole('heading', { name: /本文$/ }).closest('section') as HTMLElement;
+    expect(within(frame).getByRole('heading')).toHaveTextContent('テキスト › 前の行 › 本文');
+    // 比較元は版2（現在）、比較先は版1。前の値は引用符なしで、改行を保ったまま出る。
+    const del = frame.querySelector('del') as HTMLElement;
+    const ins = frame.querySelector('ins') as HTMLElement;
+    expect(del.textContent).toBe('後の行');
+    expect(ins.textContent).toBe('前の行\n二行目');
+    expect(del).toHaveClass('whitespace-pre-wrap');
+    expect(frame.textContent).not.toContain('"');
+    expect(frame.textContent).toContain('−');
+    expect(frame.textContent).toContain('＋');
+    expect(screen.getByRole('button', { name: '全項目の原文を確認' })).toBeEnabled();
   });
 
   it('ブロック描画でも選択した版のシートタイトルを明示する', async () => {
@@ -303,11 +364,6 @@ describe('シート全体の版の履歴', () => {
     );
   });
 
-  it('順序・未知項目・空白の差分を隠さない', () => {
-    const result = documentDifferences({ items: ['A', 'B'], future: 'x\n' }, { items: ['B', 'A'], future: 'x\n\n' });
-    expect(result.map((x) => x.path)).toEqual(['文書.items.0', '文書.items.1', '文書.future']);
-    expect(result[2].after).toBe(JSON.stringify('x\n\n'));
-  });
   it('確認前に復元せず、全公開対象・巨大件数と安全側の初期focusを表示する', async () => {
     const { api } = setup();
     const dialog = await confirmOld();

@@ -2,6 +2,7 @@
 
 import { DateTokenPicker } from '@/component/date-token-picker';
 import type { ExperienceBlockData } from '@/db/block';
+import { EXPERIENCE_FIELD_LABELS } from '../field-label';
 
 export const ExperienceBlockEditor = ({
   data,
@@ -16,17 +17,21 @@ export const ExperienceBlockEditor = ({
       <input
         value={data.company}
         onChange={(e) => set('company', e.target.value)}
-        placeholder="会社名"
-        aria-label="会社名"
+        placeholder={EXPERIENCE_FIELD_LABELS.company}
+        aria-label={EXPERIENCE_FIELD_LABELS.company}
         className="min-h-11 w-full rounded border border-input bg-background px-2 py-1 font-medium focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <div className="flex items-center gap-1.5">
-        <DateTokenPicker value={data.startDate} onChange={(v) => set('startDate', v)} placeholder="開始年月日" />
+        <DateTokenPicker
+          value={data.startDate}
+          onChange={(v) => set('startDate', v)}
+          placeholder={EXPERIENCE_FIELD_LABELS.startDate}
+        />
         <span className="text-muted-foreground text-xs">〜</span>
         <DateTokenPicker
           value={data.endDate}
           onChange={(v) => set('endDate', v)}
-          placeholder="終了年月日"
+          placeholder={EXPERIENCE_FIELD_LABELS.endDate}
           allowPresent
         />
       </div>
@@ -34,15 +39,15 @@ export const ExperienceBlockEditor = ({
         value={data.role}
         onChange={(e) => set('role', e.target.value)}
         placeholder="職種（例: フロントエンドエンジニア）"
-        aria-label="職種"
+        aria-label={EXPERIENCE_FIELD_LABELS.role}
         className="w-full min-h-11 rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
       />
       <textarea
         value={data.description}
         onChange={(e) => set('description', e.target.value)}
         rows={4}
-        placeholder="業務内容"
-        aria-label="業務内容"
+        placeholder={EXPERIENCE_FIELD_LABELS.description}
+        aria-label={EXPERIENCE_FIELD_LABELS.description}
         className="w-full min-h-11 resize-y rounded border border-input bg-background px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring"
       />
     </div>

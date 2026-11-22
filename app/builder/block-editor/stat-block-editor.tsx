@@ -7,11 +7,12 @@ import { Input } from '@/component/ui/input';
 import type { StatItem, StatsBlockData } from '@/db/block';
 import type { MarkdownExperienceContext } from '@/db/block/serialize';
 import { isStatComputed, resolveDisplayedStats } from '@/db/derived-display';
+import { STAT_FIELD_LABELS } from '../field-label';
 
 const FIELDS = [
-  { key: 'value', label: '数値' },
-  { key: 'unit', label: '単位' },
-  { key: 'label', label: 'ラベル' },
+  { key: 'value', label: STAT_FIELD_LABELS.value },
+  { key: 'unit', label: STAT_FIELD_LABELS.unit },
+  { key: 'label', label: STAT_FIELD_LABELS.label },
 ] as const;
 
 export function StatsBlockEditor({
@@ -37,9 +38,9 @@ export function StatsBlockEditor({
         className="hidden grid-cols-[6rem_5rem_minmax(0,1fr)_2.75rem] gap-3 text-sm font-medium text-muted-foreground sm:grid"
         aria-hidden="true"
       >
-        <span>数値</span>
-        <span>単位</span>
-        <span>ラベル</span>
+        <span>{STAT_FIELD_LABELS.value}</span>
+        <span>{STAT_FIELD_LABELS.unit}</span>
+        <span>{STAT_FIELD_LABELS.label}</span>
         <span />
       </div>
       {data.items.map((item, index) => {
@@ -76,7 +77,12 @@ export function StatsBlockEditor({
                       ? { readOnly: true, 'aria-describedby': noteId }
                       : { onChange: (event) => update(index, key, event.target.value) })}
                     aria-label={`統計項目${index + 1}の${label}`}
-                    className={`min-h-11 w-full min-w-0 ${key === 'value' ? 'font-mono' : ''} ${readOnly ? 'bg-muted text-muted-foreground' : ''}`}
+                    className={`min-h-11 w-full min-w-0 ${key === 'value' ? 'font-mono' : ''} ${
+                      readOnly
+                        ? // 板の読み取り専用欄（会社バーの .inp.ro）: 地 #e6ebeb/#1a2228・文字 #46525a/#a3aeb4・mono 12px。
+                          'bg-[#e6ebeb] text-xs text-[#46525a] dark:bg-[#1a2228] dark:text-[#a3aeb4]'
+                        : ''
+                    }`}
                   />
                 </label>
               );
@@ -86,7 +92,8 @@ export function StatsBlockEditor({
               variant="ghost"
               size="icon"
               className="h-11 w-11 text-muted-foreground hover:text-destructive"
-              aria-label={`統計項目${index + 1}を削除`}
+              // ボードは「{ラベル}を削除」。ラベルが空の時だけ番号で読む（読み上げで何を消すか分かるように）。
+              aria-label={item.label.trim() ? `${item.label.trim()}を削除` : `統計項目${index + 1}を削除`}
               onClick={() => onChange({ ...data, items: data.items.filter((_, i) => i !== index) })}
             >
               <Trash2 className="size-4" aria-hidden="true" />
