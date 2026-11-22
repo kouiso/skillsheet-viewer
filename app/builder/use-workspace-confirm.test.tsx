@@ -75,10 +75,7 @@ describe('共通確認ダイアログ', () => {
   it('confirmFirst と主ボタン=取消で、板の「捨てるが左・戻るが主」の並びになる', () => {
     const answer = vi.fn();
     render(
-      <Harness
-        answer={answer}
-        overrides={{ confirmFirst: true, primary: 'cancel', cancelLabel: '編集に戻る' }}
-      />,
+      <Harness answer={answer} overrides={{ confirmFirst: true, primary: 'cancel', cancelLabel: '編集に戻る' }} />,
     );
     fireEvent.click(screen.getByRole('button', { name: '開く' }));
     const buttons = screen.getAllByRole('button');
@@ -96,9 +93,7 @@ describe('共通確認ダイアログ', () => {
     fireEvent.click(screen.getByRole('button', { name: '開く' }));
     const cancel = screen.getByRole('button', { name: 'やめる' });
     const discard = screen.getByRole('button', { name: '削除する' });
-    expect(screen.getAllByRole('button').indexOf(cancel)).toBeLessThan(
-      screen.getAllByRole('button').indexOf(discard),
-    );
+    expect(screen.getAllByRole('button').indexOf(cancel)).toBeLessThan(screen.getAllByRole('button').indexOf(discard));
     expect(cancel).not.toHaveClass('bg-primary-dark');
     expect(discard).toHaveClass('text-destructive');
   });
@@ -120,11 +115,7 @@ describe('共通確認ダイアログ', () => {
     expect(dialog.querySelector('[aria-hidden="true"]')).toHaveClass('bg-danger-soft', 'h-8', 'w-8');
     // 題名 16px・太さ 700 / 本文 13.5px・行高 1.8・左 44px（390px では 0）
     expect(screen.getByText('会社を削除しますか')).toHaveClass('text-base', 'font-bold');
-    expect(screen.getByText('所属案件も削除します。')).toHaveClass(
-      'text-[13.5px]',
-      'pl-11',
-      'max-sm:pl-0',
-    );
+    expect(screen.getByText('所属案件も削除します。')).toHaveClass('text-[13.5px]', 'pl-11', 'max-sm:pl-0');
   });
 
   it('注意の tone は警告色の丸アイコンを出す', () => {
