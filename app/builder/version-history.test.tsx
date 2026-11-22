@@ -160,6 +160,41 @@ describe('シート全体の版の履歴', () => {
       expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
       expect(screen.queryByText('まだ比べる版がありません')).not.toBeInTheDocument();
     });
+
+    it('版が1つなら一覧側の箱に理由を出し、その下に版を1行出す。比較欄は「まだ比べる版がありません」', async () => {
+      setup({
+        list: vi.fn().mockResolvedValue([
+          {
+            revision: '1',
+            title: '合成',
+            recordedAt: '2026-10-06T00:00:00Z',
+            action: 'save',
+            restoredFrom: null,
+            restoredBefore: null,
+          },
+        ]),
+      });
+      // 一覧側: ボードの箱（card・1px 枠・角丸・余白・間隔）に理由を出し、その下に版の行が残る。
+      const aside = screen.getByRole('complementary', { name: '保存された版' });
+      const box = await within(aside).findByText('版が1つしかありません。');
+      expect(box.parentElement).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5', 'space-y-3');
+      expect(within(aside).getByText('保存すると変更を比べられます。')).toBeInTheDocument();
+      expect(within(aside).getByRole('button', { name: /版 1/ })).toBeInTheDocument();
+      // 同じ文を2か所に出さない: 比較欄は「まだ比べる版がありません」だけ。
+      expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
+      const compare = screen.getByText('まだ比べる版がありません').parentElement as HTMLElement;
+      expect(within(compare).queryByText(/版が1つしかありません/)).not.toBeInTheDocument();
+      expect(screen.queryByText('いまの内容から変わる項目')).not.toBeInTheDocument();
+    });
+
+    it('版が2つなら一覧側の箱も「まだ比べる版がありません」も出さず、差分を出す', async () => {
+      setup();
+      const aside = screen.getByRole('complementary', { name: '保存された版' });
+      await within(aside).findByRole('button', { name: /版 1/ });
+      expect(within(aside).queryByText(/版が1つしかありません/)).not.toBeInTheDocument();
+      expect(screen.queryByText('まだ比べる版がありません')).not.toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
+    });
   });
 
   it('旧版の行選択では現在版との差分へ切り替え、任意比較selectも維持する', async () => {
