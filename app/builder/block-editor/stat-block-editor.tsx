@@ -4,9 +4,9 @@ import { Plus, Trash2 } from 'lucide-react';
 import { useId } from 'react';
 import { Button } from '@/component/ui/button';
 import { Input } from '@/component/ui/input';
-import type { StatItem, StatsBlockData } from '@/db/block';
+import type { StatItem, StatKind, StatsBlockData } from '@/db/block';
 import type { MarkdownExperienceContext } from '@/db/block/serialize';
-import { isStatComputed, resolveDisplayedStats } from '@/db/derived-display';
+import { isStatComputed, resolveDisplayedStats, statKindOf } from '@/db/derived-display';
 import { STAT_FIELD_LABELS } from '../field-label';
 
 const FIELDS = [
@@ -14,6 +14,13 @@ const FIELDS = [
   { key: 'unit', label: STAT_FIELD_LABELS.unit },
   { key: 'label', label: STAT_FIELD_LABELS.label },
 ] as const;
+
+// 保存する種類の集合は変えない。「計算」は計算元が 2 つあるので種類をそのまま並べる。
+const KIND_OPTIONS: readonly { value: StatKind; label: string }[] = [
+  { value: 'experience', label: '計算（経験年数）' },
+  { value: 'projectCount', label: '計算（案件数）' },
+  { value: 'free', label: '自由' },
+];
 
 export function StatsBlockEditor({
   data,
@@ -29,7 +36,7 @@ export function StatsBlockEditor({
   context?: Pick<MarkdownExperienceContext, 'projects' | 'referenceMonth'>;
 }) {
   const editorId = useId();
-  const update = (index: number, key: keyof StatItem, value: string) =>
+  const update = (index: number, key: Exclude<keyof StatItem, 'kind'>, value: string) =>
     onChange({ ...data, items: data.items.map((item, i) => (i === index ? { ...item, [key]: value } : item)) });
 
   return (
@@ -52,6 +59,9 @@ export function StatsBlockEditor({
             ? (resolveDisplayedStats([item], context.projects, context.referenceMonth)[0]?.value ?? item.value)
             : item.value;
         const noteId = `${editorId}-${index}-auto`;
+        // 「計算（経験年数）」を選んでも単位が年・ヶ月でなければ #664 の規則で計算されない。理由を画面に出す。
+        const experienceNotComputable = context !== undefined && statKindOf(item) === 'experience' && !computed;
+        const hintId = `${editorId}-${index}-kind-hint`;
         return (
           <fieldset
             // biome-ignore lint/suspicious/noArrayIndexKey: 既存保存形式の統計項目は順序で管理し ID を持たない
@@ -98,6 +108,35 @@ export function StatsBlockEditor({
             >
               <Trash2 className="size-4" aria-hidden="true" />
             </Button>
+            <label
+              htmlFor={`${editorId}-${index}-kind`}
+              className="col-span-2 flex min-w-0 items-center gap-3 text-sm sm:col-span-4"
+            >
+              <span className="shrink-0 text-muted-foreground">種類</span>
+              <select
+                id={`${editorId}-${index}-kind`}
+                value={statKindOf(item)}
+                onChange={(event) => {
+                  const kind = KIND_OPTIONS.find((option) => option.value === event.target.value)?.value;
+                  if (kind === undefined) return;
+                  onChange({ ...data, items: data.items.map((it, i) => (i === index ? { ...it, kind } : it)) });
+                }}
+                aria-label={`統計項目${index + 1}の種類`}
+                aria-describedby={experienceNotComputable ? hintId : undefined}
+                className="sel min-h-11 min-w-0 flex-1 sm:max-w-60"
+              >
+                {KIND_OPTIONS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {experienceNotComputable && (
+              <p id={hintId} className="col-span-2 text-xs text-muted-foreground sm:col-span-4">
+                単位を「年」か「ヶ月」にすると案件から計算します
+              </p>
+            )}
             {computed && (
               <p id={noteId} className="col-span-2 text-xs text-muted-foreground sm:col-span-4">
                 案件から自動で出します
