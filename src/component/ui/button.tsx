@@ -14,10 +14,11 @@ const buttonVariants = cva(
         // WCAG AA（通常文字4.5）を満たさない（Issue #198）。--primary-dark はダーク/ライト
         // 両テーマで白文字/近黒文字のどちらの --*-foreground とも4.5以上を確保できているため、
         // ボタン背景には --primary ではなく --primary-dark を使う。
-        // hover は opacity-90（bg・文字色ともページ背景へブレンド）だと、暗テーマの
-        // primary-dark×primary-foreground が 5.21:1 → 約4.35:1 まで下がり AA を割り込む
+        // hover は opacity-90（bg・文字色ともページ背景へブレンド）だと、暗テーマで当時の
+        // primary-dark×primary-foreground（旧 5.21:1）が約4.35:1 まで下がり AA を割り込んだ
         // （Codex レビュー指摘）。文字色は変えず、不透明な専用トークン（--primary-hover）
-        // へ背景だけ差し替える。
+        // へ背景だけ差し替える。#671 で暗テーマの primary-dark は #14b8a6、文字は #03110f
+        // （7.73:1）、hover は #2dd4bf（10.34:1）になった。
         default:
           'bg-primary-dark text-primary-foreground shadow-elevation-1 hover:bg-primary-hover hover:shadow-elevation-3',
         gradient:
