@@ -56,8 +56,9 @@ function LoginForm() {
       {error && (
         <div
           role="alert"
-          // text-destructive（#dc2626）は bg-destructive/10 のティント背景上で 3.88:1 と
-          // WCAG AA(4.5:1) 未達だった（#152 S-4）。text-destructive-strong に切り替える。
+          // text-destructive は bg-destructive/10 のティント背景上で AA(4.5:1) に届かない
+          // （旧 #dc2626 は 3.88:1、いまの #b64437 も背景上で 4.43:1）（#152 S-4・#671）。
+          // text-destructive-strong（#b91c1c、同じ背景上で 5.29:1）に切り替える。
           className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive-strong"
         >
           {error}

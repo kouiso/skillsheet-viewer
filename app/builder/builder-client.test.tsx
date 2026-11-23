@@ -457,9 +457,9 @@ describe('BuilderClient', () => {
     expect(within(reason).getByText(/このまま履歴を開くと、未保存の変更は失われます。/)).toBeInTheDocument();
     expect(within(reason).getByText(/入力内容に、保存できない箇所があります/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'もう一度保存して開く' })).not.toBeInTheDocument();
-    // 変更が失われる操作なので、確認ボタンは danger（破壊的な見た目）で出す。
+    // 変更が失われる操作なので、確認ボタンは danger（破壊的な見た目）で出す。枠は板どおり 60%。
     const discardButton = within(reason).getByRole('button', { name: '変更を捨てて履歴を開く' });
-    expect(discardButton).toHaveClass('border-destructive', 'text-destructive');
+    expect(discardButton).toHaveClass('border-destructive/60', 'text-destructive');
     expect(within(reason).getByRole('button', { name: '編集に戻る' })).not.toHaveClass('text-destructive');
     await user.click(within(reason).getByRole('button', { name: '編集に戻る' }));
     await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
