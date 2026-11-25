@@ -13,7 +13,7 @@ URL・閲覧コード・ログイン・DB の在処は [doc/onboarding.md](./onb
 
 ```sh
 umask 077
-op read 'op://RITMO/skillsheet-viewer Neon DATABASE_URL/password' > .conn
+op read 'op://skillsheet-viewer/skillsheet-viewer Neon DATABASE_URL/password' > .conn
 ```
 
 アイテム名は [doc/onboarding.md](./onboarding.md) の表にある「skillsheet-viewer Neon DATABASE_URL」。
