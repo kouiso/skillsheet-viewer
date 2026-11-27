@@ -47,6 +47,7 @@ it('画面の準備前は入力欄とボタンが押せず、ボタンに「準�
   // 板 G の「1. 準備中」の欄は薄くない（#627）。無効のまま、共有 Input の disabled:opacity-50 を打ち消す。
   expect(container.querySelector('input')).toHaveClass('disabled:opacity-100');
   expect(container.querySelector('input')).not.toHaveClass('disabled:opacity-50');
+  expect(container.querySelector('input')).toHaveClass('disabled:hover:border-input');
   const button = container.querySelector('button');
   expect(button).toBeDisabled();
   expect(button?.textContent).toBe('準備しています…');
