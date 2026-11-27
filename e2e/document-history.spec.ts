@@ -132,7 +132,7 @@ test('history records immutable snapshots, restores and undoes through UI, and r
     expect(restored.snapshot).toMatchObject({ title: first.title, blocks: original });
     expect(BigInt(restored.snapshot.revision)).toBe(BigInt(saved.revision) + 1n);
 
-    await page.getByRole('button', { name: '戻す前に戻す', exact: true }).click();
+    await page.getByRole('button', { name: '取り消す', exact: true }).click();
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: '戻す', exact: true }).click();
     await expect(dialog).not.toBeVisible();

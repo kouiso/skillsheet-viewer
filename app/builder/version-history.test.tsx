@@ -861,15 +861,150 @@ describe('戻す版・比較の選び方・行の表示（#626）', () => {
     expect(wide).toHaveClass('max-md:hidden');
   });
 
-  it('戻した直後の通知は、戻した版の日時を板の文で出し、取り消しの説明も添える', async () => {
+  it('戻した直後の通知は板どおりの反転色のトースト（日時入りの文・「取り消す」・閉じる記号・4px のバー・説明）', async () => {
     setup();
     const dialog = await confirmOld();
     fireEvent.click(within(dialog).getByRole('button', { name: '戻す' }));
-    const notice = await screen.findByRole('status', { name: '' });
-    expect(notice).toHaveTextContent(
+    const toast = await screen.findByRole('status', { name: '' });
+    expect(toast).toHaveTextContent(
       `${stamp('2026-10-06T00:00:00Z')} の版に戻しました。いまの内容も履歴に残っています。`,
     );
-    expect(notice).toHaveTextContent('履歴には「復元」が2つ積まれます。');
+    // 板の .toast: 地 fg・文字 bg・角丸 6px・余白 12px 14px・13px。
+    expect(toast).toHaveClass('bg-foreground', 'text-background', 'rounded-lg', 'px-3.5', 'py-3', 'text-[13px]');
+    // 板のボタン名は「取り消す」（高さ 32px・枠 1px・地は透明）。旧名は残さない。
+    const undoButton = within(toast).getByRole('button', { name: '取り消す' });
+    expect(undoButton).toHaveClass(
+      'h-8',
+      'border',
+      'border-background',
+      'bg-transparent',
+      'font-semibold',
+      'text-[13px]',
+    );
+    expect(screen.queryByRole('button', { name: '戻す前に戻す' })).not.toBeInTheDocument();
+    // 板に無い閉じる操作は、記号のボタン（読み上げ名「通知を閉じる」）で残す。
+    const close = within(toast).getByRole('button', { name: '通知を閉じる' });
+    expect(close.querySelector('svg')).toBeInTheDocument();
+    expect(close).toHaveTextContent('');
+    // 残り時間は板の 4px のバー（地 chip・塗り pri）。
+    const bar = screen.getByRole('progressbar', { name: '復元通知の残り時間' });
+    expect(bar).toHaveClass('h-1', 'bg-chip-bg');
+    expect(bar).toHaveAttribute('aria-valuenow', '10');
+    expect(bar.firstElementChild).toHaveClass('h-1', 'bg-primary');
+    expect(bar.firstElementChild).toHaveStyle({ width: '100%' });
+    // 取り消しの説明の一文。
+    expect(
+      screen.getByText(
+        '取り消すと、戻す直前の版へもう一度戻します。履歴には「復元」が2つ積まれます。何回でもできます。',
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(close);
+    expect(screen.queryByRole('status', { name: '' })).not.toBeInTheDocument();
+  });
+
+  it('トーストの「取り消す」は復元前の版を、復元直後の版を期待版にして確認する', async () => {
+    const { api } = setup();
+    const dialog = await confirmOld();
+    fireEvent.click(within(dialog).getByRole('button', { name: '戻す' }));
+    fireEvent.click(await screen.findByRole('button', { name: '取り消す' }));
+    await waitFor(() => expect(api.previewRestore).toHaveBeenLastCalledWith('2', '3'));
+  });
+});
+
+describe('板「戻した後・空・失敗」と確認の文（#626）', () => {
+  const preview =
+    (laterRevisionCount: string, canRestore = true) =>
+    async (target: string, expected: string) => ({
+      current: snapshot(expected),
+      target: snapshot(target),
+      newlyVisible: [],
+      visibilityUncertain: false,
+      confirmation: 'a'.repeat(64),
+      canRestore,
+      laterRevisionCount,
+    });
+  async function openUndo(laterRevisionCount: string) {
+    const utils = setup({ previewRestore: vi.fn().mockImplementation(preview(laterRevisionCount)) });
+    const dialog = await confirmOld();
+    // 普通の復元の確認は閉じ、復元してから「取り消す」で取り消しの確認を開く。
+    fireEvent.click(within(dialog).getByRole('button', { name: '戻す' }));
+    fireEvent.click(await screen.findByRole('button', { name: '取り消す' }));
+    return { ...utils, undoDialog: await screen.findByRole('alertdialog') };
+  }
+
+  it('取り消しの確認に戻したあとの編集が挟まっていたら、板の状態2の題・文・「取り消す」を出す（件数は復元そのものを除く）', async () => {
+    const { undoDialog } = await openUndo('3');
+    expect(within(undoDialog).getByText('戻したあとに 2件 の編集があります')).toBeVisible();
+    expect(within(undoDialog).getByText('取り消すと、その2件の編集も元に戻ります（履歴には残ります）。')).toBeVisible();
+    expect(within(undoDialog).getByRole('button', { name: 'やめる' })).toBeInTheDocument();
+    expect(within(undoDialog).getByRole('button', { name: '取り消す' })).toBeInTheDocument();
+    expect(within(undoDialog).queryByRole('button', { name: '戻す' })).not.toBeInTheDocument();
+    // 普通の復元の注意（「この版のあとに…」）は出さない。
+    expect(within(undoDialog).queryByText(/この版のあとに/)).not.toBeInTheDocument();
+  });
+
+  it('挟まった編集が無い取り消し（件数 1 = 復元そのもの）は、状態2にせず、注意も出さない', async () => {
+    const { undoDialog } = await openUndo('1');
+    expect(within(undoDialog).getByText('版 2 の状態に戻します。')).toBeVisible();
+    expect(within(undoDialog).queryByText(/件 の編集があります/)).not.toBeInTheDocument();
+    expect(within(undoDialog).queryByText(/この版のあとに/)).not.toBeInTheDocument();
+    expect(within(undoDialog).getByRole('button', { name: '戻す' })).toBeInTheDocument();
+  });
+
+  it('取り消しの件数は巨大な版番号でも文字列のまま数える', async () => {
+    const { undoDialog } = await openUndo('9007199254740994');
+    expect(within(undoDialog).getByText('戻したあとに 9007199254740993件 の編集があります')).toBeVisible();
+  });
+
+  it('普通の復元の確認は、板の注意（地 warns・「この版のあとに N件 の編集があります。戻すと、そのN件の変更も消えます」）を出す', async () => {
+    setup();
+    const dialog = await confirmOld();
+    const note = within(dialog).getByText(/この版のあとに/);
+    expect(note).toHaveTextContent(
+      'この版のあとに 9007199254740993件 の編集があります。戻すと、その9007199254740993件の変更も消えます（履歴には残ります）。',
+    );
+    expect(note).toHaveClass('bg-warn-soft', 'text-warn-strong', 'text-[13px]');
+  });
+
+  it('復元の確認を取得できなかった時は、箱に注意と「閉じる」「再試行」を出し、再試行は同じ版・期待版でやり直す', async () => {
+    const previewRestore = vi.fn().mockRejectedValueOnce(new Error('NOT_FOUND')).mockImplementation(preview('1'));
+    const { api } = setup({ previewRestore });
+    await selectOld();
+    fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      '復元の確認を取得できませんでした。内容は変更していません。もう一度お試しください。',
+    );
+    // 板の .note: 地 dels・文字 del。箱は listBox と同じ寸法。
+    expect(alert).toHaveClass('bg-danger-soft', 'text-danger', 'text-[13px]');
+    expect(alert.parentElement).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5', 'space-y-3');
+    expect(within(alert.parentElement as HTMLElement).getByRole('button', { name: '閉じる' })).toBeInTheDocument();
+    fireEvent.click(within(alert.parentElement as HTMLElement).getByRole('button', { name: '再試行' }));
+    await screen.findByRole('alertdialog');
+    expect(api.previewRestore).toHaveBeenCalledTimes(2);
+    expect(api.previewRestore).toHaveBeenLastCalledWith('1', '2');
+    expect(screen.queryByText(/復元の確認を取得できませんでした/)).not.toBeInTheDocument();
+  });
+
+  it('「閉じる」で復元の確認の失敗の箱を消す', async () => {
+    setup({ previewRestore: vi.fn().mockRejectedValue(new Error('NOT_FOUND')) });
+    await selectOld();
+    fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
+    await screen.findByText(/復元の確認を取得できませんでした/);
+    fireEvent.click(screen.getByRole('button', { name: '閉じる' }));
+    expect(screen.queryByText(/復元の確認を取得できませんでした/)).not.toBeInTheDocument();
+  });
+
+  it('戻せない版は、板の1文「この版は今の入力ルールに合わないため戻せません。」を箱に出し、原文の案内は2文目、戻すは無効', async () => {
+    setup({ read: vi.fn().mockImplementation(async (rev) => snapshot(rev, rev !== '1')) });
+    fireEvent.click(await findPick('比較先', '1'));
+    const first = await screen.findByText('この版は今の入力ルールに合わないため戻せません。');
+    const box = first.parentElement as HTMLElement;
+    expect(box).toHaveAttribute('role', 'alert');
+    expect(box).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5');
+    expect(within(box).getByText('「全項目の原文を確認」で、原文と問題箇所を確認できます。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '全項目の原文を確認' })).toBeEnabled();
   });
 });
 

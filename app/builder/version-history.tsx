@@ -75,6 +75,9 @@ const dialogPrimary = `${dialogButton} border-primary-dark bg-primary-dark text-
 const dialogNormal = `${dialogButton} border-input bg-background text-foreground`;
 // 板「戻した後・空・失敗」の一覧側の箱: 地 card・枠線 1px・角丸 6px・余白 20px・中の間隔 12px。
 const listBox = 'space-y-3 rounded-lg border border-border bg-card p-5';
+// 反転色のトーストの中のボタン（.toast button: 高さ 32px・枠 1px・600 13px）。
+const toastButton =
+  'h-8 shrink-0 rounded border border-background bg-transparent px-3 text-[13px] font-semibold text-background disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring';
 const primary = `${control} border-primary bg-primary-dark text-primary-foreground font-semibold disabled:bg-background disabled:border-border`;
 // 板「版の履歴と2版の比較」の一覧の行（.ver）: 横並び・上揃え・間 10px・余白 10px 16px・下に区切り線。
 // 比較元に選んだ行（.sel）は地を acc にする。
@@ -226,6 +229,10 @@ export function VersionHistory({
   const [conflict, setConflict] = useState(false);
   const [undo, setUndo] = useState<{ target: string; expected: string } | null>(null);
   const [confirmationReviewOpen, setConfirmationReviewOpen] = useState(false);
+  // 開いている確認が「取り消し」（戻す前の版へ戻す）か。板の状態2の文と題はこの時だけ使う。
+  const [undoConfirmation, setUndoConfirmation] = useState(false);
+  // 復元の確認の取得に失敗した時の「再試行」で、同じ引数でやり直す。
+  const lastPrepare = useRef<{ target: string; expected: string; reviewTarget: boolean } | null>(null);
   const [notice, setNotice] = useState(false);
   // 戻した版の日時（板の通知「10月26日 18:40 の版に戻しました」）。一覧に無い版なら null。
   const [noticeStamp, setNoticeStamp] = useState<string | null>(null);
@@ -340,6 +347,7 @@ export function VersionHistory({
   const sameVersion = from !== '' && from === to;
   async function prepare(target = restoreTarget ?? '', expected = revision, reviewTarget = false) {
     if (!target || busyRef.current || restoreBlockedReason) return;
+    lastPrepare.current = { target, expected, reviewTarget };
     returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     busyRef.current = true;
     setBusy(true);
@@ -348,6 +356,7 @@ export function VersionHistory({
       const result = await apiRef.current.previewRestore(target, expected);
       if (alive.current) {
         setConfirmationReviewOpen(reviewTarget);
+        setUndoConfirmation(reviewTarget);
         setConfirmation(result);
       }
     } catch (error) {
@@ -501,6 +510,12 @@ export function VersionHistory({
       </div>
     );
   }
+  // 確認で示す「あとの編集」の件数。DB の件数（laterRevisionCount）は「戻す版より後の版」の数で、
+  // 取り消しの確認では、戻した復元そのもの（1件）を含む。取り消しでは、それを除いた数が板の「戻したあとの編集」。
+  // 件数は版番号の差でなく文字列の数（巨大な版番号でも丸めない）で扱う。
+  const laterCount = confirmation ? BigInt(confirmation.laterRevisionCount) : 0n;
+  const laterEdits = undoConfirmation ? (laterCount > 0n ? laterCount - 1n : 0n) : laterCount;
+  const undoWithEdits = undoConfirmation && laterEdits > 0n;
   // 版が1つの時は、一覧側の箱の中に版を出す（下の ol は空にする）。
   const listRows = single ? [] : groupVersions(rows);
   const differences = pair
@@ -583,34 +598,60 @@ export function VersionHistory({
         </p>
       )}
       {notice && (
-        <div
-          role="status"
-          className="flex flex-wrap items-center gap-3 border-b border-border bg-accent p-4 text-accent-foreground"
-        >
-          {/* 板「戻した直後」: 「10月26日 18:40 の版に戻しました。いまの内容も履歴に残っています。」 */}
-          <span>
-            {noticeStamp ? `${noticeStamp} の版に戻しました。` : '選択した版の状態に戻しました。'}
-            いまの内容も履歴に残っています。
-          </span>
-          {undo && (
-            <button
-              type="button"
-              className={control}
-              disabled={busy || Boolean(restoreBlockedReason)}
-              onClick={() => void prepare(undo.target, undo.expected, true)}
+        // 板「戻した直後（取り消しの通知）」: 箱（card・枠 1px・角丸 6px・余白 20px・間隔 12px）の中に、
+        // 反転色のトースト（地 fg・文字 bg・角丸 6px・余白 12/14・13px）、4px の残り時間のバー、説明の一文。
+        // 画面いっぱいの帯にして、箱の枠と余白は帯の中に収める。
+        <div className="border-b border-border bg-card p-4">
+          <div className={`${listBox} mx-auto max-w-[760px]`}>
+            <div
+              role="status"
+              className="flex items-center gap-3 rounded-lg bg-foreground px-3.5 py-3 text-[13px] text-background"
             >
-              戻す前に戻す
-            </button>
-          )}
-          <button type="button" className={control} onClick={() => setNotice(false)}>
-            通知を閉じる
-          </button>
-          <progress className="h-1 w-full" aria-label="復元通知の残り時間" max={10} value={noticeSeconds} />
-          {undo && (
-            <p className="w-full text-xs">
-              「戻す前に戻す」を押すと、戻す直前の版へもう一度戻します。履歴には「復元」が2つ積まれます。何回でもできます。
-            </p>
-          )}
+              {/* 板: 「10月26日 18:40 の版に戻しました。いまの内容も履歴に残っています。」 */}
+              <span className="min-w-0 flex-1 break-words">
+                {noticeStamp ? `${noticeStamp} の版に戻しました。` : '選択した版の状態に戻しました。'}
+                いまの内容も履歴に残っています。
+              </span>
+              {undo && (
+                <button
+                  type="button"
+                  className={toastButton}
+                  disabled={busy || Boolean(restoreBlockedReason)}
+                  onClick={() => void prepare(undo.target, undo.expected, true)}
+                >
+                  取り消す
+                </button>
+              )}
+              {/* 板に無い閉じる操作は、トーストに合う記号ボタンで残す。当たり判定は ::before で 44px */}
+              <button
+                type="button"
+                aria-label="通知を閉じる"
+                className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded text-background before:absolute before:-inset-1.5 before:content-[''] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                onClick={() => setNotice(false)}
+              >
+                <X aria-hidden="true" className="h-[18px] w-[18px]" />
+              </button>
+            </div>
+            {/* 板: 高さ 4px・角丸 2px・地 chip、塗りは pri。残り時間は 10 秒で 100% → 0% */}
+            <div
+              role="progressbar"
+              aria-label="復元通知の残り時間"
+              aria-valuemin={0}
+              aria-valuemax={10}
+              aria-valuenow={noticeSeconds}
+              className="h-1 overflow-hidden rounded-sm bg-chip-bg"
+            >
+              <div
+                className="h-1 rounded-sm bg-primary transition-[width] duration-1000 ease-linear"
+                style={{ width: `${noticeSeconds * 10}%` }}
+              />
+            </div>
+            {undo && (
+              <p className="text-xs text-muted-foreground">
+                取り消すと、戻す直前の版へもう一度戻します。履歴には「復元」が2つ積まれます。何回でもできます。
+              </p>
+            )}
+          </div>
         </div>
       )}
       {/* 板（1280）: 一覧の欄 360px・比較の欄 440px。390 では別画面にして mobileTab で行き来する */}
@@ -825,9 +866,16 @@ export function VersionHistory({
                   </button>
                 </nav>
                 {targetSnapshot && !targetSnapshot.validation.editable && (
-                  <p role="alert">
-                    この版は今の入力ルールに合わないため戻せません。全体プレビューで原文と問題箇所を確認できます。
-                  </p>
+                  // 板「読めない・戻せない」: 箱（listBox）に1文。板の「全項目の原文を確認」「この版に戻す（無効）」は
+                  // 比較欄の下のボタン行にある。原文と問題箇所の案内は2文目に残す。
+                  <div role="alert" className={listBox}>
+                    <p className="text-[13px] leading-[1.6] text-muted-foreground">
+                      この版は今の入力ルールに合わないため戻せません。
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      「全項目の原文を確認」で、原文と問題箇所を確認できます。
+                    </p>
+                  </div>
                 )}
                 {view === 'preview' ? (
                   <SnapshotPreview snapshot={targetSnapshot ?? pair.to} referenceMonth={referenceMonth} />
@@ -850,7 +898,28 @@ export function VersionHistory({
               </>
             )}
             {restoreError && !confirmation && (
-              <p role="alert">復元の確認を取得できませんでした。内容は変更していません。もう一度お試しください。</p>
+              // 板「読めない・戻せない」: 箱の中に、地 dels・文字 del の注意と、右寄せの「閉じる」「再試行」。
+              <div className={listBox}>
+                <p role="alert" className="rounded bg-danger-soft px-3 py-2.5 text-[13px] leading-[1.6] text-danger">
+                  復元の確認を取得できませんでした。内容は変更していません。もう一度お試しください。
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button type="button" className={control} onClick={() => setRestoreError(false)}>
+                    閉じる
+                  </button>
+                  <button
+                    type="button"
+                    className={primary}
+                    disabled={busy || Boolean(restoreBlockedReason)}
+                    onClick={() => {
+                      const last = lastPrepare.current;
+                      if (last) void prepare(last.target, last.expected, last.reviewTarget);
+                    }}
+                  >
+                    再試行
+                  </button>
+                </div>
+              </div>
             )}
           </div>
           {/* 板（390）: 比較画面の下は高さ 48px・幅いっぱいの主ボタンだけ。「全項目の原文を確認」は
@@ -894,7 +963,11 @@ export function VersionHistory({
       <AlertDialog.Root
         open={Boolean(confirmation)}
         onOpenChange={(open) => {
-          if (!open && !busy) setConfirmation(null);
+          if (!open && !busy) {
+            setConfirmation(null);
+            // 確認を閉じたら、確認の中で出した復元の失敗の表示も消す（比較欄の「確認を取得できませんでした」と混ざらないように）。
+            setRestoreError(false);
+          }
         }}
       >
         <AlertDialog.Portal>
@@ -925,19 +998,25 @@ export function VersionHistory({
               </span>
               {/* 板の題名: 16px・太さ 700・行高 1.6 */}
               <AlertDialog.Title className="min-w-0 break-words text-base font-bold leading-[1.6]">
-                版 {confirmation?.target.revision} の状態に戻します。
+                {undoWithEdits
+                  ? `戻したあとに ${laterEdits}件 の編集があります`
+                  : `版 ${confirmation?.target.revision} の状態に戻します。`}
               </AlertDialog.Title>
             </div>
             {/* 板の本文: 13.5px・行高 1.8・左 44px（390px では 0）。以降の内容も同じ段に揃える */}
             <AlertDialog.Description className="break-words pl-11 text-[13.5px] leading-[1.8] text-muted-foreground max-sm:pl-0">
-              {confirmation?.current.validation.editable
-                ? 'いまの内容も履歴に残るので、あとから戻せます。'
-                : '復元前の内容は履歴に残りますが、現在の入力ルールでは戻せません。'}
+              {undoWithEdits
+                ? `取り消すと、その${laterEdits}件の編集も元に戻ります（履歴には残ります）。`
+                : confirmation?.current.validation.editable
+                  ? 'いまの内容も履歴に残るので、あとから戻せます。'
+                  : '復元前の内容は履歴に残りますが、現在の入力ルールでは戻せません。'}
             </AlertDialog.Description>
-            {confirmation && confirmation.laterRevisionCount !== '0' && (
-              <p className="ml-11 rounded border border-border bg-muted p-3 text-sm max-sm:ml-0">
-                この版のあとに {confirmation.laterRevisionCount}
-                件の記録があります。それらの変更も今の内容から消えます（履歴には残ります）。
+            {/* 板（戻す前の確認）の注意: 地 warns・文字 warn・角丸 4px・余白 10px 12px・13px。
+                取り消しの確認では、題と本文が同じことを言うので出さない（件数が 0 の時は何も出さない） */}
+            {confirmation && !undoConfirmation && laterEdits > 0n && (
+              <p className="ml-11 rounded bg-warn-soft px-3 py-2.5 text-[13px] leading-[1.6] text-warn-strong max-sm:ml-0">
+                この版のあとに {String(laterEdits)}件 の編集があります。戻すと、その{String(laterEdits)}
+                件の変更も消えます（履歴には残ります）。
               </p>
             )}
             {confirmation?.visibilityUncertain && (
@@ -1004,7 +1083,7 @@ export function VersionHistory({
                 disabled={busy || Boolean(restoreBlockedReason) || !confirmation?.canRestore}
                 onClick={() => void restore()}
               >
-                {busy ? '復元中…' : restoreError ? '再試行' : '戻す'}
+                {busy ? '復元中…' : restoreError ? '再試行' : undoWithEdits ? '取り消す' : '戻す'}
               </button>
             </div>
           </AlertDialog.Content>
