@@ -78,7 +78,8 @@ const listBox = 'space-y-3 rounded-lg border border-border bg-card p-5';
 const primary = `${control} border-primary bg-primary-dark text-primary-foreground font-semibold disabled:bg-background disabled:border-border`;
 // 板「版の履歴と2版の比較」の一覧の行（.ver）: 横並び・上揃え・間 10px・余白 10px 16px・下に区切り線。
 // 比較元に選んだ行（.sel）は地を acc にする。
-const verRow = 'flex min-w-0 items-start gap-2.5 border-b border-border px-4 py-2.5';
+const verLayout = 'flex min-w-0 items-start gap-2.5 px-4 py-2.5';
+const verRow = `${verLayout} border-b border-border`;
 const verSelected = 'bg-accent';
 // 板の .tag: 高さ 20px・左右 6px・角丸 3px・11px/600。地 chip・文字 mfg。現在（.tag.a）は acc/accfg、
 // 復元（.tag.w）は warns/warn。warn はアプリの warn-soft / warn-strong（#671 で板に寄せた値）を使う。
@@ -370,7 +371,7 @@ export function VersionHistory({
     return (
       <button
         type="button"
-        className={`${control} mt-2 w-full`}
+        className={`${control} mx-4 mb-2.5 w-[calc(100%-2rem)]`}
         disabled={busy || Boolean(restoreBlockedReason)}
         onClick={() => {
           if (row.restoredBefore !== null) void prepare(row.restoredBefore, row.revision, true);
@@ -382,17 +383,21 @@ export function VersionHistory({
   }
   function versionEntry(row: VersionSummary) {
     return (
-      <div className={`${verRow} ${from === row.revision ? verSelected : ''}`}>
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold">
-            <time dateTime={row.recordedAt}>{groupStart(row.recordedAt)}</time>
-            {row.revision === revision && <span className={tagCurrent}>現在</span>}
-            {row.action === 'restore' && <span className={tagRestore}>復元</span>}
-          </p>
-          <p className="break-all text-xs text-muted-foreground">{actionText(row.action)}</p>
-          {restoredBeforeButton(row)}
+      // 「復元前を確認」は文字が長く、見出しの欄（右にボタン2つ）に入れると途中で折り返すので、
+      // 行の下に幅いっぱいで置く。区切り線と選択の地は外側にまとめて付ける。
+      <div className={`border-b border-border ${from === row.revision ? verSelected : ''}`}>
+        <div className={verLayout}>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold">
+              <time dateTime={row.recordedAt}>{groupStart(row.recordedAt)}</time>
+              {row.revision === revision && <span className={tagCurrent}>現在</span>}
+              {row.action === 'restore' && <span className={tagRestore}>復元</span>}
+            </p>
+            <p className="break-all text-xs text-muted-foreground">{actionText(row.action)}</p>
+          </div>
+          {pickButtons(row.revision, `版 ${row.revision}`, from === row.revision, to === row.revision)}
         </div>
-        {pickButtons(row.revision, `版 ${row.revision}`, from === row.revision, to === row.revision)}
+        {restoredBeforeButton(row)}
       </div>
     );
   }
