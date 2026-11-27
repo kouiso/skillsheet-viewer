@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /home/user/skillsheet-viewer
+
+ ✓ src/db/derived-display.test.ts (43 tests) 23ms
+
+ Test Files  1 passed (1)
+      Tests  43 passed (43)
+   Start at  13:36:00
+   Duration  354ms (transform 76ms, setup 0ms, collect 97ms, tests 23ms, environment 0ms, prepare 47ms)
+

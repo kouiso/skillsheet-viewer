@@ -1,0 +1,10 @@
+
+ RUN  v3.2.6 /home/user/skillsheet-viewer
+
+ ✓ app/builder/block-editor/stat-block-editor.test.tsx (19 tests) 696ms
+
+ Test Files  1 passed (1)
+      Tests  19 passed (19)
+   Start at  13:36:01
+   Duration  1.78s (transform 201ms, setup 176ms, collect 274ms, tests 696ms, environment 399ms, prepare 58ms)
+
