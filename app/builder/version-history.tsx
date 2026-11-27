@@ -215,6 +215,7 @@ export function VersionHistory({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const barTitleRef = useRef<HTMLHeadingElement>(null);
   // 390px の画面切替で hidden 側にフォーカスが残るとキーボード操作が見失われるので、
   // 遷移先の操作へ移し替える。初期表示では動かさないよう、切替操作の時だけ立てる。
   const mobileFocusRef = useRef(false);
@@ -237,7 +238,12 @@ export function VersionHistory({
     if (!returnFocusRequested || busy || confirmation || conflict) return;
     const origin = returnFocusRef.current;
     if (origin?.isConnected && !origin.matches(':disabled')) origin.focus();
-    else headingRef.current?.focus();
+    else {
+      // 戻り先の操作が無効になっていた時は見出しへ。390 の比較画面では「版の履歴」の h1 が隠れているので、
+      // 帯に出している比較の見出しへ移す（隠れた要素への focus() は何も起こさず、フォーカスが失われる）。
+      const bar = barTitleRef.current;
+      (bar && bar.getClientRects().length > 0 ? bar : headingRef.current)?.focus();
+    }
     setReturnFocusRequested(false);
   }, [returnFocusRequested, busy, confirmation, conflict]);
   useEffect(() => {
@@ -560,7 +566,10 @@ export function VersionHistory({
           {title}
         </span>
         {mobileTab === 'compare' && (
-          <p className="min-w-0 flex-1 truncate text-base font-semibold sm:hidden">{compareHeading}</p>
+          // 390 の比較画面で見える唯一の見出し（上の h1 とペイン側の h2 は 390 では隠れる）。
+          <h1 ref={barTitleRef} tabIndex={-1} className="min-w-0 flex-1 truncate text-base font-semibold sm:hidden">
+            {compareHeading}
+          </h1>
         )}
       </header>
       {restoreBlockedReason && (

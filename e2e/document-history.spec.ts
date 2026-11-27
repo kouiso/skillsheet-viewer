@@ -241,6 +241,26 @@ test('390px: 一覧は × 、比較は ‹ と題を出し、フォーカスが�
     await showCompare.click();
     await expect(back).toBeVisible();
     expect(await overflow()).toBe(0);
+
+    // 比較画面から戻す。確認を閉じても、フォーカスは見える操作に戻り、body に落ちない
+    // （隠れた「版の履歴」の h1 へ戻そうとすると、フォーカスが失われる）。
+    await page.getByRole('button', { name: 'この版に戻す', exact: true }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: '戻す', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole('status').filter({ hasText: '戻しました' })).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const active = document.activeElement;
+          if (!active || active === document.body) return 'body';
+          const box = active.getBoundingClientRect();
+          return box.width > 0 && box.height > 0 ? 'visible' : 'hidden';
+        }),
+      )
+      .toBe('visible');
+    expect(await overflow()).toBe(0);
   } finally {
     const current = await client.sheet.builderState.query({ sheetId });
     if (current.status === 'OK')

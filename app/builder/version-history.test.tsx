@@ -369,12 +369,15 @@ describe('シート全体の版の履歴', () => {
     expect(close).not.toHaveClass('max-sm:inline-flex');
     // 板（390）の比較画面の帯は、「版の履歴」とシート名の代わりに比較の題を ‹ の隣に出す。
     const header = close.closest('header') as HTMLElement;
-    const barTitle = within(header).getByText('いまの内容から変わる項目');
+    const barTitle = within(header).getByRole('heading', { name: 'いまの内容から変わる項目' });
     expect(barTitle).toHaveClass('sm:hidden', 'text-base', 'font-semibold');
+    // 390 で見える見出しが無くならないよう、帯の題は見出し要素（フォーカスの戻り先にもなる）。
+    expect(barTitle.tagName).toBe('H1');
+    expect(barTitle).toHaveAttribute('tabindex', '-1');
     expect(within(header).getByRole('heading', { name: '版の履歴', hidden: true })).toHaveClass('max-sm:hidden');
     expect(within(header).getByText('合成')).toHaveClass('max-sm:hidden');
     // 重複しないよう、ペイン側の見出しは 390 では隠す。
-    expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目' })).toHaveClass('max-sm:hidden');
+    expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目', level: 2 })).toHaveClass('max-sm:hidden');
     // 一覧へ戻ると、帯の題は「版の履歴」に戻る。
     fireEvent.click(back);
     await waitFor(() => expect(within(header).queryByText('いまの内容から変わる項目')).not.toBeInTheDocument());
