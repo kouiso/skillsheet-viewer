@@ -56,18 +56,22 @@ test('consecutive saves collapse into one history row that expands to every vers
     await page.goto(`/builder?sheet=${sheetId}`);
     await page.getByRole('button', { name: '版の履歴を開く', exact: true }).click();
     const list = page.getByRole('complementary', { name: '保存された版' });
-    const toggle = list.getByRole('button', { name: `版 ${oldest}〜${newest} の内訳を開く`, exact: true });
-    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // 既定の比較元は2番目に新しい版（保存のまとまりの内側）なので、選んだ行が見えるよう開いて始まる。
+    const toggle = list.getByRole('button', { name: `版 ${oldest}〜${newest} の内訳を閉じる`, exact: true });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
     await expect(list.getByText(`保存 3回 · 版 ${oldest}〜${newest}`, { exact: true })).toBeVisible();
     // 板どおり、比較元・比較先は行の［比較元］［比較先］で選ぶ。選択欄は無い。
     const pick = (side: '比較元' | '比較先', revision: string) =>
       list.getByRole('button', { name: `${side}（版 ${revision}）`, exact: true });
     await expect(page.getByRole('combobox')).toHaveCount(0);
-    // 作成の版はたたまず1行で残る。保存の版はたたんでいる間は行として出ない。
+    for (const version of saved) await expect(pick('比較先', version)).toBeVisible();
+    // 閉じると、作成の版はたたまず1行で残り、保存の版は行として出ない。
+    await toggle.click();
+    const closed = list.getByRole('button', { name: `版 ${oldest}〜${newest} の内訳を開く`, exact: true });
+    await expect(closed).toHaveAttribute('aria-expanded', 'false');
     await expect(pick('比較先', created.revision)).toBeVisible();
     await expect(pick('比較先', saved[1])).toHaveCount(0);
-
-    await toggle.click();
+    await closed.click();
     for (const version of saved) await expect(pick('比較先', version)).toBeVisible();
     await pick('比較先', saved[1]).click();
     await expect(pick('比較先', saved[1])).toHaveAttribute('aria-pressed', 'true');
@@ -158,6 +162,85 @@ test('history records immutable snapshots, restores and undoes through UI, and r
       title: first.title,
       blocks: original,
     });
+  } finally {
+    const current = await client.sheet.builderState.query({ sheetId });
+    if (current.status === 'OK')
+      await client.sheet.delete.mutate({ sheetId, expectedRevision: current.snapshot.revision });
+  }
+});
+
+// #626: 390px の版の履歴は一覧と比較が別画面。帯の記号ボタン（× / ‹）の出し分けとフォーカス、
+// 比較画面の帯の題、横にはみ出さないことを実ブラウザで確かめる。
+test('390px: 一覧は × 、比較は ‹ と題を出し、フォーカスが移り、横にはみ出さない', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await login(page);
+  const client = clientFor(page);
+  const sheetId = randomUUID();
+  const blockId = randomUUID();
+  const body = (text: string) => [{ id: blockId, type: 'markdown', order: 0, data: { markdown: text } }];
+  const created = await client.sheet.create.mutate({ sheetId, title: 'History 390', blocks: body('v0') });
+  try {
+    // 自動保存と同じく間を置かずに3回保存する（1つのまとまりになる）。
+    let revision = created.revision;
+    for (const text of ['v1', 'v2', 'v3']) {
+      revision = (
+        await client.sheet.save.mutate({
+          sheetId,
+          expectedRevision: revision,
+          title: 'History 390',
+          blocks: body(text),
+        })
+      ).revision;
+    }
+    await page.goto(`/builder?sheet=${sheetId}`);
+    await page.getByRole('button', { name: '版の履歴を開く', exact: true }).click();
+    const close = page.getByRole('button', { name: '編集画面へ', exact: true });
+    const back = page.getByRole('button', { name: '一覧へ', exact: true });
+    const showCompare = page.getByRole('button', { name: /^変更を見る/ });
+    const barTitle = page.locator('header').getByText('いまの内容から変わる項目', { exact: true });
+
+    // 一覧: × が見え、‹ と比較の題は見えない。帯の題は「版の履歴」。
+    await expect(close).toBeVisible();
+    await expect(back).toBeHidden();
+    await expect(barTitle).toBeHidden();
+    await expect(page.getByRole('heading', { name: '版の履歴', exact: true })).toBeVisible();
+    // 板どおり 32px の記号ボタン。当たり判定は ::before を 6px ずつ外へ広げて 44px にする。
+    const box = await close.boundingBox();
+    expect(box?.width).toBeCloseTo(32, 0);
+    expect(box?.height).toBeCloseTo(32, 0);
+    expect(await close.evaluate((el) => window.getComputedStyle(el, '::before').top)).toBe('-6px');
+    // 「N版 ▾」の開閉タグは見た目 20px のまま、::before を上下 10px 広げて当たり判定を 40px 以上にする。
+    const toggle = page.getByRole('button', { name: /の内訳を(開く|閉じる)$/ });
+    const toggleBox = await toggle.boundingBox();
+    expect(toggleBox?.height).toBeCloseTo(20, 0);
+    const before = await toggle.evaluate((el) => {
+      const style = window.getComputedStyle(el, '::before');
+      return { top: style.top, bottom: style.bottom, position: window.getComputedStyle(el).position };
+    });
+    expect(before).toEqual({ top: '-10px', bottom: '-10px', position: 'relative' });
+
+    // 「変更を見る」で比較画面へ。‹ と帯の題が出て × は隠れ、フォーカスが ‹ に移る。
+    await showCompare.click();
+    await expect(back).toBeVisible();
+    await expect(close).toBeHidden();
+    await expect(barTitle).toBeVisible();
+    await expect(page.getByRole('heading', { name: '版の履歴', exact: true })).toBeHidden();
+    await expect(back).toBeFocused();
+
+    // ‹ で一覧へ戻る。× が出て、フォーカスは「変更を見る」に戻る。
+    await back.click();
+    await expect(close).toBeVisible();
+    await expect(back).toBeHidden();
+    await expect(barTitle).toBeHidden();
+    await expect(showCompare).toBeFocused();
+
+    // どちらの画面でも横にはみ出さない。
+    const overflow = () =>
+      page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(await overflow()).toBe(0);
+    await showCompare.click();
+    await expect(back).toBeVisible();
+    expect(await overflow()).toBe(0);
   } finally {
     const current = await client.sheet.builderState.query({ sheetId });
     if (current.status === 'OK')
