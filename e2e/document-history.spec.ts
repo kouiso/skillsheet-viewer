@@ -59,14 +59,23 @@ test('consecutive saves collapse into one history row that expands to every vers
     const toggle = list.getByRole('button', { name: `版 ${oldest}〜${newest} の内訳を開く`, exact: true });
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await expect(list.getByText(`保存 3回 · 版 ${oldest}〜${newest}`, { exact: true })).toBeVisible();
+    // 板どおり、比較元・比較先は行の［比較元］［比較先］で選ぶ。選択欄は無い。
+    const pick = (side: '比較元' | '比較先', revision: string) =>
+      list.getByRole('button', { name: `${side}（版 ${revision}）`, exact: true });
+    await expect(page.getByRole('combobox')).toHaveCount(0);
     // 作成の版はたたまず1行で残る。保存の版はたたんでいる間は行として出ない。
-    await expect(list.getByText(`版 ${created.revision}`, { exact: true })).toBeVisible();
-    await expect(list.getByText(`版 ${saved[1]}`, { exact: true })).toHaveCount(0);
+    await expect(pick('比較先', created.revision)).toBeVisible();
+    await expect(pick('比較先', saved[1])).toHaveCount(0);
 
     await toggle.click();
-    for (const version of saved) await expect(list.getByText(`版 ${version}`, { exact: false }).first()).toBeVisible();
-    await list.getByRole('button', { name: new RegExp(`^版 ${saved[1]}`) }).click();
-    await expect(page.getByRole('combobox', { name: '比較先' })).toHaveValue(saved[1]);
+    for (const version of saved) await expect(pick('比較先', version)).toBeVisible();
+    await pick('比較先', saved[1]).click();
+    await expect(pick('比較先', saved[1])).toHaveAttribute('aria-pressed', 'true');
+    await pick('比較元', created.revision).click();
+    await expect(pick('比較元', created.revision)).toHaveAttribute('aria-pressed', 'true');
+    // 選んだ2版（作成 v0 → 2回目の保存 v2）の差分が出る。
+    await expect(page.locator('del', { hasText: 'v0' })).toBeVisible();
+    await expect(page.locator('ins', { hasText: 'v2' })).toBeVisible();
   } finally {
     const current = await client.sheet.builderState.query({ sheetId });
     if (current.status === 'OK')
@@ -106,7 +115,8 @@ test('history records immutable snapshots, restores and undoes through UI, and r
     await page.goto(`/builder?sheet=${sheetId}`);
     await page.getByRole('button', { name: '版の履歴を開く', exact: true }).click();
     await expect(page.getByRole('heading', { name: '版の履歴', exact: true })).toBeVisible();
-    await page.getByText(`版 ${first.revision}`, { exact: true }).click();
+    await page.getByRole('button', { name: `比較先（版 ${first.revision}）`, exact: true }).click();
+    await page.getByRole('button', { name: `比較元（版 ${saved.revision}）`, exact: true }).click();
     await page.getByRole('button', { name: 'この版に戻す', exact: true }).click();
     const dialog = page.getByRole('alertdialog');
     await expect(dialog).toBeVisible();

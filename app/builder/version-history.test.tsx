@@ -62,8 +62,15 @@ function setup(overrides: Partial<VersionHistoryApi> = {}, editable = true, rest
   );
   return { api, onReload, onRestored };
 }
+// 板どおり、比較元・比較先は一覧の行の「比較元」「比較先」で選ぶ。名前は「比較元（版 N）」。
+const pickName = (side: '比較元' | '比較先', revision: string) => `${side}（版 ${revision}）`;
+async function findPick(side: '比較元' | '比較先', revision: string) {
+  return await screen.findByRole('button', { name: pickName(side, revision) });
+}
+// 旧版（版 1）を比較先、現在の版（版 2）を比較元にする。
 async function selectOld() {
-  fireEvent.click(await screen.findByRole('button', { name: /版 1/ }));
+  fireEvent.click(await findPick('比較先', '1'));
+  fireEvent.click(await findPick('比較元', '2'));
   await waitFor(() => expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeEnabled());
 }
 async function confirmOld() {
@@ -143,7 +150,7 @@ describe('シート全体の版の履歴', () => {
       const list = vi.fn().mockRejectedValueOnce(new Error('失敗')).mockResolvedValue(rows);
       setup({ list });
       fireEvent.click(await screen.findByRole('button', { name: '再試行' }));
-      await screen.findByRole('button', { name: /版 1/ });
+      await findPick('比較先', '1');
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
     });
@@ -172,7 +179,7 @@ describe('シート全体の版の履歴', () => {
       });
       fireEvent.click(await screen.findByRole('button', { name: /前の版を読み込む/ }));
       await screen.findByText('履歴を読み込めませんでした。');
-      fireEvent.click(screen.getByRole('button', { name: /版 21/ }));
+      fireEvent.click(screen.getByRole('button', { name: pickName('比較先', '21') }));
       expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('差分を読み込み中…');
       expect(screen.queryByText('一覧を読み直してください')).not.toBeInTheDocument();
       expect(screen.getAllByRole('alert')).toHaveLength(1);
@@ -216,7 +223,7 @@ describe('シート全体の版の履歴', () => {
       const box = await within(aside).findByText('版が1つしかありません。');
       expect(box.parentElement).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5', 'space-y-3');
       expect(within(aside).getByText('保存すると変更を比べられます。')).toBeInTheDocument();
-      expect(within(aside).getByRole('button', { name: /版 1/ })).toBeInTheDocument();
+      expect(within(aside).getByRole('button', { name: pickName('比較先', '1') })).toBeInTheDocument();
       // 同じ文を2か所に出さない: 比較欄は「まだ比べる版がありません」だけ。
       expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
       const compare = screen.getByText('まだ比べる版がありません').parentElement as HTMLElement;
@@ -227,23 +234,115 @@ describe('シート全体の版の履歴', () => {
     it('版が2つなら一覧側の箱も「まだ比べる版がありません」も出さず、差分を出す', async () => {
       setup();
       const aside = screen.getByRole('complementary', { name: '保存された版' });
-      await within(aside).findByRole('button', { name: /版 1/ });
+      await within(aside).findByRole('button', { name: pickName('比較先', '1') });
       expect(within(aside).queryByText(/版が1つしかありません/)).not.toBeInTheDocument();
       expect(screen.queryByText('まだ比べる版がありません')).not.toBeInTheDocument();
       expect(await screen.findByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
     });
   });
 
-  it('旧版の行選択では現在版との差分へ切り替え、任意比較selectも維持する', async () => {
+  it('行の「比較元」「比較先」で任意の2版を選び、選んだボタンを押下状態で示す', async () => {
     setup();
+    // 既定は 比較先 = 最新（版 2）・比較元 = 2番目（版 1）。
+    expect(await findPick('比較先', '2')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: pickName('比較元', '1') })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: pickName('比較元', '2') })).toHaveAttribute('aria-pressed', 'false');
     await selectOld();
-    expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('2');
-    expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1');
+    expect(screen.getByRole('button', { name: pickName('比較元', '2') })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: pickName('比較先', '1') })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: pickName('比較元', '1') })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: pickName('比較先', '2') })).toHaveAttribute('aria-pressed', 'false');
+    // 板の色: 比較元は del 系、比較先は add 系、選んでいないものは枠だけ。
+    expect(screen.getByRole('button', { name: pickName('比較元', '2') })).toHaveClass(
+      'h-7',
+      'border-danger',
+      'bg-danger-soft',
+    );
+    expect(screen.getByRole('button', { name: pickName('比較先', '1') })).toHaveClass(
+      'border-accent-text',
+      'bg-accent-soft',
+    );
+    expect(screen.getByRole('button', { name: pickName('比較先', '2') })).toHaveClass(
+      'border-border',
+      'bg-transparent',
+    );
+    // 板の .ver.sel: 比較元に選んだ行の地を acc にする。
+    expect(screen.getByRole('button', { name: pickName('比較元', '2') }).closest('.border-b')).toHaveClass('bg-accent');
+    expect(screen.getByRole('button', { name: pickName('比較元', '1') }).closest('.border-b')).not.toHaveClass(
+      'bg-accent',
+    );
     expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
     expect(screen.getByText('省略せず、変わった項目は全部並べます。')).toBeInTheDocument();
-    fireEvent.change(screen.getByRole('combobox', { name: '比較元' }), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: pickName('比較元', '1') }));
     await screen.findByText('内容は同じです。');
-    expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('1');
+    expect(screen.getByRole('button', { name: pickName('比較元', '1') })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('比較の選択欄（select）は置かず、行のボタンだけで選ぶ', async () => {
+    setup();
+    await findPick('比較先', '1');
+    expect(screen.queryAllByRole('combobox')).toHaveLength(0);
+    expect(document.querySelector('select')).toBeNull();
+  });
+
+  it('行の見出しは板の「10月6日 09:10」の書式で、現在の版に「現在」、復元の版に「復元」のタグを付ける', async () => {
+    setup({
+      list: vi.fn().mockResolvedValue([
+        {
+          revision: '2',
+          title: '合成',
+          recordedAt: '2026-10-06T00:10:00Z',
+          action: 'restore',
+          restoredFrom: '1',
+          restoredBefore: null,
+        },
+        {
+          revision: '1',
+          title: '合成',
+          recordedAt: '2026-10-06T00:00:00Z',
+          action: 'create',
+          restoredFrom: null,
+          restoredBefore: null,
+        },
+      ]),
+    });
+    const row = (revision: string) =>
+      screen.getByRole('button', { name: pickName('比較先', revision) }).closest('.border-b') as HTMLElement;
+    await findPick('比較先', '1');
+    // 期待値は実行環境の時刻帯で同じ書式から作る（「10月6日 09:10」の形）。
+    const stamp = (iso: string) =>
+      new Date(iso).toLocaleString('ja-JP', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    expect(within(row('2')).getByText(stamp('2026-10-06T00:10:00Z'))).toBeInTheDocument();
+    expect(stamp('2026-10-06T00:10:00Z')).toMatch(/^\d+月\d+日 \d{2}:\d{2}$/);
+    expect(within(row('2')).getByText('現在')).toHaveClass('h-5', 'bg-accent', 'text-accent-foreground');
+    expect(within(row('2')).getByText('復元')).toHaveClass('h-5', 'bg-warn-soft', 'text-warn-strong');
+    expect(within(row('2')).getByText('復元した状態')).toBeInTheDocument();
+    expect(within(row('1')).queryByText('現在')).not.toBeInTheDocument();
+    expect(within(row('1')).queryByText('復元')).not.toBeInTheDocument();
+    expect(within(row('1')).getByText('作成')).toBeInTheDocument();
+  });
+
+  it('390 の帯: 一覧では「×」（編集画面へ）、比較では「‹」（一覧へ）の記号ボタンにし、sm 以上は文字を出す', async () => {
+    setup();
+    const close = screen.getByRole('button', { name: '編集画面へ' });
+    expect(close).toHaveAttribute('aria-label', '編集画面へ');
+    expect(close.querySelector('svg')).toHaveClass('sm:hidden');
+    expect(within(close).getByText('編集画面へ')).toHaveClass('max-sm:hidden');
+    expect(close).toHaveClass('max-sm:border-0', 'max-sm:w-10');
+    const back = screen.getByRole('button', { name: '一覧へ' });
+    expect(back).toHaveAttribute('aria-label', '一覧へ');
+    expect(back.querySelector('svg')).toHaveClass('sm:hidden');
+    expect(within(back).getByText('一覧へ')).toHaveClass('max-sm:hidden');
+    // 一覧画面では「一覧へ」を出さず、比較画面では「編集画面へ」を 390 で隠す。
+    expect(back).toHaveClass('hidden');
+    // 隠す側に display の指定を重ねない（重なると 390 で × と ‹ が両方出る）。
+    expect(back).not.toHaveClass('inline-flex');
+    expect(close).toHaveClass('max-sm:inline-flex');
+    fireEvent.click(await screen.findByRole('button', { name: /変更を見る/ }));
+    await waitFor(() => expect(back).toHaveClass('md:hidden'));
+    expect(back).not.toHaveClass('hidden');
+    expect(close).toHaveClass('max-sm:hidden');
+    expect(close).not.toHaveClass('max-sm:inline-flex');
   });
 
   it('差分は場所を語で示し、前を「−」・後を「＋」で、引用符なし・改行ありで出す', async () => {
@@ -277,7 +376,7 @@ describe('シート全体の版の履歴', () => {
         .fn()
         .mockImplementation(async (revision) => ({ ...snapshot(revision), title: `版${revision}のタイトル` })),
     });
-    fireEvent.click(await screen.findByRole('button', { name: /版 1/ }));
+    fireEvent.click(await findPick('比較先', '1'));
     fireEvent.click(await screen.findByRole('button', { name: '選択した版の全体プレビュー' }));
     expect(await screen.findByRole('heading', { name: '版1のタイトル' })).toBeVisible();
   });
@@ -317,8 +416,8 @@ describe('シート全体の版の履歴', () => {
       }),
     });
     await selectOld();
-    expect(screen.getByRole('combobox', { name: '比較元' })).toHaveValue('2');
-    expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1');
+    expect(screen.getByRole('button', { name: pickName('比較元', '2') })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: pickName('比較先', '1') })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
     const dialog = await screen.findByRole('alertdialog');
     expect(api.previewRestore).toHaveBeenCalledWith('1', '2');
@@ -365,7 +464,7 @@ describe('シート全体の版の履歴', () => {
 
   it('未保存入力のguardは比較を許可し、復元開始を禁止する', async () => {
     const { api } = setup({}, true, '未保存の入力があります。履歴を閉じ、保存してから復元してください。');
-    fireEvent.click(await screen.findByRole('button', { name: /版 1/ }));
+    fireEvent.click(await findPick('比較先', '1'));
     await screen.findByRole('button', { name: '選択した版の全体プレビュー' });
     expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
@@ -461,7 +560,7 @@ describe('シート全体の版の履歴', () => {
   });
   it('未知版は原文を閲覧できるが復元できない', async () => {
     setup({ read: vi.fn().mockImplementation(async (rev) => snapshot(rev, rev !== '1')) });
-    fireEvent.click(await screen.findByRole('button', { name: /版 1/ }));
+    fireEvent.click(await findPick('比較先', '1'));
     await screen.findByText(/この版は今の入力ルールに合わないため戻せません/);
     expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: '選択した版の全体プレビュー' }));
@@ -485,7 +584,8 @@ describe('シート全体の版の履歴', () => {
     setup({ list });
     fireEvent.click(await screen.findByRole('button', { name: '再試行' }));
     await screen.findByText(/版が1つしかありません/);
-    expect(screen.getByRole('combobox', { name: '比較元' })).toBeDisabled();
+    // 版が1つなら比べる相手が無いので、比較元は選べない。
+    expect(screen.getByRole('button', { name: pickName('比較元', '2') })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeDisabled();
   });
   it('読み込みが遅い旧選択の応答で現在の版を上書きしない', async () => {
@@ -500,11 +600,12 @@ describe('シート全体の版の履歴', () => {
         return snapshot(rev);
       }),
     });
-    await screen.findByRole('button', { name: /版 1/ });
-    fireEvent.click(screen.getByRole('button', { name: /版 1/ }));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeEnabled());
-    finish(snapshot('2'));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('1'));
+    await selectOld();
+    await act(async () => finish(snapshot('2')));
+    // 最初の（版 1 → 版 2 の）読み込みが遅れて届いても、いまの選択（版 2 → 版 1）の差分のまま。
+    expect(screen.getByRole('button', { name: pickName('比較先', '1') })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText(/本文1/, { selector: 'ins' })).toBeInTheDocument();
+    expect(screen.getByText(/本文2/, { selector: 'del' })).toBeInTheDocument();
   });
 });
 
@@ -523,6 +624,7 @@ describe('自動保存のまとまり', () => {
     restoredFrom: null,
     restoredBefore: null,
   }));
+  const groupPick = (side: '比較元' | '比較先') => `${side}（版 2〜4 の最新・版 4）`;
   function setupGrouped() {
     return setup({ list: vi.fn().mockResolvedValue(rows) });
   }
@@ -533,8 +635,11 @@ describe('自動保存のまとまり', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByText(/保存 3回 · 版 2〜4/)).toBeInTheDocument();
     // たたんでいる間は中の版の行を出さない。作成の版は1行のまま出す。
-    expect(screen.queryByRole('button', { name: /^版 3/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /^版 1/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: pickName('比較先', '3') })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: pickName('比較先', '1') })).toBeInTheDocument();
+    // 板: 開閉はタイトル横のタグ「N版 ▾」。
+    expect(toggle).toHaveTextContent('3版 ▾');
+    expect(toggle).toHaveClass('h-5', 'bg-chip-bg');
   });
 
   it('10分超の連続保存がページをまたいでも最新側を起点にまとめる', async () => {
@@ -593,11 +698,12 @@ describe('自動保存のまとまり', () => {
     setupGrouped();
     const toggle = await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
     fireEvent.click(toggle);
-    fireEvent.click(screen.getByRole('button', { name: /^版 3/ }));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('3'));
+    fireEvent.click(await findPick('比較先', '3'));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: pickName('比較先', '3') })).toHaveAttribute('aria-pressed', 'true'),
+    );
     fireEvent.click(screen.getByRole('button', { name: '版 2〜4 の内訳を閉じる' }));
-    const header = screen.getByText(/保存 3回/).closest('button');
-    expect(header).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: groupPick('比較先') })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('時刻が版番号の順と逆でも、時刻の範囲は早い方から遅い方へ出す', async () => {
@@ -610,7 +716,7 @@ describe('自動保存のまとまり', () => {
       return row;
     });
     setup({ list: vi.fn().mockResolvedValue(skewed) });
-    const header = (await screen.findByText(/保存 3回/)).closest('button');
+    const header = (await screen.findByText(/保存 3回/)).parentElement;
     const [first, last] = Array.from(header?.querySelectorAll('time') ?? []).map((time) =>
       time.getAttribute('datetime'),
     );
@@ -618,7 +724,7 @@ describe('自動保存のまとまり', () => {
     expect(last).toBe('2026-10-06T00:01:30Z');
     // 見えている文字も、早い方から遅い方へ（期待値は実行環境の時刻帯で同じ書式から作る）。
     const startText = new Date('2026-10-06T00:00:00Z').toLocaleString('ja-JP', {
-      month: 'numeric',
+      month: 'long',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
@@ -631,10 +737,13 @@ describe('自動保存のまとまり', () => {
     expect(times).toEqual([startText, endText]);
   });
 
-  it('内訳を開いている間は、選んだ版だけが選択中（aria-current）で、閉じるとまとまりの行に移る', async () => {
+  it('内訳を開いている間は、選んだ版の行のボタンだけが押下状態で、閉じるとまとまりの行に移る', async () => {
     setupGrouped();
     const toggle = await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
-    const header = screen.getByText(/保存 3回/).closest('button');
+    const header = screen.getByRole('button', { name: groupPick('比較先') });
+    // 既定の比較元は版 3（2番目に新しい）。閉じている間は、まとまりの行が比較元の行（地 acc）になる。
+    expect(screen.getByRole('button', { name: groupPick('比較元') })).toHaveAttribute('aria-pressed', 'true');
+    expect(header.closest('.border-b')).toHaveClass('bg-accent');
     // 閉じている間は、まとまりの内訳の一覧が存在しないので aria-controls を付けない。
     expect(toggle).not.toHaveAttribute('aria-controls');
     fireEvent.click(toggle);
@@ -642,19 +751,25 @@ describe('自動保存のまとまり', () => {
     const controlled = open.getAttribute('aria-controls');
     expect(controlled).toBeTruthy();
     expect(document.getElementById(controlled as string)).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /^版 3/ }));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('3'));
-    // 開いている間：選んだ版の行だけが aria-current。まとまりの行は付けず、見た目の強調も出さない。
-    expect(header).not.toHaveAttribute('aria-current');
-    expect(header?.className).not.toContain('border-primary');
-    expect(screen.getByRole('button', { name: /^版 3/ })).toHaveAttribute('aria-current', 'true');
+    // 開いている間は、まとまりの行は最新の版（版 4）だけを指す。比較元の版 3 は中の行が示す。
+    expect(screen.getByRole('button', { name: groupPick('比較元') })).toHaveAttribute('aria-pressed', 'false');
+    expect(header.closest('.border-b')).not.toHaveClass('bg-accent');
+    expect(screen.getByRole('button', { name: pickName('比較元', '3') })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: pickName('比較先', '3') }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: pickName('比較先', '3') })).toHaveAttribute('aria-pressed', 'true'),
+    );
+    // 開いている間：選んだ版の行のボタンだけが押下状態。まとまりの行は示さない。
+    expect(header).toHaveAttribute('aria-pressed', 'false');
+    expect(header).not.toHaveClass('bg-accent-soft');
+    expect(screen.getByRole('button', { name: pickName('比較先', '4') })).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(screen.getByRole('button', { name: '版 2〜4 の内訳を閉じる' }));
-    expect(screen.getByText(/保存 3回/).closest('button')).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: groupPick('比較先') })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('時刻の範囲は分が変わったときだけ「〜」で終わりを出す', async () => {
     // 「版 2〜4」にも〜があるので、時刻の行（ボタン内の最初の span）だけを見る。
-    const timeLine = async () => (await screen.findByText(/保存 3回/)).closest('button')?.querySelector('span') ?? null;
+    const timeLine = async () => (await screen.findByText(/保存 3回/)).parentElement?.querySelector('span') ?? null;
     setupGrouped();
     expect(await timeLine()).toHaveTextContent(/〜.*の編集/);
     cleanup();
@@ -666,30 +781,45 @@ describe('自動保存のまとまり', () => {
     expect(line).not.toHaveTextContent('〜');
   });
 
-  it('まとまりの行を押すと、その中で最新の版を比較先にする', async () => {
+  it('まとまりの行の「比較先」「比較元」は、その中で最新の版を選ぶ', async () => {
     setupGrouped();
-    await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
-    fireEvent.click(screen.getByText(/保存 3回/));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('4'));
+    fireEvent.click(await findPick('比較先', '1'));
+    fireEvent.click(screen.getByRole('button', { name: pickName('比較元', '1') }));
+    expect(screen.getByRole('button', { name: groupPick('比較先') })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: groupPick('比較先') }));
+    fireEvent.click(screen.getByRole('button', { name: groupPick('比較元') }));
+    expect(screen.getByRole('button', { name: groupPick('比較先') })).toHaveAttribute('aria-pressed', 'true');
+    // 開くと、選ばれているのは最新の版 4 だと分かる。
+    fireEvent.click(screen.getByRole('button', { name: '版 2〜4 の内訳を開く' }));
+    expect(screen.getByRole('button', { name: pickName('比較先', '4') })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: pickName('比較元', '4') })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: pickName('比較先', '3') })).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('開くと中の版を選べ、そこから戻せる', async () => {
     const { api } = setupGrouped();
     fireEvent.click(await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' }));
     expect(screen.getByRole('button', { name: '版 2〜4 の内訳を閉じる' })).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(screen.getByRole('button', { name: /^版 3/ }));
-    await waitFor(() => expect(screen.getByRole('combobox', { name: '比較先' })).toHaveValue('3'));
+    fireEvent.click(screen.getByRole('button', { name: pickName('比較先', '3') }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: pickName('比較先', '3') })).toHaveAttribute('aria-pressed', 'true'),
+    );
     await waitFor(() => expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
     await screen.findByRole('alertdialog');
     expect(api.previewRestore).toHaveBeenCalledWith('3', '2');
   });
 
-  it('比較の選択肢には、たたんだ版も含めてすべての版を出す', async () => {
+  it('たたんだ版も、開けばすべての版に「比較元」「比較先」がある', async () => {
     setupGrouped();
-    await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' });
-    const options = within(screen.getByRole('combobox', { name: '比較先' })).getAllByRole('option');
-    expect(options.map((option) => option.getAttribute('value'))).toEqual(['4', '3', '2', '1']);
+    fireEvent.click(await screen.findByRole('button', { name: '版 2〜4 の内訳を開く' }));
+    for (const revision of ['4', '3', '2', '1']) {
+      expect(screen.getByRole('button', { name: pickName('比較元', revision) })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: pickName('比較先', revision) })).toBeInTheDocument();
+    }
+    // 内訳の行は板どおり時刻だけを等幅で出す。
+    const child = screen.getByRole('button', { name: pickName('比較先', '3') }).parentElement?.parentElement;
+    expect(child?.querySelector('p')).toHaveClass('font-mono');
   });
 });
 
@@ -702,7 +832,7 @@ describe('履歴に無い版（NOT_FOUND）', () => {
         return snapshot(revision);
       }),
     });
-    fireEvent.click(await screen.findByRole('button', { name: /版 1/ }));
+    fireEvent.click(await findPick('比較先', '1'));
     expect(await screen.findByText('差分を読み込めませんでした。')).toBeInTheDocument();
     expect(screen.queryByText(/差分 1項目/)).not.toBeInTheDocument();
   });

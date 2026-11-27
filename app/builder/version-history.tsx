@@ -1,7 +1,7 @@
 'use client';
 
 import * as AlertDialog from '@radix-ui/react-dialog';
-import { Info, TriangleAlert } from 'lucide-react';
+import { ChevronLeft, Info, TriangleAlert, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SkillSheetViewer from '@/component/skill-sheet-viewer';
 import type { Block } from '@/db/block';
@@ -37,9 +37,10 @@ export interface VersionHistoryProps {
   onRestored: (result: RestoreResult) => void;
 }
 
+// 板の行の見出し（.t）は「10月27日 10:11」。月日は「10月27日」、時刻は2桁の時:分で出す。
 function groupStart(recordedAt: string) {
   return new Date(recordedAt).toLocaleString('ja-JP', {
-    month: 'numeric',
+    month: 'long',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
@@ -75,6 +76,41 @@ const dialogNormal = `${dialogButton} border-input bg-background text-foreground
 // 板「戻した後・空・失敗」の一覧側の箱: 地 card・枠線 1px・角丸 6px・余白 20px・中の間隔 12px。
 const listBox = 'space-y-3 rounded-lg border border-border bg-card p-5';
 const primary = `${control} border-primary bg-primary-dark text-primary-foreground font-semibold disabled:bg-background disabled:border-border`;
+// 板「版の履歴と2版の比較」の一覧の行（.ver）: 横並び・上揃え・間 10px・余白 10px 16px・下に区切り線。
+// 比較元に選んだ行（.sel）は地を acc にする。
+const verRow = 'flex min-w-0 items-start gap-2.5 border-b border-border px-4 py-2.5';
+const verSelected = 'bg-accent';
+// 板の .tag: 高さ 20px・左右 6px・角丸 3px・11px/600。地 chip・文字 mfg。現在（.tag.a）は acc/accfg、
+// 復元（.tag.w）は warns/warn。warn はアプリの warn-soft / warn-strong（#671 で板に寄せた値）を使う。
+// 文字は板の 11px でなく 12px。画面の文字は 12px 以上という決まり（src/test/min-font-size.test.ts）を優先する。
+const tag = 'inline-flex h-5 items-center rounded-[3px] px-1.5 text-xs font-semibold';
+const tagChip = `${tag} bg-chip-bg text-chip-text`;
+const tagCurrent = `${tag} bg-accent text-accent-foreground`;
+const tagRestore = `${tag} bg-warn-soft text-warn-strong`;
+// 板の .pk: 高さ 28px・左右 8px・角丸 4px・枠 bd・地なし・文字 mfg・11px/500。
+// 比較元（.pk.from）は del 系、比較先（.pk.to）は add 系。差分の色（version-diff-view）と同じアプリの色を使う。
+// 文字は .tag と同じ理由で 12px。
+const pick =
+  'h-7 shrink-0 rounded-[4px] border px-2 text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-not-allowed disabled:border-dashed';
+const pickIdle = `${pick} border-border bg-transparent text-muted-foreground`;
+const pickFrom = `${pick} border-danger bg-danger-soft text-danger`;
+const pickTo = `${pick} border-accent-text bg-accent-soft text-accent-text`;
+// 390 の帯のボタンは板どおり枠なしの記号（× / ‹）だけにする。sm 以上は文字のボタンのまま。
+// display はここで決めない。隠す側の hidden と同じ段で競合すると、隠したはずのボタンが出るため。
+const headerIconOnMobile =
+  'max-sm:h-10 max-sm:min-h-0 max-sm:w-10 max-sm:items-center max-sm:justify-center max-sm:border-0 max-sm:bg-transparent max-sm:p-0';
+function actionText(action: VersionSummary['action']) {
+  return action === 'restore'
+    ? '復元した状態'
+    : action === 'create'
+      ? '作成'
+      : action === 'delete'
+        ? '削除前の状態'
+        : '保存';
+}
+function clock(recordedAt: string) {
+  return new Date(recordedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+}
 function failed(error: unknown) {
   return (
     (error !== null &&
@@ -170,6 +206,7 @@ export function VersionHistory({
   const [noticeSerial, setNoticeSerial] = useState(0);
   // 開いているまとまりを、その中で最も新しい版で覚える（古い保存を読み込んでも変わらない）。
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
+  const single = rows.length === 1 && !more;
   useEffect(() => {
     if (!returnFocusRequested || busy || confirmation || conflict) return;
     const origin = returnFocusRef.current;
@@ -300,52 +337,76 @@ export function VersionHistory({
       if (alive.current) setBusy(false);
     }
   }
-  function selectVersion(target: string) {
-    setFrom(revision);
-    setTo(target);
-    // 390 では一覧と比較は別画面。行の選択は比較先を決めるだけで、
-    // 画面の移動は下の主ボタン「変更を見る」が担う（板どおり）。
+  // 板では行そのものは押せず、右の「比較元」「比較先」で2つの版を選ぶ。
+  // 板は古い行に「比較元」しか置かないが、任意の2版を比べられるよう、どの行にも両方を置く（意図した差分）。
+  function pickButtons(target: string, name: string, pressedFrom: boolean, pressedTo: boolean) {
+    return (
+      <div className="flex shrink-0 gap-1.5">
+        <button
+          type="button"
+          className={pressedFrom ? pickFrom : pickIdle}
+          aria-pressed={pressedFrom}
+          aria-label={`比較元（${name}）`}
+          disabled={busy || single}
+          onClick={() => setFrom(target)}
+        >
+          比較元
+        </button>
+        <button
+          type="button"
+          className={pressedTo ? pickTo : pickIdle}
+          aria-pressed={pressedTo}
+          aria-label={`比較先（${name}）`}
+          disabled={busy}
+          onClick={() => setTo(target)}
+        >
+          比較先
+        </button>
+      </div>
+    );
+  }
+  function restoredBeforeButton(row: VersionSummary) {
+    if (row.restoredBefore === null) return null;
+    return (
+      <button
+        type="button"
+        className={`${control} mt-2 w-full`}
+        disabled={busy || Boolean(restoreBlockedReason)}
+        onClick={() => {
+          if (row.restoredBefore !== null) void prepare(row.restoredBefore, row.revision, true);
+        }}
+      >
+        版 {row.revision} の復元前（版 {row.restoredBefore}）を確認
+      </button>
+    );
   }
   function versionEntry(row: VersionSummary) {
     return (
-      <>
-        <button
-          type="button"
-          className={`${control} w-full text-left ${to === row.revision ? 'border-primary bg-accent text-accent-foreground' : ''}`}
-          aria-current={to === row.revision ? 'true' : undefined}
-          disabled={busy}
-          onClick={() => selectVersion(row.revision)}
-        >
-          <span className="block font-semibold">
-            版 {row.revision}
-            {row.revision === revision ? '（現在）' : ''}
-          </span>
-          <time className="block text-xs" dateTime={row.recordedAt}>
-            {new Date(row.recordedAt).toLocaleString('ja-JP')}
-          </time>
-          <span className="block break-all text-xs">
-            {row.action === 'restore'
-              ? '復元した状態'
-              : row.action === 'create'
-                ? '作成'
-                : row.action === 'delete'
-                  ? '削除前の状態'
-                  : '保存'}
-          </span>
-        </button>
-        {row.restoredBefore !== null && (
-          <button
-            type="button"
-            className={`${control} mt-1 w-full`}
-            disabled={busy || Boolean(restoreBlockedReason)}
-            onClick={() => {
-              if (row.restoredBefore !== null) void prepare(row.restoredBefore, row.revision, true);
-            }}
-          >
-            版 {row.revision} の復元前（版 {row.restoredBefore}）を確認
-          </button>
-        )}
-      </>
+      <div className={`${verRow} ${from === row.revision ? verSelected : ''}`}>
+        <div className="min-w-0 flex-1">
+          <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold">
+            <time dateTime={row.recordedAt}>{groupStart(row.recordedAt)}</time>
+            {row.revision === revision && <span className={tagCurrent}>現在</span>}
+            {row.action === 'restore' && <span className={tagRestore}>復元</span>}
+          </p>
+          <p className="break-all text-xs text-muted-foreground">{actionText(row.action)}</p>
+          {restoredBeforeButton(row)}
+        </div>
+        {pickButtons(row.revision, `版 ${row.revision}`, from === row.revision, to === row.revision)}
+      </div>
+    );
+  }
+  // まとまりの内訳の行（板では左 32px 下げ・区切り線なし・時刻だけを等幅で出す）。
+  // 日付をまたいだまとまりでは、始まりと違う日の版にだけ日付も出す。
+  function childEntry(row: VersionSummary, groupFirst: string) {
+    const sameDay = new Date(row.recordedAt).toDateString() === new Date(groupFirst).toDateString();
+    return (
+      <div className={`flex min-w-0 items-start gap-2.5 py-2.5 ${from === row.revision ? verSelected : ''}`}>
+        <p className="min-w-0 flex-1 font-mono text-xs text-muted-foreground">
+          <time dateTime={row.recordedAt}>{sameDay ? clock(row.recordedAt) : groupStart(row.recordedAt)}</time>
+        </p>
+        {pickButtons(row.revision, `版 ${row.revision}`, from === row.revision, to === row.revision)}
+      </div>
     );
   }
   const differences = pair
@@ -356,34 +417,39 @@ export function VersionHistory({
     : [];
   const timeOf = (rev: string) => {
     const row = rows.find((r) => r.revision === rev);
-    return row ? new Date(row.recordedAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : '';
+    return row ? clock(row.recordedAt) : '';
   };
-  const single = rows.length === 1 && !more;
   return (
     <section aria-label="版の履歴" className="min-h-screen min-w-0 bg-background text-foreground">
       {/* 板（390）: 上の帯は高さ 56px。比較画面では戻り先が一覧になる別画面なので、
-          390 では帯の左を「一覧へ」に切り替える（編集画面へは一覧画面から行く）。 */}
-      <header className="flex items-center gap-3 border-b border-border bg-card p-4 max-sm:h-14 max-sm:gap-2 max-sm:px-4 max-sm:py-0">
+          390 では帯の左を「一覧へ」に切り替える（編集画面へは一覧画面から行く）。
+          板（390）の帯は左右 8px・左に記号のボタン（一覧は ×、比較は ‹）・見出し 16px。
+          記号だけでは名前が無いので aria-label を付ける。文字は sm 以上で出し、1つのボタンで出し分ける。 */}
+      <header className="flex items-center gap-3 border-b border-border bg-card p-4 max-sm:h-14 max-sm:gap-1 max-sm:px-2 max-sm:py-0">
         <button
           type="button"
-          className={`${control} ${mobileTab === 'compare' ? 'max-sm:hidden' : ''}`}
+          aria-label="編集画面へ"
+          className={`${control} ${headerIconOnMobile} ${mobileTab === 'compare' ? 'max-sm:hidden' : 'max-sm:inline-flex'}`}
           onClick={onClose}
           disabled={busy}
         >
-          編集画面へ
+          <X aria-hidden="true" className="h-5 w-5 sm:hidden" />
+          <span className="max-sm:hidden">編集画面へ</span>
         </button>
         <button
           type="button"
           ref={backToListRef}
-          className={`${control} ${mobileTab === 'compare' ? 'md:hidden' : 'hidden'}`}
+          aria-label="一覧へ"
+          className={`${control} ${headerIconOnMobile} ${mobileTab === 'compare' ? 'inline-flex md:hidden' : 'hidden'}`}
           onClick={() => {
             mobileFocusRef.current = true;
             setMobileTab('list');
           }}
         >
-          一覧へ
+          <ChevronLeft aria-hidden="true" className="h-5 w-5 sm:hidden" />
+          <span className="max-sm:hidden">一覧へ</span>
         </button>
-        <h1 ref={headingRef} tabIndex={-1} className="shrink-0 text-xl font-semibold">
+        <h1 ref={headingRef} tabIndex={-1} className="shrink-0 text-xl font-semibold max-sm:text-base">
           版の履歴
         </h1>
         <span className="min-w-0 break-all text-sm text-muted-foreground max-sm:truncate">{title}</span>
@@ -424,35 +490,43 @@ export function VersionHistory({
       <div className="grid min-w-0 md:grid-cols-[minmax(0,360px)_minmax(0,440px)]">
         <aside
           aria-label="保存された版"
-          className={`${mobileTab === 'list' ? 'flex' : 'hidden'} min-w-0 flex-col border-border bg-card p-4 pb-0 max-sm:min-h-[calc(100dvh-56px)] md:flex md:border-r md:pb-4`}
+          className={`${mobileTab === 'list' ? 'flex' : 'hidden'} min-w-0 flex-col border-border bg-card max-sm:min-h-[calc(100dvh-56px)] md:flex md:border-r md:pb-4`}
         >
-          {loading && (
-            <p role="status" aria-busy="true" className="rounded bg-muted p-6">
-              履歴を読み込み中…
-            </p>
-          )}
-          {listError && (
-            <div role="alert" className={listBox}>
-              <p className="text-sm font-semibold">履歴を読み込めませんでした。</p>
-              <button type="button" className={control} onClick={() => void load()}>
-                再試行
-              </button>
+          {/* 板: 一覧の上に使い方の一文（余白 10px 16px・12px・mfg）。行は欄の端まで広げる */}
+          <p className="border-b border-border px-4 py-2.5 text-xs text-muted-foreground">
+            2つ選ぶと、何が変わったかを出します
+          </p>
+          {(loading || listError || (!loading && !listError && (rows.length === 0 || single))) && (
+            <div className="space-y-2 p-4">
+              {loading && (
+                <p role="status" aria-busy="true" className="rounded bg-muted p-6">
+                  履歴を読み込み中…
+                </p>
+              )}
+              {listError && (
+                <div role="alert" className={listBox}>
+                  <p className="text-sm font-semibold">履歴を読み込めませんでした。</p>
+                  <button type="button" className={control} onClick={() => void load()}>
+                    再試行
+                  </button>
+                </div>
+              )}
+              {!loading && !listError && rows.length === 0 && (
+                <div className={listBox}>
+                  <p className="text-sm font-semibold">保存された版がありません。</p>
+                  <p className="text-[13px] text-muted-foreground">編集して保存すると、ここに版が残ります。</p>
+                </div>
+              )}
+              {/* 板「戻した後・空・失敗」: 版が1つの時も一覧側の箱で理由を出し、その下に版を並べる（比較欄には同じ文を出さない）。 */}
+              {!loading && !listError && single && (
+                <div className={listBox}>
+                  <p className="text-sm font-semibold">版が1つしかありません。</p>
+                  <p className="text-[13px] text-muted-foreground">保存すると変更を比べられます。</p>
+                </div>
+              )}
             </div>
           )}
-          {!loading && !listError && rows.length === 0 && (
-            <div className={listBox}>
-              <p className="text-sm font-semibold">保存された版がありません。</p>
-              <p className="text-[13px] text-muted-foreground">編集して保存すると、ここに版が残ります。</p>
-            </div>
-          )}
-          {/* 板「戻した後・空・失敗」: 版が1つの時も一覧側の箱で理由を出し、その下に版を並べる（比較欄には同じ文を出さない）。 */}
-          {!loading && !listError && single && (
-            <div className={`${listBox} mb-2`}>
-              <p className="text-sm font-semibold">版が1つしかありません。</p>
-              <p className="text-[13px] text-muted-foreground">保存すると変更を比べられます。</p>
-            </div>
-          )}
-          <ol className="space-y-2">
+          <ol>
             {groupVersions(rows).map((group) => {
               if (group.kind === 'single') return <li key={group.version.revision}>{versionEntry(group.version)}</li>;
               const newest = group.versions[0];
@@ -462,55 +536,58 @@ export function VersionHistory({
               //      開いていた内訳が閉じない。
               const open = expanded.has(newest.revision);
               const listId = `version-group-${newest.revision}`;
-              const selected = group.versions.some((version) => version.revision === to);
+              // 閉じている間は、中のどれかを選んでいればまとまりの行で示す（中の行は見えないため）。
+              // 開いている間は、まとまりの行の操作が指す最新の版を選んでいる時だけ示し、ほかは中の行が示す。
+              const marks = (selection: string) =>
+                open ? newest.revision === selection : group.versions.some((version) => version.revision === selection);
               const span = groupSpan(group.versions);
               const end = groupEnd(span.first, span.last);
+              const name = `版 ${oldest.revision}〜${newest.revision} の最新・版 ${newest.revision}`;
               return (
                 <li key={`group-${newest.revision}`}>
-                  <div className="flex min-w-0 gap-1">
-                    <button
-                      type="button"
-                      className={`${control} min-w-0 flex-1 text-left ${selected && !open ? 'border-primary bg-accent text-accent-foreground' : ''}`}
-                      aria-current={selected && !open ? 'true' : undefined}
-                      disabled={busy}
-                      onClick={() => selectVersion(newest.revision)}
-                    >
-                      <span className="block font-semibold">
-                        <time dateTime={span.first}>{groupStart(span.first)}</time>
-                        {end !== null && (
-                          <>
-                            〜<time dateTime={span.last}>{end}</time>
-                          </>
-                        )}
-                        の編集
-                        {newest.revision === revision ? '（現在）' : ''}
-                      </span>
-                      <span className="block break-all text-xs">
+                  <div className={`${verRow} ${marks(from) ? verSelected : ''}`}>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold">
+                        <span>
+                          <time dateTime={span.first}>{groupStart(span.first)}</time>
+                          {end !== null && (
+                            <>
+                              〜<time dateTime={span.last}>{end}</time>
+                            </>
+                          )}
+                          {/* 板「10:02〜10:09 の自動保存」と同じく、時刻と語の間を空ける */} の編集
+                        </span>
+                        {newest.revision === revision && <span className={tagCurrent}>現在</span>}
+                        {/* 板: 開閉はタイトル横のタグ「N版 ▾」。押せるタグなので枠の見た目は .tag のまま、フォーカスだけ足す */}
+                        <button
+                          type="button"
+                          className={`${tagChip} gap-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`}
+                          aria-expanded={open}
+                          aria-controls={open ? listId : undefined}
+                          aria-label={`版 ${oldest.revision}〜${newest.revision} の${open ? '内訳を閉じる' : '内訳を開く'}`}
+                          onClick={() =>
+                            setExpanded((previous) => {
+                              const next = new Set(previous);
+                              if (open) next.delete(newest.revision);
+                              else next.add(newest.revision);
+                              return next;
+                            })
+                          }
+                        >
+                          {group.versions.length}版 <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+                        </button>
+                      </p>
+                      <p className="break-all text-xs text-muted-foreground">
                         保存 {group.versions.length}回 · 版 {oldest.revision}〜{newest.revision}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`${control} shrink-0`}
-                      aria-expanded={open}
-                      aria-controls={open ? listId : undefined}
-                      aria-label={`版 ${oldest.revision}〜${newest.revision} の${open ? '内訳を閉じる' : '内訳を開く'}`}
-                      onClick={() =>
-                        setExpanded((previous) => {
-                          const next = new Set(previous);
-                          if (open) next.delete(newest.revision);
-                          else next.add(newest.revision);
-                          return next;
-                        })
-                      }
-                    >
-                      <span aria-hidden="true">{open ? '▴' : '▾'}</span>
-                    </button>
+                      </p>
+                    </div>
+                    {/* まとまりの行の操作は、その中で最も新しい版を選ぶ */}
+                    {pickButtons(newest.revision, name, marks(from), marks(to))}
                   </div>
                   {open && (
-                    <ol id={listId} className="mt-1 space-y-1 border-l-2 border-border pl-2">
+                    <ol id={listId} className="border-b border-border pr-4 pl-8">
                       {group.versions.map((version) => (
-                        <li key={version.revision}>{versionEntry(version)}</li>
+                        <li key={version.revision}>{childEntry(version, span.first)}</li>
                       ))}
                     </ol>
                   )}
@@ -521,7 +598,7 @@ export function VersionHistory({
           {more && (
             <button
               type="button"
-              className={`${control} mt-3 w-full`}
+              className={`${control} mx-4 mt-3 w-[calc(100%-2rem)]`}
               disabled={loading}
               onClick={() => void load(true)}
             >
@@ -531,7 +608,7 @@ export function VersionHistory({
           {undo && (
             <button
               type="button"
-              className={`${control} mt-3 w-full`}
+              className={`${control} mx-4 mt-3 w-[calc(100%-2rem)]`}
               disabled={busy || Boolean(restoreBlockedReason)}
               onClick={() => void prepare(undo.target, undo.expected, true)}
             >
@@ -539,7 +616,7 @@ export function VersionHistory({
             </button>
           )}
           {/* 板（390）: 一覧画面の下に高さ 48px・幅いっぱいの主ボタン「変更を見る（時刻 → 現在）」 */}
-          <div className="sticky bottom-0 -mx-4 mt-auto border-t border-border bg-card p-4 md:hidden">
+          <div className="sticky bottom-0 mt-auto border-t border-border bg-card p-4 md:hidden">
             <button
               type="button"
               className={`${primary} min-h-12 w-full`}
@@ -557,25 +634,7 @@ export function VersionHistory({
         <div
           className={`${mobileTab === 'compare' ? 'flex' : 'hidden'} min-h-[calc(100dvh-56px)] min-w-0 flex-col md:flex md:min-h-[calc(100dvh-80px)]`}
         >
-          <div className="grid gap-3 border-b border-border bg-card p-4 sm:grid-cols-2">
-            {(['from', 'to'] as const).map((side) => (
-              <label key={side} className="grid min-w-0 gap-1 text-sm">
-                {side === 'from' ? '比較元' : '比較先'}
-                <select
-                  className={`${control} min-w-0 w-full`}
-                  value={side === 'from' ? from : to}
-                  disabled={loading || busy || rows.length === 0 || (side === 'from' && single)}
-                  onChange={(event) => (side === 'from' ? setFrom(event.target.value) : setTo(event.target.value))}
-                >
-                  {rows.map((row) => (
-                    <option key={row.revision} value={row.revision}>
-                      版 {row.revision} · {new Date(row.recordedAt).toLocaleString('ja-JP')}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ))}
-          </div>
+          {/* 板では比較元・比較先は一覧の行のボタンで選ぶので、比較欄に選択欄は置かない */}
           <div className="flex-1 space-y-4 p-4">
             {compareError ? (
               <div role="alert">
