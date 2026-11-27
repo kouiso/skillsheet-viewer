@@ -1,0 +1,10 @@
+{
+  "light": {
+    "before": "rgb(113, 133, 140)",
+    "hovered": { "border": "rgb(113, 133, 140)", "opacity": "1", "disabled": true }
+  },
+  "dark": {
+    "before": "rgb(113, 133, 140)",
+    "hovered": { "border": "rgb(113, 133, 140)", "opacity": "1", "disabled": true }
+  }
+}
