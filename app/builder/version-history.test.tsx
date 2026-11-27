@@ -11,6 +11,21 @@ const snapshot = (revision: string, editable = true): DocumentSnapshot => ({
   blocks: [{ id: 'block', type: 'markdown', order: 0, data: { markdown: `本文${revision}\n\n` } }],
   validation: { editable, issues: editable ? [] : [{ blockId: 'block', path: 'data.future', code: 'UNKNOWN_FIELD' }] },
 });
+// 構造の前提（親・祖先・子の要素）を取り出す小さな道具。見つからない・HTMLElement でない時は、
+// 何を探していたかを書いて落とす（型アサーションで null や別の型を黙って通さない）。
+function expectHtml(found: Element | null, what: string): HTMLElement {
+  if (!(found instanceof HTMLElement)) throw new Error(`${what} が見つからない、または HTMLElement ではない`);
+  return found;
+}
+const parentOf = (element: Element, what: string) => expectHtml(element.parentElement, `${what} の親要素`);
+const closestOf = (element: Element, selector: string, what: string) =>
+  expectHtml(element.closest(selector), `${what} を含む ${selector}`);
+const childOf = (element: Element, selector: string, what: string) =>
+  expectHtml(element.querySelector(selector), `${what} の中の ${selector}`);
+function expectString(value: string | null, what: string): string {
+  if (typeof value !== 'string' || value === '') throw new Error(`${what} が空`);
+  return value;
+}
 function setup(
   overrides: Partial<VersionHistoryApi> = {},
   editable = true,
@@ -234,17 +249,17 @@ describe('シート全体の版の履歴', () => {
       // 板「版が1つしかありません。保存すると変更を比べられます。」: 理由は1文で、同じ箱（card・1px 枠・角丸・余白・間隔）に版の行も入る。
       const aside = screen.getByRole('complementary', { name: '保存された版' });
       const reason = await within(aside).findByText('版が1つしかありません。保存すると変更を比べられます。');
-      const box = reason.parentElement as HTMLElement;
+      const box = parentOf(reason, '「版が1つしかありません」の文');
       expect(box).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5', 'space-y-3');
       expect(within(box).getByText('現在')).toBeInTheDocument();
       expect(within(box).getByText('作成 · 版 1')).toBeInTheDocument();
       // 比べる相手が無いので、比較元・比較先のボタンも、選択の地（bg-accent）も出さない。
       expect(within(aside).queryByRole('button', { name: /^比較(元|先)/ })).not.toBeInTheDocument();
-      expect(box.querySelector('li > div')).not.toHaveClass('bg-accent');
+      expect(childOf(box, 'li > div', '1版の箱の行')).not.toHaveClass('bg-accent');
       expect(within(box).getByText('現在')).not.toHaveClass('border');
       // 同じ文を2か所に出さない: 比較欄は「まだ比べる版がありません」だけ。
       expect(screen.getByText('まだ比べる版がありません')).toBeInTheDocument();
-      const compare = screen.getByText('まだ比べる版がありません').parentElement as HTMLElement;
+      const compare = parentOf(screen.getByText('まだ比べる版がありません'), '比較欄の「まだ比べる版がありません」');
       expect(within(compare).queryByText(/版が1つしかありません/)).not.toBeInTheDocument();
       expect(screen.queryByText('いまの内容から変わる項目')).not.toBeInTheDocument();
     });
@@ -327,7 +342,7 @@ describe('シート全体の版の履歴', () => {
       ]),
     });
     const row = (revision: string) =>
-      screen.getByRole('button', { name: pickName('比較先', revision) }).closest('.border-b') as HTMLElement;
+      closestOf(screen.getByRole('button', { name: pickName('比較先', revision) }), '.border-b', `版 ${revision} の行`);
     await findPick('比較先', '1');
     // 期待値は実行環境の時刻帯で同じ書式から作る（「10月6日 09:10」の形）。
     const stamp = (iso: string) =>
@@ -368,7 +383,7 @@ describe('シート全体の版の履歴', () => {
     expect(close).toHaveClass('max-sm:hidden');
     expect(close).not.toHaveClass('max-sm:inline-flex');
     // 板（390）の比較画面の帯は、「版の履歴」とシート名の代わりに比較の題を ‹ の隣に出す。
-    const header = close.closest('header') as HTMLElement;
+    const header = closestOf(close, 'header', '「編集画面へ」ボタン');
     const barTitle = within(header).getByRole('heading', { name: 'いまの内容から変わる項目' });
     expect(barTitle).toHaveClass('sm:hidden', 'text-base', 'font-semibold');
     // 390 で見える見出しが無くならないよう、帯の題は見出し要素（フォーカスの戻り先にもなる）。
@@ -395,11 +410,11 @@ describe('シート全体の版の履歴', () => {
         .mockImplementation(async (revision) => withText(revision, revision === '1' ? '前の行\n二行目' : '後の行')),
     });
     await selectOld();
-    const frame = screen.getByRole('heading', { name: /本文$/ }).closest('section') as HTMLElement;
+    const frame = closestOf(screen.getByRole('heading', { name: /本文$/ }), 'section', '差分の見出し');
     expect(within(frame).getByRole('heading')).toHaveTextContent('テキスト › 前の行 › 本文');
     // 比較元は版2（現在）、比較先は版1。前の値は引用符なしで、改行を保ったまま出る。
-    const del = frame.querySelector('del') as HTMLElement;
-    const ins = frame.querySelector('ins') as HTMLElement;
+    const del = childOf(frame, 'del', '差分の枠');
+    const ins = childOf(frame, 'ins', '差分の枠');
     expect(del.textContent).toBe('後の行');
     expect(ins.textContent).toBe('前の行\n二行目');
     expect(del).toHaveClass('whitespace-pre-wrap');
@@ -676,10 +691,10 @@ describe('戻す版・比較の選び方・行の表示（#626）', () => {
     );
     expect(screen.getByRole('button', { name: pickName('比較元', '1') })).toHaveAttribute('aria-pressed', 'false');
     await waitFor(() => expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeEnabled());
-    const frame = screen.getByRole('heading', { name: /本文$/ }).closest('section') as HTMLElement;
+    const frame = closestOf(screen.getByRole('heading', { name: /本文$/ }), 'section', '差分の見出し');
     // 前（削除）は現在の本文、後（追加）は選んだ旧版の本文。
-    expect((frame.querySelector('del') as HTMLElement).textContent).toBe('本文2\n\n');
-    expect((frame.querySelector('ins') as HTMLElement).textContent).toBe('本文1\n\n');
+    expect(childOf(frame, 'del', '差分の枠').textContent).toBe('本文2\n\n');
+    expect(childOf(frame, 'ins', '差分の枠').textContent).toBe('本文1\n\n');
     expect(screen.queryByText('内容は同じです。')).not.toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
@@ -711,9 +726,9 @@ describe('戻す版・比較の選び方・行の表示（#626）', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'この版に戻す' })).toBeEnabled());
     expect(screen.getByRole('heading', { name: 'いまの内容から変わる項目' })).toBeInTheDocument();
     // 差分の向きは変えない: 比較元（版 1）が削除、比較先（現在）が追加。
-    const frame = screen.getByRole('heading', { name: /本文$/ }).closest('section') as HTMLElement;
-    expect((frame.querySelector('del') as HTMLElement).textContent).toBe('本文1\n\n');
-    expect((frame.querySelector('ins') as HTMLElement).textContent).toBe('本文3\n\n');
+    const frame = closestOf(screen.getByRole('heading', { name: /本文$/ }), 'section', '差分の見出し');
+    expect(childOf(frame, 'del', '差分の枠').textContent).toBe('本文1\n\n');
+    expect(childOf(frame, 'ins', '差分の枠').textContent).toBe('本文3\n\n');
     fireEvent.click(screen.getByRole('button', { name: 'この版に戻す' }));
     await screen.findByRole('alertdialog');
     expect(api.previewRestore).toHaveBeenCalledWith('1', '3');
@@ -830,7 +845,7 @@ describe('戻す版・比較の選び方・行の表示（#626）', () => {
     setupThree();
     // 比較先を旧版にすると比較元は現在（版 3）になり、現在の行が選択の地（acc）になる。
     fireEvent.click(await findPick('比較先', '1'));
-    const current = screen.getByRole('button', { name: pickName('比較先', '3') }).closest('.border-b') as HTMLElement;
+    const current = closestOf(screen.getByRole('button', { name: pickName('比較先', '3') }), '.border-b', '版 3 の行');
     expect(current).toHaveClass('bg-accent');
     expect(within(current).getByText('現在')).toHaveClass('border', 'border-accent-text', 'bg-card');
     // 選んだ行の「復元」タグにも枠を付け、選んでいない行では付けない。
@@ -844,7 +859,7 @@ describe('戻す版・比較の選び方・行の表示（#626）', () => {
       '3',
     );
     // 既定の比較元（版 2）が復元の行。選択の地の中では「復元」のタグにも枠を付ける。
-    const restoreRow = (await findPick('比較先', '2')).closest('.border-b') as HTMLElement;
+    const restoreRow = closestOf(await findPick('比較先', '2'), '.border-b', '版 2（復元）の行');
     expect(restoreRow).toHaveClass('bg-accent');
     expect(within(restoreRow).getByText('復元')).toHaveClass('border', 'border-border');
     fireEvent.click(screen.getByRole('button', { name: pickName('比較元', '3') }));
@@ -977,9 +992,10 @@ describe('板「戻した後・空・失敗」と確認の文（#626）', () => 
     );
     // 板の .note: 地 dels・文字 del。箱は listBox と同じ寸法。
     expect(alert).toHaveClass('bg-danger-soft', 'text-danger', 'text-[13px]');
-    expect(alert.parentElement).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5', 'space-y-3');
-    expect(within(alert.parentElement as HTMLElement).getByRole('button', { name: '閉じる' })).toBeInTheDocument();
-    fireEvent.click(within(alert.parentElement as HTMLElement).getByRole('button', { name: '再試行' }));
+    const failureBox = parentOf(alert, '復元の確認の失敗の注意');
+    expect(failureBox).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5', 'space-y-3');
+    expect(within(failureBox).getByRole('button', { name: '閉じる' })).toBeInTheDocument();
+    fireEvent.click(within(failureBox).getByRole('button', { name: '再試行' }));
     await screen.findByRole('alertdialog');
     expect(api.previewRestore).toHaveBeenCalledTimes(2);
     expect(api.previewRestore).toHaveBeenLastCalledWith('1', '2');
@@ -999,7 +1015,7 @@ describe('板「戻した後・空・失敗」と確認の文（#626）', () => 
     setup({ read: vi.fn().mockImplementation(async (rev) => snapshot(rev, rev !== '1')) });
     fireEvent.click(await findPick('比較先', '1'));
     const first = await screen.findByText('この版は今の入力ルールに合わないため戻せません。');
-    const box = first.parentElement as HTMLElement;
+    const box = parentOf(first, '「戻せません」の1文');
     expect(box).toHaveAttribute('role', 'alert');
     expect(box).toHaveClass('rounded-lg', 'border', 'bg-card', 'p-5');
     expect(within(box).getByText('「全項目の原文を確認」で、原文と問題箇所を確認できます。')).toBeInTheDocument();
@@ -1194,7 +1210,7 @@ describe('自動保存のまとまり', () => {
     // まとまりの内訳の一覧があるので aria-controls を付ける。
     const controlled = toggle.getAttribute('aria-controls');
     expect(controlled).toBeTruthy();
-    expect(document.getElementById(controlled as string)).not.toBeNull();
+    expect(document.getElementById(expectString(controlled, '内訳の aria-controls'))).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: pickName('比較先', '3') }));
     await waitFor(() =>
       expect(screen.getByRole('button', { name: pickName('比較先', '3') })).toHaveAttribute('aria-pressed', 'true'),
@@ -1263,13 +1279,18 @@ describe('自動保存のまとまり', () => {
       expect(screen.getByRole('button', { name: pickName('比較先', revision) })).toBeInTheDocument();
     }
     // 内訳の行は板どおり時刻を等幅で出す。同じ分に収まる保存を見分けるため、秒と版番号も添える（「00:00:30 · 版 3」）。
-    const child = screen.getByRole('button', { name: pickName('比較先', '3') }).parentElement?.parentElement;
-    expect(child?.querySelector('p')).toHaveClass('font-mono');
-    expect(child?.querySelector('p')).toHaveTextContent(/^\d{2}:\d{2}:\d{2} · 版 3$/);
-    const secondsOf = (revision: string) =>
-      screen
-        .getByRole('button', { name: pickName('比較先', revision) })
-        .parentElement?.parentElement?.querySelector('p')?.textContent;
+    const timeLineOf = (revision: string) =>
+      childOf(
+        parentOf(
+          parentOf(screen.getByRole('button', { name: pickName('比較先', revision) }), `版 ${revision} の比較先ボタン`),
+          '比較ボタンの組',
+        ),
+        'p',
+        `版 ${revision} の内訳の行`,
+      );
+    expect(timeLineOf('3')).toHaveClass('font-mono');
+    expect(timeLineOf('3')).toHaveTextContent(/^\d{2}:\d{2}:\d{2} · 版 3$/);
+    const secondsOf = (revision: string) => timeLineOf(revision).textContent;
     expect(new Set(['4', '3', '2'].map(secondsOf)).size).toBe(3);
   });
 });
