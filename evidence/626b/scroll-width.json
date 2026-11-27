@@ -1,0 +1,194 @@
+[
+  {
+    "name": "list",
+    "theme": "light",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "compare",
+    "theme": "light",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "empty",
+    "theme": "light",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "single",
+    "theme": "light",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "failure",
+    "theme": "light",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "after-restore",
+    "theme": "light",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "list",
+    "theme": "dark",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "compare",
+    "theme": "dark",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "empty",
+    "theme": "dark",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "single",
+    "theme": "dark",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "failure",
+    "theme": "dark",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "after-restore",
+    "theme": "dark",
+    "width": 390,
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "equal": true
+  },
+  {
+    "name": "list",
+    "theme": "light",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "compare",
+    "theme": "light",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "empty",
+    "theme": "light",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "single",
+    "theme": "light",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "failure",
+    "theme": "light",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "after-restore",
+    "theme": "light",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "list",
+    "theme": "dark",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "compare",
+    "theme": "dark",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "empty",
+    "theme": "dark",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "single",
+    "theme": "dark",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "failure",
+    "theme": "dark",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  },
+  {
+    "name": "after-restore",
+    "theme": "dark",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "equal": true
+  }
+]
