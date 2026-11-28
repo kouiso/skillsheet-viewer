@@ -44,6 +44,10 @@ it('画面の準備前は入力欄とボタンが押せず、ボタンに「準�
   container.innerHTML = renderToString(<ViewerAuthPage />);
   expect(container.querySelector('h1')?.textContent).toBe('スキルシートを見る');
   expect(container.querySelector('input')).toBeDisabled();
+  // 板 G の「1. 準備中」の欄は薄くない（#627）。無効のまま、共有 Input の disabled:opacity-50 を打ち消す。
+  expect(container.querySelector('input')).toHaveClass('disabled:opacity-100');
+  expect(container.querySelector('input')).not.toHaveClass('disabled:opacity-50');
+  expect(container.querySelector('input')).toHaveClass('disabled:hover:border-input');
   const button = container.querySelector('button');
   expect(button).toBeDisabled();
   expect(button?.textContent).toBe('準備しています…');
@@ -128,12 +132,7 @@ it('締め出しの応答に待ち時間が無い時は、締め出しの長さ�
   expect(screen.getByRole('button', { name: 'あと 15分 で入力できます' })).toBeDisabled();
 });
 
-it('締め出し中の入力欄は板 G のとおり薄くならず、画面の準備前だけ薄いまま', async () => {
-  const { container, unmount } = render(<ViewerAuthPage />);
-  // 準備前（#398）の無効状態は共有 Input の disabled:opacity-50 のまま。
-  expect(container.querySelector('input')).toHaveClass('disabled:opacity-50');
-  unmount();
-
+it('締め出し中の入力欄は板 G のとおり薄くならない（無効のまま）', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
   mutateAsync.mockRejectedValueOnce(apiError('TOO_MANY_REQUESTS', { 'retry-after': '840' }));
   render(<ViewerAuthPage />);

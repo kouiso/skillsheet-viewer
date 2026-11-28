@@ -141,14 +141,16 @@ const ViewerAuthPage = () => {
           className={cn(
             'h-12 rounded-[4px] bg-card px-3.5 font-mono text-lg font-medium tracking-[0.2em] shadow-none',
             notice?.kind === 'invalid' && 'border-[#b64437] dark:border-[#f28b7f]',
-            // 板 G の締め出し中の入力欄は薄くしない（共有 Input の disabled:opacity-50 を、この画面の締め出し中だけ打ち消す）。
-            // hydration 前の無効状態（#398）は従来どおり薄いまま。
-            locked && 'disabled:opacity-100',
+            // 板 G は準備中・締め出し中とも入力欄を薄くしない（共有 Input の disabled:opacity-50 をこの画面だけ打ち消す）。
+            // hydration 前に無効にする理由（#398: 打った文字が hydration で消える）は変えず、見た目だけ板に合わせる（#627）。
+            // 不透明にした無効の欄に、共有 Input のホバーの主色の枠が出ると押せる欄に見えるので、無効の間は枠を戻す。
+            'disabled:opacity-100 disabled:hover:border-input',
           )}
         />
         <Button
           type="submit"
           // 地の色は既存の primary-dark のまま。板の pri #0d9488 に白文字は 3.74:1 で AA 未達（#198）。
+          // 暗い配色の文字はテーマの --primary-foreground（#03110f。ビルダーの板の on-primary に合わせた #671）に従う。板 G のシートは #0a0d0f。
           className="h-12 w-full rounded-[4px] text-sm shadow-none! hover:shadow-none! disabled:opacity-[0.45]"
           disabled={!mounted || locked || loginMutation.isPending}
         >
